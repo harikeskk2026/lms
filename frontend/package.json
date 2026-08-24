@@ -1,0 +1,31 @@
+{
+  "name": "careerlabs-lms-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3040",
+    "build": "next build",
+    "start": "next start -p 3040"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "axios": "^1.7.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "js-cookie": "^3.0.5",
+    "lucide-react": "^0.438.0",
+    "next": "14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.52.1",
+    "react-hot-toast": "^2.4.1",
+    "recharts": "^3.8.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.7"
+  }
+}

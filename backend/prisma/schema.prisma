@@ -1,0 +1,547 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  TRAINER
+  STUDENT
+}
+
+enum PlacementStatus {
+  SEEKING
+  INTERVIEWING
+  PLACED
+  NOT_SEEKING
+}
+
+enum Level {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum BatchMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum ClassStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum MaterialType {
+  PDF
+  SLIDE
+  CHEATSHEET
+  EBOOK
+  OTHER
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum MockStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum SubmitStatus {
+  PENDING
+  SUBMITTED
+  GRADED
+  LATE
+}
+
+enum QuestionType {
+  MCQ
+  MULTI_SELECT
+  TRUE_FALSE
+}
+
+enum QuizType {
+  MCQ
+  APTITUDE
+  CODING
+  INTERVIEW_PREP
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  name             String
+  email            String    @unique
+  phone            String?   @unique
+  passwordHash     String
+  role             Role      @default(STUDENT)
+  profilePhoto     String?
+  isActive         Boolean   @default(true)
+  isEmailVerified  Boolean   @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  refreshTokens  RefreshToken[]
+  passwordResets PasswordReset[]
+  loginAttempts  LoginAttempt[]
+  notifications  Notification[]
+  studentProfile StudentProfile?
+  adminProfile   AdminProfile?
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  userAgent String?
+  ipAddress String?
+
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otp       String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  success   Boolean
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model StudentProfile {
+  id              Int             @id @default(autoincrement())
+  userId          Int             @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentNo    String          @unique
+  batchId         Int?
+  phone           String?
+  address         String?
+  qualification   String?
+  linkedinUrl     String?
+  githubUrl       String?
+  resumeUrl       String?
+  placementStatus PlacementStatus @default(SEEKING)
+  createdAt       DateTime        @default(now())
+
+  enrollments      BatchEnrollment[]
+  attendances      Attendance[]
+  submissions      AssignmentSubmission[]
+  quizAttempts     QuizAttempt[]
+  mockInterviews   MockInterview[]
+  placementUpdates PlacementUpdate[]
+  topicCompletions TopicCompletion[]
+  attendanceAlerts AttendanceAlert[]
+  skills           StudentSkill[]
+  driveApplications DriveApplication[]
+  resumeData       ResumeData?
+}
+
+model AdminProfile {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department String?
+  createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique
+  description String
+  thumbnail   String?
+  duration    String
+  level       Level    @default(BEGINNER)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  batches   Batch[]
+  syllabus  SyllabusModule[]
+  materials CourseMaterial[]
+  sessions  RecordedSession[]
+}
+
+model Batch {
+  id          Int       @id @default(autoincrement())
+  name        String
+  courseId    Int
+  course      Course    @relation(fields: [courseId], references: [id])
+  trainerId   Int?
+  startDate   DateTime
+  endDate     DateTime
+  timing      String
+  mode        BatchMode @default(HYBRID)
+  maxStudents Int       @default(30)
+  isActive    Boolean   @default(true)
+
+  enrollments      BatchEnrollment[]
+  classes          DailyClass[]
+  announcements    Announcement[]
+  assignments      Assignment[]
+  attendanceAlerts AttendanceAlert[]
+  companyDrives    CompanyDrive[]
+}
+
+model BatchEnrollment {
+  id        Int      @id @default(autoincrement())
+  batchId   Int
+  batch     Batch    @relation(fields: [batchId], references: [id])
+  studentId Int
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  joinedAt  DateTime @default(now())
+
+  @@unique([batchId, studentId])
+}
+
+model SyllabusModule {
+  id       Int    @id @default(autoincrement())
+  courseId Int
+  course   Course @relation(fields: [courseId], references: [id])
+  title    String
+  order    Int
+  topics   SyllabusTopic[]
+}
+
+model SyllabusTopic {
+  id          Int            @id @default(autoincrement())
+  moduleId    Int
+  module      SyllabusModule @relation(fields: [moduleId], references: [id])
+  title       String
+  order       Int
+  classId     Int?
+  class       DailyClass?    @relation(fields: [classId], references: [id])
+  completions TopicCompletion[]
+}
+
+model TopicCompletion {
+  id        Int           @id @default(autoincrement())
+  topicId   Int
+  topic     SyllabusTopic @relation(fields: [topicId], references: [id])
+  studentId Int
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  completedAt DateTime    @default(now())
+
+  @@unique([topicId, studentId])
+}
+
+model DailyClass {
+  id           Int         @id @default(autoincrement())
+  batchId      Int
+  batch        Batch       @relation(fields: [batchId], references: [id])
+  date         DateTime
+  title        String
+  notes        String?
+  recordingUrl String?
+  meetLink     String?
+  status       ClassStatus @default(SCHEDULED)
+  createdAt    DateTime    @default(now())
+
+  topics      SyllabusTopic[]
+  attendances Attendance[]
+}
+
+model Attendance {
+  id        Int            @id @default(autoincrement())
+  studentId Int
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  classId   Int
+  class     DailyClass     @relation(fields: [classId], references: [id])
+  status    AttendStatus   @default(ABSENT)
+  markedAt  DateTime?
+
+  @@unique([studentId, classId])
+}
+
+model CourseMaterial {
+  id         Int          @id @default(autoincrement())
+  courseId   Int
+  course     Course       @relation(fields: [courseId], references: [id])
+  batchId    Int?
+  title      String
+  type       MaterialType @default(PDF)
+  fileUrl    String
+  fileSize   String?
+  uploadedAt DateTime     @default(now())
+}
+
+model RecordedSession {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  course    Course   @relation(fields: [courseId], references: [id])
+  batchId   Int?
+  title     String
+  videoUrl  String
+  duration  String?
+  thumbnail String?
+  classDate DateTime?
+  order     Int      @default(0)
+  gradient  String   @default("from-purple-600 to-violet-700")
+  views     Int      @default(0)
+}
+
+model Assignment {
+  id          Int      @id @default(autoincrement())
+  batchId     Int
+  batch       Batch    @relation(fields: [batchId], references: [id])
+  title       String
+  description String
+  dueDate     DateTime
+  maxMarks    Int      @default(100)
+  fileUrl     String?
+  createdAt   DateTime @default(now())
+
+  submissions AssignmentSubmission[]
+}
+
+model AssignmentSubmission {
+  id           Int            @id @default(autoincrement())
+  assignmentId Int
+  assignment   Assignment     @relation(fields: [assignmentId], references: [id])
+  studentId    Int
+  student      StudentProfile @relation(fields: [studentId], references: [id])
+  fileUrl      String
+  notes        String?
+  grade        Int?
+  feedback     String?
+  status       SubmitStatus   @default(SUBMITTED)
+  submittedAt  DateTime       @default(now())
+  gradedAt     DateTime?
+
+  @@unique([assignmentId, studentId])
+}
+
+model Quiz {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  courseId    Int?
+  batchId     Int?
+  duration    Int
+  totalMarks  Int
+  passMark    Int
+  isPublished Boolean  @default(false)
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  quizType    QuizType  @default(MCQ)
+  category    String?
+  tags        String[]
+  isFeatured  Boolean   @default(false)
+
+  questions Question[]
+  attempts  QuizAttempt[]
+}
+
+model Question {
+  id          Int          @id @default(autoincrement())
+  quizId      Int
+  quiz        Quiz         @relation(fields: [quizId], references: [id])
+  text        String
+  type        QuestionType @default(MCQ)
+  options     Json
+  marks       Int          @default(1)
+  order       Int
+  explanation String?
+  topic       String?
+  difficulty  Difficulty   @default(MEDIUM)
+  codeSnippet String?
+  imageUrl    String?
+}
+
+model QuizAttempt {
+  id             Int            @id @default(autoincrement())
+  quizId         Int
+  quiz           Quiz           @relation(fields: [quizId], references: [id])
+  studentId      Int
+  student        StudentProfile @relation(fields: [studentId], references: [id])
+  answers        Json
+  score          Int
+  totalMarks     Int
+  passed         Boolean
+  timeTaken      Int?
+  startedAt      DateTime       @default(now())
+  submittedAt    DateTime?
+  topicBreakdown Json?
+
+  @@unique([quizId, studentId])
+}
+
+model MockInterview {
+  id              Int            @id @default(autoincrement())
+  studentId       Int
+  student         StudentProfile @relation(fields: [studentId], references: [id])
+  scheduledAt     DateTime
+  interviewerName String?
+  meetLink        String?
+  feedback        String?
+  strengths       String[]
+  improvements    String[]
+  rating          Int?
+  status          MockStatus     @default(SCHEDULED)
+  createdAt       DateTime       @default(now())
+}
+
+model PlacementUpdate {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  title     String
+  body      String
+  type      String   @default("UPDATE")
+  createdAt DateTime @default(now())
+}
+
+model Announcement {
+  id        Int      @id @default(autoincrement())
+  batchId   Int?
+  batch     Batch?   @relation(fields: [batchId], references: [id])
+  title     String
+  body      String
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+}
+
+model AttendanceAlert {
+  id          Int            @id @default(autoincrement())
+  studentId   Int
+  student     StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batchId     Int
+  batch       Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  threshold   Float          @default(75.0)
+  currentPct  Float
+  message     String
+  isResolved  Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  resolvedAt  DateTime?
+}
+
+model InterviewQuestion {
+  id         Int        @id @default(autoincrement())
+  category   String
+  question   String
+  answer     String
+  difficulty Difficulty @default(MEDIUM)
+  tags       String[]
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model StudentSkill {
+  id          Int            @id @default(autoincrement())
+  studentId   Int
+  student     StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  name        String
+  category    String
+  proficiency Int            @default(3)
+  yearsExp    Float?
+  isVerified  Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+
+  @@unique([studentId, name])
+}
+
+model CompanyDrive {
+  id            Int      @id @default(autoincrement())
+  companyName   String
+  role          String
+  package       String
+  location      String
+  driveDate     DateTime
+  applyDeadline DateTime
+  description   String
+  requirements  String[]
+  skills        String[]
+  driveType     String   @default("CAMPUS")
+  status        String   @default("ACTIVE")
+  applyLink     String?
+  batchId       Int?
+  batch         Batch?   @relation(fields: [batchId], references: [id])
+  createdAt     DateTime @default(now())
+
+  applications DriveApplication[]
+}
+
+model DriveApplication {
+  id        Int            @id @default(autoincrement())
+  driveId   Int
+  drive     CompanyDrive   @relation(fields: [driveId], references: [id])
+  studentId Int
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  appliedAt DateTime       @default(now())
+  status    String         @default("APPLIED")
+  notes     String?
+
+  @@unique([driveId, studentId])
+}
+
+model ResumeData {
+  id             Int            @id @default(autoincrement())
+  studentId      Int            @unique
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  headline       String?
+  summary        String?
+  phone          String?
+  email          String?
+  linkedinUrl    String?
+  githubUrl      String?
+  portfolioUrl   String?
+  location       String?
+  education      Json           @default("[]")
+  experience     Json           @default("[]")
+  projects       Json           @default("[]")
+  certifications Json           @default("[]")
+  languages      Json           @default("[]")
+  updatedAt      DateTime       @updatedAt @default(now())
+}

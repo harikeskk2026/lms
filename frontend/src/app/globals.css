@@ -1,0 +1,253 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base ──────────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans;
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  * {
+    @apply border-slate-200;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+/* ─── Components ─────────────────────────────────────────────────────────────── */
+@layer components {
+
+  /* Glass Card */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-sm border border-white/60 shadow-card rounded-2xl;
+  }
+
+  .dark .glass-card {
+    @apply bg-slate-900/80 border-slate-700/60;
+  }
+
+  /* Primary Button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-r from-brand-600 to-brand-800
+           text-white font-semibold rounded-xl
+           px-6 py-3 text-sm
+           hover:opacity-90 active:scale-[0.98]
+           transition-all duration-150
+           disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+  }
+
+  /* Secondary / Outline Button */
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2
+           bg-transparent border-2 border-brand-600 text-brand-600
+           font-semibold rounded-xl px-6 py-3 text-sm
+           hover:bg-brand-50 active:scale-[0.98]
+           transition-all duration-150
+           disabled:opacity-60 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+  }
+
+  /* Ghost Button */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-slate-600 font-medium rounded-xl px-4 py-2 text-sm
+           hover:bg-slate-100 active:scale-[0.98]
+           transition-all duration-150
+           focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1;
+  }
+
+  /* Input Field */
+  .input-field {
+    @apply w-full rounded-xl border border-slate-200 bg-white
+           px-4 py-3 text-sm text-slate-900
+           placeholder:text-slate-400
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
+           transition-all duration-150
+           disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed;
+  }
+
+  .input-field.error {
+    @apply border-red-400 focus:ring-red-400;
+  }
+
+  .dark .input-field {
+    @apply bg-slate-800 border-slate-600 text-slate-100 placeholder:text-slate-500;
+  }
+
+  /* Chip/Badge */
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  .chip-brand   { @apply chip bg-brand-100 text-brand-700; }
+  .chip-green   { @apply chip bg-green-100 text-green-700; }
+  .chip-amber   { @apply chip bg-amber-100 text-amber-700; }
+  .chip-red     { @apply chip bg-red-100 text-red-700; }
+  .chip-slate   { @apply chip bg-slate-100 text-slate-600; }
+
+  /* Stat Card */
+  .stat-card {
+    @apply glass-card p-5 flex flex-col gap-1;
+  }
+
+  /* Form Group */
+  .form-group {
+    @apply flex flex-col gap-1.5;
+  }
+
+  .form-label {
+    @apply text-sm font-medium text-slate-700;
+  }
+
+  .dark .form-label {
+    @apply text-slate-300;
+  }
+
+  .form-error {
+    @apply text-xs text-red-500 mt-0.5;
+  }
+
+  /* Sidebar link */
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl
+           text-sm font-medium text-white/70
+           hover:bg-white/10 hover:text-white
+           transition-all duration-150;
+  }
+
+  .sidebar-link.active {
+    @apply bg-white/15 text-white;
+  }
+
+  /* Card hover */
+  .hover-card {
+    @apply transition-all duration-200 hover:shadow-card-lg hover:-translate-y-0.5;
+  }
+}
+
+  /* Student Dashboard Utilities */
+  .stat-card {
+    @apply glass-card p-5 hover:scale-[1.02] transition-all duration-300;
+  }
+  .section-title {
+    @apply font-display font-bold text-lg text-gray-800 dark:text-white flex items-center gap-2 mb-4;
+  }
+  .page-wrapper {
+    @apply p-4 lg:p-6 space-y-6 max-w-7xl mx-auto;
+  }
+  .chip-yellow {
+    @apply chip bg-yellow-100 text-yellow-800;
+  }
+  .chip-blue {
+    @apply chip bg-blue-100 text-blue-700;
+  }
+  .chip-purple {
+    @apply chip bg-brand-100 text-brand-700;
+  }
+
+/* ─── Utilities ──────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .animate-fadeInUp {
+    animation: fadeInUp 0.5s ease-out both;
+  }
+
+  /* Staggered children animation */
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 80ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 160ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 320ms; }
+
+  .delay-100 { animation-delay: 0.1s; }
+  .delay-200 { animation-delay: 0.2s; }
+  .delay-300 { animation-delay: 0.3s; }
+  .animate-fadeInUp { animation: fadeInUp 0.4s ease forwards; }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-400;
+  }
+
+  /* Scrollbar */
+  .scrollbar-thin::-webkit-scrollbar       { width: 4px; height: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track  { @apply bg-transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb  { @apply bg-slate-300 rounded-full; }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-slate-600; }
+
+  /* SlidePanel animation */
+  .animate-slideInRight { animation: slideInRight 0.3s ease; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+/* ─── Quiz Module Animations ─────────────────────────────────────────────────── */
+@keyframes quizSlideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes quizSlideOutLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-40px); }
+}
+@keyframes floatUp {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+}
+@keyframes countUpAnim {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes ringFill {
+  from { stroke-dashoffset: 314; }
+}
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+.animate-quizSlideInRight { animation: quizSlideInRight 0.3s ease forwards; }
+.animate-quizSlideOutLeft  { animation: quizSlideOutLeft  0.25s ease forwards; }
+.animate-countUp   { animation: countUpAnim 0.5s ease both; }
+.animate-timerPulse { animation: timerPulse 1s ease-in-out infinite; }
+
+.animate-float-1  { animation: floatUp 3.0s ease forwards 0.0s; }
+.animate-float-2  { animation: floatUp 3.2s ease forwards 0.2s; }
+.animate-float-3  { animation: floatUp 2.8s ease forwards 0.4s; }
+.animate-float-4  { animation: floatUp 3.4s ease forwards 0.1s; }
+.animate-float-5  { animation: floatUp 3.1s ease forwards 0.3s; }
+.animate-float-6  { animation: floatUp 2.9s ease forwards 0.5s; }
+.animate-float-7  { animation: floatUp 3.3s ease forwards 0.2s; }
+.animate-float-8  { animation: floatUp 3.0s ease forwards 0.6s; }
+.animate-float-9  { animation: floatUp 2.7s ease forwards 0.1s; }
+.animate-float-10 { animation: floatUp 3.5s ease forwards 0.4s; }
+.animate-float-11 { animation: floatUp 3.0s ease forwards 0.0s; }
+.animate-float-12 { animation: floatUp 3.2s ease forwards 0.3s; }
+.animate-float-13 { animation: floatUp 2.8s ease forwards 0.5s; }
+.animate-float-14 { animation: floatUp 3.4s ease forwards 0.2s; }
+.animate-float-15 { animation: floatUp 3.1s ease forwards 0.1s; }
+.animate-float-16 { animation: floatUp 2.9s ease forwards 0.6s; }
+.animate-float-17 { animation: floatUp 3.3s ease forwards 0.3s; }
+.animate-float-18 { animation: floatUp 3.0s ease forwards 0.4s; }
+.animate-float-19 { animation: floatUp 2.7s ease forwards 0.5s; }
+.animate-float-20 { animation: floatUp 3.5s ease forwards 0.2s; }

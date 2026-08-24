@@ -1,0 +1,226 @@
+import axios from 'axios'
+import Cookies from 'js-cookie'
+
+const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api',
+  withCredentials: true,
+  timeout: 10000,
+})
+
+// ─── Request: attach access token ─────────────────────────────────────────────
+api.interceptors.request.use(config => {
+  const token = Cookies.get('clms_at')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// ─── Response: auto-refresh on TOKEN_EXPIRED ──────────────────────────────────
+let isRefreshing = false
+let failedQueue = []
+
+function processQueue(error, token = null) {
+  failedQueue.forEach(prom => {
+    if (error) prom.reject(error)
+    else prom.resolve(token)
+  })
+  failedQueue = []
+}
+
+api.interceptors.response.use(
+  res => res,
+  async err => {
+    const original = err.config
+
+    if (
+      err.response?.status === 401 &&
+      err.response?.data?.code === 'TOKEN_EXPIRED' &&
+      !original._retry
+    ) {
+      original._retry = true
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then(token => {
+          original.headers.Authorization = `Bearer ${token}`
+          return api(original)
+        }).catch(e => Promise.reject(e))
+      }
+
+      isRefreshing = true
+
+      try {
+        const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api'
+        const { data } = await axios.post(
+          `${baseURL}/auth/refresh`,
+          {},
+          { withCredentials: true }
+        )
+        const newToken = data.accessToken
+        // 15 minutes = 1/96 of a day
+        Cookies.set('clms_at', newToken, { expires: 1 / 96, sameSite: 'strict' })
+        processQueue(null, newToken)
+        original.headers.Authorization = `Bearer ${newToken}`
+        return api(original)
+      } catch (refreshErr) {
+        processQueue(refreshErr, null)
+        Cookies.remove('clms_at')
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
+        return Promise.reject(refreshErr)
+      } finally {
+        isRefreshing = false
+      }
+    }
+
+    return Promise.reject(err)
+  }
+)
+
+export default api
+
+export const adminApi = {
+  // Dashboard
+  getDashboardStats: () => api.get('/admin/dashboard/stats'),
+
+  // Students
+  getStudents: (params) => api.get('/admin/students', { params }),
+  createStudent: (data) => api.post('/admin/students', data),
+  getStudentDetail: (id) => api.get(`/admin/students/${id}`),
+  updateStudent: (id, data) => api.patch(`/admin/students/${id}`, data),
+  toggleStudentStatus: (id) => api.patch(`/admin/students/${id}/status`),
+  resetStudentPassword: (id, data) => api.post(`/admin/students/${id}/reset-password`, data),
+
+  // Batches
+  getBatches: (params) => api.get('/admin/batches', { params }),
+  createBatch: (data) => api.post('/admin/batches', data),
+  getBatchDetail: (id) => api.get(`/admin/batches/${id}`),
+  updateBatch: (id, data) => api.patch(`/admin/batches/${id}`, data),
+  enrollStudent: (batchId, studentId) => api.post(`/admin/batches/${batchId}/enroll`, { studentId }),
+  removeFromBatch: (batchId, studentId) => api.delete(`/admin/batches/${batchId}/students/${studentId}`),
+
+  // Courses
+  getCourses: () => api.get('/admin/courses'),
+  createCourse: (data) => api.post('/admin/courses', data),
+  addMaterial: (courseId, data) => api.post(`/admin/courses/${courseId}/materials`, data),
+  deleteMaterial: (courseId, materialId) => api.delete(`/admin/courses/${courseId}/materials/${materialId}`),
+  addSession: (courseId, data) => api.post(`/admin/courses/${courseId}/sessions`, data),
+  addSyllabusModule: (courseId, data) => api.post(`/admin/courses/${courseId}/syllabus/modules`, data),
+  addSyllabusTopic: (courseId, moduleId, data) => api.post(`/admin/courses/${courseId}/syllabus/modules/${moduleId}/topics`, data),
+
+  // Classes
+  getClasses: (params) => api.get('/admin/classes', { params }),
+  createClass: (data) => api.post('/admin/classes', data),
+  updateClass: (id, data) => api.patch(`/admin/classes/${id}`, data),
+
+  // Attendance
+  getAttendanceSheet: (classId) => api.get(`/admin/attendance/${classId}`),
+  markAttendance: (classId, records) => api.post(`/admin/attendance/${classId}`, { records }),
+  // Attendance system
+  getAttendanceOverview:  ()        => api.get('/admin/attendance'),
+  getAttendanceAnalytics: (params)  => api.get('/admin/attendance/analytics', { params }),
+  getLowAttendance:       (params)  => api.get('/admin/attendance/low', { params }),
+  getStudentAttHistory:   (id)      => api.get(`/admin/attendance/student/${id}`),
+  getBatchAttDetail:      (id, p)   => api.get(`/admin/attendance/batch/${id}`, { params: p }),
+  getAttendanceAlerts:    (params)  => api.get('/admin/attendance/alerts', { params }),
+  generateAlerts:         (params)  => api.post('/admin/attendance/alerts/generate', null, { params }),
+  resolveAlert:           (id)      => api.patch(`/admin/attendance/alerts/${id}/resolve`),
+
+  // Quizzes
+  getQuizzes: (params) => api.get('/admin/quizzes', { params }),
+  createQuiz: (data) => api.post('/admin/quizzes', data),
+  updateQuiz: (id, data) => api.patch(`/admin/quizzes/${id}`, data),
+  publishQuiz: (id) => api.post(`/admin/quizzes/${id}/publish`),
+  getQuizResults: (id) => api.get(`/admin/quizzes/${id}/results`),
+  getQuizLeaderboard: (id) => api.get(`/admin/quizzes/${id}/leaderboard`),
+  addQuestion: (quizId, data) => api.post(`/admin/quizzes/${quizId}/questions`, data),
+  deleteQuestion: (quizId, qId) => api.delete(`/admin/quizzes/${quizId}/questions/${qId}`),
+
+  // Interview Questions
+  getInterviewQuestions: (params) => api.get('/admin/interview-questions', { params }),
+  createInterviewQuestion: (data) => api.post('/admin/interview-questions', data),
+  updateInterviewQuestion: (id, data) => api.patch(`/admin/interview-questions/${id}`, data),
+  deleteInterviewQuestion: (id) => api.delete(`/admin/interview-questions/${id}`),
+
+  // Admin Company Drives
+  getDrives:              (p)           => api.get('/admin/drives', { params: p }),
+  createDrive:            (d)           => api.post('/admin/drives', d),
+  updateDrive:            (id, d)       => api.patch(`/admin/drives/${id}`, d),
+  getDriveApplications:   (id)          => api.get(`/admin/drives/${id}/applications`),
+  updateDriveApplication: (driveId, appId, d) => api.patch(`/admin/drives/${driveId}/applications/${appId}`, d),
+
+  // Placement
+  getPlacement: (params) => api.get('/admin/placement', { params }),
+  updatePlacementStatus: (studentId, status) => api.patch(`/admin/placement/${studentId}/status`, { status }),
+  getMockInterviews: (params) => api.get('/admin/mock-interviews', { params }),
+  scheduleMockInterview: (data) => api.post('/admin/mock-interviews', data),
+  updateMockInterview: (id, data) => api.patch(`/admin/mock-interviews/${id}`, data),
+
+  // Assignments
+  getAssignments: (params) => api.get('/admin/assignments', { params }),
+  createAssignment: (data) => api.post('/admin/assignments', data),
+  getSubmissions: (id) => api.get(`/admin/assignments/${id}/submissions`),
+  gradeSubmission: (assignmentId, subId, data) => api.patch(`/admin/assignments/${assignmentId}/submissions/${subId}`, data),
+
+  // Announcements
+  getAnnouncements: (params) => api.get('/admin/announcements', { params }),
+  createAnnouncement: (data) => api.post('/admin/announcements', data),
+  updateAnnouncement: (id, data) => api.patch(`/admin/announcements/${id}`, data),
+  deleteAnnouncement: (id) => api.delete(`/admin/announcements/${id}`),
+
+  // Reports
+  getAttendanceReport: (params) => api.get('/admin/reports/attendance', { params }),
+  getPerformanceReport: (params) => api.get('/admin/reports/performance', { params }),
+  exportCSV: (params) => api.get('/admin/reports/export', { params }),
+}
+
+export const studentApi = {
+  getDashboard:      ()         => api.get('/student/dashboard'),
+  getCourses:        ()         => api.get('/student/courses'),
+  getCourse:         (id)       => api.get(`/student/courses/${id}`),
+  getSyllabus:       (id)       => api.get(`/student/courses/${id}/syllabus`),
+  getMaterials:      (id)       => api.get(`/student/courses/${id}/materials`),
+  getSessions:       (id)       => api.get(`/student/courses/${id}/sessions`),
+  getClasses:        (status)   => api.get(`/student/classes?status=${status || ''}`),
+  getAttendance:     (month)    => api.get(`/student/attendance?month=${month || ''}`),
+  getAttSummary:     ()         => api.get('/student/attendance/summary'),
+  getAttendanceTrend: ()        => api.get('/student/attendance/trend'),
+  getAssignments:    ()         => api.get('/student/assignments'),
+  submitAssignment:  (id, form) => api.post(`/student/assignments/${id}/submit`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  getQuizzes:        ()         => api.get('/student/quizzes'),
+  getQuiz:           (id)       => api.get(`/student/quizzes/${id}`),
+  submitQuiz:        (id, body) => api.post(`/student/quizzes/${id}/attempt`, body),
+  getQuizLeaderboard:(id)       => api.get(`/student/quizzes/${id}/leaderboard`),
+  getQuizAnalytics:  ()         => api.get('/student/quiz-analytics'),
+  getInterviewPrep:  (p)        => api.get('/student/interview-prep', { params: p }),
+  getPlacement:      ()         => api.get('/student/placement'),
+  getMockInterviews: ()         => api.get('/student/mock-interviews'),
+  getNotifications:  ()         => api.get('/student/notifications'),
+  markRead:          (id)       => api.patch(`/student/notifications/${id}/read`),
+  markAllRead:       ()         => api.patch('/student/notifications/read-all'),
+  getActivity:       ()         => api.get('/student/activity'),
+
+  // Placement Hub
+  getPlacementHub:          ()      => api.get('/student/placement/hub'),
+  updatePlacementProfile:   (d)     => api.patch('/student/placement/profile', d),
+
+  // Resume
+  getResume:                ()      => api.get('/student/resume'),
+  saveResume:               (d)     => api.put('/student/resume', d),
+
+  // Skills
+  getSkills:                ()      => api.get('/student/skills'),
+  addSkill:                 (d)     => api.post('/student/skills', d),
+  updateSkill:              (id, d) => api.patch(`/student/skills/${id}`, d),
+  deleteSkill:              (id)    => api.delete(`/student/skills/${id}`),
+
+  // Drives
+  getDrives:                ()      => api.get('/student/drives'),
+  applyDrive:               (id)    => api.post(`/student/drives/${id}/apply`),
+
+  // Mock Analytics
+  getMockAnalytics:         ()      => api.get('/student/mock-analytics'),
+}

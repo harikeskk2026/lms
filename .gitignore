@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next/
+out/
+
+# Build output
+dist/
+build/
+
+# Uploaded / imported media (recordings, thumbnails)
+backend/storage/
+backend/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
