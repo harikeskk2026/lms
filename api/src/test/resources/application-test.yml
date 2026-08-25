@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:lms_test;MODE=PostgreSQL
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+app:
+  jwt:
+    secret: test-secret-key-please-replace-me-1234567890
+    expiration-ms: 3600000
+  cors:
+    allowed-origins: http://localhost:3000
+  seed:
+    enabled: false
+    admin-email: admin@careerlabs.com
+    admin-password: ChangeMe123!

@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import Cookies from 'js-cookie'
 import api from '@/lib/api'
+import authService from '@/services/authService'
 import { useRouter } from 'next/navigation'
 
 const AuthContext = createContext(null)
@@ -28,7 +29,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password })
+    const { data } = await authService.login(email, password)
     // 15 min expiry
     Cookies.set('clms_at', data.accessToken, { expires: 1 / 96, sameSite: 'strict' })
     setUser(data.user)

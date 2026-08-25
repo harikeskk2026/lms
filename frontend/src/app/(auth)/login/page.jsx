@@ -2,17 +2,12 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { Eye, EyeOff, Mail, Lock, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
+import { loginSchema } from '@/validations/loginValidation'
 import clsx from 'clsx'
-
-const schema = z.object({
-  email:    z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-})
 
 const stats = [
   { icon: GraduationCap, label: 'Students Enrolled', value: '2,400+' },
@@ -21,10 +16,9 @@ const stats = [
   { icon: TrendingUp,    label: 'Placement Rate',    value: '94%' },
 ]
 
+// Matches the user seeded by api/.../DevUserSeeder on first run (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD)
 const demoAccounts = [
-  { role: 'Student',      email: 'ramesh@student.com',   password: 'Student@123' },
-  { role: 'Admin',        email: 'admin@careerlabs.in',  password: 'Admin@123456' },
-  { role: 'Super Admin',  email: 'superadmin@careerlabs.in', password: 'Admin@123456' },
+  { role: 'Admin', email: 'admin@careerlabs.com', password: 'ChangeMe123!' },
 ]
 
 export default function LoginPage() {
@@ -36,22 +30,14 @@ export default function LoginPage() {
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting }
-  } = useForm({ resolver: zodResolver(schema) })
+  } = useForm({ resolver: zodResolver(loginSchema) })
 
   async function onSubmit(data) {
     try {
       await login(data.email, data.password)
       toast.success('Welcome back!')
     } catch (err) {
-      const msg = err.response?.data?.message || 'Login failed. Please try again.'
-      const code = err.response?.data?.code
-      if (code === 'ACCOUNT_LOCKED') {
-        toast.error(msg, { duration: 6000 })
-      } else if (code === 'ACCOUNT_SUSPENDED') {
-        toast.error(msg, { duration: 6000 })
-      } else {
-        toast.error(msg)
-      }
+      toast.error(err.message || 'Login failed. Please try again.')
     }
   }
 
