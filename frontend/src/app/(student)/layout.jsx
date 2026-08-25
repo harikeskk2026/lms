@@ -1,11 +1,24 @@
 'use client'
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import StudentShell from '@/components/layout/StudentShell'
 
 export default function StudentLayout({ children }) {
   const { user, loading } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
 
-  if (loading) {
+  useEffect(() => {
+    if (loading) return
+    if (!user) {
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
+    } else if (user.role !== 'STUDENT') {
+      router.replace('/admin/dashboard')
+    }
+  }, [loading, user, pathname, router])
+
+  if (loading || !user || user.role !== 'STUDENT') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <svg className="animate-spin h-8 w-8 text-brand-600" viewBox="0 0 24 24" fill="none">
@@ -14,11 +27,6 @@ export default function StudentLayout({ children }) {
         </svg>
       </div>
     )
-  }
-
-  // Middleware handles redirect, but belt-and-suspenders check
-  if (!user || user.role !== 'STUDENT') {
-    return null
   }
 
   return <StudentShell>{children}</StudentShell>

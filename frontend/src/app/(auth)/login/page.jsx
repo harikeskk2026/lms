@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Mail, Lock, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -22,8 +23,15 @@ const demoAccounts = [
 ]
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { user, loading, login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace(user.role === 'STUDENT' ? '/student/dashboard' : '/admin/dashboard')
+    }
+  }, [loading, user, router])
 
   const {
     register,

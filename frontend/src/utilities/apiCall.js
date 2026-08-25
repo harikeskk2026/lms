@@ -1,5 +1,5 @@
 import axios from 'axios'
-import Cookies from 'js-cookie'
+import tokenStorage from '@/utilities/tokenStorage'
 
 const JAVA_API_BASE_URL = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:8081/api'
 
@@ -9,7 +9,7 @@ const httpClient = axios.create({
 })
 
 httpClient.interceptors.request.use(config => {
-  const token = Cookies.get('clms_at')
+  const token = tokenStorage.getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })

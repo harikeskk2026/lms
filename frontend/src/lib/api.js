@@ -1,5 +1,5 @@
 import axios from 'axios'
-import Cookies from 'js-cookie'
+import tokenStorage from '@/utilities/tokenStorage'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api',
@@ -9,7 +9,7 @@ const api = axios.create({
 
 // ─── Request: attach access token ─────────────────────────────────────────────
 api.interceptors.request.use(config => {
-  const token = Cookies.get('clms_at')
+  const token = tokenStorage.getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -57,14 +57,13 @@ api.interceptors.response.use(
           { withCredentials: true }
         )
         const newToken = data.accessToken
-        // 15 minutes = 1/96 of a day
-        Cookies.set('clms_at', newToken, { expires: 1 / 96, sameSite: 'strict' })
+        tokenStorage.setSession(newToken, tokenStorage.getUser())
         processQueue(null, newToken)
         original.headers.Authorization = `Bearer ${newToken}`
         return api(original)
       } catch (refreshErr) {
         processQueue(refreshErr, null)
-        Cookies.remove('clms_at')
+        tokenStorage.clear()
         if (typeof window !== 'undefined') {
           window.location.href = '/login'
         }

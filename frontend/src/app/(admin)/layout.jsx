@@ -1,4 +1,6 @@
 'use client'
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import AdminShell from '@/components/layout/AdminShell'
 
@@ -6,8 +8,19 @@ const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN', 'TRAINER']
 
 export default function AdminLayout({ children }) {
   const { user, loading } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
 
-  if (loading) {
+  useEffect(() => {
+    if (loading) return
+    if (!user) {
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
+    } else if (!ADMIN_ROLES.includes(user.role)) {
+      router.replace('/student/dashboard')
+    }
+  }, [loading, user, pathname, router])
+
+  if (loading || !user || !ADMIN_ROLES.includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <svg className="animate-spin h-8 w-8 text-brand-600" viewBox="0 0 24 24" fill="none">
@@ -16,10 +29,6 @@ export default function AdminLayout({ children }) {
         </svg>
       </div>
     )
-  }
-
-  if (!user || !ADMIN_ROLES.includes(user.role)) {
-    return null
   }
 
   return <AdminShell>{children}</AdminShell>
