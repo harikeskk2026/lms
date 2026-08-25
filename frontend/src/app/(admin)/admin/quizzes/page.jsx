@@ -4,6 +4,7 @@ import { Plus, BarChart2, Trash2, ChevronUp, ChevronDown, Eye, Trophy, Star } fr
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
+import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import { useRouter } from 'next/navigation'
 
@@ -50,7 +51,7 @@ export default function QuizzesPage() {
 
   useEffect(() => {
     load()
-    adminApi.getCourses().then(r => setCourses(r.data.data || [])).catch(() => {})
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
   }, [])
 

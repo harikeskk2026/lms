@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation'
 import { Plus, Users, Calendar, Clock, Monitor, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import { adminApi } from '@/lib/api'
+import courseService from '@/services/courseService'
+import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 
 const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
@@ -25,25 +26,30 @@ export default function BatchesPage() {
 
   const load = () => {
     setLoading(true)
-    adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => toast.error('Failed to load batches')).finally(() => setLoading(false))
+    batchService.list().then(r => setBatches(r.data || [])).catch(err => toast.error(err.message || 'Failed to load batches')).finally(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
-    adminApi.getCourses().then(r => setCourses(r.data.data || [])).catch(() => {})
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
   }, [])
 
   const handleCreate = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await adminApi.createBatch(form)
+      await batchService.create({
+        ...form,
+        courseId: Number(form.courseId),
+        trainerId: form.trainerId ? Number(form.trainerId) : null,
+        maxStudents: Number(form.maxStudents),
+      })
       toast.success('Batch created')
       setPanelOpen(false)
       setForm({ name: '', courseId: '', trainerId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
       load()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create batch')
+      toast.error(err.message || 'Failed to create batch')
     } finally { setSaving(false) }
   }
 
