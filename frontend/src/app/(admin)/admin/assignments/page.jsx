@@ -1,239 +1,453 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { Plus, ClipboardList, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Paperclip, X, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import { adminApi } from '@/lib/api'
+import assignmentService from '@/services/assignmentService'
+import courseService from '@/services/courseService'
+import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import SearchableSelect from '@/components/admin/SearchableSelect'
+
+const STATUS_COLORS = {
+  DRAFT:     'bg-gray-100 text-gray-600',
+  PUBLISHED: 'bg-green-100 text-green-700',
+  CLOSED:    'bg-red-100 text-red-700',
+}
+
+const EMPTY_FORM = {
+  title: '', description: '', courseId: '', batchId: '',
+  startDate: '', dueDate: '', totalMarks: 100,
+  attachmentUrl: '', attachmentName: '',
+}
+
+const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
 
 export default function AssignmentsPage() {
+  const router = useRouter()
   const [assignments, setAssignments] = useState([])
-  const [batches, setBatches] = useState([])
-  const [batchFilter, setBatchFilter] = useState('')
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [selectedAssignment, setSelectedAssignment] = useState(null)
-  const [submissions, setSubmissions] = useState([])
-  const [subLoading, setSubLoading] = useState(false)
-  const [createPanel, setCreatePanel] = useState(false)
+  const [search, setSearch] = useState('')
+  const [courseFilter, setCourseFilter] = useState('')
+  const [batchFilter, setBatchFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [dueDateFrom, setDueDateFrom] = useState('')
+  const [dueDateTo, setDueDateTo] = useState('')
+  const [courses, setCourses] = useState([])
+  const [batches, setBatches] = useState([])
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [editAssignment, setEditAssignment] = useState(null)
+  const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
-  const [gradeInputs, setGradeInputs] = useState({})
-  const [feedbackInputs, setFeedbackInputs] = useState({})
-  const [form, setForm] = useState({ title: '', description: '', batchId: '', dueDate: '', maxMarks: 100, fileUrl: '' })
+  const [uploading, setUploading] = useState(false)
+  const searchTimer = useRef(null)
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true)
-    adminApi.getAssignments(batchFilter ? { batchId: batchFilter } : {})
-      .then(r => setAssignments(r.data.data || []))
-      .catch(() => toast.error('Failed'))
+    assignmentService.list({
+      search: search || undefined,
+      courseId: courseFilter || undefined,
+      batchId: batchFilter || undefined,
+      status: statusFilter || undefined,
+      dueDateFrom: dueDateFrom || undefined,
+      dueDateTo: dueDateTo || undefined,
+      page,
+      limit: 20,
+    })
+      .then(r => {
+        const d = r.data
+        setAssignments(d.assignments)
+        setTotal(d.total)
+        setTotalPages(d.totalPages)
+      })
+      .catch(err => toast.error(err.message || 'Failed to load assignments'))
       .finally(() => setLoading(false))
-  }
+  }, [search, courseFilter, batchFilter, statusFilter, dueDateFrom, dueDateTo, page])
 
-  useEffect(() => { load() }, [batchFilter])
+  useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
+    batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
   }, [])
 
-  const loadSubmissions = async (a) => {
-    setSelectedAssignment(a)
-    setSubLoading(true)
-    try {
-      const r = await adminApi.getSubmissions(a.id)
-      setSubmissions(r.data.data || [])
-    } catch { toast.error('Failed to load submissions') } finally { setSubLoading(false) }
+  const handleSearch = (v) => {
+    clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => { setSearch(v); setPage(1) }, 300)
   }
 
-  const handleCreate = async (e) => {
-    e.preventDefault(); setSaving(true)
+  const openCreate = () => {
+    setEditAssignment(null)
+    setForm(EMPTY_FORM)
+    setPanelOpen(true)
+  }
+
+  const openEdit = (assignment) => {
+    setEditAssignment(assignment)
+    setForm({
+      title: assignment.title,
+      description: assignment.description,
+      courseId: String(assignment.course.id),
+      batchId: String(assignment.batch.id),
+      startDate: assignment.startDate || '',
+      dueDate: assignment.dueDate,
+      totalMarks: assignment.totalMarks,
+      attachmentUrl: assignment.attachmentUrl || '',
+      attachmentName: assignment.attachmentName || '',
+    })
+    setPanelOpen(true)
+  }
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
     try {
-      await adminApi.createAssignment(form)
-      toast.success('Assignment created — students notified')
-      setCreatePanel(false)
-      setForm({ title: '', description: '', batchId: '', dueDate: '', maxMarks: 100, fileUrl: '' })
+      const r = await assignmentService.upload(file)
+      setForm(f => ({ ...f, attachmentUrl: r.data.url, attachmentName: r.data.fileName }))
+      toast.success('File uploaded')
+    } catch (err) {
+      toast.error(err.message || 'Only PDF and DOC/DOCX files are allowed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const buildPayload = (status) => ({
+    title: form.title,
+    description: form.description,
+    courseId: Number(form.courseId),
+    batchId: Number(form.batchId),
+    startDate: form.startDate || null,
+    dueDate: form.dueDate,
+    totalMarks: Number(form.totalMarks),
+    attachmentUrl: form.attachmentUrl || null,
+    attachmentName: form.attachmentName || null,
+    status,
+  })
+
+  const handleSubmit = async (status) => {
+    if (!form.title || !form.description || !form.courseId || !form.batchId || !form.dueDate || !form.totalMarks) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = buildPayload(status)
+      if (editAssignment) {
+        await assignmentService.update(editAssignment.id, payload)
+        toast.success('Assignment updated successfully')
+      } else {
+        await assignmentService.create(payload)
+        toast.success(status === 'PUBLISHED' ? 'Assignment published' : 'Assignment saved as draft')
+      }
+      setPanelOpen(false)
+      setForm(EMPTY_FORM)
+      setEditAssignment(null)
       load()
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed') } finally { setSaving(false) }
+    } catch (err) {
+      toast.error(err.message || `Failed to ${editAssignment ? 'update' : 'create'} assignment`)
+    } finally { setSaving(false) }
   }
 
-  const handleGrade = async (sub) => {
-    const grade = gradeInputs[sub.id]
-    const feedback = feedbackInputs[sub.id] || ''
-    if (grade === undefined || grade === '') return toast.error('Enter a grade')
-    try {
-      await adminApi.gradeSubmission(selectedAssignment.id, sub.id, { grade: parseInt(grade), feedback })
-      toast.success('Graded')
-      loadSubmissions(selectedAssignment)
-    } catch { toast.error('Failed to grade') }
+  const handlePublish = async (id) => {
+    try { await assignmentService.publish(id); toast.success('Assignment published'); load() }
+    catch (err) { toast.error(err.message || 'Failed to publish') }
   }
 
-  const isOverdue = (dueDate) => new Date(dueDate) < new Date()
+  const handleClose = async (id) => {
+    if (!confirm('Close this assignment? Students will no longer be able to submit.')) return
+    try { await assignmentService.close(id); toast.success('Assignment closed'); load() }
+    catch (err) { toast.error(err.message || 'Failed to close') }
+  }
+
+  const handleDelete = async (assignment) => {
+    if (!confirm(`Delete "${assignment.title}"? This cannot be undone.`)) return
+    try { await assignmentService.remove(assignment.id); toast.success('Assignment deleted'); load() }
+    catch (err) { toast.error(err.message || 'Failed to delete') }
+  }
+
+  const courseOptions = toOptions(courses, c => c.title)
+  const batchOptions = toOptions(batches, b => b.name)
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Assignments</h1>
-        <div className="flex gap-3">
-          <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none">
-            <option value="">All Batches</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          <button onClick={() => setCreatePanel(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
-            <Plus size={16} /> Create Assignment
-          </button>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Assignments</h1>
+          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
         </div>
+        <button onClick={openCreate}
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 transition-all">
+          <Plus size={16} /> Create Assignment
+        </button>
       </div>
 
-      <div className={`grid ${selectedAssignment ? 'lg:grid-cols-2' : 'grid-cols-1'} gap-5`}>
-        {/* Assignments List */}
-        <div className="space-y-3">
-          {loading ? (
-            [...Array(4)].map((_, i) => <div key={i} className="h-24 glass-card animate-pulse" />)
-          ) : assignments.length === 0 ? (
-            <div className="glass-card p-12 text-center">
-              <ClipboardList size={32} className="text-purple-200 mx-auto mb-3" />
-              <p className="text-gray-400">No assignments yet.</p>
-            </div>
-          ) : (
-            assignments.map(a => {
-              const overdue = isOverdue(a.dueDate)
-              const isSelected = selectedAssignment?.id === a.id
-              return (
-                <div key={a.id}
-                  className={`glass-card p-5 cursor-pointer hover:border-purple-300 transition-all ${isSelected ? 'border-2 border-purple-500 bg-purple-50/30 dark:bg-purple-900/10' : ''}`}
-                  onClick={() => loadSubmissions(a)}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-display font-bold text-gray-800 dark:text-white">{a.title}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">{a.batch?.name}</p>
-                      <div className="flex items-center gap-3 mt-2 flex-wrap">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${overdue ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
-                          Due: {format(new Date(a.dueDate), 'dd MMM yyyy')}
-                        </span>
-                        <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Max: {a.maxMarks} marks</span>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-2xl font-extrabold text-purple-600 font-display">{a._count?.submissions || 0}</p>
-                      <p className="text-[10px] text-gray-400">submissions</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })
-          )}
+      {/* Filters */}
+      <div className="glass-card p-4 flex flex-wrap gap-3">
+        <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 flex-1 min-w-[200px]">
+          <Search size={15} className="text-purple-400 flex-shrink-0" />
+          <input
+            placeholder="Search assignments..."
+            className="bg-transparent text-sm outline-none w-full text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
+            onChange={e => handleSearch(e.target.value)}
+          />
         </div>
+        <select
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          value={courseFilter} onChange={e => { setCourseFilter(e.target.value); setPage(1) }}
+        >
+          <option value="">All Courses</option>
+          {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+        </select>
+        <select
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1) }}
+        >
+          <option value="">All Batches</option>
+          {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+        <select
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+        >
+          <option value="">All Status</option>
+          <option value="DRAFT">Draft</option>
+          <option value="PUBLISHED">Published</option>
+          <option value="CLOSED">Closed</option>
+        </select>
+        <input
+          type="date" value={dueDateFrom} onChange={e => { setDueDateFrom(e.target.value); setPage(1) }}
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          title="Due date from"
+        />
+        <input
+          type="date" value={dueDateTo} onChange={e => { setDueDateTo(e.target.value); setPage(1) }}
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          title="Due date to"
+        />
+        <button onClick={load} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+          <RefreshCw size={15} />
+        </button>
+      </div>
 
-        {/* Submissions Panel */}
-        {selectedAssignment && (
-          <div className="glass-card overflow-hidden">
-            <div className="px-5 py-4 border-b border-purple-100 dark:border-purple-900/30">
-              <h3 className="font-display font-bold text-gray-800 dark:text-white">{selectedAssignment.title}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">{submissions.length} submissions · Max: {selectedAssignment.maxMarks} marks</p>
-            </div>
-            {subLoading ? (
-              <div className="p-6 space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-            ) : submissions.length === 0 ? (
-              <div className="p-10 text-center text-gray-400">No submissions yet</div>
-            ) : (
-              <div className="overflow-y-auto max-h-[600px]">
-                {submissions.map(sub => (
-                  <div key={sub.id} className="p-4 border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/10 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white text-sm">{sub.student?.user?.name}</p>
-                        <p className="text-xs text-gray-400">{format(new Date(sub.submittedAt), 'dd MMM, HH:mm')}</p>
-                        {sub.notes && <p className="text-xs text-gray-500 mt-1 italic">"{sub.notes}"</p>}
-                      </div>
-                      {sub.fileUrl && (
-                        <a href={sub.fileUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold flex-shrink-0">
-                          <ExternalLink size={11} /> File
-                        </a>
-                      )}
-                    </div>
-                    {sub.grade !== null ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-green-600">{sub.grade}/{selectedAssignment.maxMarks}</span>
-                        {sub.feedback && <p className="text-xs text-gray-500">"{sub.feedback}"</p>}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <input
-                            type="number" min="0" max={selectedAssignment.maxMarks}
-                            value={gradeInputs[sub.id] || ''}
-                            onChange={e => setGradeInputs(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                            placeholder={`Grade (0-${selectedAssignment.maxMarks})`}
-                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                          />
-                          <button onClick={() => handleGrade(sub)}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 whitespace-nowrap">
-                            Grade
+      {/* Table */}
+      <div className="glass-card overflow-hidden">
+        {loading ? (
+          <div className="p-6 space-y-3">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
+                  {['Assignment', 'Course', 'Batch', 'Due Date', 'Marks', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {assignments.length === 0 ? (
+                  <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">No assignments found</td></tr>
+                ) : (
+                  assignments.map(a => (
+                    <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
+                      <td className="px-4 py-3">
+                        <button onClick={() => router.push(`/admin/assignments/${a.id}`)}
+                          className="font-semibold text-gray-800 dark:text-white hover:text-purple-600 transition-colors text-left">
+                          {a.title}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course.title}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch.name}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{format(new Date(a.dueDate), 'dd MMM yyyy')}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.totalMarks}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[a.status]}`}>{a.status}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => router.push(`/admin/assignments/${a.id}`)}
+                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="View">
+                            <Eye size={14} />
+                          </button>
+                          <button onClick={() => openEdit(a)}
+                            className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
+                            <Pencil size={14} />
+                          </button>
+                          {a.status === 'DRAFT' && (
+                            <button onClick={() => handlePublish(a.id)}
+                              className="w-7 h-7 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 flex items-center justify-center transition-colors" title="Publish">
+                              <Send size={14} />
+                            </button>
+                          )}
+                          {a.status === 'PUBLISHED' && (
+                            <button onClick={() => handleClose(a.id)}
+                              className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 flex items-center justify-center transition-colors" title="Close">
+                              <Lock size={14} />
+                            </button>
+                          )}
+                          <button onClick={() => handleDelete(a)}
+                            className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
+                            <Trash2 size={14} />
                           </button>
                         </div>
-                        <textarea
-                          value={feedbackInputs[sub.id] || ''}
-                          onChange={e => setFeedbackInputs(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                          placeholder="Feedback (optional)"
-                          rows={2}
-                          className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Create Assignment Panel */}
-      <SlidePanel open={createPanel} onClose={() => setCreatePanel(false)} title="Create Assignment">
-        <form onSubmit={handleCreate} className="space-y-4">
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
+              ← Prev
+            </button>
+            {[...Array(Math.min(5, totalPages))].map((_, i) => {
+              const p = Math.max(1, Math.min(page - 2, totalPages - 4)) + i
+              return (
+                <button key={p} onClick={() => setPage(p)}
+                  className={`w-8 h-8 rounded-xl text-sm font-semibold transition-colors ${p === page ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-purple-50'}`}>
+                  {p}
+                </button>
+              )
+            })}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create / Edit Panel */}
+      <SlidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={editAssignment ? 'Edit Assignment' : 'Create Assignment'}
+        subtitle={editAssignment ? 'Update assignment details' : 'Assign work to a batch'}
+      >
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
-            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Assignment title" required
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+            <input
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Java Basics Assignment"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+            />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Description *</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={4} required
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
+            <textarea
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              rows={4}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Batch *</label>
-            <select value={form.batchId} onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))} required
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">Select batch</option>
-              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
+            <SearchableSelect
+              options={courseOptions}
+              value={form.courseId}
+              onChange={(v) => setForm(f => ({ ...f, courseId: v }))}
+              placeholder="Select course"
+              searchPlaceholder="Search course..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch *</label>
+            <SearchableSelect
+              options={batchOptions}
+              value={form.batchId}
+              onChange={(v) => setForm(f => ({ ...f, batchId: v }))}
+              placeholder="Select batch"
+              searchPlaceholder="Search batch..."
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Due Date *</label>
-              <input type="datetime-local" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={form.startDate}
+                onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Max Marks</label>
-              <input type="number" min="1" value={form.maxMarks} onChange={e => setForm(f => ({ ...f, maxMarks: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due Date *</label>
+              <input
+                type="date"
+                value={form.dueDate}
+                onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Reference File URL (optional)</label>
-            <input value={form.fileUrl} onChange={e => setForm(f => ({ ...f, fileUrl: e.target.value }))} placeholder="https://..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total Marks *</label>
+            <input
+              type="number" min="1"
+              value={form.totalMarks}
+              onChange={e => setForm(f => ({ ...f, totalMarks: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+            />
           </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF or DOC only)</label>
+            {form.attachmentName ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
+                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate">
+                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> {form.attachmentName}
+                </span>
+                <button type="button" onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentName: '' }))}
+                  className="text-gray-400 hover:text-red-500 flex-shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleFileChange}
+                disabled={uploading}
+                className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:text-sm file:font-semibold hover:file:bg-purple-100"
+              />
+            )}
+            {uploading && <p className="text-xs text-purple-500 mt-1">Uploading...</p>}
+          </div>
+
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setCreatePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-              {saving ? 'Creating...' : 'Create & Notify Students'}
+            <button type="button" onClick={() => setPanelOpen(false)}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button type="button" disabled={saving} onClick={() => handleSubmit('DRAFT')}
+              className="flex-1 py-2.5 rounded-xl border border-purple-200 text-purple-600 text-sm font-semibold hover:bg-purple-50 transition-colors disabled:opacity-60">
+              Save as Draft
+            </button>
+            <button type="button" disabled={saving} onClick={() => handleSubmit('PUBLISHED')}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 transition-all disabled:opacity-60">
+              {saving ? 'Saving...' : 'Publish'}
             </button>
           </div>
-        </form>
+        </div>
       </SlidePanel>
     </div>
   )

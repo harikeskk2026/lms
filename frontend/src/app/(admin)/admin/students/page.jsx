@@ -1,10 +1,14 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Key, Pencil, Download, RefreshCw } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Download, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { adminApi } from '@/lib/api'
+import studentService from '@/services/studentService'
+import batchService from '@/services/batchService'
+import collegeService from '@/services/collegeService'
+import departmentService from '@/services/departmentService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import SearchableSelect from '@/components/admin/SearchableSelect'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 text-blue-700',
@@ -13,10 +17,18 @@ const PLACEMENT_COLORS = {
   NOT_SEEKING:  'bg-gray-100 text-gray-600',
 }
 
+const EMPTY_FORM = {
+  name: '', email: '', phone: '', password: '', batchId: '',
+  collegeId: '', courseId: '', departmentId: '',
+  address: '', qualification: '', linkedinUrl: '', githubUrl: '', placementStatus: 'SEEKING',
+}
+
 function genPassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!'
   return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
+
+const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
 
 export default function StudentsPage() {
   const router = useRouter()
@@ -30,79 +42,177 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [placementFilter, setPlacementFilter] = useState('')
   const [batches, setBatches] = useState([])
+  const [colleges, setColleges] = useState([])
+  const [courses, setCourses] = useState([])
+  const [departments, setDepartments] = useState([])
+  const [loadingCourses, setLoadingCourses] = useState(false)
+  const [loadingDepartments, setLoadingDepartments] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', batchId: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const searchTimer = useRef(null)
 
   const load = useCallback(() => {
     setLoading(true)
-    adminApi.getStudents({ search, batchId: batchFilter, status: statusFilter, placementStatus: placementFilter, page, limit: 20 })
+    studentService.list({
+      search: search || undefined,
+      batchId: batchFilter || undefined,
+      status: statusFilter || undefined,
+      placementStatus: placementFilter || undefined,
+      page,
+      limit: 20,
+    })
       .then(r => {
-        const d = r.data.data
+        const d = r.data
         setStudents(d.students)
         setTotal(d.total)
         setTotalPages(d.totalPages)
       })
-      .catch(() => toast.error('Failed to load students'))
+      .catch(err => toast.error(err.message || 'Failed to load students'))
       .finally(() => setLoading(false))
   }, [search, batchFilter, statusFilter, placementFilter, page])
 
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
+    batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
+    collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
   }, [])
+
+  const loadCourses = (collegeId) => {
+    setLoadingCourses(true)
+    collegeService.getCourses(collegeId)
+      .then(r => setCourses(r.data || []))
+      .catch(() => { setCourses([]); toast.error('Failed to load courses for this college') })
+      .finally(() => setLoadingCourses(false))
+  }
+
+  const loadDepartments = (courseId) => {
+    setLoadingDepartments(true)
+    departmentService.list(courseId)
+      .then(r => setDepartments(r.data || []))
+      .catch(() => { setDepartments([]); toast.error('Failed to load departments for this course') })
+      .finally(() => setLoadingDepartments(false))
+  }
 
   const handleSearch = (v) => {
     clearTimeout(searchTimer.current)
     searchTimer.current = setTimeout(() => { setSearch(v); setPage(1) }, 300)
   }
 
-  const handleCreate = async (e) => {
+  const openCreate = () => {
+    setEditStudent(null)
+    setForm(EMPTY_FORM)
+    setCourses([])
+    setDepartments([])
+    setPanelOpen(true)
+  }
+
+  const openEdit = (student) => {
+    setEditStudent(student)
+    setForm({
+      name: student.name,
+      email: student.email,
+      phone: student.phone || '',
+      password: '',
+      batchId: student.batch?.id ? String(student.batch.id) : '',
+      collegeId: student.college?.id ? String(student.college.id) : '',
+      courseId: student.course?.id ? String(student.course.id) : '',
+      departmentId: student.department?.id ? String(student.department.id) : '',
+      address: student.address || '',
+      qualification: student.qualification || '',
+      linkedinUrl: student.linkedinUrl || '',
+      githubUrl: student.githubUrl || '',
+      placementStatus: student.placementStatus || 'SEEKING',
+    })
+    setCourses([])
+    setDepartments([])
+    if (student.college?.id) loadCourses(student.college.id)
+    if (student.course?.id) loadDepartments(student.course.id)
+    setPanelOpen(true)
+  }
+
+  const handleCollegeChange = (collegeId) => {
+    setForm(f => ({ ...f, collegeId, courseId: '', departmentId: '' }))
+    setDepartments([])
+    if (collegeId) loadCourses(collegeId)
+    else setCourses([])
+  }
+
+  const handleCourseChange = (courseId) => {
+    setForm(f => ({ ...f, courseId, departmentId: '' }))
+    if (courseId) loadDepartments(courseId)
+    else setDepartments([])
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await adminApi.createStudent(form)
-      toast.success('Student created successfully')
+      const batchId = form.batchId ? Number(form.batchId) : null
+      const collegeId = form.collegeId ? Number(form.collegeId) : null
+      const courseId = form.courseId ? Number(form.courseId) : null
+      const departmentId = form.departmentId ? Number(form.departmentId) : null
+      if (editStudent) {
+        await studentService.update(editStudent.id, {
+          name: form.name,
+          phone: form.phone,
+          address: form.address,
+          qualification: form.qualification,
+          linkedinUrl: form.linkedinUrl,
+          githubUrl: form.githubUrl,
+          placementStatus: form.placementStatus,
+          batchId, collegeId, courseId, departmentId,
+        })
+        toast.success('Student updated successfully')
+      } else {
+        await studentService.create({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          password: form.password,
+          batchId, collegeId, courseId, departmentId,
+        })
+        toast.success('Student created successfully')
+      }
       setPanelOpen(false)
-      setForm({ name: '', email: '', phone: '', password: '', batchId: '' })
+      setForm(EMPTY_FORM)
+      setEditStudent(null)
       load()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create student')
+      toast.error(err.message || `Failed to ${editStudent ? 'update' : 'create'} student`)
     } finally { setSaving(false) }
   }
 
   const handleToggleStatus = async (id, current) => {
     try {
-      await adminApi.toggleStudentStatus(id)
+      await studentService.toggleStatus(id)
       toast.success(`Student ${current ? 'deactivated' : 'activated'}`)
       load()
     } catch { toast.error('Failed to update status') }
   }
 
-  const handleResetPw = async (id) => {
-    const pw = genPassword()
-    if (!confirm(`Reset password to: ${pw}\n\nCopy this password and share with student.`)) return
-    try {
-      await adminApi.resetStudentPassword(id, { newPassword: pw })
-      toast.success('Password reset successfully')
-    } catch { toast.error('Failed to reset password') }
-  }
-
   const downloadCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'Batch', 'Placement', 'Status']
+    const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Department', 'Batch', 'Placement', 'Status']
     const rows = students.map(s => [
       s.name, s.email, s.phone || '',
-      s.studentProfile?.enrollmentNo || '',
-      s.studentProfile?.enrollments?.[0]?.batch?.name || '',
-      s.studentProfile?.placementStatus || '',
-      s.isActive ? 'Active' : 'Inactive',
+      s.enrollmentNo || '',
+      s.college?.name || '',
+      s.course?.title || '',
+      s.department?.name || '',
+      s.batch?.name || '',
+      s.placementStatus || '',
+      s.active ? 'Active' : 'Inactive',
     ])
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'students.csv'; a.click()
   }
+
+  const batchOptions = toOptions(batches, b => b.name)
+  const collegeOptions = toOptions(colleges, c => c.name)
+  const courseOptions = toOptions(courses, c => c.title)
+  const departmentOptions = toOptions(departments, d => d.name)
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -113,7 +223,7 @@ export default function StudentsPage() {
           <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
         </div>
         <button
-          onClick={() => { setEditStudent(null); setForm({ name: '', email: '', phone: '', password: '', batchId: '' }); setPanelOpen(true) }}
+          onClick={openCreate}
           className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 transition-all"
         >
           <Plus size={16} /> Add Student
@@ -174,78 +284,78 @@ export default function StudentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['#', 'Student', 'Enrollment', 'Batch', 'Placement', 'Attendance', 'Status', 'Actions'].map(h => (
+                  {['#', 'Student', 'Enrollment', 'College / Course', 'Department', 'Batch', 'Placement', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {students.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
                 ) : (
-                  students.map((s, i) => {
-                    const enrollment = s.studentProfile?.enrollments?.[0]
-                    return (
-                      <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
-                        <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * 20 + i + 1}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                              {s.name[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-800 dark:text-white">{s.name}</p>
-                              <p className="text-xs text-gray-400">{s.email}</p>
-                            </div>
+                  students.map((s, i) => (
+                    <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
+                      <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * 20 + i + 1}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {s.name[0].toUpperCase()}
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{s.studentProfile?.enrollmentNo || '—'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {enrollment ? (
-                            <div>
-                              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{enrollment.batch?.name}</p>
-                              <p className="text-[10px] text-gray-400">{enrollment.batch?.course?.title}</p>
-                            </div>
-                          ) : <span className="text-gray-400 text-xs">Not enrolled</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PLACEMENT_COLORS[s.studentProfile?.placementStatus] || 'bg-gray-100 text-gray-500'}`}>
-                            {s.studentProfile?.placementStatus?.replace('_', ' ') || '—'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                              <div className="h-full bg-purple-500 rounded-full" style={{ width: `${s.attendancePct || 0}%` }} />
-                            </div>
-                            <span className="text-xs text-gray-600 dark:text-gray-400">{s.attendancePct || 0}%</span>
+                          <div>
+                            <p className="font-semibold text-gray-800 dark:text-white">{s.name}</p>
+                            <p className="text-xs text-gray-400">{s.email}</p>
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleToggleStatus(s.id, s.isActive)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.isActive ? 'bg-purple-500' : 'bg-gray-200 dark:bg-gray-700'}`}
-                          >
-                            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${s.isActive ? 'translate-x-4.5' : 'translate-x-0.5'}`} style={{ transform: s.isActive ? 'translateX(18px)' : 'translateX(2px)' }} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{s.enrollmentNo || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {s.college || s.course ? (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{s.college?.name || '—'}</p>
+                            <p className="text-[10px] text-gray-400">{s.course?.title || ''}</p>
+                          </div>
+                        ) : <span className="text-gray-400 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-gray-600 dark:text-gray-300">{s.department?.name || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {s.batch ? (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{s.batch.name}</p>
+                            <p className="text-[10px] text-gray-400">{s.batch.course?.title}</p>
+                          </div>
+                        ) : <span className="text-gray-400 text-xs">Not enrolled</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PLACEMENT_COLORS[s.placementStatus] || 'bg-gray-100 text-gray-500'}`}>
+                          {s.placementStatus?.replace('_', ' ') || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleToggleStatus(s.id, s.active)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.active ? 'bg-purple-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform`} style={{ transform: s.active ? 'translateX(18px)' : 'translateX(2px)' }} />
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => router.push(`/admin/students/${s.id}`)}
+                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="View">
+                            <Eye size={14} />
                           </button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => router.push(`/admin/students/${s.id}`)}
-                              className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="View">
-                              <Eye size={14} />
-                            </button>
-                            <button onClick={() => handleResetPw(s.id)}
-                              className="w-7 h-7 rounded-lg bg-yellow-50 text-yellow-600 hover:bg-yellow-100 flex items-center justify-center transition-colors" title="Reset Password">
-                              <Key size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
+                          <button onClick={() => openEdit(s)}
+                            className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -279,54 +389,172 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Add Student Panel */}
-      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Add Student" subtitle="Create a new student account">
-        <form onSubmit={handleCreate} className="space-y-4">
-          {[
-            { label: 'Full Name *', key: 'name', type: 'text', placeholder: 'Ravi Kumar' },
-            { label: 'Email *', key: 'email', type: 'email', placeholder: 'ravi@example.com' },
-            { label: 'Phone', key: 'phone', type: 'tel', placeholder: '+91 98765 43210' },
-          ].map(({ label, key, type, placeholder }) => (
-            <div key={key}>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-              <input
-                type={type}
-                value={form[key]}
-                onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                placeholder={placeholder}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                required={key === 'name' || key === 'email'}
-              />
-            </div>
-          ))}
+      {/* Add / Edit Student Panel */}
+      <SlidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={editStudent ? 'Edit Student' : 'Add Student'}
+        subtitle={editStudent ? 'Update student profile' : 'Create a new student account'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Password *</label>
-            <div className="flex gap-2">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="Ravi Kumar"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              required
+            />
+          </div>
+          {!editStudent && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Email *</label>
               <input
-                type="text"
-                value={form.password}
-                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                placeholder="Min 8 characters"
-                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                type="email"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="ravi@example.com"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
                 required
               />
-              <button type="button" onClick={() => setForm(f => ({ ...f, password: genPassword() }))}
-                className="px-3 py-2 bg-purple-50 text-purple-600 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors whitespace-nowrap">
-                Generate
-              </button>
             </div>
+          )}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              placeholder="+91 98765 43210"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          {!editStudent && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Password *</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  placeholder="Min 8 characters"
+                  className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                  required
+                />
+                <button type="button" onClick={() => setForm(f => ({ ...f, password: genPassword() }))}
+                  className="px-3 py-2 bg-purple-50 text-purple-600 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors whitespace-nowrap">
+                  Generate
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Academic hierarchy: College -> Course -> Department, then Batch */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
+            <SearchableSelect
+              options={collegeOptions}
+              value={form.collegeId}
+              onChange={handleCollegeChange}
+              placeholder="Select college"
+              searchPlaceholder="Search college..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course</label>
+            <SearchableSelect
+              options={courseOptions}
+              value={form.courseId}
+              onChange={handleCourseChange}
+              placeholder={form.collegeId ? 'Select course' : 'Select a college first'}
+              searchPlaceholder="Search course..."
+              disabled={!form.collegeId}
+              loading={loadingCourses}
+              emptyLabel="No courses offered by this college"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Department</label>
+            <SearchableSelect
+              options={departmentOptions}
+              value={form.departmentId}
+              onChange={(v) => setForm(f => ({ ...f, departmentId: v }))}
+              placeholder={form.courseId ? 'Select department' : 'Select a course first'}
+              searchPlaceholder="Search department..."
+              disabled={!form.courseId}
+              loading={loadingDepartments}
+              emptyLabel="No departments for this course"
+            />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign to Batch</label>
-            <select
+            <SearchableSelect
+              options={batchOptions}
               value={form.batchId}
-              onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <option value="">No batch (assign later)</option>
-              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+              onChange={(v) => setForm(f => ({ ...f, batchId: v }))}
+              placeholder="No batch (assign later)"
+              searchPlaceholder="Search batch..."
+            />
           </div>
+
+          {editStudent && (
+            <>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={form.address}
+                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Qualification</label>
+                <input
+                  type="text"
+                  value={form.qualification}
+                  onChange={e => setForm(f => ({ ...f, qualification: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">LinkedIn</label>
+                  <input
+                    type="text"
+                    value={form.linkedinUrl}
+                    onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">GitHub</label>
+                  <input
+                    type="text"
+                    value={form.githubUrl}
+                    onChange={e => setForm(f => ({ ...f, githubUrl: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Placement Status</label>
+                <select
+                  value={form.placementStatus}
+                  onChange={e => setForm(f => ({ ...f, placementStatus: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="SEEKING">Seeking</option>
+                  <option value="INTERVIEWING">Interviewing</option>
+                  <option value="PLACED">Placed</option>
+                  <option value="NOT_SEEKING">Not Seeking</option>
+                </select>
+              </div>
+            </>
+          )}
+
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setPanelOpen(false)}
               className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
@@ -334,7 +562,7 @@ export default function StudentsPage() {
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 transition-all disabled:opacity-60">
-              {saving ? 'Creating...' : 'Create Student'}
+              {saving ? 'Saving...' : editStudent ? 'Save Changes' : 'Create Student'}
             </button>
           </div>
         </form>
