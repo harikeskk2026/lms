@@ -473,29 +473,8 @@ async function removeStudentFromBatch(batchId, studentId) {
 }
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
-async function getCourses() {
-  return prisma.course.findMany({
-    include: {
-      _count: { select: { batches: true, materials: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
-}
-
-async function createCourse(data) {
-  const { title, slug, description, duration, level, thumbnail } = data
-  return prisma.course.create({
-    data: {
-      title,
-      slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-      description,
-      duration: duration || '',
-      level: level || 'BEGINNER',
-      thumbnail: thumbnail || null,
-      isActive: true,
-    },
-  })
-}
+// Course list/create now served by the Java API (api/); materials/syllabus/sessions
+// below still operate on courses that already exist in this database.
 
 async function addMaterial(courseId, { title, type, fileUrl, fileSize, batchId }) {
   return prisma.courseMaterial.create({
@@ -1578,7 +1557,7 @@ module.exports = {
   getDashboardStats,
   getStudents, createStudent, getStudentDetail, updateStudent, toggleStudentStatus, resetStudentPassword,
   getBatches, createBatch, getBatchDetail, updateBatch, enrollStudent, removeStudentFromBatch,
-  getCourses, createCourse, addMaterial, deleteMaterial, addRecordedSession, addSyllabusModule, addSyllabusTopic,
+  addMaterial, deleteMaterial, addRecordedSession, addSyllabusModule, addSyllabusTopic,
   getClasses, createClass, updateClass,
   getAttendanceSheet, markAttendance,
   getAttendanceOverview, getAttendanceAnalytics, getLowAttendanceStudents,

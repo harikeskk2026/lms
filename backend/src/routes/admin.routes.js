@@ -30,8 +30,7 @@ router.post('/batches/:id/enroll',    adminOnly,              ctrl.enrollStudent
 router.delete('/batches/:id/students/:studentId', adminOnly,  ctrl.removeStudentFromBatch)
 
 // ─── Courses & Materials ──────────────────────────────────────────────────────
-router.get('/courses',                                        ctrl.getCourses)
-router.post('/courses',               adminOnly,              ctrl.createCourse)
+// Course list/create now served by the Java API (api/).
 router.post('/courses/:id/materials', adminOnly,              ctrl.addMaterial)
 router.delete('/courses/:courseId/materials/:materialId', adminOnly, ctrl.deleteMaterial)
 router.post('/courses/:id/sessions',  adminOnly,              ctrl.addRecordedSession)

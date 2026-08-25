@@ -16,8 +16,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = Cookies.get('clms_at')
     if (token) {
-      api.get('/auth/me')
-        .then(r => setUser(r.data.user))
+      authService.me()
+        .then(r => setUser(r.data))
         .catch(() => {
           Cookies.remove('clms_at')
           setUser(null)

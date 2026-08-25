@@ -6,6 +6,7 @@ import com.careerlabs.lms.api.auth.dto.response.UserResponse;
 import com.careerlabs.lms.api.auth.service.AuthService;
 import com.careerlabs.lms.api.common.exception.AccountDisabledException;
 import com.careerlabs.lms.api.common.exception.InvalidCredentialsException;
+import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.security.JwtService;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
@@ -48,5 +49,12 @@ public class AuthServiceImpl implements AuthService {
         String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getRole().name());
 
         return LoginResponse.of(token, jwtService.getExpirationSeconds(), UserResponse.from(user));
+    }
+
+    @Override
+    public UserResponse getCurrentUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        return UserResponse.from(user);
     }
 }

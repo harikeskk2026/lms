@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Plus, BookOpen, Video, FileText, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
+import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
 
 const LEVEL_COLORS = { BEGINNER: 'bg-green-100 text-green-700', INTERMEDIATE: 'bg-yellow-100 text-yellow-700', ADVANCED: 'bg-red-100 text-red-700' }
@@ -27,7 +28,7 @@ export default function CoursesPage() {
 
   const load = () => {
     setLoading(true)
-    adminApi.getCourses().then(r => setCourses(r.data.data || [])).catch(() => toast.error('Failed')).finally(() => setLoading(false))
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => toast.error('Failed')).finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -38,12 +39,12 @@ export default function CoursesPage() {
   const handleCreateCourse = async (e) => {
     e.preventDefault(); setSaving(true)
     try {
-      await adminApi.createCourse(courseForm)
+      await courseService.create(courseForm)
       toast.success('Course created')
       setAddPanel(false)
       setCourseForm({ title: '', description: '', duration: '', level: 'BEGINNER', thumbnail: '' })
       load()
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed') } finally { setSaving(false) }
+    } catch (err) { toast.error(err.message || 'Failed') } finally { setSaving(false) }
   }
 
   const handleAddMaterial = async (e) => {

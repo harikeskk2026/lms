@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.security;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,5 +37,17 @@ public class JwtService {
 
     public long getExpirationSeconds() {
         return expirationSeconds;
+    }
+
+    /**
+     * Verifies the token signature/expiry and returns its claims.
+     * Throws {@link io.jsonwebtoken.JwtException} (or a subclass) when the token is invalid.
+     */
+    public Claims parseClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(signingKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }

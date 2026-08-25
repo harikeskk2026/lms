@@ -71,15 +71,8 @@ const removeStudentFromBatch = asyncHandler(async (req, res) => {
 })
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
-const getCourses = asyncHandler(async (req, res) => {
-  const data = await svc.getCourses()
-  res.json({ success: true, data })
-})
-
-const createCourse = asyncHandler(async (req, res) => {
-  const data = await svc.createCourse(req.body)
-  res.status(201).json({ success: true, data })
-})
+// Course list/create now served by the Java API (api/). Materials/syllabus/sessions
+// below still operate on courses that already exist in this database.
 
 const addMaterial = asyncHandler(async (req, res) => {
   const data = await svc.addMaterial(req.params.id, req.body)
@@ -329,7 +322,7 @@ module.exports = {
   getDashboardStats,
   getStudents, createStudent, getStudentDetail, updateStudent, toggleStudentStatus, resetStudentPassword,
   getBatches, createBatch, getBatchDetail, updateBatch, enrollStudent, removeStudentFromBatch,
-  getCourses, createCourse, addMaterial, deleteMaterial, addRecordedSession, addSyllabusModule, addSyllabusTopic,
+  addMaterial, deleteMaterial, addRecordedSession, addSyllabusModule, addSyllabusTopic,
   getClasses, createClass, updateClass,
   getAttendanceSheet, markAttendance,
   getAttendanceOverview, getAttendanceAnalytics, getLowAttendanceStudents,
