@@ -2,7 +2,7 @@ import axios from 'axios'
 import tokenStorage from '@/utilities/tokenStorage'
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api',
+  baseURL: process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api',
   withCredentials: true,
   timeout: 10000,
 })
@@ -50,7 +50,7 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api'
+        const baseURL = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api'
         const { data } = await axios.post(
           `${baseURL}/auth/refresh`,
           {},

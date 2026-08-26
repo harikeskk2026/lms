@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
  * switched off outside local development.
  */
 @Component
+@Order(1)
 public class DevUserSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DevUserSeeder.class);
@@ -40,17 +42,29 @@ public class DevUserSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (!seedEnabled || userRepository.count() > 0) {
+        if (!seedEnabled) {
             return;
         }
 
-        User user = new User();
-        user.setName("Admin User");
-        user.setEmail(seedEmail);
-        user.setPasswordHash(passwordEncoder.encode(seedPassword));
-        user.setRole(Role.ADMIN);
-        userRepository.save(user);
+        if (userRepository.findByEmailIgnoreCase(seedEmail).isEmpty()) {
+            User admin = new User();
+            admin.setName("Admin User");
+            admin.setEmail(seedEmail);
+            admin.setPasswordHash(passwordEncoder.encode(seedPassword));
+            admin.setRole(Role.ADMIN);
+            userRepository.save(admin);
+            log.info("Seeded initial admin user '{}' for local development", seedEmail);
+        }
 
-        log.info("Seeded initial user '{}' for local development", seedEmail);
+        String studentEmail = "student@careerlabs.com";
+        if (userRepository.findByEmailIgnoreCase(studentEmail).isEmpty()) {
+            User student = new User();
+            student.setName("Student User");
+            student.setEmail(studentEmail);
+            student.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
+            student.setRole(Role.STUDENT);
+            userRepository.save(student);
+            log.info("Seeded initial student user '{}' for local development", studentEmail);
+        }
     }
 }

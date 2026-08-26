@@ -17,9 +17,10 @@ const stats = [
   { icon: TrendingUp,    label: 'Placement Rate',    value: '94%' },
 ]
 
-// Matches the user seeded by api/.../DevUserSeeder on first run (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD)
+// Matches the users seeded by api/.../DevUserSeeder on run
 const demoAccounts = [
   { role: 'Admin', email: 'admin@careerlabs.com', password: 'ChangeMe123!' },
+  { role: 'Student', email: 'student@careerlabs.com', password: 'ChangeMe123!' },
 ]
 
 export default function LoginPage() {
