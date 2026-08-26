@@ -30,4 +30,8 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
 
     @Query("SELECT a FROM QuizAttempt a WHERE a.status = 'SUBMITTED' AND a.completedAt >= :since")
     List<QuizAttempt> findAllSubmittedSince(@Param("since") Instant since);
+
+    List<QuizAttempt> findByStudentIdInAndStatus(List<Long> studentIds, AttemptStatus status);
+
+    List<QuizAttempt> findByStatus(AttemptStatus status);
 }
