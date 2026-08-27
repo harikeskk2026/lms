@@ -73,6 +73,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/assignments/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/assignments/**").hasRole("ADMIN")
+                        // Notification endpoints
+                        .requestMatchers("/api/student/notifications/**").hasRole("STUDENT")
+                        .requestMatchers("/api/admin/notifications/**").hasRole("ADMIN")
+                        // Attendance endpoints
+                        .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasRole("ADMIN")
+                        .requestMatchers("/api/student/attendance/**", "/api/student/classes/**").hasRole("STUDENT")
                         .requestMatchers("/uploads/**").permitAll()
                         .anyRequest().authenticated()
                 )

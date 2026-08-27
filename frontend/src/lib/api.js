@@ -103,10 +103,10 @@ export const adminApi = {
   resetStudentPassword: (id, data) => api.post(`/admin/students/${id}/reset-password`, data),
 
   // Batches
-  getBatches: (params) => api.get('/admin/batches', { params }),
-  createBatch: (data) => api.post('/admin/batches', data),
-  getBatchDetail: (id) => api.get(`/admin/batches/${id}`),
-  updateBatch: (id, data) => api.patch(`/admin/batches/${id}`, data),
+  getBatches: (params) => api.get('/batches', { params }),
+  createBatch: (data) => api.post('/batches', data),
+  getBatchDetail: (id) => api.get(`/batches/${id}`),
+  updateBatch: (id, data) => api.put(`/batches/${id}`, data),
   enrollStudent: (batchId, studentId) => api.post(`/admin/batches/${batchId}/enroll`, { studentId }),
   removeFromBatch: (batchId, studentId) => api.delete(`/admin/batches/${batchId}/students/${studentId}`),
 
@@ -134,6 +134,18 @@ export const adminApi = {
   getAttendanceAlerts:    (params)  => api.get('/admin/attendance/alerts', { params }),
   generateAlerts:         (params)  => api.post('/admin/attendance/alerts/generate', null, { params }),
   resolveAlert:           (id)      => api.patch(`/admin/attendance/alerts/${id}/resolve`),
+  getAttendanceDashboard: ()        => api.get('/admin/attendance/dashboard'),
+  getTodayClasses:        ()        => api.get('/admin/attendance/today'),
+  copyPreviousAttendance: (classId) => api.get(`/admin/attendance/${classId}/copy-previous`),
+  saveAttendanceDraft:    (classId, records) => api.post(`/admin/attendance/${classId}`, { records }, { params: { submit: false } }),
+  submitAttendance:       (classId, records) => api.post(`/admin/attendance/${classId}`, { records }, { params: { submit: true } }),
+  editAttendanceRecord:   (id, data) => api.put(`/admin/attendance/${id}`, data),
+  getCorrections:         (params)  => api.get('/admin/attendance/corrections', { params }),
+  reviewCorrection:       (id, data) => api.put(`/admin/attendance/corrections/${id}`, data),
+  getAttendancePolicy:    (params)  => api.get('/admin/attendance/policy', { params }),
+  saveAttendancePolicy:   (data)    => api.put('/admin/attendance/policy', data),
+  getAttendanceHistory:   (params)  => api.get('/admin/attendance/history', { params }),
+  exportCSV:              (params)  => api.get('/reports/export', { params }),
 
   // Quizzes
   getQuizzes: (params) => api.get('/admin/quizzes', { params }),
@@ -177,10 +189,11 @@ export const adminApi = {
   updateAnnouncement: (id, data) => api.patch(`/admin/announcements/${id}`, data),
   deleteAnnouncement: (id) => api.delete(`/admin/announcements/${id}`),
 
-  // Reports
-  getAttendanceReport: (params) => api.get('/admin/reports/attendance', { params }),
-  getPerformanceReport: (params) => api.get('/admin/reports/performance', { params }),
-  exportCSV: (params) => api.get('/admin/reports/export', { params }),
+  // Notifications
+  getNotifications:    ()    => api.get('/admin/notifications'),
+  markNotifRead:       (id)  => api.patch(`/admin/notifications/${id}/read`),
+  markAllNotifsRead:   ()    => api.patch('/admin/notifications/read-all'),
+  getUnreadCount:      ()    => api.get('/admin/notifications/unread-count'),
 }
 
 export const studentApi = {
@@ -194,6 +207,12 @@ export const studentApi = {
   getAttendance:     (month)    => api.get(`/student/attendance?month=${month || ''}`),
   getAttSummary:     ()         => api.get('/student/attendance/summary'),
   getAttendanceTrend: ()        => api.get('/student/attendance/trend'),
+  getAttendanceHealth: ()       => api.get('/student/attendance/health'),
+  getAttendanceGoal:  ()        => api.get('/student/attendance/goal'),
+  setAttendanceGoal:  (targetPercentage) => api.post('/student/attendance/goal', { targetPercentage }),
+  getCalendarDay:     (date)    => api.get('/student/attendance/calendar/day', { params: { date } }),
+  getMyCorrections:   ()        => api.get('/student/attendance/corrections'),
+  requestCorrection:  (data)    => api.post('/student/attendance/corrections', data),
   getAssignments:    ()         => api.get('/student/assignments'),
   submitAssignment:  (id, form) => api.post(`/student/assignments/${id}/submit`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }

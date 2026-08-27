@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
+import courseService from '@/services/courseService'
+import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionBankPanel from '@/components/admin/QuestionBankPanel'
 import QuestionForm from '@/components/admin/QuestionForm'
@@ -27,6 +29,7 @@ const DIFFICULTY_STYLES = {
 const EMPTY_FORM = {
   title: '', description: '', type: 'MCQ', difficulty: 'MEDIUM',
   duration: 30, passingScore: 50, maxAttempts: 1,
+  courseId: '', batchId: '',
   randomQuestions: false, randomOptions: false, showExplanation: true,
 }
 
@@ -35,6 +38,8 @@ export default function QuizzesPage() {
   const [loading, setLoading]       = useState(true)
   const [bankQuestions, setBankQuestions] = useState([])
   const [topics, setTopics]         = useState([])
+  const [courses, setCourses]       = useState([])
+  const [batches, setBatches]       = useState([])
   const [panelOpen, setPanelOpen]   = useState(false)
   const [questionsView, setQuestionsView] = useState('list') // 'list' | 'create' | 'bulkCreate'
   const [step, setStep]             = useState(0)
@@ -67,6 +72,8 @@ export default function QuizzesPage() {
     load()
     loadBankQuestions()
     quizService.listTopics().then(r => setTopics(r.data || [])).catch(() => {})
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
+    batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
   }, [])
 
   const handleQuestionCreated = (newQuestion) => {
@@ -87,6 +94,7 @@ export default function QuizzesPage() {
       await quizService.updateQuiz(quiz.id, {
         title: quiz.title, description: quiz.description, type: quiz.type, difficulty: quiz.difficulty,
         duration: quiz.duration, passingScore: quiz.passingScore, maxAttempts: quiz.maxAttempts,
+        courseId: quiz.courseId || null, batchId: quiz.batchId || null,
         randomQuestions: quiz.randomQuestions, randomOptions: quiz.randomOptions,
         showExplanation: quiz.showExplanation, status: nextStatus,
       })
@@ -157,10 +165,11 @@ export default function QuizzesPage() {
     }
     setSaving(true)
     try {
-      const quiz = await quizService.createQuiz(form)
+      const payload = { ...form, courseId: form.courseId || null, batchId: form.batchId || null }
+      const quiz = await quizService.createQuiz(payload)
       await quizService.attachQuestions(quiz.data.id, selectedQuestionIds)
       if (publish) {
-        await quizService.updateQuiz(quiz.data.id, { ...form, status: 'PUBLISHED' })
+        await quizService.updateQuiz(quiz.data.id, { ...payload, status: 'PUBLISHED' })
       }
       toast.success(publish ? 'Quiz published!' : 'Quiz saved as draft')
       setPanelOpen(false); setStep(0)
@@ -239,14 +248,14 @@ export default function QuizzesPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-purple-50/50 border-b border-purple-100 dark:bg-purple-900/20 dark:border-purple-900/30">
-                        {['Title', 'Type', 'Difficulty', 'Questions', 'Duration', 'Passing', 'Max Attempts', 'Status', 'Actions'].map(h => (
+                        {['Title', 'Type', 'Difficulty', 'Course / Batch', 'Questions', 'Duration', 'Passing', 'Max Attempts', 'Status', 'Actions'].map(h => (
                           <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedQuizzes.length === 0 ? (
-                        <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No quizzes found</td></tr>
+                        <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No quizzes found</td></tr>
                       ) : (
                         paginatedQuizzes.map(q => (
                           <tr key={q.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
@@ -258,6 +267,14 @@ export default function QuizzesPage() {
                             </td>
                             <td className="px-3 py-3">
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_STYLES[q.difficulty]}`}>{q.difficulty}</span>
+                            </td>
+                            <td className="px-3 py-3 text-xs text-gray-500 max-w-[160px]">
+                              {q.courseName || q.batchName ? (
+                                <div className="flex flex-col gap-0.5">
+                                  {q.courseName && <span className="truncate">{q.courseName}</span>}
+                                  {q.batchName && <span className="text-gray-400 truncate">{q.batchName}</span>}
+                                </div>
+                              ) : <span className="text-gray-300">All students</span>}
                             </td>
                             <td className="px-3 py-3"><span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full">{q.totalQuestions}</span></td>
                             <td className="px-3 py-3 text-xs text-gray-500">{q.duration}m</td>
@@ -398,6 +415,33 @@ export default function QuizzesPage() {
                   <option value="EASY">Easy</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="HARD">Hard</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Course</label>
+                <select value={form.courseId}
+                  onChange={e => {
+                    const courseId = e.target.value
+                    setForm(f => {
+                      const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(b.course?.id) === String(courseId))
+                      return { ...f, courseId, batchId: stillValid ? f.batchId : '' }
+                    })
+                  }}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">All courses</option>
+                  {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Batch</label>
+                <select value={form.batchId} onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">All batches</option>
+                  {batches
+                    .filter(b => !form.courseId || String(b.course?.id) === String(form.courseId))
+                    .map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
             </div>

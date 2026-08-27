@@ -17,6 +17,10 @@ public record QuizResponse(
         Integer duration,
         Integer passingScore,
         Integer maxAttempts,
+        Long courseId,
+        String courseName,
+        Long batchId,
+        String batchName,
         boolean randomQuestions,
         boolean randomOptions,
         boolean showExplanation,
@@ -29,6 +33,10 @@ public record QuizResponse(
 ) {
 
     public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions) {
+        return from(quiz, questions, null, null);
+    }
+
+    public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions, String courseName, String batchName) {
         return new QuizResponse(
                 quiz.getId(),
                 quiz.getTitle(),
@@ -38,6 +46,10 @@ public record QuizResponse(
                 quiz.getDuration(),
                 quiz.getPassingScore(),
                 quiz.getMaxAttempts(),
+                quiz.getCourseId(),
+                courseName,
+                quiz.getBatchId(),
+                batchName,
                 quiz.isRandomQuestions(),
                 quiz.isRandomOptions(),
                 quiz.isShowExplanation(),

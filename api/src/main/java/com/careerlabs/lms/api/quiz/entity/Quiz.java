@@ -44,6 +44,12 @@ public class Quiz {
     @Column(name = "max_attempts", nullable = false)
     private Integer maxAttempts = 1;
 
+    @Column(name = "course_id")
+    private Long courseId;
+
+    @Column(name = "batch_id")
+    private Long batchId;
+
     @Column(name = "random_questions", nullable = false)
     private boolean randomQuestions = false;
 
@@ -136,6 +142,22 @@ public class Quiz {
 
     public void setMaxAttempts(Integer maxAttempts) {
         this.maxAttempts = maxAttempts;
+    }
+
+    public Long getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(Long courseId) {
+        this.courseId = courseId;
+    }
+
+    public Long getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(Long batchId) {
+        this.batchId = batchId;
     }
 
     public boolean isRandomQuestions() {

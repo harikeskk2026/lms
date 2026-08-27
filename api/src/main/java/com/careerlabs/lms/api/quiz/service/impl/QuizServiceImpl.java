@@ -1,7 +1,11 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
+import com.careerlabs.lms.api.batch.entity.Batch;
+import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.quiz.dto.request.AttachQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.CreateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
@@ -32,13 +36,18 @@ public class QuizServiceImpl implements QuizService {
     private final QuizQuestionRepository quizQuestionRepository;
     private final QuestionRepository questionRepository;
     private final QuizAttemptRepository quizAttemptRepository;
+    private final CourseRepository courseRepository;
+    private final BatchRepository batchRepository;
 
     public QuizServiceImpl(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
-                            QuestionRepository questionRepository, QuizAttemptRepository quizAttemptRepository) {
+                            QuestionRepository questionRepository, QuizAttemptRepository quizAttemptRepository,
+                            CourseRepository courseRepository, BatchRepository batchRepository) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.questionRepository = questionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
     }
 
     @Override
@@ -62,6 +71,7 @@ public class QuizServiceImpl implements QuizService {
         quiz.setCreatedBy(createdBy);
         applyRequest(quiz, request.getTitle(), request.getDescription(), request.getType(), request.getDifficulty(),
                 request.getDuration(), request.getPassingScore(), request.getMaxAttempts(),
+                request.getCourseId(), request.getBatchId(),
                 request.isRandomQuestions(), request.isRandomOptions(), request.isShowExplanation());
 
         return toResponse(quizRepository.save(quiz));
@@ -73,6 +83,7 @@ public class QuizServiceImpl implements QuizService {
         Quiz quiz = findOrThrow(id);
         applyRequest(quiz, request.getTitle(), request.getDescription(), request.getType(), request.getDifficulty(),
                 request.getDuration(), request.getPassingScore(), request.getMaxAttempts(),
+                request.getCourseId(), request.getBatchId(),
                 request.isRandomQuestions(), request.isRandomOptions(), request.isShowExplanation());
         quiz.setStatus(request.getStatus());
 
@@ -176,8 +187,16 @@ public class QuizServiceImpl implements QuizService {
     private void applyRequest(Quiz quiz, String title, String description,
                                com.careerlabs.lms.api.quiz.entity.QuizType type,
                                com.careerlabs.lms.api.quiz.entity.QuizDifficulty difficulty,
-                               Integer duration, Integer passingScore, Integer maxAttempts, boolean randomQuestions,
+                               Integer duration, Integer passingScore, Integer maxAttempts,
+                               Long courseId, Long batchId, boolean randomQuestions,
                                boolean randomOptions, boolean showExplanation) {
+        if (courseId != null && !courseRepository.existsById(courseId)) {
+            throw new ResourceNotFoundException("Course not found: " + courseId);
+        }
+        if (batchId != null && !batchRepository.existsById(batchId)) {
+            throw new ResourceNotFoundException("Batch not found: " + batchId);
+        }
+
         quiz.setTitle(title);
         quiz.setDescription(description);
         quiz.setType(type);
@@ -185,6 +204,8 @@ public class QuizServiceImpl implements QuizService {
         quiz.setDuration(duration);
         quiz.setPassingScore(passingScore);
         quiz.setMaxAttempts(maxAttempts);
+        quiz.setCourseId(courseId);
+        quiz.setBatchId(batchId);
         quiz.setRandomQuestions(randomQuestions);
         quiz.setRandomOptions(randomOptions);
         quiz.setShowExplanation(showExplanation);
@@ -195,7 +216,11 @@ public class QuizServiceImpl implements QuizService {
                 .stream()
                 .map(qq -> QuestionResponse.from(qq.getQuestion()))
                 .toList();
-        return QuizResponse.from(quiz, questions);
+        String courseName = quiz.getCourseId() == null ? null
+                : courseRepository.findById(quiz.getCourseId()).map(Course::getTitle).orElse(null);
+        String batchName = quiz.getBatchId() == null ? null
+                : batchRepository.findById(quiz.getBatchId()).map(Batch::getName).orElse(null);
+        return QuizResponse.from(quiz, questions, courseName, batchName);
     }
 
     private StudentQuizResponse toStudentResponse(Quiz quiz, Long studentId) {

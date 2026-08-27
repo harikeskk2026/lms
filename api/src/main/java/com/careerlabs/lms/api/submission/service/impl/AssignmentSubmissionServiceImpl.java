@@ -7,6 +7,8 @@ import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.storage.FileStorageService;
 import com.careerlabs.lms.api.common.storage.StoredFile;
+import com.careerlabs.lms.api.notification.entity.NotificationType;
+import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.submission.dto.request.GradeSubmissionRequest;
@@ -36,15 +38,18 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
     private final AssignmentRepository assignmentRepository;
     private final StudentRepository studentRepository;
     private final FileStorageService fileStorageService;
+    private final NotificationService notificationService;
 
     public AssignmentSubmissionServiceImpl(AssignmentSubmissionRepository submissionRepository,
                                             AssignmentRepository assignmentRepository,
                                             StudentRepository studentRepository,
-                                            FileStorageService fileStorageService) {
+                                            FileStorageService fileStorageService,
+                                            NotificationService notificationService) {
         this.submissionRepository = submissionRepository;
         this.assignmentRepository = assignmentRepository;
         this.studentRepository = studentRepository;
         this.fileStorageService = fileStorageService;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -93,7 +98,24 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
             submission.setReviewed(request.getReviewed());
         }
 
-        return toRow(submissionRepository.save(submission));
+        SubmissionRowResponse result = toRow(submissionRepository.save(submission));
+
+        // Notify the student that their submission has been reviewed
+        Long studentUserId = submission.getStudent().getUser().getId();
+        String assignmentTitle = submission.getAssignment().getTitle();
+        String scoreText = submission.getMarks() != null
+                ? submission.getMarks() + "/" + submission.getAssignment().getTotalMarks()
+                : "—";
+        notificationService.notifyUser(
+                studentUserId,
+                "\u2705 Assignment Graded: " + assignmentTitle,
+                "Your score: " + scoreText + "."
+                        + (submission.getFeedback() != null ? " Feedback: " + submission.getFeedback() : ""),
+                NotificationType.SUCCESS,
+                "/student/assignments"
+        );
+
+        return result;
     }
 
     @Override
@@ -121,7 +143,18 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         submission.setSubmittedAt(Instant.now());
         submission.setLate(LocalDate.now().isAfter(assignment.getDueDate()));
 
-        return toRow(submissionRepository.save(submission));
+        AssignmentSubmission saved = submissionRepository.save(submission);
+
+        // Notify all admins about the new student submission
+        notificationService.notifyAdmins(
+                "\uD83D\uDCE9 New Submission: " + assignment.getTitle(),
+                student.getUser().getName() + " submitted " + assignment.getTitle()
+                        + (saved.isLate() ? " (late)" : "") + ".",
+                NotificationType.INFO,
+                "/admin/assignments"
+        );
+
+        return toRow(saved);
     }
 
     private Assignment findAssignmentOrThrow(Long assignmentId) {

@@ -2,6 +2,12 @@ package com.careerlabs.lms.api.report.service.impl;
 
 import com.careerlabs.lms.api.assignment.entity.Assignment;
 import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
+import com.careerlabs.lms.api.attendance.entity.Attendance;
+import com.careerlabs.lms.api.attendance.entity.AttendStatus;
+import com.careerlabs.lms.api.attendance.entity.ClassStatus;
+import com.careerlabs.lms.api.attendance.entity.DailyClass;
+import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
+import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
@@ -84,6 +90,8 @@ public class ReportServiceImpl implements ReportService {
     private final AssignmentRepository assignmentRepository;
     private final AssignmentSubmissionRepository submissionRepository;
     private final QuizAttemptRepository quizAttemptRepository;
+    private final AttendanceRepository attendanceRepository;
+    private final DailyClassRepository dailyClassRepository;
     private final ReportValidator reportValidator;
 
     public ReportServiceImpl(BatchRepository batchRepository,
@@ -92,6 +100,8 @@ public class ReportServiceImpl implements ReportService {
                               AssignmentRepository assignmentRepository,
                               AssignmentSubmissionRepository submissionRepository,
                               QuizAttemptRepository quizAttemptRepository,
+                              AttendanceRepository attendanceRepository,
+                              DailyClassRepository dailyClassRepository,
                               ReportValidator reportValidator) {
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
@@ -99,6 +109,8 @@ public class ReportServiceImpl implements ReportService {
         this.assignmentRepository = assignmentRepository;
         this.submissionRepository = submissionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
+        this.attendanceRepository = attendanceRepository;
+        this.dailyClassRepository = dailyClassRepository;
         this.reportValidator = reportValidator;
     }
 
@@ -110,14 +122,59 @@ public class ReportServiceImpl implements ReportService {
         reportValidator.validateStudentExists(request.getStudentId());
         reportValidator.validateDateRange(request.getStartDate(), request.getEndDate());
 
+        List<Batch> batches = request.getBatchId() != null ?
+                batchRepository.findById(request.getBatchId()).map(List::of).orElse(List.of()) :
+                batchRepository.findAll();
+
+        List<AttendanceReportResponse.BatchAttendance> attendanceByBatch = new ArrayList<>();
+        List<AttendanceReportResponse.TrendPoint> trendPoints = new ArrayList<>();
+
+        int totalPresent = 0, totalAbsent = 0, totalLate = 0, totalExcused = 0;
+
+        for (Batch batch : batches) {
+            List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
+            int p = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.PRESENT).count();
+            int ab = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.ABSENT).count();
+            int lt = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.LATE).count();
+            int ex = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.EXCUSED).count();
+
+            totalPresent += p;
+            totalAbsent += ab;
+            totalLate += lt;
+            totalExcused += ex;
+
+            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            double avgPct = students.isEmpty() ? 0.0 : round1(
+                    students.stream().mapToDouble(s -> {
+                        List<Attendance> sAtt = attendanceRepository.findByStudentIdAndDailyClassBatchId(s.getId(), batch.getId());
+                        int sp = (int) sAtt.stream().filter(att -> att.getStatus() == AttendStatus.PRESENT).count();
+                        return sAtt.isEmpty() ? 0.0 : (sp * 100.0 / sAtt.size());
+                    }).average().orElse(0.0)
+            );
+
+            attendanceByBatch.add(new AttendanceReportResponse.BatchAttendance(
+                    batch.getId(),
+                    batch.getName(),
+                    avgPct
+            ));
+        }
+
+        List<AttendanceReportResponse.StatusCount> distribution = List.of(
+                new AttendanceReportResponse.StatusCount("PRESENT", totalPresent),
+                new AttendanceReportResponse.StatusCount("ABSENT", totalAbsent),
+                new AttendanceReportResponse.StatusCount("LATE", totalLate),
+                new AttendanceReportResponse.StatusCount("EXCUSED", totalExcused)
+        );
+
         return new AttendanceReportResponse(
-                false,
-                "Attendance tracking is not yet available in this system.",
+                true,
+                "Attendance report generated successfully",
                 null,
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of());
+                trendPoints,
+                attendanceByBatch,
+                distribution,
+                List.of()
+        );
     }
 
     @Override
@@ -285,7 +342,7 @@ public class ReportServiceImpl implements ReportService {
         return switch (type) {
             case "students" -> exportStudents(batchId);
             case "performance" -> exportPerformance(batchId);
-            case "attendance" -> List.of();
+            case "attendance" -> exportAttendance(batchId);
             default -> throw new ResourceNotFoundException("Unknown export type: " + type);
         };
     }
@@ -767,13 +824,13 @@ public class ReportServiceImpl implements ReportService {
         return students.stream()
                 .map(s -> {
                     Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("name", s.getUser().getName());
-                    row.put("email", s.getUser().getEmail());
-                    row.put("enrollmentNo", s.getEnrollmentNo());
+                    row.put("name", s.getUser() != null ? s.getUser().getName() : "Student #" + s.getId());
+                    row.put("email", s.getUser() != null ? s.getUser().getEmail() : "");
+                    row.put("enrollmentNo", s.getEnrollmentNo() != null ? s.getEnrollmentNo() : "");
                     row.put("batch", s.getBatch() != null ? s.getBatch().getName() : "");
                     row.put("course", s.getCourse() != null ? s.getCourse().getTitle() : "");
                     row.put("college", s.getCollege() != null ? s.getCollege().getName() : "");
-                    row.put("placementStatus", s.getPlacementStatus().name());
+                    row.put("placementStatus", s.getPlacementStatus() != null ? s.getPlacementStatus().name() : "SEEKING");
                     return row;
                 })
                 .toList();
@@ -785,12 +842,39 @@ public class ReportServiceImpl implements ReportService {
         return getPerformanceReport(request).students().stream()
                 .map(row -> {
                     Map<String, Object> map = new LinkedHashMap<>();
-                    map.put("name", row.studentName());
+                    map.put("name", row.studentName() != null ? row.studentName() : "");
                     map.put("assignmentsSubmitted", row.assignmentsSubmitted());
-                    map.put("avgGradePct", row.avgGrade());
-                    map.put("avgQuizScorePct", row.avgQuizScore());
-                    map.put("riskLevel", row.riskLevel());
+                    map.put("avgGradePct", row.avgGrade() != null ? row.avgGrade() : 0.0);
+                    map.put("avgQuizScorePct", row.avgQuizScore() != null ? row.avgQuizScore() : 0.0);
+                    map.put("attendancePct", row.attendancePct() != null ? row.attendancePct() : 0.0);
+                    map.put("riskLevel", row.riskLevel() != null ? row.riskLevel() : "NONE");
                     return map;
+                })
+                .toList();
+    }
+
+    private List<Map<String, Object>> exportAttendance(Long batchId) {
+        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        return students.stream()
+                .map(s -> {
+                    List<Attendance> attendances = attendanceRepository.findByStudentId(s.getId());
+                    long present = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+                    long absent = attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
+                    long late = attendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
+                    int total = attendances.size();
+                    double pct = total > 0 ? round1(present * 100.0 / total) : 0.0;
+
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("name", s.getUser() != null ? s.getUser().getName() : "Student #" + s.getId());
+                    row.put("email", s.getUser() != null ? s.getUser().getEmail() : "");
+                    row.put("enrollmentNo", s.getEnrollmentNo() != null ? s.getEnrollmentNo() : "");
+                    row.put("batch", s.getBatch() != null ? s.getBatch().getName() : "");
+                    row.put("present", present);
+                    row.put("absent", absent);
+                    row.put("late", late);
+                    row.put("total", total);
+                    row.put("attendancePct", pct);
+                    return row;
                 })
                 .toList();
     }
@@ -799,12 +883,17 @@ public class ReportServiceImpl implements ReportService {
         Double avgGrade = averageScorePct(submissions);
         Double completionPct = completionPctForStudent(student, submissions.size());
         Double quizPct = avgQuizAccuracy(quizAttempts);
+
+        List<Attendance> attendances = attendanceRepository.findByStudentId(student.getId());
+        long presentCount = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        Double attPct = attendances.isEmpty() ? null : round1(presentCount * 100.0 / attendances.size());
+
         Integer risk = riskScore(completionPct, avgGrade, quizPct);
         return new ReportStudentResponse(
                 student.getId(),
                 student.getUser().getName(),
                 student.getBatch() != null ? student.getBatch().getName() : null,
-                null,
+                attPct,
                 quizPct,
                 submissions.size(),
                 avgGrade,

@@ -127,7 +127,20 @@ public class AssignmentServiceImpl implements AssignmentService {
             assignment.setStatus(request.getStatus());
         }
 
-        return AssignmentResponse.from(assignmentRepository.save(assignment));
+        Assignment saved = assignmentRepository.save(assignment);
+
+        // Notify batch students immediately if published on creation
+        if (saved.getStatus() == AssignmentStatus.PUBLISHED) {
+            notificationService.notifyBatch(
+                    saved.getBatch().getId(),
+                    "📋 New Assignment: " + saved.getTitle(),
+                    "Due on " + saved.getDueDate() + ". Submit before the deadline.",
+                    NotificationType.INFO,
+                    "/student/assignments"
+            );
+        }
+
+        return AssignmentResponse.from(saved);
     }
 
     @Override
@@ -154,7 +167,18 @@ public class AssignmentServiceImpl implements AssignmentService {
     public AssignmentResponse publish(Long id) {
         Assignment assignment = findOrThrow(id);
         assignment.setStatus(AssignmentStatus.PUBLISHED);
-        return AssignmentResponse.from(assignmentRepository.save(assignment));
+        Assignment saved = assignmentRepository.save(assignment);
+
+        // Notify all students in the batch that a new assignment is live
+        notificationService.notifyBatch(
+                saved.getBatch().getId(),
+                "📋 New Assignment: " + saved.getTitle(),
+                "Due on " + saved.getDueDate() + ". Submit before the deadline.",
+                NotificationType.INFO,
+                "/student/assignments"
+        );
+
+        return AssignmentResponse.from(saved);
     }
 
     @Override

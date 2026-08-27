@@ -36,6 +36,10 @@ public class CreateQuizRequest {
     @Min(value = 1, message = QuizValidationMessages.MAX_ATTEMPTS_MIN)
     private Integer maxAttempts = 1;
 
+    private Long courseId;
+
+    private Long batchId;
+
     private boolean randomQuestions = false;
 
     private boolean randomOptions = false;
@@ -96,6 +100,22 @@ public class CreateQuizRequest {
 
     public void setMaxAttempts(Integer maxAttempts) {
         this.maxAttempts = maxAttempts;
+    }
+
+    public Long getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(Long courseId) {
+        this.courseId = courseId;
+    }
+
+    public Long getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(Long batchId) {
+        this.batchId = batchId;
     }
 
     public boolean isRandomQuestions() {

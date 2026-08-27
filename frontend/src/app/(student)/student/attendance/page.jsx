@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format, addMonths, subMonths } from 'date-fns'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
@@ -8,6 +8,11 @@ import {
 import { ChevronLeft, ChevronRight, Flame, AlertTriangle, TrendingUp } from 'lucide-react'
 import { useAttendance } from '@/hooks/useStudentDashboard'
 import AttendanceCalendar from '@/components/student/AttendanceCalendar'
+import AttendanceHealthCard from '@/components/student/AttendanceHealthCard'
+import AttendanceGoalTracker from '@/components/student/AttendanceGoalTracker'
+import AttendanceDayModal from '@/components/student/AttendanceDayModal'
+import CorrectionRequestModal from '@/components/student/CorrectionRequestModal'
+import AttendanceCorrectionsList from '@/components/student/AttendanceCorrectionsList'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import { studentApi } from '@/lib/api'
 
@@ -15,10 +20,12 @@ const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12,
 
 function StatusChip({ status }) {
   const cls =
-    status === 'PRESENT' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
-    status === 'LATE'    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
-    status === 'EXCUSED' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' :
-                           'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
+    status === 'PRESENT'  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
+    status === 'LATE'     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+    status === 'HALF_DAY' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400' :
+    status === 'LEAVE'    ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400' :
+    status === 'EXCUSED'  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' :
+                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
   return (
     <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase ${cls}`}>
       {status}
@@ -32,6 +39,21 @@ export default function AttendancePage() {
   const [trend, setTrend]             = useState([])
   const [trendLoading, setTrendLoading] = useState(true)
   const { data, loading } = useAttendance(activeMonth)
+
+  const [selectedDate, setSelectedDate]   = useState(null)
+  const [dayRecords, setDayRecords]       = useState([])
+  const [dayLoading, setDayLoading]       = useState(false)
+  const [correctionRecord, setCorrectionRecord] = useState(null)
+  const correctionsRef = useRef(null)
+
+  const openDay = (dateStr) => {
+    setSelectedDate(dateStr)
+    setDayLoading(true)
+    studentApi.getCalendarDay(dateStr)
+      .then(r => setDayRecords(r.data.data || []))
+      .catch(() => setDayRecords([]))
+      .finally(() => setDayLoading(false))
+  }
 
   const prev = () => setActiveMonth(m => format(subMonths(new Date(m + '-01'), 1), 'yyyy-MM'))
   const next = () => setActiveMonth(m => format(addMonths(new Date(m + '-01'), 1), 'yyyy-MM'))
@@ -90,6 +112,12 @@ export default function AttendancePage() {
             Today
           </button>
         </div>
+      </div>
+
+      {/* Health Score + Goal Tracker */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <AttendanceHealthCard />
+        <AttendanceGoalTracker />
       </div>
 
       {/* Summary Strip */}
@@ -169,7 +197,7 @@ export default function AttendancePage() {
       ) : (
         <div className="glass-card p-5">
           {view === 'calendar' ? (
-            <AttendanceCalendar calendarData={calendar} activeMonth={activeMonth} />
+            <AttendanceCalendar calendarData={calendar} activeMonth={activeMonth} onDayClick={openDay} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -262,6 +290,33 @@ export default function AttendancePage() {
           <p className="text-sm text-gray-400 text-center py-6">No records for this month.</p>
         )}
       </div>
+
+      {/* Correction Requests */}
+      <AttendanceCorrectionsList ref={correctionsRef} />
+
+      {/* Day detail modal */}
+      {selectedDate && (
+        <AttendanceDayModal
+          date={selectedDate}
+          records={dayRecords}
+          loading={dayLoading}
+          onClose={() => setSelectedDate(null)}
+          onRequestCorrection={(record) => setCorrectionRecord(record)}
+        />
+      )}
+
+      {/* Correction request modal */}
+      {correctionRecord && (
+        <CorrectionRequestModal
+          record={correctionRecord}
+          onClose={() => setCorrectionRecord(null)}
+          onSubmitted={() => {
+            setCorrectionRecord(null)
+            setSelectedDate(null)
+            correctionsRef.current?.reload()
+          }}
+        />
+      )}
     </div>
   )
 }
