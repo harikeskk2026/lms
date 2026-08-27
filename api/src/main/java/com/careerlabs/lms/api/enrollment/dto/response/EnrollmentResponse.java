@@ -14,7 +14,7 @@ public record EnrollmentResponse(
     public static EnrollmentResponse from(Enrollment enrollment) {
         return new EnrollmentResponse(
                 enrollment.getId(),
-                CourseResponse.from(enrollment.getCourse(), true),
+                CourseResponse.from(enrollment.getCourse()),
                 enrollment.getEnrolledAt());
     }
 }

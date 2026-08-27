@@ -32,6 +32,10 @@ public class FileStorageService {
     }
 
     public StoredFile store(MultipartFile file, String subDir) {
+        return store(file, subDir, ALLOWED_EXTENSIONS);
+    }
+
+    public StoredFile store(MultipartFile file, String subDir, Set<String> allowedExtensions) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("A file is required");
         }
@@ -42,8 +46,8 @@ public class FileStorageService {
         String originalName = StringUtils.cleanPath(
                 file.getOriginalFilename() != null ? file.getOriginalFilename() : "file");
         String extension = extensionOf(originalName);
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new BadRequestException("Only PDF and DOC/DOCX files are allowed");
+        if (!allowedExtensions.contains(extension)) {
+            throw new BadRequestException("File type not allowed: ." + extension);
         }
 
         try {
