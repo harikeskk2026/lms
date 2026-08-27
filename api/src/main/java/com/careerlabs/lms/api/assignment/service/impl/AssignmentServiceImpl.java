@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.assignment.service.impl;
 import com.careerlabs.lms.api.assignment.dto.request.AssignmentRequest;
 import com.careerlabs.lms.api.assignment.dto.response.AssignmentPageResponse;
 import com.careerlabs.lms.api.assignment.dto.response.AssignmentResponse;
+import com.careerlabs.lms.api.assignment.dto.response.StudentAssignmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.UploadResponse;
 import com.careerlabs.lms.api.assignment.entity.Assignment;
 import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
@@ -15,6 +16,10 @@ import com.careerlabs.lms.api.common.storage.FileStorageService;
 import com.careerlabs.lms.api.common.storage.StoredFile;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.student.entity.Student;
+import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.submission.entity.AssignmentSubmission;
+import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +34,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class AssignmentServiceImpl implements AssignmentService {
@@ -37,13 +43,19 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
     private final FileStorageService fileStorageService;
+    private final StudentRepository studentRepository;
+    private final AssignmentSubmissionRepository submissionRepository;
 
     public AssignmentServiceImpl(AssignmentRepository assignmentRepository, CourseRepository courseRepository,
-                                  BatchRepository batchRepository, FileStorageService fileStorageService) {
+                                  BatchRepository batchRepository, FileStorageService fileStorageService,
+                                  StudentRepository studentRepository,
+                                  AssignmentSubmissionRepository submissionRepository) {
         this.assignmentRepository = assignmentRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.fileStorageService = fileStorageService;
+        this.studentRepository = studentRepository;
+        this.submissionRepository = submissionRepository;
     }
 
     @Override
@@ -68,6 +80,42 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Transactional(readOnly = true)
     public AssignmentResponse get(Long id) {
         return AssignmentResponse.from(findOrThrow(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudentAssignmentResponse> listForStudent(Long userId) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
+        if (student.getBatch() == null) {
+            return List.of();
+        }
+
+        List<Assignment> assignments = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
+                student.getBatch().getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
+
+        return assignments.stream()
+                .map(assignment -> toStudentResponse(assignment, student))
+                .toList();
+    }
+
+    private StudentAssignmentResponse toStudentResponse(Assignment assignment, Student student) {
+        Optional<AssignmentSubmission> submission =
+                submissionRepository.findByAssignmentIdAndStudentId(assignment.getId(), student.getId());
+
+        boolean isOverdue = submission.isEmpty() && LocalDate.now().isAfter(assignment.getDueDate());
+
+        StudentAssignmentResponse.SubmissionInfo submissionInfo = submission.map(s -> {
+            String status = s.isReviewed() ? "GRADED" : s.isLate() ? "LATE" : "SUBMITTED";
+            return new StudentAssignmentResponse.SubmissionInfo(
+                    s.getId(), status, s.getMarks(), s.getFeedback(), s.getFileUrl(), s.getNotes(),
+                    s.getSubmittedAt(), s.isReviewed() ? s.getUpdatedAt() : null);
+        }).orElse(null);
+
+        return new StudentAssignmentResponse(
+                assignment.getId(), assignment.getTitle(), assignment.getDescription(),
+                assignment.getBatch().getName(), assignment.getDueDate(), assignment.getTotalMarks(),
+                assignment.getAttachmentUrl(), assignment.getAttachmentName(), isOverdue, submissionInfo);
     }
 
     @Override

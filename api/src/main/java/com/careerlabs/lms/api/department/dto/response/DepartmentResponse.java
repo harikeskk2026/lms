@@ -7,7 +7,7 @@ import java.time.Instant;
 public record DepartmentResponse(
         Long id,
         String name,
-        CourseSummary course,
+        CollegeSummary college,
         boolean active,
         Instant createdAt,
         Instant updatedAt
@@ -17,12 +17,12 @@ public record DepartmentResponse(
         return new DepartmentResponse(
                 department.getId(),
                 department.getName(),
-                new CourseSummary(department.getCourse().getId(), department.getCourse().getTitle()),
+                new CollegeSummary(department.getCollege().getId(), department.getCollege().getName()),
                 department.isActive(),
                 department.getCreatedAt(),
                 department.getUpdatedAt());
     }
 
-    public record CourseSummary(Long id, String title) {
+    public record CollegeSummary(Long id, String name) {
     }
 }

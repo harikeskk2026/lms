@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.batch.entity.BatchMode;
 import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.department.entity.Department;
+import com.careerlabs.lms.api.student.entity.AcademicScoreType;
 import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.user.entity.User;
@@ -21,6 +22,9 @@ public record StudentResponse(
         String enrollmentNo,
         String address,
         String qualification,
+        AcademicScoreType academicScoreType,
+        Double academicScore,
+        Integer passedOutYear,
         String linkedinUrl,
         String githubUrl,
         String resumeUrl,
@@ -50,6 +54,9 @@ public record StudentResponse(
                 student.getEnrollmentNo(),
                 student.getAddress(),
                 student.getQualification(),
+                student.getAcademicScoreType(),
+                student.getAcademicScore(),
+                student.getPassedOutYear(),
                 student.getLinkedinUrl(),
                 student.getGithubUrl(),
                 student.getResumeUrl(),

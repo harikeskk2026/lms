@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Layers,
+  ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Layers, Calendar,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -99,6 +99,9 @@ export default function StudentDetailPage() {
             { icon: Phone,   label: 'Phone',         value: student.phone || '—' },
             { icon: MapPin,  label: 'Address',       value: student.address || '—' },
             { icon: Award,   label: 'Qualification', value: student.qualification || '—' },
+            { icon: Award,   label: student.academicScoreType === 'PERCENTAGE' ? 'Percentage' : 'CGPA',
+              value: student.academicScore != null ? `${student.academicScore}${student.academicScoreType === 'PERCENTAGE' ? '%' : ''}` : '—' },
+            { icon: Calendar,label: 'Passed Out Year', value: student.passedOutYear || '—' },
             { icon: Linkedin,label: 'LinkedIn',      value: student.linkedinUrl || '—', href: student.linkedinUrl },
             { icon: Github,  label: 'GitHub',        value: student.githubUrl || '—', href: student.githubUrl },
           ].map(({ icon: Icon, label, value, href }) => (

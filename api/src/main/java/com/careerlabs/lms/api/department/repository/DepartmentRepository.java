@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface DepartmentRepository extends JpaRepository<Department, Long> {
 
-    List<Department> findByCourseIdOrderByNameAsc(Long courseId);
+    List<Department> findByCollegeIdOrderByNameAsc(Long collegeId);
 
-    List<Department> findByCourseIdAndNameContainingIgnoreCaseOrderByNameAsc(Long courseId, String search);
+    List<Department> findByCollegeIdAndNameContainingIgnoreCaseOrderByNameAsc(Long collegeId, String search);
 }

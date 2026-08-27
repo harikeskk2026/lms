@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.assignment.repository;
 
 import com.careerlabs.lms.api.assignment.entity.Assignment;
+import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
@@ -11,4 +12,6 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long>, J
     List<Assignment> findByBatchId(Long batchId);
 
     List<Assignment> findByCourseId(Long courseId);
+
+    List<Assignment> findByBatchIdAndStatusInOrderByDueDateAsc(Long batchId, List<AssignmentStatus> statuses);
 }

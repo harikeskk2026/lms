@@ -1,6 +1,6 @@
 package com.careerlabs.lms.api.department.entity;
 
-import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.college.entity.College;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -26,9 +26,12 @@ public class Department {
     @Column(nullable = false)
     private String name;
 
+    // A department is scoped to the student's college (e.g. "Computer Science"
+    // at "National College of Engineering") - it has no relation to the
+    // CareerLabs Course a student is enrolled in.
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_id", nullable = false)
-    private Course course;
+    @JoinColumn(name = "college_id", nullable = false)
+    private College college;
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
@@ -63,12 +66,12 @@ public class Department {
         this.name = name;
     }
 
-    public Course getCourse() {
-        return course;
+    public College getCollege() {
+        return college;
     }
 
-    public void setCourse(Course course) {
-        this.course = course;
+    public void setCollege(College college) {
+        this.college = college;
     }
 
     public boolean isActive() {

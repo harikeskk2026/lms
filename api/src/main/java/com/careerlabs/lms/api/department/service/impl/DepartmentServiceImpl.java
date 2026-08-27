@@ -1,8 +1,8 @@
 package com.careerlabs.lms.api.department.service.impl;
 
+import com.careerlabs.lms.api.college.entity.College;
+import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
-import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.department.dto.request.DepartmentRequest;
 import com.careerlabs.lms.api.department.dto.response.DepartmentResponse;
 import com.careerlabs.lms.api.department.entity.Department;
@@ -17,23 +17,23 @@ import java.util.List;
 public class DepartmentServiceImpl implements DepartmentService {
 
     private final DepartmentRepository departmentRepository;
-    private final CourseRepository courseRepository;
+    private final CollegeRepository collegeRepository;
 
-    public DepartmentServiceImpl(DepartmentRepository departmentRepository, CourseRepository courseRepository) {
+    public DepartmentServiceImpl(DepartmentRepository departmentRepository, CollegeRepository collegeRepository) {
         this.departmentRepository = departmentRepository;
-        this.courseRepository = courseRepository;
+        this.collegeRepository = collegeRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<DepartmentResponse> list(Long courseId, String search) {
-        if (courseId == null) {
-            throw new ResourceNotFoundException("Course is required to list departments");
+    public List<DepartmentResponse> list(Long collegeId, String search) {
+        if (collegeId == null) {
+            throw new ResourceNotFoundException("College is required to list departments");
         }
 
         List<Department> departments = (search == null || search.isBlank())
-                ? departmentRepository.findByCourseIdOrderByNameAsc(courseId)
-                : departmentRepository.findByCourseIdAndNameContainingIgnoreCaseOrderByNameAsc(courseId, search);
+                ? departmentRepository.findByCollegeIdOrderByNameAsc(collegeId)
+                : departmentRepository.findByCollegeIdAndNameContainingIgnoreCaseOrderByNameAsc(collegeId, search);
 
         return departments.stream().map(DepartmentResponse::from).toList();
     }
@@ -75,10 +75,10 @@ public class DepartmentServiceImpl implements DepartmentService {
     }
 
     private void applyRequest(Department department, DepartmentRequest request) {
-        Course course = courseRepository.findById(request.getCourseId())
-                .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + request.getCourseId()));
+        College college = collegeRepository.findById(request.getCollegeId())
+                .orElseThrow(() -> new ResourceNotFoundException("College not found: " + request.getCollegeId()));
 
         department.setName(request.getName());
-        department.setCourse(course);
+        department.setCollege(college);
     }
 }

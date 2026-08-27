@@ -11,8 +11,8 @@ public class DepartmentRequest {
     @Size(min = 2, max = 150, message = DepartmentValidationMessages.NAME_SIZE)
     private String name;
 
-    @NotNull(message = DepartmentValidationMessages.COURSE_ID_REQUIRED)
-    private Long courseId;
+    @NotNull(message = DepartmentValidationMessages.COLLEGE_ID_REQUIRED)
+    private Long collegeId;
 
     public String getName() {
         return name;
@@ -22,11 +22,11 @@ public class DepartmentRequest {
         this.name = name;
     }
 
-    public Long getCourseId() {
-        return courseId;
+    public Long getCollegeId() {
+        return collegeId;
     }
 
-    public void setCourseId(Long courseId) {
-        this.courseId = courseId;
+    public void setCollegeId(Long collegeId) {
+        this.collegeId = collegeId;
     }
 }

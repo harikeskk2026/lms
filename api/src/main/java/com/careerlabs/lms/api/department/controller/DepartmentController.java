@@ -30,9 +30,9 @@ public class DepartmentController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<DepartmentResponse>>> list(
-            @RequestParam Long courseId,
+            @RequestParam Long collegeId,
             @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(ApiResponse.of(departmentService.list(courseId, search)));
+        return ResponseEntity.ok(ApiResponse.of(departmentService.list(collegeId, search)));
     }
 
     @GetMapping("/{id}")

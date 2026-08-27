@@ -18,11 +18,12 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Seeds a couple of colleges (linked to whatever courses already exist) and a
- * couple of departments per course, so the College/Course/Department cascading
- * dropdowns on the Student form have real data to exercise locally. Controlled
- * by the same APP_SEED_ENABLED flag as {@link DevUserSeeder}; only runs once,
- * when the colleges table is empty and at least one course already exists.
+ * Seeds a couple of colleges (linked to whatever CareerLabs courses already
+ * exist, purely so the "Course" dropdown has data) and a couple of academic
+ * departments per college, so the College -> Department dropdown on the
+ * Student form has real data to exercise locally. Controlled by the same
+ * APP_SEED_ENABLED flag as {@link DevUserSeeder}; only runs once, when the
+ * colleges table is empty and at least one course already exists.
  */
 @Component
 public class CollegeDataSeeder implements CommandLineRunner {
@@ -64,23 +65,24 @@ public class CollegeDataSeeder implements CommandLineRunner {
         }
 
         Set<Course> offeredCourses = new LinkedHashSet<>(courses);
+        List<College> colleges = new java.util.ArrayList<>();
         for (String name : COLLEGE_NAMES) {
             College college = new College();
             college.setName(name);
             college.setCourses(offeredCourses);
-            collegeRepository.save(college);
+            colleges.add(collegeRepository.save(college));
         }
 
-        for (Course course : courses) {
+        for (College college : colleges) {
             for (String departmentName : DEPARTMENT_NAMES) {
                 Department department = new Department();
                 department.setName(departmentName);
-                department.setCourse(course);
+                department.setCollege(college);
                 departmentRepository.save(department);
             }
         }
 
         log.info("Seeded {} colleges and {} departments for local development",
-                COLLEGE_NAMES.size(), courses.size() * DEPARTMENT_NAMES.size());
+                colleges.size(), colleges.size() * DEPARTMENT_NAMES.size());
     }
 }

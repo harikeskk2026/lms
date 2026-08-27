@@ -11,6 +11,7 @@ import {
   Circle, Flame, ExternalLink, Bell
 } from 'lucide-react'
 import { useDashboard } from '@/hooks/useStudentDashboard'
+import { resolveFileUrl } from '@/lib/api'
 import ProgressRing from '@/components/student/ProgressRing'
 import ActivityFeed from '@/components/student/ActivityFeed'
 import { SkeletonStat } from '@/components/student/SkeletonCard'
@@ -454,7 +455,7 @@ export default function StudentDashboardPage() {
                   </div>
                 </div>
                 <a
-                  href={m.fileUrl} target="_blank" rel="noopener noreferrer"
+                  href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1 chip bg-brand-100 text-brand-700 text-xs px-2 py-1 hover:bg-brand-200 transition-colors"
                 >
                   <Download size={12} /> Get

@@ -79,6 +79,17 @@ api.interceptors.response.use(
 
 export default api
 
+// Files (e.g. assignment attachments, submissions) come back from the API as
+// paths relative to the API origin (e.g. "/uploads/assignments/x.pdf"), not
+// the frontend origin — resolve them to an absolute URL before linking.
+const API_ORIGIN = (process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api').replace(/\/api\/?$/, '')
+
+export function resolveFileUrl(path) {
+  if (!path) return path
+  if (/^https?:\/\//i.test(path)) return path
+  return `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`
+}
+
 export const adminApi = {
   // Dashboard
   getDashboardStats: () => api.get('/admin/dashboard/stats'),

@@ -1,10 +1,12 @@
 import apiCall from '@/utilities/apiCall'
 
 const departmentService = {
-  list: (courseId, search) => apiCall({
+  // Departments are scoped to a college (e.g. "Computer Science" at
+  // "National College of Engineering") - not to a CareerLabs course.
+  list: (collegeId, search) => apiCall({
     method: 'GET',
     url: '/departments',
-    params: { courseId, ...(search ? { search } : {}) },
+    params: { collegeId, ...(search ? { search } : {}) },
   }),
 
   get: (id) => apiCall({ method: 'GET', url: `/departments/${id}` }),

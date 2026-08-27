@@ -43,6 +43,16 @@ public class Student {
 
     private String qualification;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "academic_score_type")
+    private AcademicScoreType academicScoreType;
+
+    @Column(name = "academic_score")
+    private Double academicScore;
+
+    @Column(name = "passed_out_year")
+    private Integer passedOutYear;
+
     @Column(name = "linkedin_url")
     private String linkedinUrl;
 
@@ -132,6 +142,30 @@ public class Student {
 
     public void setQualification(String qualification) {
         this.qualification = qualification;
+    }
+
+    public AcademicScoreType getAcademicScoreType() {
+        return academicScoreType;
+    }
+
+    public void setAcademicScoreType(AcademicScoreType academicScoreType) {
+        this.academicScoreType = academicScoreType;
+    }
+
+    public Double getAcademicScore() {
+        return academicScore;
+    }
+
+    public void setAcademicScore(Double academicScore) {
+        this.academicScore = academicScore;
+    }
+
+    public Integer getPassedOutYear() {
+        return passedOutYear;
+    }
+
+    public void setPassedOutYear(Integer passedOutYear) {
+        this.passedOutYear = passedOutYear;
     }
 
     public String getLinkedinUrl() {

@@ -10,6 +10,8 @@ import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.department.entity.Department;
 import com.careerlabs.lms.api.department.repository.DepartmentRepository;
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.dto.request.StudentCreateRequest;
 import com.careerlabs.lms.api.student.dto.request.StudentUpdateRequest;
 import com.careerlabs.lms.api.student.dto.response.StudentCountResponse;
@@ -46,18 +48,20 @@ public class StudentServiceImpl implements StudentService {
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
     private final DepartmentRepository departmentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final PasswordEncoder passwordEncoder;
 
     public StudentServiceImpl(StudentRepository studentRepository, UserRepository userRepository,
                                BatchRepository batchRepository, CollegeRepository collegeRepository,
                                CourseRepository courseRepository, DepartmentRepository departmentRepository,
-                               PasswordEncoder passwordEncoder) {
+                               EnrollmentRepository enrollmentRepository, PasswordEncoder passwordEncoder) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
         this.batchRepository = batchRepository;
         this.collegeRepository = collegeRepository;
         this.courseRepository = courseRepository;
         this.departmentRepository = departmentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -111,6 +115,9 @@ public class StudentServiceImpl implements StudentService {
         student.setUser(user);
         student.setPhone(request.getPhone());
         student.setEnrollmentNo(generateEnrollmentNo(user.getId()));
+        student.setAcademicScoreType(request.getAcademicScoreType());
+        student.setAcademicScore(request.getAcademicScore());
+        student.setPassedOutYear(request.getPassedOutYear());
         if (request.getBatchId() != null) {
             student.setBatch(findBatchOrThrow(request.getBatchId()));
         }
@@ -124,7 +131,10 @@ public class StudentServiceImpl implements StudentService {
             student.setDepartment(findDepartmentOrThrow(request.getDepartmentId()));
         }
 
-        return StudentResponse.from(studentRepository.save(student));
+        student = studentRepository.save(student);
+        syncCourseEnrollment(student);
+
+        return StudentResponse.from(student);
     }
 
     @Override
@@ -133,8 +143,10 @@ public class StudentServiceImpl implements StudentService {
         Student student = findOrThrow(id);
         applyRequest(student, request);
         userRepository.save(student.getUser());
+        student = studentRepository.save(student);
+        syncCourseEnrollment(student);
 
-        return StudentResponse.from(studentRepository.save(student));
+        return StudentResponse.from(student);
     }
 
     @Override
@@ -178,6 +190,9 @@ public class StudentServiceImpl implements StudentService {
         student.setPhone(request.getPhone());
         student.setAddress(request.getAddress());
         student.setQualification(request.getQualification());
+        student.setAcademicScoreType(request.getAcademicScoreType());
+        student.setAcademicScore(request.getAcademicScore());
+        student.setPassedOutYear(request.getPassedOutYear());
         student.setLinkedinUrl(request.getLinkedinUrl());
         student.setGithubUrl(request.getGithubUrl());
         student.setPlacementStatus(request.getPlacementStatus());
@@ -185,6 +200,29 @@ public class StudentServiceImpl implements StudentService {
         student.setCollege(request.getCollegeId() != null ? findCollegeOrThrow(request.getCollegeId()) : null);
         student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);
         student.setDepartment(request.getDepartmentId() != null ? findDepartmentOrThrow(request.getDepartmentId()) : null);
+    }
+
+    /**
+     * The student self-service "My Courses" page reads from the {@code enrollments}
+     * table, not from {@code Student.course}. Setting a student's course from the
+     * admin panel used to leave that table untouched, so the course an admin
+     * assigned never actually showed up for the student. Whenever a student has a
+     * course assigned, make sure a matching enrollment row exists so the admin's
+     * assignment is reflected on the student side too. This only ever creates a
+     * missing enrollment - it never removes one, so course history isn't lost if
+     * an admin later clears/changes the course field.
+     */
+    private void syncCourseEnrollment(Student student) {
+        Course course = student.getCourse();
+        if (course == null) {
+            return;
+        }
+        if (!enrollmentRepository.existsByStudentIdAndCourseId(student.getId(), course.getId())) {
+            Enrollment enrollment = new Enrollment();
+            enrollment.setStudent(student);
+            enrollment.setCourse(course);
+            enrollmentRepository.save(enrollment);
+        }
     }
 
     private String generateEnrollmentNo(Long userId) {

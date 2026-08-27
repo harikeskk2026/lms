@@ -5,7 +5,7 @@ import {
   BookOpen, FileText, Play, Calendar, Download,
   CheckCircle, Circle, ChevronDown
 } from 'lucide-react'
-import { studentApi } from '@/lib/api'
+import { studentApi, resolveFileUrl } from '@/lib/api'
 import SkeletonCard from '@/components/student/SkeletonCard'
 
 const TABS = ['Overview','Syllabus','Materials','Sessions','Classes']
@@ -194,7 +194,7 @@ export default function CourseDetailPage({ params }) {
                       {m.fileSize && <span className="text-xs text-gray-400">{m.fileSize}</span>}
                     </div>
                   </div>
-                  <a href={m.fileUrl} target="_blank" rel="noopener noreferrer"
+                  <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer"
                      className="flex items-center gap-1 chip bg-brand-100 text-brand-700 hover:bg-brand-200 transition-colors text-xs px-2.5 py-1.5">
                     <Download size={12} /> Get
                   </a>

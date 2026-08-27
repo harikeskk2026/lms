@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface DepartmentService {
 
-    List<DepartmentResponse> list(Long courseId, String search);
+    List<DepartmentResponse> list(Long collegeId, String search);
 
     DepartmentResponse get(Long id);
 

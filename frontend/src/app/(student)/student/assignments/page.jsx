@@ -1,9 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns'
-import { ClipboardList, Upload, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Download } from 'lucide-react'
 import { useAssignments } from '@/hooks/useStudentDashboard'
-import { studentApi } from '@/lib/api'
+import { studentApi, resolveFileUrl } from '@/lib/api'
 import toast from 'react-hot-toast'
 import SkeletonCard from '@/components/student/SkeletonCard'
 
@@ -130,6 +130,12 @@ function AssignmentCard({ a, onSubmit }) {
           <button onClick={() => setExpanded(e => !e)} className="text-xs text-brand-600 hover:underline mt-1 flex items-center gap-0.5">
             {expanded ? <><ChevronUp size={12} /> Less</> : <><ChevronDown size={12} /> More</>}
           </button>
+        )}
+        {a.attachmentUrl && (
+          <a href={resolveFileUrl(a.attachmentUrl)} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:underline font-medium mt-2">
+            <Paperclip size={12} /> {a.attachmentName || 'Assignment attachment'} <Download size={11} />
+          </a>
         )}
       </div>
 

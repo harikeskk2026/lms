@@ -9,6 +9,7 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import submissionService from '@/services/submissionService'
+import { resolveFileUrl } from '@/lib/api'
 
 const STATUS_COLORS = {
   DRAFT:     'bg-gray-100 text-gray-600',
@@ -180,7 +181,7 @@ export default function AssignmentDetailPage() {
           {assignment.attachmentUrl && (
             <div>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Attachment</h3>
-              <a href={assignment.attachmentUrl} target="_blank" rel="noopener noreferrer"
+              <a href={resolveFileUrl(assignment.attachmentUrl)} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-sm text-purple-600 hover:underline font-semibold">
                 <Paperclip size={14} /> {assignment.attachmentName || 'Download attachment'} <Download size={12} />
               </a>
@@ -241,7 +242,7 @@ export default function AssignmentDetailPage() {
                     </td>
                     <td className="px-4 py-3">
                       {row.fileUrl ? (
-                        <a href={row.fileUrl} target="_blank" rel="noopener noreferrer"
+                        <a href={resolveFileUrl(row.fileUrl)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold whitespace-nowrap">
                           <Download size={12} /> {row.fileName || 'File'}
                         </a>

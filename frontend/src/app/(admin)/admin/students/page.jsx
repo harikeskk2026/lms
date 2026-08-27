@@ -7,6 +7,7 @@ import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 import collegeService from '@/services/collegeService'
 import departmentService from '@/services/departmentService'
+import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 
@@ -19,7 +20,8 @@ const PLACEMENT_COLORS = {
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '', password: '', batchId: '',
-  collegeId: '', courseId: '', departmentId: '',
+  collegeName: '', courseId: '', departmentName: '',
+  academicScoreType: 'CGPA', academicScore: '', passedOutYear: '',
   address: '', qualification: '', linkedinUrl: '', githubUrl: '', placementStatus: 'SEEKING',
 }
 
@@ -44,9 +46,7 @@ export default function StudentsPage() {
   const [batches, setBatches] = useState([])
   const [colleges, setColleges] = useState([])
   const [courses, setCourses] = useState([])
-  const [departments, setDepartments] = useState([])
-  const [loadingCourses, setLoadingCourses] = useState(false)
-  const [loadingDepartments, setLoadingDepartments] = useState(false)
+  const [departmentSuggestions, setDepartmentSuggestions] = useState([])
   const [panelOpen, setPanelOpen] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -76,25 +76,28 @@ export default function StudentsPage() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
+    // Course and Batch are independent of College/Department - every
+    // CareerLabs course ever created shows up here; batches are filtered
+    // down to the selected course below.
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
   }, [])
 
-  const loadCourses = (collegeId) => {
-    setLoadingCourses(true)
-    collegeService.getCourses(collegeId)
-      .then(r => setCourses(r.data || []))
-      .catch(() => { setCourses([]); toast.error('Failed to load courses for this college') })
-      .finally(() => setLoadingCourses(false))
-  }
-
-  const loadDepartments = (courseId) => {
-    setLoadingDepartments(true)
-    departmentService.list(courseId)
-      .then(r => setDepartments(r.data || []))
-      .catch(() => { setDepartments([]); toast.error('Failed to load departments for this course') })
-      .finally(() => setLoadingDepartments(false))
-  }
+  // College Name and Department are free-typed. As the admin types a college
+  // name that matches one already on file, pull that college's departments in
+  // as autocomplete suggestions for the Department box (still just a text
+  // field - this only powers the suggestion list, nothing is forced).
+  useEffect(() => {
+    const typed = form.collegeName.trim().toLowerCase()
+    const match = typed ? colleges.find(c => c.name.toLowerCase() === typed) : null
+    if (!match) { setDepartmentSuggestions([]); return }
+    let cancelled = false
+    departmentService.list(match.id)
+      .then(r => { if (!cancelled) setDepartmentSuggestions(r.data || []) })
+      .catch(() => { if (!cancelled) setDepartmentSuggestions([]) })
+    return () => { cancelled = true }
+  }, [form.collegeName, colleges])
 
   const handleSearch = (v) => {
     clearTimeout(searchTimer.current)
@@ -104,8 +107,6 @@ export default function StudentsPage() {
   const openCreate = () => {
     setEditStudent(null)
     setForm(EMPTY_FORM)
-    setCourses([])
-    setDepartments([])
     setPanelOpen(true)
   }
 
@@ -117,33 +118,51 @@ export default function StudentsPage() {
       phone: student.phone || '',
       password: '',
       batchId: student.batch?.id ? String(student.batch.id) : '',
-      collegeId: student.college?.id ? String(student.college.id) : '',
+      collegeName: student.college?.name || '',
       courseId: student.course?.id ? String(student.course.id) : '',
-      departmentId: student.department?.id ? String(student.department.id) : '',
+      departmentName: student.department?.name || '',
+      academicScoreType: student.academicScoreType || 'CGPA',
+      academicScore: student.academicScore != null ? String(student.academicScore) : '',
+      passedOutYear: student.passedOutYear != null ? String(student.passedOutYear) : '',
       address: student.address || '',
       qualification: student.qualification || '',
       linkedinUrl: student.linkedinUrl || '',
       githubUrl: student.githubUrl || '',
       placementStatus: student.placementStatus || 'SEEKING',
     })
-    setCourses([])
-    setDepartments([])
-    if (student.college?.id) loadCourses(student.college.id)
-    if (student.course?.id) loadDepartments(student.course.id)
     setPanelOpen(true)
   }
 
-  const handleCollegeChange = (collegeId) => {
-    setForm(f => ({ ...f, collegeId, courseId: '', departmentId: '' }))
-    setDepartments([])
-    if (collegeId) loadCourses(collegeId)
-    else setCourses([])
+  // Course changed - the batch list is scoped to the selected course, so any
+  // previously chosen batch (which belonged to a different course) no longer
+  // applies.
+  const handleCourseChange = (courseId) => {
+    setForm(f => ({ ...f, courseId, batchId: '' }))
   }
 
-  const handleCourseChange = (courseId) => {
-    setForm(f => ({ ...f, courseId, departmentId: '' }))
-    if (courseId) loadDepartments(courseId)
-    else setDepartments([])
+  // College Name / Department are plain typed text, not tied to an id while
+  // typing. On submit, resolve each typed name to an existing record (case
+  // insensitive match) or create a brand-new one on the fly, so the admin
+  // never has to leave this form to add a college/department that isn't in
+  // the system yet.
+  const resolveCollegeId = async (name) => {
+    const trimmed = name.trim()
+    if (!trimmed) return null
+    const match = colleges.find(c => c.name.toLowerCase() === trimmed.toLowerCase())
+    if (match) return match.id
+    const r = await collegeService.create({ name: trimmed })
+    setColleges(list => [...list, r.data])
+    return r.data.id
+  }
+
+  const resolveDepartmentId = async (name, collegeId) => {
+    const trimmed = name.trim()
+    if (!trimmed || !collegeId) return null
+    const existing = await departmentService.list(collegeId).then(r => r.data || []).catch(() => [])
+    const match = existing.find(d => d.name.toLowerCase() === trimmed.toLowerCase())
+    if (match) return match.id
+    const r = await departmentService.create({ name: trimmed, collegeId })
+    return r.data.id
   }
 
   const handleSubmit = async (e) => {
@@ -151,15 +170,19 @@ export default function StudentsPage() {
     setSaving(true)
     try {
       const batchId = form.batchId ? Number(form.batchId) : null
-      const collegeId = form.collegeId ? Number(form.collegeId) : null
       const courseId = form.courseId ? Number(form.courseId) : null
-      const departmentId = form.departmentId ? Number(form.departmentId) : null
+      const collegeId = await resolveCollegeId(form.collegeName)
+      const departmentId = await resolveDepartmentId(form.departmentName, collegeId)
+      const academicScore = form.academicScore !== '' ? Number(form.academicScore) : null
+      const academicScoreType = academicScore !== null ? form.academicScoreType : null
+      const passedOutYear = form.passedOutYear !== '' ? Number(form.passedOutYear) : null
       if (editStudent) {
         await studentService.update(editStudent.id, {
           name: form.name,
           phone: form.phone,
           address: form.address,
           qualification: form.qualification,
+          academicScoreType, academicScore, passedOutYear,
           linkedinUrl: form.linkedinUrl,
           githubUrl: form.githubUrl,
           placementStatus: form.placementStatus,
@@ -172,6 +195,7 @@ export default function StudentsPage() {
           email: form.email,
           phone: form.phone,
           password: form.password,
+          academicScoreType, academicScore, passedOutYear,
           batchId, collegeId, courseId, departmentId,
         })
         toast.success('Student created successfully')
@@ -209,10 +233,14 @@ export default function StudentsPage() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'students.csv'; a.click()
   }
 
-  const batchOptions = toOptions(batches, b => b.name)
-  const collegeOptions = toOptions(colleges, c => c.name)
+  // Batches are scoped to whichever course is selected - a batch always
+  // belongs to exactly one course, so showing every batch regardless of
+  // course just invites mis-assignment.
+  const batchesForCourse = form.courseId
+    ? batches.filter(b => String(b.course?.id) === String(form.courseId))
+    : []
+  const batchOptions = toOptions(batchesForCourse, b => b.name)
   const courseOptions = toOptions(courses, c => c.title)
-  const departmentOptions = toOptions(departments, d => d.name)
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -451,52 +479,119 @@ export default function StudentsPage() {
             </div>
           )}
 
-          {/* Academic hierarchy: College -> Course -> Department, then Batch */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
-            <SearchableSelect
-              options={collegeOptions}
-              value={form.collegeId}
-              onChange={handleCollegeChange}
-              placeholder="Select college"
-              searchPlaceholder="Search college..."
-            />
+          {/*
+            Two independent groups:
+            1. College -> Department: the student's own college background.
+               Both are plain typed text fields (with autocomplete via a
+               native datalist) - the value is resolved to an existing or
+               newly-created record on submit.
+            2. Course + Batch: what CareerLabs is training this student on.
+               Course lists every course ever created; Batch is filtered down
+               to batches that belong to the selected course.
+          */}
+          <div className="pt-1">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Student&apos;s College Background</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
+                <input
+                  type="text"
+                  list="college-name-options"
+                  value={form.collegeName}
+                  onChange={e => setForm(f => ({ ...f, collegeName: e.target.value }))}
+                  placeholder="Type the student's college name"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <datalist id="college-name-options">
+                  {colleges.map(c => <option key={c.id} value={c.name} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Department</label>
+                <input
+                  type="text"
+                  list="department-name-options"
+                  value={form.departmentName}
+                  onChange={e => setForm(f => ({ ...f, departmentName: e.target.value }))}
+                  placeholder="Type the student's department"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <datalist id="department-name-options">
+                  {departmentSuggestions.map(d => <option key={d.id} value={d.name} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Academic Score</label>
+                <div className="flex gap-2">
+                  <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-0.5 flex-shrink-0">
+                    {['CGPA', 'PERCENTAGE'].map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, academicScoreType: type }))}
+                        className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                          form.academicScoreType === type ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                      >
+                        {type === 'CGPA' ? 'CGPA' : 'Percentage'}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={form.academicScoreType === 'CGPA' ? 10 : 100}
+                    value={form.academicScore}
+                    onChange={e => setForm(f => ({ ...f, academicScore: e.target.value }))}
+                    placeholder={form.academicScoreType === 'CGPA' ? 'e.g. 8.5' : 'e.g. 82.5'}
+                    className="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Passed Out Year</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1950"
+                  max="2100"
+                  value={form.passedOutYear}
+                  onChange={e => setForm(f => ({ ...f, passedOutYear: e.target.value }))}
+                  placeholder="e.g. 2024"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course</label>
-            <SearchableSelect
-              options={courseOptions}
-              value={form.courseId}
-              onChange={handleCourseChange}
-              placeholder={form.collegeId ? 'Select course' : 'Select a college first'}
-              searchPlaceholder="Search course..."
-              disabled={!form.collegeId}
-              loading={loadingCourses}
-              emptyLabel="No courses offered by this college"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Department</label>
-            <SearchableSelect
-              options={departmentOptions}
-              value={form.departmentId}
-              onChange={(v) => setForm(f => ({ ...f, departmentId: v }))}
-              placeholder={form.courseId ? 'Select department' : 'Select a course first'}
-              searchPlaceholder="Search department..."
-              disabled={!form.courseId}
-              loading={loadingDepartments}
-              emptyLabel="No departments for this course"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign to Batch</label>
-            <SearchableSelect
-              options={batchOptions}
-              value={form.batchId}
-              onChange={(v) => setForm(f => ({ ...f, batchId: v }))}
-              placeholder="No batch (assign later)"
-              searchPlaceholder="Search batch..."
-            />
+
+          <div className="pt-1">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course</label>
+                <SearchableSelect
+                  options={courseOptions}
+                  value={form.courseId}
+                  onChange={handleCourseChange}
+                  placeholder="Select course"
+                  searchPlaceholder="Search course..."
+                  emptyLabel="No courses created yet"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign to Batch</label>
+                <SearchableSelect
+                  options={batchOptions}
+                  value={form.batchId}
+                  onChange={(v) => setForm(f => ({ ...f, batchId: v }))}
+                  placeholder={form.courseId ? 'No batch (assign later)' : 'Select a course first'}
+                  searchPlaceholder="Search batch..."
+                  disabled={!form.courseId}
+                  emptyLabel="No batches created for this course yet"
+                />
+              </div>
+            </div>
           </div>
 
           {editStudent && (

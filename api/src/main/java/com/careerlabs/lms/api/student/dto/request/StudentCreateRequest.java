@@ -1,8 +1,13 @@
 package com.careerlabs.lms.api.student.dto.request;
 
 import com.careerlabs.lms.api.auth.validation.annotation.ValidEmailFormat;
+import com.careerlabs.lms.api.student.entity.AcademicScoreType;
 import com.careerlabs.lms.api.student.validation.StudentValidationMessages;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -30,6 +35,16 @@ public class StudentCreateRequest {
     private Long courseId;
 
     private Long departmentId;
+
+    private AcademicScoreType academicScoreType;
+
+    @DecimalMin(value = "0", message = StudentValidationMessages.ACADEMIC_SCORE_INVALID)
+    @DecimalMax(value = "100", message = StudentValidationMessages.ACADEMIC_SCORE_INVALID)
+    private Double academicScore;
+
+    @Min(value = 1950, message = StudentValidationMessages.PASSED_OUT_YEAR_INVALID)
+    @Max(value = 2100, message = StudentValidationMessages.PASSED_OUT_YEAR_INVALID)
+    private Integer passedOutYear;
 
     public String getName() {
         return name;
@@ -93,5 +108,29 @@ public class StudentCreateRequest {
 
     public void setDepartmentId(Long departmentId) {
         this.departmentId = departmentId;
+    }
+
+    public AcademicScoreType getAcademicScoreType() {
+        return academicScoreType;
+    }
+
+    public void setAcademicScoreType(AcademicScoreType academicScoreType) {
+        this.academicScoreType = academicScoreType;
+    }
+
+    public Double getAcademicScore() {
+        return academicScore;
+    }
+
+    public void setAcademicScore(Double academicScore) {
+        this.academicScore = academicScore;
+    }
+
+    public Integer getPassedOutYear() {
+        return passedOutYear;
+    }
+
+    public void setPassedOutYear(Integer passedOutYear) {
+        this.passedOutYear = passedOutYear;
     }
 }
