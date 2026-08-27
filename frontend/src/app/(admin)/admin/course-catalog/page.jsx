@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Pencil, Trash2, Clock, BarChart2 } from 'lucide-react'
+import Link from 'next/link'
+import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import courseService from '@/services/courseService'
 import { courseSchema } from '@/validations/courseValidation'
@@ -14,7 +15,13 @@ const LEVEL_COLORS = {
   ADVANCED: 'bg-red-100 text-red-700',
 }
 
-const EMPTY_FORM = { title: '', description: '', duration: '', level: 'BEGINNER', thumbnail: '' }
+const STATUS_COLORS = {
+  DRAFT: 'bg-gray-100 text-gray-600',
+  PUBLISHED: 'bg-emerald-100 text-emerald-700',
+  ARCHIVED: 'bg-orange-100 text-orange-700',
+}
+
+const EMPTY_FORM = { title: '', description: '', duration: '', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
 
 export default function CourseCatalogPage() {
   const [courses, setCourses] = useState([])
@@ -22,6 +29,7 @@ export default function CourseCatalogPage() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null)
 
   const {
     register,
@@ -54,6 +62,7 @@ export default function CourseCatalogPage() {
       duration: course.duration,
       level: course.level,
       thumbnail: course.thumbnail || '',
+      status: course.status,
     })
     setPanelOpen(true)
   }
@@ -74,6 +83,20 @@ export default function CourseCatalogPage() {
       toast.error(err.message || 'Failed to save course')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function togglePublish(course) {
+    const nextStatus = course.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED'
+    setStatusUpdatingId(course.id)
+    try {
+      await courseService.updateStatus(course.id, nextStatus)
+      toast.success(nextStatus === 'PUBLISHED' ? 'Course published' : 'Course moved to draft')
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to update status')
+    } finally {
+      setStatusUpdatingId(null)
     }
   }
 
@@ -117,11 +140,20 @@ export default function CourseCatalogPage() {
                 <h3 className="font-display font-bold text-base leading-tight text-gray-900 dark:text-white">{c.title}</h3>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${LEVEL_COLORS[c.level]}`}>{c.level}</span>
               </div>
+              <span className={`self-start text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_COLORS[c.status]}`}>{c.status}</span>
               <p className="text-xs text-gray-500 line-clamp-2">{c.description}</p>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span className="flex items-center gap-1"><Clock size={11} /> {c.duration}</span>
                 <span className="flex items-center gap-1"><BarChart2 size={11} /> {c.slug}</span>
               </div>
+              <Link href={`/admin/course-catalog/${c.id}`}
+                className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 transition-colors">
+                <FolderOpen size={12} /> Manage Content
+              </Link>
+              <button onClick={() => togglePublish(c)} disabled={statusUpdatingId === c.id}
+                className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
+                {c.status === 'PUBLISHED' ? <><EyeOff size={12} /> Move to Draft</> : <><Eye size={12} /> Publish</>}
+              </button>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => openEdit(c)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-purple-50 text-purple-600 text-xs font-semibold hover:bg-purple-100 transition-colors">
@@ -169,6 +201,17 @@ export default function CourseCatalogPage() {
               <option value="ADVANCED">ADVANCED</option>
             </select>
             {errors.level && <span className="text-xs text-red-500 mt-1 block">{errors.level.message}</span>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Status *</label>
+            <select {...register('status')}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="ARCHIVED">ARCHIVED</option>
+            </select>
+            {errors.status && <span className="text-xs text-red-500 mt-1 block">{errors.status.message}</span>}
           </div>
 
           <div>

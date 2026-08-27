@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, BookOpen, Calendar, ClipboardList,
+  LayoutDashboard, BookOpen, Compass, Calendar, ClipboardList,
   Brain, Briefcase, Bell, LogOut, LogIn, Menu, X, ChevronRight
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -12,7 +12,8 @@ import clsx from 'clsx'
 
 const navItems = [
   { href: '/student/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/student/courses',       icon: BookOpen,        label: 'My Courses' },
+  { href: '/student/my-courses',    icon: BookOpen,        label: 'My Courses' },
+  { href: '/student/course-catalog', icon: Compass,        label: 'Course Catalog' },
   { href: '/student/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/student/assignments',   icon: ClipboardList,   label: 'Assignments', badge: 'assignments' },
   { href: '/student/quizzes',       icon: Brain,           label: 'Quizzes' },

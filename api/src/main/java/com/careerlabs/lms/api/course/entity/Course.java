@@ -43,7 +43,7 @@ public class Course {
     private boolean active = true;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "varchar(20) default 'PUBLISHED'")
+    @Column(nullable = false)
     private CourseStatus status = CourseStatus.PUBLISHED;
 
     @Column(name = "created_at", nullable = false, updatable = false)
