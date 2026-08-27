@@ -173,11 +173,14 @@ export default function MyCourseDetailPage({ params }) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sessions.map(s => (
               <div key={s.id} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4">
-                <p className="text-[10px] text-gray-400 mb-1">{s.topicTitle}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] text-gray-400">{s.topicTitle}</p>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{s.type || 'LIVE'}</span>
+                </div>
                 <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-1">{s.title}</p>
                 <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
                   <span>{s.trainerName || '—'}</span>
-                  <span>{s.sessionDate || ''} {s.sessionTime || ''}</span>
+                  <span>{s.sessionDate || ''} {s.startTime || ''}{s.endTime ? `–${s.endTime}` : ''}</span>
                 </div>
                 <div className="flex gap-2">
                   {s.meetingUrl && (

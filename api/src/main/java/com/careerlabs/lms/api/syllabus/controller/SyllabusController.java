@@ -2,7 +2,7 @@ package com.careerlabs.lms.api.syllabus.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
-import com.careerlabs.lms.api.syllabus.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusModuleRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusTopicRequest;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusModuleResponse;

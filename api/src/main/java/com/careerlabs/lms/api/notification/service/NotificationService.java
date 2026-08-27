@@ -1,6 +1,6 @@
 package com.careerlabs.lms.api.notification.service;
 
-import com.careerlabs.lms.api.notification.dto.NotificationResponse;
+import com.careerlabs.lms.api.notification.dto.response.NotificationResponse;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 
 import java.util.List;
@@ -11,6 +11,11 @@ public interface NotificationService {
      * Fetch all notifications (up to 50, newest first) for the given user.
      */
     List<NotificationResponse> getForUser(Long userId);
+
+    /**
+     * Fetch all notifications (unbounded, newest first) for the given user.
+     */
+    List<NotificationResponse> list(Long userId);
 
     /**
      * Mark a single notification as read.
@@ -50,4 +55,10 @@ public interface NotificationService {
      * Fan-out a notification to ALL active ADMIN / SUPERADMIN / TRAINER users.
      */
     void notifyAdmins(String title, String body, NotificationType type, String link);
+
+    /**
+     * Send a notification to a single user (alternate parameter order, kept for
+     * callers built against the earlier minimal API - equivalent to notifyUser).
+     */
+    void create(Long userId, NotificationType type, String title, String body, String link);
 }

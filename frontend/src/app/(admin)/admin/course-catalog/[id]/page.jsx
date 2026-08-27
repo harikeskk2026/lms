@@ -12,7 +12,10 @@ import batchService from '@/services/batchService'
 
 const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
-const EMPTY_SESSION = { title: '', description: '', trainerName: '', sessionDate: '', sessionTime: '', durationMinutes: '', meetingUrl: '', recordingUrl: '' }
+const EMPTY_SESSION = {
+  title: '', description: '', trainerName: '', sessionDate: '', startTime: '', endTime: '',
+  durationMinutes: '', type: 'LIVE', meetingUrl: '', recordingUrl: '', status: 'PUBLISHED',
+}
 
 export default function CourseManagePage({ params }) {
   const { id: courseId } = params
@@ -89,12 +92,33 @@ function OverviewTab({ course }) {
   )
 }
 
+const EMPTY_MODULE_FORM = { title: '', description: '', status: 'PUBLISHED' }
+
+function StatusBadge({ status }) {
+  const isDraft = status === 'DRAFT'
+  return (
+    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+      isDraft ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+    }`}>{isDraft ? 'DRAFT' : 'PUBLISHED'}</span>
+  )
+}
+
+function StatusSelect({ value, onChange, small }) {
+  return (
+    <select value={value || 'PUBLISHED'} onChange={e => onChange(e.target.value)}
+      className={`rounded-lg border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-purple-500 ${small ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}`}>
+      <option value="DRAFT">Draft</option>
+      <option value="PUBLISHED">Published</option>
+    </select>
+  )
+}
+
 function SyllabusTab({ courseId }) {
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
-  const [newModuleTitle, setNewModuleTitle] = useState('')
-  const [newTopicTitle, setNewTopicTitle] = useState({})
+  const [newModule, setNewModule] = useState(EMPTY_MODULE_FORM)
+  const [newTopic, setNewTopic] = useState({})
   const [editingModule, setEditingModule] = useState(null)
   const [editingTopic, setEditingTopic] = useState(null)
 
@@ -109,17 +133,21 @@ function SyllabusTab({ courseId }) {
   useEffect(() => { load() }, [load])
 
   async function addModule() {
-    if (!newModuleTitle.trim()) return
+    if (!newModule.title.trim()) return
     try {
-      await courseContentService.createModule(courseId, { title: newModuleTitle.trim() })
-      setNewModuleTitle('')
+      await courseContentService.createModule(courseId, {
+        title: newModule.title.trim(), description: newModule.description.trim(), status: newModule.status,
+      })
+      setNewModule(EMPTY_MODULE_FORM)
       load()
     } catch (err) { toast.error(err.message || 'Failed to add module') }
   }
 
   async function saveModuleEdit() {
     try {
-      await courseContentService.updateModule(editingModule.id, { title: editingModule.title })
+      await courseContentService.updateModule(editingModule.id, {
+        title: editingModule.title, description: editingModule.description, status: editingModule.status,
+      })
       setEditingModule(null)
       load()
     } catch (err) { toast.error(err.message || 'Failed to update module') }
@@ -140,18 +168,22 @@ function SyllabusTab({ courseId }) {
   }
 
   async function addTopic(moduleId) {
-    const title = (newTopicTitle[moduleId] || '').trim()
-    if (!title) return
+    const topicForm = newTopic[moduleId] || EMPTY_MODULE_FORM
+    if (!topicForm.title.trim()) return
     try {
-      await courseContentService.createTopic(moduleId, { title })
-      setNewTopicTitle(prev => ({ ...prev, [moduleId]: '' }))
+      await courseContentService.createTopic(moduleId, {
+        title: topicForm.title.trim(), description: (topicForm.description || '').trim(), status: topicForm.status || 'PUBLISHED',
+      })
+      setNewTopic(prev => ({ ...prev, [moduleId]: EMPTY_MODULE_FORM }))
       load()
     } catch (err) { toast.error(err.message || 'Failed to add topic') }
   }
 
   async function saveTopicEdit() {
     try {
-      await courseContentService.updateTopic(editingTopic.id, { title: editingTopic.title })
+      await courseContentService.updateTopic(editingTopic.id, {
+        title: editingTopic.title, description: editingTopic.description, status: editingTopic.status,
+      })
       setEditingTopic(null)
       load()
     } catch (err) { toast.error(err.message || 'Failed to update topic') }
@@ -175,13 +207,17 @@ function SyllabusTab({ courseId }) {
 
   return (
     <div className="glass-card p-5 space-y-4">
-      <div className="flex gap-2">
-        <input value={newModuleTitle} onChange={e => setNewModuleTitle(e.target.value)} placeholder="New module title"
-          onKeyDown={e => e.key === 'Enter' && addModule()}
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-        <button onClick={addModule} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
-          <Plus size={14} /> Add Module
-        </button>
+      <div className="space-y-2 p-3 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+        <div className="flex gap-2">
+          <input value={newModule.title} onChange={e => setNewModule(f => ({ ...f, title: e.target.value }))} placeholder="New module title"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+          <StatusSelect value={newModule.status} onChange={v => setNewModule(f => ({ ...f, status: v }))} />
+          <button onClick={addModule} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold flex items-center gap-1 flex-shrink-0">
+            <Plus size={14} /> Add Module
+          </button>
+        </div>
+        <input value={newModule.description} onChange={e => setNewModule(f => ({ ...f, description: e.target.value }))} placeholder="Module description (optional)"
+          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
       </div>
 
       {modules.length === 0 && <p className="text-sm text-gray-400 text-center py-6">No modules yet. Add one above.</p>}
@@ -199,47 +235,72 @@ function SyllabusTab({ courseId }) {
                 ) : (
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{m.title}</span>
                 )}
+                {editingModule?.id !== m.id && <StatusBadge status={m.status} />}
                 <span className="text-xs text-gray-400 flex-shrink-0">({(m.topics || []).length} topics)</span>
               </button>
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                {editingModule?.id === m.id && <StatusSelect small value={editingModule.status} onChange={v => setEditingModule({ ...editingModule, status: v })} />}
                 <button onClick={() => moveModule(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={13} /></button>
                 <button onClick={() => moveModule(i, 1)} disabled={i === modules.length - 1} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={13} /></button>
                 {editingModule?.id === m.id ? (
                   <button onClick={saveModuleEdit} className="text-xs font-semibold text-purple-600 px-2">Save</button>
                 ) : (
-                  <button onClick={() => setEditingModule({ id: m.id, title: m.title })} className="w-7 h-7 rounded-lg hover:bg-gray-200 flex items-center justify-center"><Pencil size={12} /></button>
+                  <button onClick={() => setEditingModule({ id: m.id, title: m.title, description: m.description || '', status: m.status || 'PUBLISHED' })} className="w-7 h-7 rounded-lg hover:bg-gray-200 flex items-center justify-center"><Pencil size={12} /></button>
                 )}
                 <button onClick={() => deleteModule(m.id)} className="w-7 h-7 rounded-lg hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={12} /></button>
               </div>
             </div>
+            {editingModule?.id === m.id && (
+              <div className="px-4 py-2 bg-purple-50/50 dark:bg-purple-900/10">
+                <input value={editingModule.description} onChange={e => setEditingModule({ ...editingModule, description: e.target.value })}
+                  placeholder="Module description" onKeyDown={e => e.key === 'Enter' && saveModuleEdit()}
+                  className="w-full rounded-lg border border-purple-200 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            )}
+            {m.description && editingModule?.id !== m.id && (
+              <p className="px-4 py-1.5 text-xs text-gray-500 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">{m.description}</p>
+            )}
             {expanded[m.id] && (
               <div className="p-3 space-y-2 bg-white dark:bg-gray-900">
                 {(m.topics || []).map((t, ti) => (
-                  <div key={t.id} className="flex items-center justify-between gap-2 pl-4 border-l-2 border-purple-100 dark:border-purple-900/30 py-1.5">
-                    {editingTopic?.id === t.id ? (
-                      <input autoFocus value={editingTopic.title} onChange={e => setEditingTopic({ ...editingTopic, title: e.target.value })}
-                        onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
-                        className="flex-1 rounded-lg border border-purple-300 px-2 py-1 text-xs" />
-                    ) : (
-                      <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 truncate">{t.title}</span>
-                    )}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => moveTopic(m.id, m.topics, ti, -1)} disabled={ti === 0} className="w-6 h-6 rounded hover:bg-gray-100 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={11} /></button>
-                      <button onClick={() => moveTopic(m.id, m.topics, ti, 1)} disabled={ti === m.topics.length - 1} className="w-6 h-6 rounded hover:bg-gray-100 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={11} /></button>
+                  <div key={t.id} className="pl-4 border-l-2 border-purple-100 dark:border-purple-900/30 py-1.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
                       {editingTopic?.id === t.id ? (
-                        <button onClick={saveTopicEdit} className="text-xs font-semibold text-purple-600 px-1">Save</button>
+                        <input autoFocus value={editingTopic.title} onChange={e => setEditingTopic({ ...editingTopic, title: e.target.value })}
+                          onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
+                          className="flex-1 rounded-lg border border-purple-300 px-2 py-1 text-xs" />
                       ) : (
-                        <button onClick={() => setEditingTopic({ id: t.id, title: t.title })} className="w-6 h-6 rounded hover:bg-gray-100 flex items-center justify-center"><Pencil size={11} /></button>
+                        <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 truncate flex items-center gap-1.5">
+                          {t.title} <StatusBadge status={t.status} />
+                        </span>
                       )}
-                      <button onClick={() => deleteTopic(t.id)} className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={11} /></button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {editingTopic?.id === t.id && <StatusSelect small value={editingTopic.status} onChange={v => setEditingTopic({ ...editingTopic, status: v })} />}
+                        <button onClick={() => moveTopic(m.id, m.topics, ti, -1)} disabled={ti === 0} className="w-6 h-6 rounded hover:bg-gray-100 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={11} /></button>
+                        <button onClick={() => moveTopic(m.id, m.topics, ti, 1)} disabled={ti === m.topics.length - 1} className="w-6 h-6 rounded hover:bg-gray-100 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={11} /></button>
+                        {editingTopic?.id === t.id ? (
+                          <button onClick={saveTopicEdit} className="text-xs font-semibold text-purple-600 px-1">Save</button>
+                        ) : (
+                          <button onClick={() => setEditingTopic({ id: t.id, title: t.title, description: t.description || '', status: t.status || 'PUBLISHED' })} className="w-6 h-6 rounded hover:bg-gray-100 flex items-center justify-center"><Pencil size={11} /></button>
+                        )}
+                        <button onClick={() => deleteTopic(t.id)} className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={11} /></button>
+                      </div>
                     </div>
+                    {editingTopic?.id === t.id ? (
+                      <input value={editingTopic.description} onChange={e => setEditingTopic({ ...editingTopic, description: e.target.value })}
+                        placeholder="Topic description" onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
+                        className="w-full rounded-lg border border-purple-200 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                    ) : t.description ? (
+                      <p className="text-xs text-gray-400">{t.description}</p>
+                    ) : null}
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
-                  <input value={newTopicTitle[m.id] || ''} onChange={e => setNewTopicTitle(prev => ({ ...prev, [m.id]: e.target.value }))}
+                  <input value={(newTopic[m.id] || EMPTY_MODULE_FORM).title} onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_MODULE_FORM), title: e.target.value } }))}
                     placeholder="New topic title" onKeyDown={e => e.key === 'Enter' && addTopic(m.id)}
                     className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                  <button onClick={() => addTopic(m.id)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold">Add Topic</button>
+                  <StatusSelect small value={(newTopic[m.id] || EMPTY_MODULE_FORM).status} onChange={v => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_MODULE_FORM), status: v } }))} />
+                  <button onClick={() => addTopic(m.id)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold flex-shrink-0">Add Topic</button>
                 </div>
               </div>
             )}
@@ -296,8 +357,9 @@ function SessionsTab({ courseId }) {
     setEditingId(s.id)
     setForm({
       title: s.title, description: s.description || '', trainerName: s.trainerName || '',
-      sessionDate: s.sessionDate || '', sessionTime: s.sessionTime || '', durationMinutes: s.durationMinutes || '',
-      meetingUrl: s.meetingUrl || '', recordingUrl: s.recordingUrl || '',
+      sessionDate: s.sessionDate || '', startTime: s.startTime || '', endTime: s.endTime || '',
+      durationMinutes: s.durationMinutes || '', type: s.type || 'LIVE',
+      meetingUrl: s.meetingUrl || '', recordingUrl: s.recordingUrl || '', status: s.status || 'PUBLISHED',
     })
   }
 
@@ -346,8 +408,23 @@ function SessionsTab({ courseId }) {
               <div className="grid grid-cols-2 gap-2">
                 <input type="date" value={form.sessionDate} onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
                   className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-                <input type="time" value={form.sessionTime} onChange={e => setForm(f => ({ ...f, sessionTime: e.target.value }))}
-                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="LIVE">Live</option>
+                  <option value="RECORDED">Recorded</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">Start Time</label>
+                  <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">End Time</label>
+                  <input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                </div>
               </div>
               <input type="number" min="0" value={form.durationMinutes} onChange={e => setForm(f => ({ ...f, durationMinutes: e.target.value }))} placeholder="Duration (minutes)"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
@@ -355,6 +432,10 @@ function SessionsTab({ courseId }) {
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               <input value={form.recordingUrl} onChange={e => setForm(f => ({ ...f, recordingUrl: e.target.value }))} placeholder="Recording URL"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <div>
+                <label className="block text-[10px] text-gray-400 mb-1">Status</label>
+                <StatusSelect value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} />
+              </div>
               <div className="flex gap-2">
                 {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}
                 <button type="submit" disabled={saving} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
@@ -373,8 +454,14 @@ function SessionsTab({ courseId }) {
                 {sessions.map((s, i) => (
                   <div key={s.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{s.title}</p>
-                      <p className="text-xs text-gray-400">{s.trainerName || '—'} {s.sessionDate ? `· ${s.sessionDate}` : ''} {s.sessionTime ? `· ${s.sessionTime}` : ''}</p>
+                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate flex items-center gap-1.5">
+                        {s.title}
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">{s.type || 'LIVE'}</span>
+                        <StatusBadge status={s.status} />
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {s.trainerName || '—'} {s.sessionDate ? `· ${s.sessionDate}` : ''} {s.startTime ? `· ${s.startTime}${s.endTime ? `–${s.endTime}` : ''}` : ''}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button onClick={() => moveSession(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={12} /></button>
@@ -402,7 +489,8 @@ function MaterialsTab({ courseId }) {
   const [sessions, setSessions] = useState([])
   const [materials, setMaterials] = useState([])
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ title: '', type: 'PDF', url: '' })
+  const [form, setForm] = useState({ title: '', type: 'PDF', url: '', description: '', visibility: 'PUBLISHED' })
+  const [editingId, setEditingId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -434,17 +522,33 @@ function MaterialsTab({ courseId }) {
 
   useEffect(() => { load() }, [load])
 
+  function resetForm() {
+    setForm({ title: '', type: 'PDF', url: '', description: '', visibility: 'PUBLISHED' })
+    setEditingId(null)
+  }
+
+  function openEdit(m) {
+    setEditingId(m.id)
+    setForm({ title: m.title, type: m.type, url: m.url, description: m.description || '', visibility: m.visibility || 'PUBLISHED' })
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!ownerId) { toast.error('Select a target first'); return }
+    if (!editingId && !ownerId) { toast.error('Select a target first'); return }
     if (!form.url.trim()) { toast.error('Provide a URL or upload a file'); return }
     setSaving(true)
     try {
-      await courseContentService.createMaterial({ title: form.title, type: form.type, url: form.url, [ownerParamKey]: Number(ownerId) })
-      toast.success('Material added')
-      setForm({ title: '', type: 'PDF', url: '' })
+      const payload = { title: form.title, type: form.type, url: form.url, description: form.description, visibility: form.visibility }
+      if (editingId) {
+        await courseContentService.updateMaterial(editingId, payload)
+        toast.success('Material updated')
+      } else {
+        await courseContentService.createMaterial({ ...payload, [ownerParamKey]: Number(ownerId) })
+        toast.success('Material added')
+      }
+      resetForm()
       load()
-    } catch (err) { toast.error(err.message || 'Failed to add material') } finally { setSaving(false) }
+    } catch (err) { toast.error(err.message || 'Failed to save material') } finally { setSaving(false) }
   }
 
   async function handleUpload(e) {
@@ -511,23 +615,31 @@ function MaterialsTab({ courseId }) {
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           <div className="glass-card p-4 space-y-3">
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Add Material</p>
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{editingId ? 'Edit Material' : 'Add Material'}</p>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Title *"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                {MATERIAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description (optional)" rows={2}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+              <div className="grid grid-cols-2 gap-2">
+                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  {MATERIAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <StatusSelect value={form.visibility} onChange={v => setForm(f => ({ ...f, visibility: v }))} />
+              </div>
               <input required value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="URL (or upload a file below) *"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               <label className="flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
                 <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload file instead'}
                 <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
               </label>
-              <button type="submit" disabled={saving} className="w-full py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-                {saving ? 'Adding...' : 'Add Material'}
-              </button>
+              <div className="flex gap-2">
+                {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}
+                <button type="submit" disabled={saving} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+                  {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Material'}
+                </button>
+              </div>
             </form>
           </div>
 
@@ -540,13 +652,18 @@ function MaterialsTab({ courseId }) {
                 {materials.map((m, i) => (
                   <div key={m.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{m.title}</p>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{m.type}</span>
+                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate flex items-center gap-1.5">
+                        {m.title}
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0">{m.type}</span>
+                        <StatusBadge status={m.visibility} />
+                      </p>
+                      {m.description && <p className="text-xs text-gray-400 truncate">{m.description}</p>}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <a href={m.url} target="_blank" rel="noopener noreferrer" className="w-7 h-7 rounded-lg hover:bg-purple-100 text-purple-600 flex items-center justify-center"><ExternalLink size={12} /></a>
                       <button onClick={() => moveMaterial(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={12} /></button>
                       <button onClick={() => moveMaterial(i, 1)} disabled={i === materials.length - 1} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={12} /></button>
+                      <button onClick={() => openEdit(m)} className="w-7 h-7 rounded-lg hover:bg-purple-100 text-purple-600 flex items-center justify-center"><Pencil size={12} /></button>
                       <button onClick={() => handleDelete(m.id)} className="w-7 h-7 rounded-lg hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={12} /></button>
                     </div>
                   </div>

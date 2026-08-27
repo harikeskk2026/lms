@@ -66,6 +66,12 @@ public class Student {
     @Column(name = "placement_status", nullable = false)
     private PlacementStatus placementStatus = PlacementStatus.SEEKING;
 
+    private Double cgpa;
+
+    private Double percentage;
+
+    private Integer backlogs;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "batch_id")
     private Batch batch;
@@ -198,6 +204,30 @@ public class Student {
 
     public void setPlacementStatus(PlacementStatus placementStatus) {
         this.placementStatus = placementStatus;
+    }
+
+    public Double getCgpa() {
+        return cgpa;
+    }
+
+    public void setCgpa(Double cgpa) {
+        this.cgpa = cgpa;
+    }
+
+    public Double getPercentage() {
+        return percentage;
+    }
+
+    public void setPercentage(Double percentage) {
+        this.percentage = percentage;
+    }
+
+    public Integer getBacklogs() {
+        return backlogs;
+    }
+
+    public void setBacklogs(Integer backlogs) {
+        this.backlogs = backlogs;
     }
 
     public Batch getBatch() {

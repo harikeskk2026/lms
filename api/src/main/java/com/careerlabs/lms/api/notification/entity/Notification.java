@@ -16,6 +16,9 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 
+/**
+ * Immutable once created - notifications are never edited, only marked read.
+ */
 @Entity
 @Table(name = "notifications")
 public class Notification {
@@ -53,27 +56,59 @@ public class Notification {
         createdAt = Instant.now();
     }
 
-    // ─── Getters & Setters ────────────────────────────────────────────────────
+    public Long getId() {
+        return id;
+    }
 
-    public Long getId() { return id; }
+    public User getUser() {
+        return user;
+    }
 
-    public User getUser() { return user; }
-    public void setUser(User user) { this.user = user; }
+    public void setUser(User user) {
+        this.user = user;
+    }
 
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public String getTitle() {
+        return title;
+    }
 
-    public String getBody() { return body; }
-    public void setBody(String body) { this.body = body; }
+    public void setTitle(String title) {
+        this.title = title;
+    }
 
-    public NotificationType getType() { return type; }
-    public void setType(NotificationType type) { this.type = type; }
+    public String getBody() {
+        return body;
+    }
 
-    public boolean isRead() { return read; }
-    public void setRead(boolean read) { this.read = read; }
+    public void setBody(String body) {
+        this.body = body;
+    }
 
-    public String getLink() { return link; }
-    public void setLink(String link) { this.link = link; }
+    public NotificationType getType() {
+        return type;
+    }
 
-    public Instant getCreatedAt() { return createdAt; }
+    public void setType(NotificationType type) {
+        this.type = type;
+    }
+
+    public boolean isRead() {
+        return read;
+    }
+
+    public void setRead(boolean read) {
+        this.read = read;
+    }
+
+    public String getLink() {
+        return link;
+    }
+
+    public void setLink(String link) {
+        this.link = link;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

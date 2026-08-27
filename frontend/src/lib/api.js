@@ -167,6 +167,7 @@ export const adminApi = {
   getDrives:              (p)           => api.get('/admin/drives', { params: p }),
   createDrive:            (d)           => api.post('/admin/drives', d),
   updateDrive:            (id, d)       => api.patch(`/admin/drives/${id}`, d),
+  updateDriveStatus:      (id, status)  => api.patch(`/admin/drives/${id}/status`, { status }),
   getDriveApplications:   (id)          => api.get(`/admin/drives/${id}/applications`),
   updateDriveApplication: (driveId, appId, d) => api.patch(`/admin/drives/${driveId}/applications/${appId}`, d),
 
@@ -246,7 +247,12 @@ export const studentApi = {
 
   // Drives
   getDrives:                ()      => api.get('/student/drives'),
-  applyDrive:               (id)    => api.post(`/student/drives/${id}/apply`),
+  expressInterest:          (id)    => api.post(`/student/drives/${id}/interest`),
+
+  // Resume upload (actual PDF file - distinct from the Resume Builder above)
+  uploadResumeFile:         (form)  => api.post('/student/resume-file', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 
   // Mock Analytics
   getMockAnalytics:         ()      => api.get('/student/mock-analytics'),

@@ -4,5 +4,11 @@ public enum NotificationType {
     INFO,
     SUCCESS,
     WARNING,
-    URGENT
+    URGENT,
+    DRIVE,
+    INTERVIEW,
+    RESUME,
+    STATUS,
+    PREP,
+    SYSTEM
 }

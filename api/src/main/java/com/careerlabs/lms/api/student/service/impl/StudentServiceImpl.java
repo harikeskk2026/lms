@@ -196,6 +196,9 @@ public class StudentServiceImpl implements StudentService {
         student.setLinkedinUrl(request.getLinkedinUrl());
         student.setGithubUrl(request.getGithubUrl());
         student.setPlacementStatus(request.getPlacementStatus());
+        student.setCgpa(request.getCgpa());
+        student.setPercentage(request.getPercentage());
+        student.setBacklogs(request.getBacklogs());
         student.setBatch(request.getBatchId() != null ? findBatchOrThrow(request.getBatchId()) : null);
         student.setCollege(request.getCollegeId() != null ? findCollegeOrThrow(request.getCollegeId()) : null);
         student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);

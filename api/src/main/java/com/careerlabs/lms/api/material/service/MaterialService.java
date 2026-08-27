@@ -4,7 +4,7 @@ import com.careerlabs.lms.api.material.dto.request.MaterialRequest;
 import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
 import com.careerlabs.lms.api.material.dto.response.UploadResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
-import com.careerlabs.lms.api.syllabus.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;

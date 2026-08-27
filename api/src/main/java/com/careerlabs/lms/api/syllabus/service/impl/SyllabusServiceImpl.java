@@ -2,13 +2,14 @@ package com.careerlabs.lms.api.syllabus.service.impl;
 
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.session.entity.Session;
 import com.careerlabs.lms.api.session.repository.SessionRepository;
-import com.careerlabs.lms.api.syllabus.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusModuleRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusTopicRequest;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusModuleResponse;
@@ -52,7 +53,22 @@ public class SyllabusServiceImpl implements SyllabusService {
         findCourseOrThrow(courseId);
         accessGuard.requireContentAccess(principal, courseId);
 
-        return reloadTree(courseId);
+        List<SyllabusModuleResponse> modules = reloadTree(courseId);
+        return accessGuard.isAdmin(principal) ? modules : filterPublished(modules);
+    }
+
+    /** Non-admins only ever see PUBLISHED modules, and only PUBLISHED topics within them. */
+    private List<SyllabusModuleResponse> filterPublished(List<SyllabusModuleResponse> modules) {
+        return modules.stream()
+                .filter(module -> isPublished(module.status()))
+                .map(module -> new SyllabusModuleResponse(module.id(), module.courseId(), module.title(),
+                        module.description(), module.status(), module.orderIndex(),
+                        module.topics().stream().filter(topic -> isPublished(topic.status())).toList()))
+                .toList();
+    }
+
+    private boolean isPublished(CourseStatus status) {
+        return status == null || status == CourseStatus.PUBLISHED;
     }
 
     @Override
@@ -63,6 +79,8 @@ public class SyllabusServiceImpl implements SyllabusService {
         SyllabusModule module = new SyllabusModule();
         module.setCourse(course);
         module.setTitle(request.getTitle());
+        module.setDescription(request.getDescription());
+        module.setStatus(request.getStatus());
         module.setOrderIndex(moduleRepository.countByCourseId(courseId));
 
         return SyllabusModuleResponse.from(moduleRepository.save(module), List.of());
@@ -73,6 +91,8 @@ public class SyllabusServiceImpl implements SyllabusService {
     public SyllabusModuleResponse updateModule(Long id, SyllabusModuleRequest request) {
         SyllabusModule module = findModuleOrThrow(id);
         module.setTitle(request.getTitle());
+        module.setDescription(request.getDescription());
+        module.setStatus(request.getStatus());
         moduleRepository.save(module);
 
         List<SyllabusTopicResponse> topics = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(id).stream()
@@ -131,6 +151,8 @@ public class SyllabusServiceImpl implements SyllabusService {
         SyllabusTopic topic = new SyllabusTopic();
         topic.setModule(module);
         topic.setTitle(request.getTitle());
+        topic.setDescription(request.getDescription());
+        topic.setStatus(request.getStatus());
         topic.setOrderIndex(topicRepository.countByModuleId(moduleId));
 
         return SyllabusTopicResponse.from(topicRepository.save(topic));
@@ -141,6 +163,8 @@ public class SyllabusServiceImpl implements SyllabusService {
     public SyllabusTopicResponse updateTopic(Long id, SyllabusTopicRequest request) {
         SyllabusTopic topic = findTopicOrThrow(id);
         topic.setTitle(request.getTitle());
+        topic.setDescription(request.getDescription());
+        topic.setStatus(request.getStatus());
         return SyllabusTopicResponse.from(topicRepository.save(topic));
     }
 

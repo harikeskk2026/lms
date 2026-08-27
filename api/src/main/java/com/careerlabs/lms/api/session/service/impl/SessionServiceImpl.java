@@ -1,9 +1,11 @@
 package com.careerlabs.lms.api.session.service.impl;
 
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
+import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
-import com.careerlabs.lms.api.session.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import com.careerlabs.lms.api.session.dto.request.SessionRequest;
 import com.careerlabs.lms.api.session.dto.response.SessionResponse;
 import com.careerlabs.lms.api.session.entity.Session;
@@ -23,12 +25,14 @@ public class SessionServiceImpl implements SessionService {
 
     private final SessionRepository sessionRepository;
     private final SyllabusTopicRepository topicRepository;
+    private final MaterialRepository materialRepository;
     private final CourseAccessGuard accessGuard;
 
     public SessionServiceImpl(SessionRepository sessionRepository, SyllabusTopicRepository topicRepository,
-                               CourseAccessGuard accessGuard) {
+                               MaterialRepository materialRepository, CourseAccessGuard accessGuard) {
         this.sessionRepository = sessionRepository;
         this.topicRepository = topicRepository;
+        this.materialRepository = materialRepository;
         this.accessGuard = accessGuard;
     }
 
@@ -38,9 +42,15 @@ public class SessionServiceImpl implements SessionService {
         SyllabusTopic topic = findTopicOrThrow(topicId);
         accessGuard.requireContentAccess(principal, topic.getModule().getCourse().getId());
 
-        return sessionRepository.findAllByTopicIdOrderByOrderIndexAsc(topicId).stream()
-                .map(SessionResponse::from)
-                .toList();
+        List<Session> sessions = sessionRepository.findAllByTopicIdOrderByOrderIndexAsc(topicId);
+        if (!accessGuard.isAdmin(principal)) {
+            sessions = sessions.stream().filter(this::isPublished).toList();
+        }
+        return sessions.stream().map(SessionResponse::from).toList();
+    }
+
+    private boolean isPublished(Session session) {
+        return session.getStatus() == null || session.getStatus() == CourseStatus.PUBLISHED;
     }
 
     @Override
@@ -67,7 +77,9 @@ public class SessionServiceImpl implements SessionService {
     @Override
     @Transactional
     public void delete(Long id) {
-        sessionRepository.delete(findOrThrow(id));
+        Session session = findOrThrow(id);
+        materialRepository.deleteAllBySessionIdIn(List.of(id));
+        sessionRepository.delete(session);
     }
 
     @Override
@@ -107,9 +119,12 @@ public class SessionServiceImpl implements SessionService {
         session.setDescription(request.getDescription());
         session.setTrainerName(request.getTrainerName());
         session.setSessionDate(request.getSessionDate());
-        session.setSessionTime(request.getSessionTime());
+        session.setStartTime(request.getStartTime());
+        session.setEndTime(request.getEndTime());
         session.setDurationMinutes(request.getDurationMinutes());
+        session.setType(request.getType());
         session.setMeetingUrl(request.getMeetingUrl());
         session.setRecordingUrl(request.getRecordingUrl());
+        session.setStatus(request.getStatus());
     }
 }

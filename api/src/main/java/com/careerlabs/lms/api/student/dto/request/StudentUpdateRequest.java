@@ -40,6 +40,12 @@ public class StudentUpdateRequest {
     @NotNull(message = StudentValidationMessages.PLACEMENT_STATUS_REQUIRED)
     private PlacementStatus placementStatus;
 
+    private Double cgpa;
+
+    private Double percentage;
+
+    private Integer backlogs;
+
     private Long batchId;
 
     private Long collegeId;
@@ -126,6 +132,30 @@ public class StudentUpdateRequest {
 
     public void setPlacementStatus(PlacementStatus placementStatus) {
         this.placementStatus = placementStatus;
+    }
+
+    public Double getCgpa() {
+        return cgpa;
+    }
+
+    public void setCgpa(Double cgpa) {
+        this.cgpa = cgpa;
+    }
+
+    public Double getPercentage() {
+        return percentage;
+    }
+
+    public void setPercentage(Double percentage) {
+        this.percentage = percentage;
+    }
+
+    public Integer getBacklogs() {
+        return backlogs;
+    }
+
+    public void setBacklogs(Integer backlogs) {
+        this.backlogs = backlogs;
     }
 
     public Long getBatchId() {

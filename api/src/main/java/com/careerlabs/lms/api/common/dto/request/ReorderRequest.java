@@ -1,14 +1,17 @@
-package com.careerlabs.lms.api.syllabus.dto.request;
+package com.careerlabs.lms.api.common.dto.request;
 
-import com.careerlabs.lms.api.syllabus.validation.SyllabusValidationMessages;
 import jakarta.validation.constraints.NotEmpty;
 
 import java.util.List;
 
-/** Generic reorder payload: the ids of the items, in their new desired order. */
+/**
+ * Generic reorder payload: the ids of a set of sibling items, in their new
+ * desired order. Shared across syllabus modules/topics, sessions and
+ * materials rather than duplicated per domain.
+ */
 public class ReorderRequest {
 
-    @NotEmpty(message = SyllabusValidationMessages.ORDERED_IDS_REQUIRED)
+    @NotEmpty(message = "orderedIds must not be empty")
     private List<Long> orderedIds;
 
     public List<Long> getOrderedIds() {

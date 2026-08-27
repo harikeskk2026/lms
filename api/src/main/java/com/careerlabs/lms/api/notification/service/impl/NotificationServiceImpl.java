@@ -1,7 +1,7 @@
 package com.careerlabs.lms.api.notification.service.impl;
 
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
-import com.careerlabs.lms.api.notification.dto.NotificationResponse;
+import com.careerlabs.lms.api.notification.dto.response.NotificationResponse;
 import com.careerlabs.lms.api.notification.entity.Notification;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
@@ -28,8 +28,8 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
 
     public NotificationServiceImpl(NotificationRepository notificationRepository,
-                                   StudentRepository studentRepository,
-                                   UserRepository userRepository) {
+                                    StudentRepository studentRepository,
+                                    UserRepository userRepository) {
         this.notificationRepository = notificationRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -42,6 +42,14 @@ public class NotificationServiceImpl implements NotificationService {
     public List<NotificationResponse> getForUser(Long userId) {
         return notificationRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
+                .map(NotificationResponse::from)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> list(Long userId) {
+        return notificationRepository.findAllByUser_IdOrderByCreatedAtDesc(userId).stream()
                 .map(NotificationResponse::from)
                 .toList();
     }
@@ -124,10 +132,18 @@ public class NotificationServiceImpl implements NotificationService {
         }
     }
 
+    @Override
+    @Transactional
+    public void create(Long userId, NotificationType type, String title, String body, String link) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        notificationRepository.save(buildNotification(user, title, body, type, link));
+    }
+
     // ─── Private helpers ──────────────────────────────────────────────────────
 
     private Notification buildNotification(User user, String title, String body,
-                                           NotificationType type, String link) {
+                                             NotificationType type, String link) {
         Notification n = new Notification();
         n.setUser(user);
         n.setTitle(title);
@@ -137,4 +153,3 @@ public class NotificationServiceImpl implements NotificationService {
         return n;
     }
 }
-

@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.material.dto.request;
 
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.material.entity.MaterialType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -14,6 +15,10 @@ public class MaterialRequest {
 
     @NotBlank(message = "URL is required")
     private String url;
+
+    private String description;
+
+    private CourseStatus visibility = CourseStatus.PUBLISHED;
 
     private Long courseId;
 
@@ -45,6 +50,22 @@ public class MaterialRequest {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public CourseStatus getVisibility() {
+        return visibility;
+    }
+
+    public void setVisibility(CourseStatus visibility) {
+        this.visibility = visibility;
     }
 
     public Long getCourseId() {

@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.material.dto.response;
 
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.material.entity.Material;
 import com.careerlabs.lms.api.material.entity.MaterialType;
 
@@ -10,6 +11,8 @@ public record MaterialResponse(
         String title,
         MaterialType type,
         String url,
+        String description,
+        CourseStatus visibility,
         Long courseId,
         Long moduleId,
         Long topicId,
@@ -24,6 +27,8 @@ public record MaterialResponse(
                 material.getTitle(),
                 material.getType(),
                 material.getUrl(),
+                material.getDescription(),
+                material.getVisibility(),
                 material.getCourseId(),
                 material.getModuleId(),
                 material.getTopicId(),

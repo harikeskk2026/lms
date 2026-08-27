@@ -20,35 +20,65 @@ export default function StudentDetailPage() {
   const router = useRouter()
   const [student, setStudent] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [academicForm, setAcademicForm] = useState({ cgpa: '', percentage: '', backlogs: '' })
+  const [savingAcademics, setSavingAcademics] = useState(false)
 
   const load = () => {
     setLoading(true)
     studentService.get(id)
-      .then(r => setStudent(r.data))
+      .then(r => {
+        setStudent(r.data)
+        setAcademicForm({
+          cgpa: r.data.cgpa ?? '',
+          percentage: r.data.percentage ?? '',
+          backlogs: r.data.backlogs ?? '',
+        })
+      })
       .catch(err => toast.error(err.message || 'Failed to load student'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [id])
 
+  const buildUpdatePayload = (overrides) => ({
+    name: student.name,
+    phone: student.phone,
+    address: student.address,
+    qualification: student.qualification,
+    linkedinUrl: student.linkedinUrl,
+    githubUrl: student.githubUrl,
+    placementStatus: student.placementStatus,
+    cgpa: student.cgpa ?? null,
+    percentage: student.percentage ?? null,
+    backlogs: student.backlogs ?? null,
+    batchId: student.batch?.id || null,
+    collegeId: student.college?.id || null,
+    courseId: student.course?.id || null,
+    departmentId: student.department?.id || null,
+    ...overrides,
+  })
+
   const handlePlacementUpdate = async (status) => {
     try {
-      await studentService.update(id, {
-        name: student.name,
-        phone: student.phone,
-        address: student.address,
-        qualification: student.qualification,
-        linkedinUrl: student.linkedinUrl,
-        githubUrl: student.githubUrl,
-        placementStatus: status,
-        batchId: student.batch?.id || null,
-        collegeId: student.college?.id || null,
-        courseId: student.course?.id || null,
-        departmentId: student.department?.id || null,
-      })
+      await studentService.update(id, buildUpdatePayload({ placementStatus: status }))
       toast.success('Placement status updated')
       load()
     } catch (err) { toast.error(err.message || 'Failed to update') }
+  }
+
+  const handleAcademicsSave = async (e) => {
+    e.preventDefault()
+    setSavingAcademics(true)
+    try {
+      await studentService.update(id, buildUpdatePayload({
+        cgpa: academicForm.cgpa === '' ? null : Number(academicForm.cgpa),
+        percentage: academicForm.percentage === '' ? null : Number(academicForm.percentage),
+        backlogs: academicForm.backlogs === '' ? null : Number(academicForm.backlogs),
+      }))
+      toast.success('Academic details updated')
+      load()
+    } catch (err) { toast.error(err.message || 'Failed to update') }
+    finally { setSavingAcademics(false) }
   }
 
   if (loading) return (
@@ -145,6 +175,34 @@ export default function StudentDetailPage() {
                 </div>
               </div>
             ))}
+          </div>
+          <div className="glass-card p-6">
+            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1">Academic Details</h3>
+            <p className="text-xs text-gray-400 mb-4">Used to automatically check eligibility for placement opportunities.</p>
+            <form onSubmit={handleAcademicsSave} className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">CGPA</label>
+                <input type="number" step="0.1" min="0" max="10" value={academicForm.cgpa}
+                  onChange={e => setAcademicForm(f => ({ ...f, cgpa: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Percentage</label>
+                <input type="number" step="0.1" min="0" max="100" value={academicForm.percentage}
+                  onChange={e => setAcademicForm(f => ({ ...f, percentage: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Backlogs</label>
+                <input type="number" step="1" min="0" value={academicForm.backlogs}
+                  onChange={e => setAcademicForm(f => ({ ...f, backlogs: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <button type="submit" disabled={savingAcademics}
+                className="col-span-3 mt-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+                {savingAcademics ? 'Saving...' : 'Save Academic Details'}
+              </button>
+            </form>
           </div>
           <div className="glass-card p-5">
             <h3 className="font-display font-bold text-gray-800 dark:text-white mb-3">Current Batch</h3>

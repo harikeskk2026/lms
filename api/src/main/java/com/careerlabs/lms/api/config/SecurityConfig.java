@@ -79,7 +79,13 @@ public class SecurityConfig {
                         // Attendance endpoints
                         .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasRole("ADMIN")
                         .requestMatchers("/api/student/attendance/**", "/api/student/classes/**").hasRole("STUDENT")
+                        // Course content mutation endpoints (syllabus modules/topics, sessions, materials)
+                        .requestMatchers(HttpMethod.POST, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
                         .requestMatchers("/uploads/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/student/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

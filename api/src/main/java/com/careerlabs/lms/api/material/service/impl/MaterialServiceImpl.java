@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.storage.FileStorageService;
 import com.careerlabs.lms.api.common.storage.StoredFile;
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.dto.request.MaterialRequest;
@@ -16,7 +17,7 @@ import com.careerlabs.lms.api.material.service.MaterialService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.session.entity.Session;
 import com.careerlabs.lms.api.session.repository.SessionRepository;
-import com.careerlabs.lms.api.syllabus.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusTopic;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
@@ -90,7 +91,14 @@ public class MaterialServiceImpl implements MaterialService {
 
         accessGuard.requireContentAccess(principal, resolvedCourseId);
 
+        if (!accessGuard.isAdmin(principal)) {
+            materials = materials.stream().filter(this::isPublished).toList();
+        }
         return materials.stream().map(MaterialResponse::from).toList();
+    }
+
+    private boolean isPublished(Material material) {
+        return material.getVisibility() == null || material.getVisibility() == CourseStatus.PUBLISHED;
     }
 
     @Override
@@ -131,6 +139,8 @@ public class MaterialServiceImpl implements MaterialService {
         material.setTitle(request.getTitle());
         material.setType(request.getType());
         material.setUrl(request.getUrl());
+        material.setDescription(request.getDescription());
+        material.setVisibility(request.getVisibility());
         return MaterialResponse.from(materialRepository.save(material));
     }
 
@@ -171,6 +181,8 @@ public class MaterialServiceImpl implements MaterialService {
         material.setTitle(request.getTitle());
         material.setType(request.getType());
         material.setUrl(request.getUrl());
+        material.setDescription(request.getDescription());
+        material.setVisibility(request.getVisibility());
         material.setCourseId(request.getCourseId());
         material.setModuleId(request.getModuleId());
         material.setTopicId(request.getTopicId());

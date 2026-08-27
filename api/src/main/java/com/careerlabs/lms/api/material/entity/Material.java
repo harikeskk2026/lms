@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.material.entity;
 
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -33,6 +34,13 @@ public class Material {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String url;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    /** Nullable so adding this column never breaks existing rows under ddl-auto=update; null is treated as PUBLISHED. */
+    @Enumerated(EnumType.STRING)
+    private CourseStatus visibility = CourseStatus.PUBLISHED;
 
     @Column(name = "course_id")
     private Long courseId;
@@ -78,6 +86,22 @@ public class Material {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public CourseStatus getVisibility() {
+        return visibility;
+    }
+
+    public void setVisibility(CourseStatus visibility) {
+        this.visibility = visibility;
     }
 
     public Long getCourseId() {

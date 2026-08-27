@@ -1,8 +1,11 @@
 package com.careerlabs.lms.api.syllabus.entity;
 
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -26,6 +29,16 @@ public class SyllabusModule {
     @Column(nullable = false)
     private String title;
 
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    /**
+     * Nullable so adding this column never breaks existing rows under
+     * ddl-auto=update. Null is treated as PUBLISHED everywhere this is read.
+     */
+    @Enumerated(EnumType.STRING)
+    private CourseStatus status = CourseStatus.PUBLISHED;
+
     @Column(name = "order_index", nullable = false)
     private int orderIndex;
 
@@ -47,6 +60,22 @@ public class SyllabusModule {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public CourseStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(CourseStatus status) {
+        this.status = status;
     }
 
     public int getOrderIndex() {

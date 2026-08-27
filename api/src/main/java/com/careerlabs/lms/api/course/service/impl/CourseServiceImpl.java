@@ -9,8 +9,12 @@ import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.course.service.CourseService;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
+import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
+import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
+import com.careerlabs.lms.api.syllabus.service.SyllabusService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,15 +30,22 @@ public class CourseServiceImpl implements CourseService {
     private final CourseAccessGuard accessGuard;
     private final StudentRepository studentRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final SyllabusModuleRepository moduleRepository;
+    private final SyllabusService syllabusService;
+    private final MaterialRepository materialRepository;
 
     public CourseServiceImpl(CourseRepository courseRepository, SlugGenerator slugGenerator,
                               CourseAccessGuard accessGuard, StudentRepository studentRepository,
-                              EnrollmentRepository enrollmentRepository) {
+                              EnrollmentRepository enrollmentRepository, SyllabusModuleRepository moduleRepository,
+                              SyllabusService syllabusService, MaterialRepository materialRepository) {
         this.courseRepository = courseRepository;
         this.slugGenerator = slugGenerator;
         this.accessGuard = accessGuard;
         this.studentRepository = studentRepository;
         this.enrollmentRepository = enrollmentRepository;
+        this.moduleRepository = moduleRepository;
+        this.syllabusService = syllabusService;
+        this.materialRepository = materialRepository;
     }
 
     @Override
@@ -92,6 +103,13 @@ public class CourseServiceImpl implements CourseService {
     @Transactional
     public void delete(Long id) {
         Course course = findOrThrow(id);
+
+        for (SyllabusModule module : moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(id)) {
+            syllabusService.deleteModule(module.getId());
+        }
+        materialRepository.deleteAllByCourseId(id);
+        enrollmentRepository.deleteAllByCourseId(id);
+
         courseRepository.delete(course);
     }
 

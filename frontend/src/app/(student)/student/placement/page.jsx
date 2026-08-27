@@ -54,6 +54,27 @@ const DRIVE_STATUS_COLORS = {
   ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   UPCOMING: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
   CLOSED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  CANCELLED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+}
+// Students never apply directly - this is the admin-mediated pipeline their
+// expressed interest moves through (see DriveApplicationStatus on the backend).
+const APPLICATION_STATUS_LABELS = {
+  INTERESTED: 'Interested',
+  UNDER_REVIEW: 'Under Review',
+  SHORTLISTED: 'Shortlisted',
+  RESUME_SHARED: 'Resume Shared',
+  SELECTED: 'Selected',
+  NOT_SELECTED: 'Not Selected',
+  REJECTED: 'Not Selected',
+}
+const APPLICATION_STATUS_COLORS = {
+  INTERESTED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  UNDER_REVIEW: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+  SHORTLISTED: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+  RESUME_SHARED: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+  SELECTED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  NOT_SELECTED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  REJECTED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
 }
 const CATEGORY_COLORS = {
   'Programming': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
@@ -102,14 +123,15 @@ export default function PlacementPage() {
   const TABS = ['Dashboard', 'Resume Builder', 'Skills', 'Company Drives', 'Interview Prep']
 
   useEffect(() => {
-    Promise.all([
+    // Independent settles - one not-yet-implemented section (rolled out phase by
+    // phase) must not blank the whole page; each tab loads its own data anyway.
+    Promise.allSettled([
       studentApi.getPlacementHub(),
       studentApi.getMockAnalytics(),
     ]).then(([h, a]) => {
-      setHub(h.data.data)
-      setAnalytics(a.data.data)
-    }).catch(() => toast.error('Failed to load placement data'))
-      .finally(() => setLoading(false))
+      if (h.status === 'fulfilled') setHub(h.value.data.data)
+      if (a.status === 'fulfilled') setAnalytics(a.value.data.data)
+    }).finally(() => setLoading(false))
   }, [])
 
   const refreshHub = () => {
@@ -968,19 +990,19 @@ function CompanyDrivesTab() {
   }, [])
 
   const filtered = drives.filter(d => {
-    const matchFilter = filter === 'All' || (filter === 'Applied' ? d.hasApplied : d.status === filter.toUpperCase())
+    const matchFilter = filter === 'All' || (filter === 'Interested' ? !!d.applicationStatus : d.status === filter.toUpperCase())
     const matchSearch = !search || d.companyName.toLowerCase().includes(search.toLowerCase()) || d.role.toLowerCase().includes(search.toLowerCase())
     return matchFilter && matchSearch
   })
 
-  const handleApply = async (drive) => {
+  const handleExpressInterest = async (drive) => {
     setApplying(drive.id)
     try {
-      await studentApi.applyDrive(drive.id)
-      setDrives(prev => prev.map(d => d.id === drive.id ? { ...d, hasApplied: true, applicationStatus: 'APPLIED' } : d))
-      toast.success(`Applied to ${drive.companyName}!`)
+      await studentApi.expressInterest(drive.id)
+      setDrives(prev => prev.map(d => d.id === drive.id ? { ...d, applicationStatus: 'INTERESTED' } : d))
+      toast.success(`Interest recorded for ${drive.companyName}!`)
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Failed to apply')
+      toast.error(e?.response?.data?.message || 'Failed to record interest')
     } finally {
       setApplying(null)
     }
@@ -1013,7 +1035,7 @@ function CompanyDrivesTab() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search company or role..."
           className="flex-1 text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500" />
         <div className="flex gap-2">
-          {['All', 'Active', 'Upcoming', 'Applied'].map(f => (
+          {['All', 'Active', 'Upcoming', 'Interested'].map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                 filter === f ? 'bg-purple-600 text-white shadow' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
@@ -1055,10 +1077,10 @@ function CompanyDrivesTab() {
                     </div>
                     <div className="flex flex-wrap gap-2 mt-1.5 text-[10px] text-gray-500 dark:text-gray-400">
                       <span className="flex items-center gap-0.5"><MapPin size={9} /> {drive.location}</span>
-                      <span className="flex items-center gap-0.5">💰 {drive.package}</span>
+                      <span className="flex items-center gap-0.5">💰 {drive.packageOffered}</span>
                       <span className={`px-1.5 py-0.5 rounded-full font-medium ${
                         drive.driveType === 'CAMPUS' ? 'bg-purple-50 text-purple-600' :
-                        drive.driveType === 'ONLINE' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'
+                        drive.driveType === 'VIRTUAL' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'
                       }`}>{drive.driveType}</span>
                     </div>
                   </div>
@@ -1079,16 +1101,20 @@ function CompanyDrivesTab() {
                     <span className="text-[10px] text-gray-400">Drive: {format(new Date(drive.driveDate), 'MMM d')}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-400">{drive._count?.applications || 0} applied</span>
-                    {drive.hasApplied ? (
-                      <span className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-xl text-[10px] font-bold">
-                        <CheckCircle size={10} /> Applied
+                    {drive.applicationStatus ? (
+                      <span className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-bold ${APPLICATION_STATUS_COLORS[drive.applicationStatus] || ''}`}>
+                        <CheckCircle size={10} /> {APPLICATION_STATUS_LABELS[drive.applicationStatus] || drive.applicationStatus}
+                      </span>
+                    ) : !drive.isEligible ? (
+                      <span title={(drive.ineligibilityReasons || []).join('; ')}
+                        className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2.5 py-1 rounded-xl text-[10px] font-bold cursor-help">
+                        <AlertCircle size={10} /> Not Eligible
                       </span>
                     ) : (
-                      <button onClick={() => handleApply(drive)} disabled={applying === drive.id || drive.status === 'CLOSED'}
+                      <button onClick={() => handleExpressInterest(drive)} disabled={applying === drive.id || drive.status === 'CLOSED'}
                         className="flex items-center gap-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors">
                         {applying === drive.id ? <Loader2 size={10} className="animate-spin" /> : null}
-                        Apply Now →
+                        I'm Interested →
                       </button>
                     )}
                   </div>
@@ -1118,7 +1144,7 @@ function CompanyDrivesTab() {
                   {drive.applyLink && (
                     <a href={drive.applyLink} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium">
-                      <ExternalLink size={11} /> Apply via external link
+                      <ExternalLink size={11} /> Company reference link
                     </a>
                   )}
                 </div>

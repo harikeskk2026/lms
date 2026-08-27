@@ -2,7 +2,7 @@ package com.careerlabs.lms.api.session.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
-import com.careerlabs.lms.api.session.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import com.careerlabs.lms.api.session.dto.request.SessionRequest;
 import com.careerlabs.lms.api.session.dto.response.SessionResponse;
 import com.careerlabs.lms.api.session.service.SessionService;

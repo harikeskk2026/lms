@@ -14,11 +14,17 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     /** All notifications for a user, newest first (max 50). */
     List<Notification> findTop50ByUserIdOrderByCreatedAtDesc(Long userId);
 
+    List<Notification> findAllByUser_IdOrderByCreatedAtDesc(Long userId);
+
     /** Count of unread notifications for a user. */
     long countByUserIdAndReadFalse(Long userId);
 
     /** Find a single notification that belongs to a specific user. */
     Optional<Notification> findByIdAndUserId(Long id, Long userId);
+
+    Optional<Notification> findByIdAndUser_Id(Long id, Long userId);
+
+    List<Notification> findAllByUser_IdAndReadFalse(Long userId);
 
     /** Bulk-mark all unread as read for a user. */
     @Modifying

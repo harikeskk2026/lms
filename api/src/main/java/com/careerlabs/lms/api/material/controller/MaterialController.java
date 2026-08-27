@@ -6,7 +6,7 @@ import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
 import com.careerlabs.lms.api.material.dto.response.UploadResponse;
 import com.careerlabs.lms.api.material.service.MaterialService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
-import com.careerlabs.lms.api.syllabus.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
