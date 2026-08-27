@@ -1,0 +1,19 @@
+package com.careerlabs.lms.api.syllabus.dto.response;
+
+import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
+
+import java.util.List;
+
+public record SyllabusModuleResponse(
+        Long id,
+        Long courseId,
+        String title,
+        int orderIndex,
+        List<SyllabusTopicResponse> topics
+) {
+
+    public static SyllabusModuleResponse from(SyllabusModule module, List<SyllabusTopicResponse> topics) {
+        return new SyllabusModuleResponse(module.getId(), module.getCourse().getId(), module.getTitle(),
+                module.getOrderIndex(), topics);
+    }
+}
