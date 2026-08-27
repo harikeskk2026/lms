@@ -17,7 +17,9 @@ public record ReportStudentResponse(
         List<CourseScore> courseBreakdown,
         Integer riskScore,
         String riskLevel,
-        List<TrendPointResponse> progressTrend
+        List<TrendPointResponse> progressTrend,
+        Integer presentCount,
+        Integer absentCount
 ) {
 
     public record CourseScore(Long courseId, String courseTitle, Double averageScorePct) {

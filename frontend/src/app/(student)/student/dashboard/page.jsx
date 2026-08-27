@@ -254,11 +254,11 @@ export default function StudentDashboardPage() {
               </div>
               <h2 className="font-display text-lg font-bold text-gray-800 dark:text-white">{todayClass.title}</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                {batch?.name} · {batch?.timing} · Senthil Kumar
+                {batch?.name} · {batch?.timing}
               </p>
             </div>
             <div className="flex flex-col items-center md:items-end gap-2">
-              <Countdown targetDate={new Date().setHours(18, 0, 0, 0)} />
+              <Countdown targetDate={new Date(todayClass.date).getTime()} />
               <a
                 href={todayClass.meetLink || 'https://meet.google.com'}
                 target="_blank" rel="noopener noreferrer"

@@ -232,6 +232,11 @@ export default function ReportsPage() {
     { name: 'Placed', value: placementPlaced, fill: '#22c55e' },
   ]
 
+  const ATTENDANCE_STATUS_COLOR = { PRESENT: '#22c55e', ABSENT: '#ef4444', LATE: '#f59e0b', EXCUSED: '#9ca3af' }
+  const attendanceDistributionData = (attData?.attendanceDistribution || [])
+    .map(d => ({ name: d.status, value: d.count, fill: ATTENDANCE_STATUS_COLOR[d.status] || '#9ca3af' }))
+  const attendanceDistributionTotal = attendanceDistributionData.reduce((a, d) => a + d.value, 0)
+
   const engagementDonutData = engagementData ? [
     { name: 'High', value: engagementData.highCount, fill: '#22c55e' },
     { name: 'Medium', value: engagementData.mediumCount, fill: '#f59e0b' },
@@ -300,14 +305,46 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard label="Average Attendance" value={attData.summary?.averageScorePct != null ? `${attData.summary.averageScorePct}%` : '—'} color="text-purple-600" />
                 <StatCard label="Total Students" value={attData.summary?.totalStudents ?? '—'} color="text-blue-600" />
-                <StatCard label="Total Classes" value="—" color="text-green-600" />
-                <StatCard label="Low Attendance Students" value="—" color="text-orange-600" />
+                <StatCard label="Total Classes" value={attData.totalClasses ?? '—'} color="text-green-600" />
+                <StatCard label="Low Attendance Students" value={attData.lowAttendanceCount ?? '—'} color="text-orange-600" />
               </div>
 
               <div className="grid sm:grid-cols-3 gap-5">
-                <ChartCard title="Attendance Trend" empty emptyMessage={attData.message} />
-                <ChartCard title="Attendance by Batch" empty emptyMessage={attData.message} />
-                <ChartCard title="Present / Absent / Late" empty emptyMessage={attData.message} />
+                <ChartCard title="Attendance Trend" empty={!attData.attendanceTrend?.length} emptyMessage="Not enough attendance data yet to show a trend.">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={attData.attendanceTrend}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
+                      <XAxis dataKey="period" tick={CHART_TICK_STYLE} />
+                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                      <Line type="monotone" dataKey="percentage" name="Attendance %" stroke="#9333ea" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="Attendance by Batch" empty={!attData.attendanceByBatch?.length} emptyMessage="No batch attendance data available.">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={attData.attendanceByBatch}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
+                      <XAxis dataKey="batchName" tick={CHART_TICK_STYLE} />
+                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                      <Bar dataKey="percentage" name="Attendance %" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="Present / Absent / Late" empty={attendanceDistributionTotal === 0} emptyMessage="No attendance data available.">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie data={attendanceDistributionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                        {attendanceDistributionData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                      </Pie>
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </ChartCard>
               </div>
             </>
           )}
@@ -328,8 +365,8 @@ export default function ReportsPage() {
                       <tr key={i} className="border-b border-gray-50 hover:bg-purple-50/20">
                         <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{r.studentName}</td>
                         <td className="px-4 py-3 text-gray-600">{r.batchName}</td>
-                        <td className="px-4 py-3 text-green-600 font-semibold">—</td>
-                        <td className="px-4 py-3 text-red-500 font-semibold">—</td>
+                        <td className="px-4 py-3 text-green-600 font-semibold">{r.presentCount ?? '—'}</td>
+                        <td className="px-4 py-3 text-red-500 font-semibold">{r.absentCount ?? '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${r.attendancePct >= 85 ? 'bg-green-100 text-green-700' : r.attendancePct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-orange-100 text-orange-700'}`}>
                             {r.attendancePct}%
@@ -773,16 +810,18 @@ export default function ReportsPage() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Placement Funnel" empty={placementTotal === 0} emptyMessage="No placement data available.">
-              <ResponsiveContainer width="100%" height={240}>
-                <FunnelChart>
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Funnel dataKey="value" data={funnelData} isAnimationActive>
-                    <LabelList position="right" dataKey="name" fill="#374151" stroke="none" fontSize={11} />
-                  </Funnel>
-                </FunnelChart>
-              </ResponsiveContainer>
-            </ChartCard>
+            <div className="sm:col-span-2">
+              <ChartCard title="Placement Funnel" empty={placementTotal === 0} emptyMessage="No placement data available.">
+                <ResponsiveContainer width="100%" height={240}>
+                  <FunnelChart>
+                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                    <Funnel dataKey="value" data={funnelData} isAnimationActive>
+                      <LabelList position="right" dataKey="name" fill="#374151" stroke="none" fontSize={11} />
+                    </Funnel>
+                  </FunnelChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
           </div>
 
           <TableCard

@@ -107,6 +107,7 @@ export const adminApi = {
   createBatch: (data) => api.post('/batches', data),
   getBatchDetail: (id) => api.get(`/batches/${id}`),
   updateBatch: (id, data) => api.put(`/batches/${id}`, data),
+  toggleBatchStatus: (id) => api.patch(`/batches/${id}/status`),
   enrollStudent: (batchId, studentId) => api.post(`/admin/batches/${batchId}/enroll`, { studentId }),
   removeFromBatch: (batchId, studentId) => api.delete(`/admin/batches/${batchId}/students/${studentId}`),
 

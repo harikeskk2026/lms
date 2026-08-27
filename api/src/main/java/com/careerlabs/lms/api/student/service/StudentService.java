@@ -21,4 +21,6 @@ public interface StudentService {
     StudentResponse update(Long id, StudentUpdateRequest request);
 
     StudentResponse toggleStatus(Long id);
+
+    StudentResponse assignToBatch(Long studentId, Long batchId);
 }

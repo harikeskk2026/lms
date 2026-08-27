@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Pencil, Trash2, Calendar, Users, Clock } from 'lucide-react'
@@ -7,6 +8,8 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import batchService from '@/services/batchService'
 import courseService from '@/services/courseService'
+import studentService from '@/services/studentService'
+import { adminApi } from '@/lib/api'
 import { batchSchema } from '@/validations/batchValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
 
@@ -19,8 +22,10 @@ const MODE_COLORS = {
 const EMPTY_FORM = { name: '', courseId: '', trainerId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 }
 
 export default function BatchCatalogPage() {
+  const router = useRouter()
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
+  const [enrollmentCounts, setEnrollmentCounts] = useState({})
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -35,11 +40,29 @@ export default function BatchCatalogPage() {
 
   const load = useCallback(() => {
     setLoading(true)
-    batchService.list()
-      .then(r => setBatches(r.data || []))
+    Promise.all([
+      batchService.list(),
+      studentService.list({ limit: 1000 }),
+    ])
+      .then(([batchRes, studentRes]) => {
+        setBatches(batchRes.data || [])
+        const counts = {}
+        for (const s of studentRes.data?.students || []) {
+          if (s.batch?.id) counts[s.batch.id] = (counts[s.batch.id] || 0) + 1
+        }
+        setEnrollmentCounts(counts)
+      })
       .catch(err => toast.error(err.message || 'Failed to load batches'))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleToggleStatus = async (batch) => {
+    try {
+      await adminApi.toggleBatchStatus(batch.id)
+      toast.success('Batch status updated')
+      load()
+    } catch { toast.error('Failed to update batch status') }
+  }
 
   useEffect(() => {
     load()
@@ -127,9 +150,10 @@ export default function BatchCatalogPage() {
                   <h3 className="font-display font-bold text-base leading-tight text-gray-900 dark:text-white">{b.name}</h3>
                   <span className="text-xs text-gray-500">{b.course?.title}</span>
                 </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${b.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                <button onClick={() => handleToggleStatus(b)}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap transition-colors ${b.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                   {b.isActive ? 'Active' : 'Ended'}
-                </span>
+                </button>
               </div>
               <span className={`self-start text-xs font-semibold px-2 py-0.5 rounded-full ${MODE_COLORS[b.mode]}`}>{b.mode}</span>
               <div className="flex items-center gap-3 text-xs text-gray-400">
@@ -137,8 +161,20 @@ export default function BatchCatalogPage() {
               </div>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 {b.timing && <span className="flex items-center gap-1"><Clock size={11} /> {b.timing}</span>}
-                <span className="flex items-center gap-1"><Users size={11} /> Max {b.maxStudents}</span>
               </div>
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span className="flex items-center gap-1"><Users size={11} /> Students</span>
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">{enrollmentCounts[b.id] || 0}/{b.maxStudents}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-purple-500" style={{ width: `${Math.min(100, Math.round(((enrollmentCounts[b.id] || 0) / b.maxStudents) * 100))}%` }} />
+                </div>
+              </div>
+              <button onClick={() => router.push(`/admin/batches/${b.id}`)}
+                className="w-full py-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 transition-colors">
+                View Details →
+              </button>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => openEdit(b)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-purple-50 text-purple-600 text-xs font-semibold hover:bg-purple-100 transition-colors">

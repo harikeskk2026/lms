@@ -5,18 +5,11 @@ const reportService = {
 
   getPerformance: (params) => apiCall({ method: 'GET', url: '/reports/performance', params }),
 
-  getCoursePerformance: () => apiCall({ method: 'GET', url: '/reports/performance/courses' }),
-
-  getBatchPerformance: (batchId) =>
-    apiCall({ method: 'GET', url: batchId ? `/reports/performance/batches/${batchId}` : '/reports/performance/batches' }),
-
   getStudentPerformance: (studentId) => apiCall({ method: 'GET', url: `/reports/performance/students/${studentId}` }),
 
   getAtRiskStudents: (params) => apiCall({ method: 'GET', url: '/reports/at-risk', params }),
 
   getPlacement: (params) => apiCall({ method: 'GET', url: '/reports/placement', params }),
-
-  getPlacementByBatch: () => apiCall({ method: 'GET', url: '/reports/placement/batches' }),
 
   export: (params) => apiCall({ method: 'GET', url: '/reports/export', params }),
 

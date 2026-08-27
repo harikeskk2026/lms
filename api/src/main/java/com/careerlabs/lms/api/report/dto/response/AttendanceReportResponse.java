@@ -2,11 +2,6 @@ package com.careerlabs.lms.api.report.dto.response;
 
 import java.util.List;
 
-/**
- * available is always false today — there is no attendance data model in this backend yet.
- * The shape is kept real (not omitted) so the frontend has a stable, chart-ready contract to
- * code against once attendance tracking is added; every list stays empty until then.
- */
 public record AttendanceReportResponse(
         boolean available,
         String message,
@@ -14,7 +9,9 @@ public record AttendanceReportResponse(
         List<TrendPoint> attendanceTrend,
         List<BatchAttendance> attendanceByBatch,
         List<StatusCount> attendanceDistribution,
-        List<ReportStudentResponse> students
+        List<ReportStudentResponse> students,
+        int totalClasses,
+        int lowAttendanceCount
 ) {
 
     public record TrendPoint(String period, Double percentage) {

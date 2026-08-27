@@ -118,9 +118,7 @@ public class StudentServiceImpl implements StudentService {
         student.setAcademicScoreType(request.getAcademicScoreType());
         student.setAcademicScore(request.getAcademicScore());
         student.setPassedOutYear(request.getPassedOutYear());
-        if (request.getBatchId() != null) {
-            student.setBatch(findBatchOrThrow(request.getBatchId()));
-        }
+        assignBatch(student, request.getBatchId());
         if (request.getCollegeId() != null) {
             student.setCollege(findCollegeOrThrow(request.getCollegeId()));
         }
@@ -160,6 +158,16 @@ public class StudentServiceImpl implements StudentService {
         return StudentResponse.from(student);
     }
 
+    @Override
+    @Transactional
+    public StudentResponse assignToBatch(Long studentId, Long batchId) {
+        Student student = findOrThrow(studentId);
+        assignBatch(student, batchId);
+        student = studentRepository.save(student);
+
+        return StudentResponse.from(student);
+    }
+
     private Student findOrThrow(Long id) {
         return studentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + id));
@@ -168,6 +176,23 @@ public class StudentServiceImpl implements StudentService {
     private Batch findBatchOrThrow(Long batchId) {
         return batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
+    }
+
+    private void assignBatch(Student student, Long batchId) {
+        if (batchId == null) {
+            student.setBatch(null);
+            return;
+        }
+        Batch currentBatch = student.getBatch();
+        if (currentBatch != null && currentBatch.getId().equals(batchId)) {
+            return;
+        }
+        Batch batch = findBatchOrThrow(batchId);
+        long currentCount = studentRepository.findByBatchId(batchId).size();
+        if (currentCount >= batch.getMaxStudents()) {
+            throw new ConflictException("Batch '" + batch.getName() + "' is full (" + batch.getMaxStudents() + " max)");
+        }
+        student.setBatch(batch);
     }
 
     private College findCollegeOrThrow(Long collegeId) {
@@ -199,7 +224,7 @@ public class StudentServiceImpl implements StudentService {
         student.setCgpa(request.getCgpa());
         student.setPercentage(request.getPercentage());
         student.setBacklogs(request.getBacklogs());
-        student.setBatch(request.getBatchId() != null ? findBatchOrThrow(request.getBatchId()) : null);
+        assignBatch(student, request.getBatchId());
         student.setCollege(request.getCollegeId() != null ? findCollegeOrThrow(request.getCollegeId()) : null);
         student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);
         student.setDepartment(request.getDepartmentId() != null ? findDepartmentOrThrow(request.getDepartmentId()) : null);

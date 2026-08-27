@@ -15,5 +15,7 @@ public interface BatchService {
 
     BatchResponse update(Long id, BatchRequest request);
 
+    BatchResponse toggleActive(Long id);
+
     void delete(Long id);
 }
