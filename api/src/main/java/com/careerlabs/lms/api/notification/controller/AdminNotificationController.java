@@ -1,7 +1,7 @@
 package com.careerlabs.lms.api.notification.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
-import com.careerlabs.lms.api.notification.dto.NotificationResponse;
+import com.careerlabs.lms.api.notification.dto.response.NotificationResponse;
 import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import org.springframework.http.ResponseEntity;

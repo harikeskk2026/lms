@@ -40,4 +40,10 @@ public class StudentNotificationController {
         notificationService.markAllRead(principal.id());
         return ResponseEntity.ok(ApiResponse.of("All notifications marked read", null));
     }
+
+    /** Lightweight endpoint for polling the unread badge count (e.g. every 30s from the shell). */
+    @GetMapping("/unread-count")
+    public ResponseEntity<ApiResponse<Long>> unreadCount(@AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(notificationService.countUnread(principal.id())));
+    }
 }
