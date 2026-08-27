@@ -16,6 +16,8 @@ import com.careerlabs.lms.api.common.storage.FileStorageService;
 import com.careerlabs.lms.api.common.storage.StoredFile;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.notification.entity.NotificationType;
+import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.submission.entity.AssignmentSubmission;
@@ -45,17 +47,20 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final FileStorageService fileStorageService;
     private final StudentRepository studentRepository;
     private final AssignmentSubmissionRepository submissionRepository;
+    private final NotificationService notificationService;
 
     public AssignmentServiceImpl(AssignmentRepository assignmentRepository, CourseRepository courseRepository,
                                   BatchRepository batchRepository, FileStorageService fileStorageService,
                                   StudentRepository studentRepository,
-                                  AssignmentSubmissionRepository submissionRepository) {
+                                  AssignmentSubmissionRepository submissionRepository,
+                                  NotificationService notificationService) {
         this.assignmentRepository = assignmentRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.fileStorageService = fileStorageService;
         this.studentRepository = studentRepository;
         this.submissionRepository = submissionRepository;
+        this.notificationService = notificationService;
     }
 
     @Override
