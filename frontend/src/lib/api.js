@@ -92,6 +92,7 @@ export function resolveFileUrl(path) {
 
 export const adminApi = {
   // Dashboard
+  getDashboard: () => api.get('/admin/dashboard'),
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
 
   // Students

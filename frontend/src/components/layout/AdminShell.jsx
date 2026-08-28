@@ -205,12 +205,11 @@ export default function AdminShell({ children }) {
 
   // Fetch badge counts
   useEffect(() => {
-    adminApi.getDashboardStats().then(res => {
+    adminApi.getDashboard().then(res => {
       const d = res.data?.data
       if (d) {
         setBadges({
-          students: d.newThisMonth || 0,
-          assignments: d.totalAssignmentsPending || 0,
+          assignments: d.assignments?.pendingSubmissions || 0,
         })
       }
     }).catch(() => {})

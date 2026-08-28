@@ -34,4 +34,8 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     List<QuizAttempt> findByStudentIdInAndStatus(List<Long> studentIds, AttemptStatus status);
 
     List<QuizAttempt> findByStatus(AttemptStatus status);
+
+    long countByStatus(AttemptStatus status);
+
+    List<QuizAttempt> findTop10ByStatusOrderByCompletedAtDesc(AttemptStatus status);
 }

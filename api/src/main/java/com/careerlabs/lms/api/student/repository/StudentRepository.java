@@ -20,4 +20,8 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     @Query("SELECT s.placementStatus AS status, COUNT(s) AS count FROM Student s GROUP BY s.placementStatus")
     List<PlacementStatusCount> countGroupedByPlacementStatus();
+
+    long countByUser_ActiveTrue();
+
+    List<Student> findTop10ByOrderByCreatedAtDesc();
 }
