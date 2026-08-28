@@ -1,11 +1,18 @@
 'use client'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { format } from 'date-fns'
 import { X, Video, PlayCircle } from 'lucide-react'
 
 export default function AttendanceDayModal({ date, records = [], loading, onClose, onRequestCorrection }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="glass-card w-full max-w-md p-5 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-800 dark:text-white">
             {date ? format(new Date(date), 'MMMM d, yyyy') : ''}
@@ -55,6 +62,8 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
+

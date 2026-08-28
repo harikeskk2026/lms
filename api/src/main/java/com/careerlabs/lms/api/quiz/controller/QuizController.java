@@ -1,10 +1,13 @@
 package com.careerlabs.lms.api.quiz.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
+import com.careerlabs.lms.api.quiz.dto.request.AssignQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.request.AttachQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.CreateQuizRequest;
+import com.careerlabs.lms.api.quiz.dto.request.ReorderQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAnalyticsResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuizAssignmentResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResponse;
 import com.careerlabs.lms.api.quiz.service.QuizService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -84,5 +87,37 @@ public class QuizController {
     @GetMapping("/{id}/analytics")
     public ResponseEntity<ApiResponse<AdminQuizAnalyticsResponse>> getAnalytics(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.of(quizService.getAnalytics(id)));
+    }
+
+    @PutMapping("/{id}/questions/reorder")
+    public ResponseEntity<ApiResponse<QuizResponse>> reorderQuestions(@PathVariable Long id,
+                                                                        @Valid @RequestBody ReorderQuestionsRequest request) {
+        QuizResponse response = quizService.reorderQuestions(id, request);
+        return ResponseEntity.ok(ApiResponse.of("Questions reordered", response));
+    }
+
+    @PostMapping("/{id}/assignments")
+    public ResponseEntity<ApiResponse<List<QuizAssignmentResponse>>> assign(@PathVariable Long id,
+                                                                              @Valid @RequestBody AssignQuizRequest request,
+                                                                              @AuthenticationPrincipal JwtUserPrincipal principal) {
+        List<QuizAssignmentResponse> response = quizService.assign(id, request, principal.id());
+        return ResponseEntity.ok(ApiResponse.of("Quiz assigned", response));
+    }
+
+    @GetMapping("/{id}/assignments")
+    public ResponseEntity<ApiResponse<List<QuizAssignmentResponse>>> getAssignments(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.of(quizService.getAssignments(id)));
+    }
+
+    @DeleteMapping("/{id}/assignments/{assignmentId}")
+    public ResponseEntity<ApiResponse<Void>> removeAssignment(@PathVariable Long id, @PathVariable Long assignmentId) {
+        quizService.removeAssignment(id, assignmentId);
+        return ResponseEntity.ok(ApiResponse.of("Assignment removed", null));
+    }
+
+    @PostMapping("/{id}/release-results")
+    public ResponseEntity<ApiResponse<QuizResponse>> releaseResults(@PathVariable Long id) {
+        QuizResponse response = quizService.releaseResults(id);
+        return ResponseEntity.ok(ApiResponse.of("Results released", response));
     }
 }

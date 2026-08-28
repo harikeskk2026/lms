@@ -2,10 +2,13 @@ package com.careerlabs.lms.api.quiz.dto.response;
 
 import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
+import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
+import com.careerlabs.lms.api.quiz.entity.ResultVisibility;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record QuizResponse(
@@ -24,19 +27,23 @@ public record QuizResponse(
         boolean randomQuestions,
         boolean randomOptions,
         boolean showExplanation,
+        boolean negativeMarking,
+        ResultVisibility resultVisibility,
+        boolean resultsReleased,
+        LocalDateTime scheduledStart,
+        LocalDateTime scheduledEnd,
         QuizStatus status,
+        QuizEffectiveStatus effectiveStatus,
         Long createdBy,
         int totalQuestions,
         List<QuestionResponse> questions,
+        List<QuizAssignmentResponse> assignments,
         Instant createdAt,
         Instant updatedAt
 ) {
 
-    public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions) {
-        return from(quiz, questions, null, null);
-    }
-
-    public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions, String courseName, String batchName) {
+    public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions, String courseName, String batchName,
+                                     QuizEffectiveStatus effectiveStatus, List<QuizAssignmentResponse> assignments) {
         return new QuizResponse(
                 quiz.getId(),
                 quiz.getTitle(),
@@ -53,10 +60,17 @@ public record QuizResponse(
                 quiz.isRandomQuestions(),
                 quiz.isRandomOptions(),
                 quiz.isShowExplanation(),
+                quiz.isNegativeMarking(),
+                quiz.getResultVisibility(),
+                quiz.isResultsReleased(),
+                quiz.getScheduledStart(),
+                quiz.getScheduledEnd(),
                 quiz.getStatus(),
+                effectiveStatus,
                 quiz.getCreatedBy(),
                 questions.size(),
                 questions,
+                assignments,
                 quiz.getCreatedAt(),
                 quiz.getUpdatedAt());
     }

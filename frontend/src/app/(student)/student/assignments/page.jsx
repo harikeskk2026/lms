@@ -1,5 +1,7 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns'
 import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Download } from 'lucide-react'
 import { useAssignments } from '@/hooks/useStudentDashboard'
@@ -28,9 +30,12 @@ function gradeLabel(grade) {
 }
 
 function SubmitModal({ assignment, onClose, onSuccess }) {
+  const [mounted, setMounted] = useState(false)
   const [file, setFile] = useState(null)
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   const handleSubmit = async () => {
     if (!file) return toast.error('Please select a file')
@@ -50,22 +55,24 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
     }
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="glass-card max-w-md w-full p-6 animate-fadeInUp">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display font-bold text-gray-800 dark:text-white">Submit Assignment</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+  if (!mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="font-display font-bold text-gray-800 dark:text-white text-base">Submit Assignment</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"><X size={16} /></button>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{assignment.title}</p>
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{assignment.title}</p>
 
         {/* Drop zone */}
-        <label className="block w-full border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-xl p-6 text-center cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors mb-3">
-          <Upload size={24} className="mx-auto text-brand-400 mb-2" />
+        <label className="block w-full border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-2xl p-6 text-center cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
+          <Upload size={24} className="mx-auto text-purple-600 dark:text-purple-400 mb-2" />
           {file ? (
-            <p className="text-sm font-medium text-brand-600">{file.name}</p>
+            <p className="text-sm font-medium text-purple-700 dark:text-purple-300">{file.name}</p>
           ) : (
-            <p className="text-sm text-gray-400">Click to upload or drag & drop<br /><span className="text-xs">PDF, ZIP, PY, JS, TXT, DOCX</span></p>
+            <p className="text-sm text-gray-400">Click to upload or drag & drop<br /><span className="text-xs font-normal">PDF, ZIP, PY, JS, TXT, DOCX</span></p>
           )}
           <input type="file" className="hidden" onChange={e => setFile(e.target.files[0])} />
         </label>
@@ -75,19 +82,21 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
           onChange={e => setNotes(e.target.value)}
           placeholder="Add any notes for your trainer (optional)..."
           rows={3}
-          className="input-field mb-4 resize-none text-sm"
+          className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
         />
 
-        <div className="flex gap-2">
-          <button onClick={onClose} className="btn-outline flex-1 py-2">Cancel</button>
-          <button onClick={handleSubmit} disabled={loading || !file} className="btn-primary flex-1 py-2">
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+          <button onClick={handleSubmit} disabled={loading || !file} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
             {loading ? 'Submitting…' : 'Submit'}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
+
 
 function AssignmentCard({ a, onSubmit }) {
   const [expanded, setExpanded] = useState(false)

@@ -13,6 +13,7 @@ import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuizQuestion;
+import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
 import com.careerlabs.lms.api.quiz.repository.QuestionAttemptRepository;
@@ -20,6 +21,7 @@ import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizQuestionRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizRepository;
 import com.careerlabs.lms.api.quiz.service.AdaptiveQuizService;
+import com.careerlabs.lms.api.quiz.service.QuizAvailabilityService;
 import com.careerlabs.lms.api.quiz.service.QuizScoringService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,16 +42,19 @@ public class AdaptiveQuizServiceImpl implements AdaptiveQuizService {
     private final QuizAttemptRepository quizAttemptRepository;
     private final QuestionAttemptRepository questionAttemptRepository;
     private final QuizScoringService quizScoringService;
+    private final QuizAvailabilityService quizAvailabilityService;
 
     public AdaptiveQuizServiceImpl(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
                                     QuizAttemptRepository quizAttemptRepository,
                                     QuestionAttemptRepository questionAttemptRepository,
-                                    QuizScoringService quizScoringService) {
+                                    QuizScoringService quizScoringService,
+                                    QuizAvailabilityService quizAvailabilityService) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
         this.questionAttemptRepository = questionAttemptRepository;
         this.quizScoringService = quizScoringService;
+        this.quizAvailabilityService = quizAvailabilityService;
     }
 
     @Override
@@ -62,6 +67,17 @@ public class AdaptiveQuizServiceImpl implements AdaptiveQuizService {
         }
         if (quiz.getType() != QuizType.ADAPTIVE) {
             throw new ConflictException("This quiz is not configured for adaptive mode");
+        }
+
+        QuizEffectiveStatus effectiveStatus = quizAvailabilityService.effectiveStatus(quiz);
+        if (effectiveStatus == QuizEffectiveStatus.SCHEDULED) {
+            throw new ConflictException("This quiz hasn't opened yet");
+        }
+        if (effectiveStatus == QuizEffectiveStatus.COMPLETED) {
+            throw new ConflictException("This quiz has closed");
+        }
+        if (!quizAvailabilityService.isAssignedTo(quiz, studentId)) {
+            throw new ForbiddenException("You are not assigned to this quiz");
         }
 
         QuizAttempt attempt = quizAttemptRepository

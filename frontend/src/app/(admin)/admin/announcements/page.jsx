@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+
 import {
   Pin, Trash2, Pencil, Plus, Send, Copy,
   BarChart3, History, MessageSquare, Sparkles, CalendarDays, Check, X as XIcon,
@@ -624,18 +626,23 @@ function Badge({ color, children }) {
 }
 
 function Modal({ title, onClose, children }) {
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="glass-card bg-white dark:bg-gray-900 max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display font-bold text-gray-800 dark:text-white">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon size={18} /></button>
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return null
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="font-display font-bold text-gray-800 dark:text-white text-base">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"><XIcon size={16} /></button>
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
+
 
 function TemplatesModal({ templates, onClose, onUse, onChanged }) {
   const [creating, setCreating] = useState(false)

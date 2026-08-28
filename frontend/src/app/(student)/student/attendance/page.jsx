@@ -20,18 +20,18 @@ const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12,
 
 function StatusChip({ status }) {
   const cls =
-    status === 'PRESENT'  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
-    status === 'LATE'     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
-    status === 'HALF_DAY' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400' :
-    status === 'LEAVE'    ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400' :
-    status === 'EXCUSED'  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' :
-                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
+    status === 'PRESENT' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
+    status === 'ABSENT'  ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
+    status === 'LATE'    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' :
+    status === 'LEAVE'   ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+                           'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
   return (
     <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase ${cls}`}>
       {status}
     </span>
   )
 }
+
 
 export default function AttendancePage() {
   const [activeMonth, setActiveMonth] = useState(format(new Date(), 'yyyy-MM'))

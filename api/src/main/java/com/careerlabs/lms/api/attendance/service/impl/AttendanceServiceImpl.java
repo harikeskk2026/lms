@@ -534,7 +534,18 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found with id: " + batchId));
 
         List<DailyClass> classes = dailyClassRepository.findByBatchIdAndStatusOrderByDateAsc(batchId, ClassStatus.COMPLETED);
+        if (month != null && !month.trim().isEmpty()) {
+            try {
+                java.time.YearMonth ym = java.time.YearMonth.parse(month.trim());
+                classes = classes.stream()
+                        .filter(c -> c.getDate() != null &&
+                                     c.getDate().getYear() == ym.getYear() &&
+                                     c.getDate().getMonthValue() == ym.getMonthValue())
+                        .collect(Collectors.toList());
+            } catch (Exception ignored) {}
+        }
         List<Student> students = studentRepository.findByBatchId(batchId);
+
         List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batchId);
 
         Map<String, Attendance> attMap = attendances.stream()

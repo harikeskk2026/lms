@@ -2,7 +2,10 @@ package com.careerlabs.lms.api.quiz.dto.response;
 
 import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
+import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
+
+import java.time.LocalDateTime;
 
 /**
  * Student-facing quiz view — deliberately excludes the question list and any
@@ -18,10 +21,17 @@ public record StudentQuizResponse(
         Integer passingScore,
         Integer maxAttempts,
         int totalQuestions,
-        int attemptsUsed
+        int attemptsUsed,
+        LocalDateTime scheduledStart,
+        LocalDateTime scheduledEnd,
+        QuizEffectiveStatus effectiveStatus
 ) {
 
     public static StudentQuizResponse from(Quiz quiz, int totalQuestions, int attemptsUsed) {
+        return from(quiz, totalQuestions, attemptsUsed, QuizEffectiveStatus.LIVE);
+    }
+
+    public static StudentQuizResponse from(Quiz quiz, int totalQuestions, int attemptsUsed, QuizEffectiveStatus effectiveStatus) {
         return new StudentQuizResponse(
                 quiz.getId(),
                 quiz.getTitle(),
@@ -32,6 +42,9 @@ public record StudentQuizResponse(
                 quiz.getPassingScore(),
                 quiz.getMaxAttempts(),
                 totalQuestions,
-                attemptsUsed);
+                attemptsUsed,
+                quiz.getScheduledStart(),
+                quiz.getScheduledEnd(),
+                effectiveStatus);
     }
 }

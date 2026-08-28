@@ -12,6 +12,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "quizzes")
@@ -58,6 +59,30 @@ public class Quiz {
 
     @Column(name = "show_explanation", nullable = false)
     private boolean showExplanation = true;
+
+    /*
+     * Boxed + nullable (not `nullable = false`): this column was added to an
+     * already-populated `quizzes` table. A NOT NULL column addition would fail on
+     * Postgres without a DEFAULT (ddl-auto=update issues a plain ADD COLUMN with
+     * no default), so existing rows read back as SQL NULL — a primitive boolean
+     * can't hydrate from that. The getter below treats null as false.
+     */
+    @Column(name = "negative_marking")
+    private Boolean negativeMarking = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "result_visibility")
+    private ResultVisibility resultVisibility = ResultVisibility.IMMEDIATE;
+
+    /** Same nullable-column reasoning as {@link #negativeMarking}. */
+    @Column(name = "results_released")
+    private Boolean resultsReleased = false;
+
+    @Column(name = "scheduled_start")
+    private LocalDateTime scheduledStart;
+
+    @Column(name = "scheduled_end")
+    private LocalDateTime scheduledEnd;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -182,6 +207,46 @@ public class Quiz {
 
     public void setShowExplanation(boolean showExplanation) {
         this.showExplanation = showExplanation;
+    }
+
+    public boolean isNegativeMarking() {
+        return Boolean.TRUE.equals(negativeMarking);
+    }
+
+    public void setNegativeMarking(boolean negativeMarking) {
+        this.negativeMarking = negativeMarking;
+    }
+
+    public ResultVisibility getResultVisibility() {
+        return resultVisibility != null ? resultVisibility : ResultVisibility.IMMEDIATE;
+    }
+
+    public void setResultVisibility(ResultVisibility resultVisibility) {
+        this.resultVisibility = resultVisibility;
+    }
+
+    public boolean isResultsReleased() {
+        return Boolean.TRUE.equals(resultsReleased);
+    }
+
+    public void setResultsReleased(boolean resultsReleased) {
+        this.resultsReleased = resultsReleased;
+    }
+
+    public LocalDateTime getScheduledStart() {
+        return scheduledStart;
+    }
+
+    public void setScheduledStart(LocalDateTime scheduledStart) {
+        this.scheduledStart = scheduledStart;
+    }
+
+    public LocalDateTime getScheduledEnd() {
+        return scheduledEnd;
+    }
+
+    public void setScheduledEnd(LocalDateTime scheduledEnd) {
+        this.scheduledEnd = scheduledEnd;
     }
 
     public QuizStatus getStatus() {

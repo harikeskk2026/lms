@@ -2,22 +2,19 @@
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from 'date-fns'
 
 const STATUS_STYLE = {
-  PRESENT:  'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-  ABSENT:   'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
-  LATE:     'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-  HALF_DAY: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
-  LEAVE:    'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400',
-  EXCUSED:  'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+  PRESENT: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+  ABSENT:  'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+  LATE:    'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
+  LEAVE:   'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
 }
 
 const STATUS_DOT = {
-  PRESENT:  'bg-green-500',
-  ABSENT:   'bg-yellow-500',
-  LATE:     'bg-blue-500',
-  HALF_DAY: 'bg-orange-500',
-  LEAVE:    'bg-teal-500',
-  EXCUSED:  'bg-purple-500',
+  PRESENT: 'bg-green-500',
+  ABSENT:  'bg-red-500',
+  LATE:    'bg-yellow-400',
+  LEAVE:   'bg-blue-500',
 }
+
 
 export default function AttendanceCalendar({ calendarData = [], activeMonth, onDayClick }) {
   const monthDate = activeMonth ? new Date(activeMonth + '-01') : new Date()

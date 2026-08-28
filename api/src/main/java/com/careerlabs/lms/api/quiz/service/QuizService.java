@@ -1,9 +1,12 @@
 package com.careerlabs.lms.api.quiz.service;
 
+import com.careerlabs.lms.api.quiz.dto.request.AssignQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.request.AttachQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.CreateQuizRequest;
+import com.careerlabs.lms.api.quiz.dto.request.ReorderQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAnalyticsResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuizAssignmentResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StudentQuizResponse;
 
@@ -25,9 +28,19 @@ public interface QuizService {
 
     QuizResponse detachQuestion(Long quizId, Long questionId);
 
+    QuizResponse reorderQuestions(Long quizId, ReorderQuestionsRequest request);
+
     List<StudentQuizResponse> listPublished(Long studentId);
 
     StudentQuizResponse getPublished(Long id, Long studentId);
 
     AdminQuizAnalyticsResponse getAnalytics(Long id);
+
+    List<QuizAssignmentResponse> assign(Long quizId, AssignQuizRequest request, Long assignedBy);
+
+    List<QuizAssignmentResponse> getAssignments(Long quizId);
+
+    void removeAssignment(Long quizId, Long assignmentId);
+
+    QuizResponse releaseResults(Long quizId);
 }

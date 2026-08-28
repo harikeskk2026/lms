@@ -29,15 +29,28 @@ public record QuizResultResponse(
         Instant startedAt,
         Instant completedAt,
         Boolean passed,
+        boolean resultsPending,
         List<QuestionReviewItem> review
 ) {
 
     public static QuizResultResponse from(QuizAttempt attempt, List<QuestionAttempt> questionAttempts,
                                            boolean showExplanation) {
+        return from(attempt, questionAttempts, showExplanation, false);
+    }
+
+    /**
+     * @param resultsPending when true (the quiz's result-visibility rule hasn't
+     *                       released this attempt's outcome yet), every answer-key
+     *                       and scoring field is nulled out — the student only
+     *                       learns that their attempt was recorded, not how it went.
+     */
+    public static QuizResultResponse from(QuizAttempt attempt, List<QuestionAttempt> questionAttempts,
+                                           boolean showExplanation, boolean resultsPending) {
         boolean submitted = attempt.getStatus() == AttemptStatus.SUBMITTED;
+        boolean revealScoring = submitted && !resultsPending;
 
         List<QuestionReviewItem> review = questionAttempts.stream()
-                .map(qa -> toReviewItem(qa, submitted, showExplanation))
+                .map(qa -> toReviewItem(qa, revealScoring, showExplanation))
                 .toList();
 
         return new QuizResultResponse(
@@ -46,16 +59,17 @@ public record QuizResultResponse(
                 attempt.getQuiz().getTitle(),
                 attempt.getStatus(),
                 attempt.getAttemptNumber(),
-                attempt.getScore(),
+                revealScoring ? attempt.getScore() : null,
                 attempt.getTotalScore(),
-                attempt.getAccuracy(),
-                attempt.getCorrectCount(),
-                attempt.getWrongCount(),
-                attempt.getSkippedCount(),
+                revealScoring ? attempt.getAccuracy() : null,
+                revealScoring ? attempt.getCorrectCount() : 0,
+                revealScoring ? attempt.getWrongCount() : 0,
+                revealScoring ? attempt.getSkippedCount() : 0,
                 attempt.getTimeTaken(),
                 attempt.getStartedAt(),
                 attempt.getCompletedAt(),
-                attempt.getPassed(),
+                revealScoring ? attempt.getPassed() : null,
+                submitted && resultsPending,
                 review);
     }
 

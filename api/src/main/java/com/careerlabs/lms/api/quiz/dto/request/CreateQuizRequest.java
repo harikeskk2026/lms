@@ -2,12 +2,15 @@ package com.careerlabs.lms.api.quiz.dto.request;
 
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
+import com.careerlabs.lms.api.quiz.entity.ResultVisibility;
 import com.careerlabs.lms.api.quiz.validation.QuizValidationMessages;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
+import java.time.LocalDateTime;
 
 public class CreateQuizRequest {
 
@@ -45,6 +48,14 @@ public class CreateQuizRequest {
     private boolean randomOptions = false;
 
     private boolean showExplanation = true;
+
+    private boolean negativeMarking = false;
+
+    private ResultVisibility resultVisibility = ResultVisibility.IMMEDIATE;
+
+    private LocalDateTime scheduledStart;
+
+    private LocalDateTime scheduledEnd;
 
     public String getTitle() {
         return title;
@@ -140,5 +151,37 @@ public class CreateQuizRequest {
 
     public void setShowExplanation(boolean showExplanation) {
         this.showExplanation = showExplanation;
+    }
+
+    public boolean isNegativeMarking() {
+        return negativeMarking;
+    }
+
+    public void setNegativeMarking(boolean negativeMarking) {
+        this.negativeMarking = negativeMarking;
+    }
+
+    public ResultVisibility getResultVisibility() {
+        return resultVisibility;
+    }
+
+    public void setResultVisibility(ResultVisibility resultVisibility) {
+        this.resultVisibility = resultVisibility;
+    }
+
+    public LocalDateTime getScheduledStart() {
+        return scheduledStart;
+    }
+
+    public void setScheduledStart(LocalDateTime scheduledStart) {
+        this.scheduledStart = scheduledStart;
+    }
+
+    public LocalDateTime getScheduledEnd() {
+        return scheduledEnd;
+    }
+
+    public void setScheduledEnd(LocalDateTime scheduledEnd) {
+        this.scheduledEnd = scheduledEnd;
     }
 }

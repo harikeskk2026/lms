@@ -1,19 +1,23 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { studentApi } from '@/lib/api'
 
-const STATUS_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'LEAVE', 'EXCUSED']
+const STATUS_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE']
 
 export default function CorrectionRequestModal({ record, onClose, onSubmitted }) {
+  const [mounted, setMounted] = useState(false)
   const [requestedStatus, setRequestedStatus] = useState(
-    record.attendanceStatus === 'ABSENT' ? 'EXCUSED' : 'PRESENT'
+    record.attendanceStatus === 'ABSENT' ? 'LEAVE' : 'PRESENT'
   )
   const [reason, setReason] = useState('')
   const [comment, setComment] = useState('')
   const [documentUrl, setDocumentUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   const submit = async () => {
     if (!reason.trim()) return toast.error('Reason is required')
@@ -35,9 +39,12 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="glass-card w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+  if (!mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-800 dark:text-white">Request Correction</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
@@ -83,6 +90,8 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
           {submitting ? 'Submitting...' : 'Submit Request'}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
+

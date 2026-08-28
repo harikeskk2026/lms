@@ -15,6 +15,7 @@ import com.careerlabs.lms.api.quiz.entity.QuestionAttempt;
 import com.careerlabs.lms.api.quiz.entity.QuestionOption;
 import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
+import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizQuestion;
 import com.careerlabs.lms.api.quiz.entity.QuizStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
@@ -24,6 +25,7 @@ import com.careerlabs.lms.api.quiz.repository.QuizQuestionRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizRepository;
 import com.careerlabs.lms.api.quiz.service.GamificationService;
 import com.careerlabs.lms.api.quiz.service.QuizAttemptService;
+import com.careerlabs.lms.api.quiz.service.QuizAvailabilityService;
 import com.careerlabs.lms.api.quiz.service.QuizScoringService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +34,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class QuizAttemptServiceImpl implements QuizAttemptService {
@@ -43,17 +47,20 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     private final QuestionAttemptRepository questionAttemptRepository;
     private final QuizScoringService quizScoringService;
     private final GamificationService gamificationService;
+    private final QuizAvailabilityService quizAvailabilityService;
 
     public QuizAttemptServiceImpl(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
                                    QuizAttemptRepository quizAttemptRepository,
                                    QuestionAttemptRepository questionAttemptRepository,
-                                   QuizScoringService quizScoringService, GamificationService gamificationService) {
+                                   QuizScoringService quizScoringService, GamificationService gamificationService,
+                                   QuizAvailabilityService quizAvailabilityService) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
         this.questionAttemptRepository = questionAttemptRepository;
         this.quizScoringService = quizScoringService;
         this.gamificationService = gamificationService;
+        this.quizAvailabilityService = quizAvailabilityService;
     }
 
     @Override
@@ -66,6 +73,17 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         }
         if (quiz.getType() == QuizType.ADAPTIVE) {
             throw new ConflictException("This quiz uses adaptive mode — start it via the adaptive quiz endpoint");
+        }
+
+        QuizEffectiveStatus effectiveStatus = quizAvailabilityService.effectiveStatus(quiz);
+        if (effectiveStatus == QuizEffectiveStatus.SCHEDULED) {
+            throw new ConflictException("This quiz hasn't opened yet");
+        }
+        if (effectiveStatus == QuizEffectiveStatus.COMPLETED) {
+            throw new ConflictException("This quiz has closed");
+        }
+        if (!quizAvailabilityService.isAssignedTo(quiz, studentId)) {
+            throw new ForbiddenException("You are not assigned to this quiz");
         }
 
         QuizAttempt attempt = quizAttemptRepository
@@ -92,12 +110,18 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
             throw new ConflictException("Quiz has no questions yet");
         }
 
+        Map<Long, Integer> effectiveMarksByQuestionId = new HashMap<>();
+        for (QuizQuestion qq : quizQuestions) {
+            effectiveMarksByQuestionId.put(qq.getQuestion().getId(),
+                    qq.getMarks() != null ? qq.getMarks() : qq.getQuestion().getPoints());
+        }
+
         List<Question> questions = new ArrayList<>(quizQuestions.stream().map(QuizQuestion::getQuestion).toList());
         if (quiz.isRandomQuestions()) {
             Collections.shuffle(questions);
         }
 
-        int totalScore = questions.stream().mapToInt(Question::getPoints).sum();
+        int totalScore = questions.stream().mapToInt(q -> effectiveMarksByQuestionId.get(q.getId())).sum();
 
         QuizAttempt attempt = new QuizAttempt();
         attempt.setQuiz(quiz);
@@ -115,6 +139,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
             qa.setAttempt(attempt);
             qa.setQuestion(question);
             qa.setOrderIndex(index++);
+            qa.setMaxPoints(effectiveMarksByQuestionId.get(question.getId()));
             qa.setTopicId(question.getTopic() != null ? question.getTopic().getId() : null);
             qa.setDifficulty(question.getDifficulty());
             placeholders.add(qa);
@@ -155,7 +180,8 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         }
 
         List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attemptId);
-        questionAttempts.forEach(quizScoringService::score);
+        boolean negativeMarking = attempt.getQuiz().isNegativeMarking();
+        questionAttempts.forEach(qa -> quizScoringService.score(qa, negativeMarking));
 
         int correctCount = 0;
         int skippedCount = 0;
@@ -188,7 +214,8 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         questionAttemptRepository.saveAll(questionAttempts);
         gamificationService.processSubmission(studentId, attempt);
 
-        return QuizResultResponse.from(attempt, questionAttempts, attempt.getQuiz().isShowExplanation());
+        return QuizResultResponse.from(attempt, questionAttempts, attempt.getQuiz().isShowExplanation(),
+                isResultsPending(attempt.getQuiz()));
     }
 
     @Override
@@ -196,7 +223,25 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     public QuizResultResponse get(Long attemptId, Long studentId) {
         QuizAttempt attempt = findAttemptOwnedBy(attemptId, studentId);
         List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attemptId);
-        return QuizResultResponse.from(attempt, questionAttempts, attempt.getQuiz().isShowExplanation());
+        return QuizResultResponse.from(attempt, questionAttempts, attempt.getQuiz().isShowExplanation(),
+                isResultsPending(attempt.getQuiz()));
+    }
+
+    /**
+     * Whether a SUBMITTED attempt's score/answer-key should stay hidden per the
+     * quiz's {@code resultVisibility} rule — re-evaluated on every read, so a quiz
+     * that closes (AFTER_CLOSE) or gets an admin release (MANUAL) reveals results
+     * without needing to touch the attempt row itself.
+     */
+    private boolean isResultsPending(Quiz quiz) {
+        return switch (quiz.getResultVisibility()) {
+            case IMMEDIATE -> false;
+            case AFTER_CLOSE -> {
+                QuizEffectiveStatus status = quizAvailabilityService.effectiveStatus(quiz);
+                yield status != QuizEffectiveStatus.COMPLETED && status != QuizEffectiveStatus.ARCHIVED;
+            }
+            case MANUAL -> !quiz.isResultsReleased();
+        };
     }
 
     @Override

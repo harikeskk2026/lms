@@ -1,12 +1,21 @@
 'use client'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function SlidePanel({ open, onClose, title, subtitle, children, width = 'w-[480px]' }) {
-  if (!open) return null
-  return (
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!open || !mounted) return null
+
+  return createPortal(
     <>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose} />
-      <div className={`fixed top-0 right-0 h-full ${width} z-50 bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInRight`}>
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[90] animate-fadeIn" onClick={onClose} />
+      <div className={`fixed top-0 right-0 h-full ${width} z-[100] bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInRight border-l border-purple-100 dark:border-purple-900/30`}>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-purple-100 dark:border-purple-900/30">
           <div>
             <h2 className="font-display font-bold text-lg text-gray-800 dark:text-white">{title}</h2>
             {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>}
@@ -20,6 +29,8 @@ export default function SlidePanel({ open, onClose, title, subtitle, children, w
         </div>
         <div className="flex-1 overflow-y-auto p-6 pb-10">{children}</div>
       </div>
-    </>
+    </>,
+    document.body
   )
 }
+

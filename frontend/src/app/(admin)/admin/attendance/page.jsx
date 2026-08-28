@@ -4,10 +4,12 @@ import {
   CheckSquare, Save, BarChart2, Bell, Users, BookOpen,
   ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
   Download, RefreshCw, ChevronDown, Calendar, ClipboardList,
-  Copy, FileEdit, XCircle, History
+  Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
+import assignmentService from '@/services/assignmentService'
+
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -21,13 +23,13 @@ import HistoryTab from './HistoryTab'
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  PRESENT:  { label: 'P',  color: 'bg-green-500 text-white',  hover: 'hover:bg-green-100 hover:text-green-700' },
-  ABSENT:   { label: 'A',  color: 'bg-yellow-400 text-white', hover: 'hover:bg-yellow-100 hover:text-yellow-800' },
-  LATE:     { label: 'L',  color: 'bg-blue-400 text-white',   hover: 'hover:bg-blue-100 hover:text-blue-700' },
-  HALF_DAY: { label: 'H',  color: 'bg-orange-400 text-white', hover: 'hover:bg-orange-100 hover:text-orange-700' },
-  LEAVE:    { label: 'Lv', color: 'bg-teal-400 text-white',   hover: 'hover:bg-teal-100 hover:text-teal-700' },
-  EXCUSED:  { label: 'E',  color: 'bg-purple-400 text-white', hover: 'hover:bg-purple-100 hover:text-purple-700' },
+  PRESENT: { label: 'P',  color: 'bg-green-500 text-white',  hover: 'hover:bg-green-100 hover:text-green-700' },
+  ABSENT:  { label: 'A',  color: 'bg-red-500 text-white',    hover: 'hover:bg-red-100 hover:text-red-700' },
+  LATE:    { label: 'L',  color: 'bg-yellow-400 text-white', hover: 'hover:bg-yellow-100 hover:text-yellow-800' },
+  LEAVE:   { label: 'Lv', color: 'bg-blue-500 text-white',   hover: 'hover:bg-blue-100 hover:text-blue-700' },
 }
+
+
 
 const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
 
@@ -87,11 +89,45 @@ function MarkAttendanceTab() {
   const [saving, setSaving]               = useState(false)
   const [saveResult, setSaveResult]       = useState(null)
   const [classNotes, setClassNotes]       = useState('')
+  const [attachments, setAttachments]     = useState([])
+  const [uploading, setUploading]         = useState(false)
   const [copying, setCopying]             = useState(false)
   const [history, setHistory]             = useState([])
   const [studentSearch, setStudentSearch] = useState('')
   const [selectedIds, setSelectedIds]     = useState([])
   const [bulkStatus, setBulkStatus]       = useState('PRESENT')
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const res = await assignmentService.upload(file)
+      const newAttachment = {
+        name: res.data?.fileName || file.name,
+        url: res.data?.url || '',
+        size: (file.size / 1024).toFixed(1) + ' KB'
+      }
+      setAttachments(prev => [...prev, newAttachment])
+      toast.success(`Attached ${file.name}`)
+    } catch {
+      const newAttachment = {
+        name: file.name,
+        url: URL.createObjectURL(file),
+        size: (file.size / 1024).toFixed(1) + ' KB'
+      }
+      setAttachments(prev => [...prev, newAttachment])
+      toast.success(`Attached ${file.name}`)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const removeAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
 
   useEffect(() => {
     adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
@@ -255,9 +291,8 @@ function MarkAttendanceTab() {
             <p className="font-semibold text-green-800 dark:text-green-300 text-sm">
               Attendance saved — {saveResult.PRESENT} present, {saveResult.ABSENT} absent
               {saveResult.LATE > 0 ? `, ${saveResult.LATE} late` : ''}
-              {saveResult.HALF_DAY > 0 ? `, ${saveResult.HALF_DAY} half day` : ''}
               {saveResult.LEAVE > 0 ? `, ${saveResult.LEAVE} on leave` : ''}
-              {saveResult.EXCUSED > 0 ? `, ${saveResult.EXCUSED} excused` : ''}
+
             </p>
           </div>
         </GlassCard>
@@ -293,7 +328,8 @@ function MarkAttendanceTab() {
 
       {/* Step 2: Mark */}
       {sheet && (
-        <div className="space-y-4">
+        <div className="space-y-5 pb-6">
+
           {/* Class info + counts */}
           <GlassCard className="p-5 flex items-center justify-between flex-wrap gap-3">
             <div>
@@ -310,47 +346,37 @@ function MarkAttendanceTab() {
             </div>
           </GlassCard>
 
-          {/* Quick mark buttons */}
-          <div className="flex gap-2 flex-wrap items-center">
-            {Object.entries(STATUS_CONFIG).map(([s, cfg]) => (
-              <button key={s} onClick={() => markAll(s)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${cfg.color} hover:opacity-80 transition-opacity`}>
-                Mark All {s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ')}
-              </button>
-            ))}
-            <button onClick={copyPrevious} disabled={copying}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-50 transition-colors">
-              <Copy size={12} /> {copying ? 'Copying...' : 'Copy Previous Attendance'}
-            </button>
-            <button onClick={undo} disabled={!history.length}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors">
-              Undo
-            </button>
-            <button onClick={resetChanges}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Reset
-            </button>
-          </div>
-
-          {/* Search + bulk selection */}
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Search + bulk selection + Undo/Reset */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <input value={studentSearch} onChange={e => setStudentSearch(e.target.value)}
               placeholder="Search student by name, email, or enrollment no..."
               className="flex-1 min-w-[220px] rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            {selectedIds.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Selected: {selectedIds.length}</span>
-                <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
-                  className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500">
-                  {Object.keys(STATUS_CONFIG).map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ')}</option>)}
-                </select>
-                <button onClick={applyBulkStatus}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors">
-                  Apply to Selected
-                </button>
-              </div>
-            )}
+            
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <>
+                  <span className="text-xs text-gray-500">Selected: {selectedIds.length}</span>
+                  <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
+                    className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500">
+                    {Object.keys(STATUS_CONFIG).map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ')}</option>)}
+                  </select>
+                  <button onClick={applyBulkStatus}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors">
+                    Apply to Selected
+                  </button>
+                </>
+              )}
+              <button onClick={undo} disabled={!history.length}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors">
+                Undo
+              </button>
+              <button onClick={resetChanges}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Reset
+              </button>
+            </div>
           </div>
+
 
           {/* Student table */}
           <GlassCard className="overflow-hidden">
@@ -417,28 +443,80 @@ function MarkAttendanceTab() {
             </div>
           </GlassCard>
 
-          {/* Class notes */}
-          <GlassCard className="p-5">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Class Notes (optional)</label>
-            <textarea
-              value={classNotes}
-              onChange={e => setClassNotes(e.target.value)}
-              placeholder="Add notes about today's class, topics covered, announcements..."
-              rows={3}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-            />
+          {/* Class notes & Attachments */}
+          <GlassCard className="p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Class Notes (optional)</label>
+              <textarea
+                value={classNotes}
+                onChange={e => setClassNotes(e.target.value)}
+                placeholder="Add notes about today's class, topics covered, announcements..."
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+
+            {/* Class Attachments */}
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <Paperclip size={14} className="text-purple-600 dark:text-purple-400" />
+                  Class Attachments
+                  <span className="text-[10px] text-gray-400 font-normal">(PDF, Slides, Docs, Images)</span>
+                </label>
+
+                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors">
+                  <Upload size={13} />
+                  {uploading ? 'Uploading...' : 'Add Attachment'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.zip"
+                  />
+                </label>
+              </div>
+
+              {/* Attachments list */}
+              {attachments.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {attachments.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-50/70 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800 text-xs">
+                      <FileText size={14} className="text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[180px]">{file.name}</span>
+                      {file.size && <span className="text-[10px] text-gray-400">({file.size})</span>}
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(idx)}
+                        className="text-gray-400 hover:text-red-500 transition-colors ml-1"
+                        title="Remove file"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic mt-1">No attachments added yet.</p>
+              )}
+            </div>
           </GlassCard>
 
-          {/* Sticky save */}
-          <div className="sticky bottom-0 z-40 bg-white dark:bg-gray-900 p-4 -mx-6 -mb-6 border-t border-purple-100 dark:border-purple-900/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+
+          {/* Sticky save bar */}
+          <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl -mx-6 -mb-6 px-6 py-4 border-t border-purple-100 dark:border-purple-900/30 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <p className="text-sm text-gray-500">
-                <span className="text-green-600 font-semibold">{counts.PRESENT} present</span>
+                <span className="text-green-600 font-semibold">{counts.PRESENT || 0} present</span>
                 {' · '}
-                <span className="text-yellow-600 font-semibold">{counts.ABSENT} absent</span>
+                <span className="text-red-500 font-semibold">{counts.ABSENT || 0} absent</span>
                 {' · '}
-                <span className="text-blue-500 font-semibold">{counts.LATE} late</span>
+                <span className="text-yellow-600 font-semibold">{counts.LATE || 0} late</span>
+                {' · '}
+                <span className="text-blue-500 font-semibold">{counts.LEAVE || 0} leave</span>
               </p>
+
               <div className="flex items-center gap-2">
                 <button onClick={() => saveAttendance(false)} disabled={saving}
                   className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-60 transition-all">
@@ -452,6 +530,7 @@ function MarkAttendanceTab() {
               </div>
             </div>
           </div>
+
         </div>
       )}
     </div>
@@ -480,7 +559,14 @@ function BatchOverviewTab() {
     setDetailLoading(true)
     try {
       const r = await adminApi.getBatchAttDetail(batch.batchId, monthFilter ? { month: monthFilter } : {})
-      setDetail(r.data.data)
+      const data = r.data.data
+      setDetail(data)
+      if (!monthFilter && data?.classes?.length > 0) {
+        const lastClassDate = data.classes[data.classes.length - 1].date
+        if (lastClassDate) {
+          setMonthFilter(format(new Date(lastClassDate), 'yyyy-MM'))
+        }
+      }
     } catch { toast.error('Failed to load batch detail') } finally { setDetailLoading(false) }
   }
 
@@ -494,6 +580,7 @@ function BatchOverviewTab() {
   }
 
   useEffect(() => { if (selectedBatch) reloadDetail() }, [monthFilter])
+
 
   if (loading) return <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-44" />)}</div>
 

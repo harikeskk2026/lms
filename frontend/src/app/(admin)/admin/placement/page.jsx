@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+
 import { Plus, ChevronDown, ChevronUp, Star, Trash2, Calendar, Building2, MapPin, Users, CheckCircle, X } from 'lucide-react'
 import { format, differenceInDays, isPast } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -406,52 +408,13 @@ export default function PlacementPage() {
           </div>
 
           {/* Applications modal */}
-          {viewingApps && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-                  <h3 className="font-bold text-gray-900 dark:text-white">Drive Applications</h3>
-                  <button onClick={() => setViewingApps(null)} className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200"><X size={14} /></button>
-                </div>
-                <div className="overflow-y-auto flex-1">
-                  {!driveApplications[viewingApps] ? (
-                    <div className="p-6 text-center text-gray-400">Loading...</div>
-                  ) : driveApplications[viewingApps].length === 0 ? (
-                    <div className="p-6 text-center text-gray-400">No applications yet</div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                          {['Student', 'Email', 'Applied', 'Status'].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {driveApplications[viewingApps].map(app => (
-                          <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800">
-                            <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-white">{app.student?.user?.name}</td>
-                            <td className="px-4 py-2.5 text-xs text-gray-400">{app.student?.user?.email}</td>
-                            <td className="px-4 py-2.5 text-xs text-gray-400">{format(new Date(app.appliedAt), 'dd MMM')}</td>
-                            <td className="px-4 py-2.5">
-                              <select value={app.status}
-                                onChange={e => handleUpdateAppStatus(viewingApps, app.id, e.target.value)}
-                                className="text-xs font-semibold px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none">
-                                <option value="APPLIED">APPLIED</option>
-                                <option value="SHORTLISTED">SHORTLISTED</option>
-                                <option value="SELECTED">SELECTED</option>
-                                <option value="REJECTED">REJECTED</option>
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          <DriveAppsModal
+            viewingApps={viewingApps}
+            driveApplications={driveApplications}
+            onClose={() => setViewingApps(null)}
+            handleUpdateAppStatus={handleUpdateAppStatus}
+          />
+
 
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
@@ -718,3 +681,58 @@ export default function PlacementPage() {
     </div>
   )
 }
+
+function DriveAppsModal({ viewingApps, driveApplications, onClose, handleUpdateAppStatus }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted || !viewingApps) return null
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="font-bold text-base text-gray-900 dark:text-white">Drive Applications</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-2">
+          {!driveApplications[viewingApps] ? (
+            <div className="p-6 text-center text-gray-400 text-sm">Loading...</div>
+          ) : driveApplications[viewingApps].length === 0 ? (
+            <div className="p-6 text-center text-gray-400 text-sm">No applications yet</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                  {['Student', 'Email', 'Applied', 'Status'].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {driveApplications[viewingApps].map(app => (
+                  <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
+                    <td className="px-4 py-2.5 font-semibold text-gray-800 dark:text-white">{app.student?.user?.name}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{app.student?.user?.email}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{format(new Date(app.appliedAt), 'dd MMM')}</td>
+                    <td className="px-4 py-2.5">
+                      <select value={app.status}
+                        onChange={e => handleUpdateAppStatus(viewingApps, app.id, e.target.value)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none">
+                        <option value="APPLIED">APPLIED</option>
+                        <option value="SHORTLISTED">SHORTLISTED</option>
+                        <option value="SELECTED">SELECTED</option>
+                        <option value="REJECTED">REJECTED</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+

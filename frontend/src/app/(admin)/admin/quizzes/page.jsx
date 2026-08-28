@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3 } from 'lucide-react'
+import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3, Users, Send, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
@@ -31,6 +31,16 @@ const EMPTY_FORM = {
   duration: 30, passingScore: 50, maxAttempts: 1,
   courseId: '', batchId: '',
   randomQuestions: false, randomOptions: false, showExplanation: true,
+  negativeMarking: false, resultVisibility: 'IMMEDIATE',
+  scheduledStart: '', scheduledEnd: '',
+}
+
+const STATUS_BADGE_STYLES = {
+  DRAFT:     'bg-gray-100 text-gray-600',
+  SCHEDULED: 'bg-blue-100 text-blue-700',
+  LIVE:      'bg-green-100 text-green-700',
+  COMPLETED: 'bg-purple-100 text-purple-700',
+  ARCHIVED:  'bg-red-100 text-red-700',
 }
 
 export default function QuizzesPage() {
@@ -45,6 +55,10 @@ export default function QuizzesPage() {
   const [step, setStep]             = useState(0)
   const [saving, setSaving]         = useState(false)
   const [typeFilter, setTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [courseFilter, setCourseFilter] = useState('')
+  const [batchFilter, setBatchFilter] = useState('')
+  const [quizSearch, setQuizSearch] = useState('')
   const [activeTab, setActiveTab]   = useState('quizzes')
   const [questionSearch, setQuestionSearch] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -58,6 +72,11 @@ export default function QuizzesPage() {
   const [analyticsQuiz, setAnalyticsQuiz] = useState(null)
   const [quizAnalytics, setQuizAnalytics] = useState(null)
   const [loadingAnalytics, setLoadingAnalytics] = useState(false)
+  const [questionMarks, setQuestionMarks] = useState({})
+  const [selectedBatchIds, setSelectedBatchIds] = useState([])
+  const [selectedCourseIds, setSelectedCourseIds] = useState([])
+  const [assigningQuiz, setAssigningQuiz] = useState(null)
+  const [quizAssignments, setQuizAssignments] = useState([])
 
   const loadBankQuestions = () => {
     quizService.listQuestions({ active: true }).then(r => setBankQuestions(r.data || [])).catch(() => {})
@@ -90,13 +109,25 @@ export default function QuizzesPage() {
 
   const handleStatusToggle = async (quiz) => {
     const nextStatus = quiz.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED'
+    if (nextStatus === 'PUBLISHED') {
+      const missing = []
+      if (!quiz.totalQuestions) missing.push('at least one question')
+      if (!quiz.assignments?.length && !quiz.courseId && !quiz.batchId) missing.push('an assignment to at least one batch, course, or student')
+      if (missing.length > 0) {
+        toast.error(`Quiz cannot be published. Complete: ${missing.join(', ')}.`)
+        return
+      }
+    }
     try {
       await quizService.updateQuiz(quiz.id, {
         title: quiz.title, description: quiz.description, type: quiz.type, difficulty: quiz.difficulty,
         duration: quiz.duration, passingScore: quiz.passingScore, maxAttempts: quiz.maxAttempts,
         courseId: quiz.courseId || null, batchId: quiz.batchId || null,
         randomQuestions: quiz.randomQuestions, randomOptions: quiz.randomOptions,
-        showExplanation: quiz.showExplanation, status: nextStatus,
+        showExplanation: quiz.showExplanation,
+        negativeMarking: quiz.negativeMarking, resultVisibility: quiz.resultVisibility,
+        scheduledStart: quiz.scheduledStart || null, scheduledEnd: quiz.scheduledEnd || null,
+        status: nextStatus,
       })
       toast.success(nextStatus === 'PUBLISHED' ? 'Quiz published' : 'Quiz moved to draft')
       load()
@@ -144,8 +175,26 @@ export default function QuizzesPage() {
     setSelectedQuestionIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  const selectedQuestions = bankQuestions.filter(q => selectedQuestionIds.includes(q.id))
-  const totalPoints = selectedQuestions.reduce((a, q) => a + (q.points || 1), 0)
+  const moveQuestion = (id, direction) => {
+    setSelectedQuestionIds(prev => {
+      const idx = prev.indexOf(id)
+      const newIdx = idx + direction
+      if (newIdx < 0 || newIdx >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
+      return next
+    })
+  }
+
+  const setQuestionMark = (id, value) => {
+    setQuestionMarks(prev => ({ ...prev, [id]: value === '' ? undefined : Number(value) }))
+  }
+
+  // Preserves selection/reorder order (unlike a plain bank filter)
+  const selectedQuestions = selectedQuestionIds
+    .map(id => bankQuestions.find(q => q.id === id))
+    .filter(Boolean)
+  const totalPoints = selectedQuestions.reduce((a, q) => a + (questionMarks[q.id] ?? q.points ?? 1), 0)
   const filteredBankQuestions = questionSearch
     ? bankQuestions.filter(q => q.questionText.toLowerCase().includes(questionSearch.toLowerCase()))
     : bankQuestions
@@ -153,9 +202,21 @@ export default function QuizzesPage() {
   const openCreate = () => {
     setForm(EMPTY_FORM)
     setSelectedQuestionIds([])
+    setQuestionMarks({})
+    setSelectedBatchIds([])
+    setSelectedCourseIds([])
     setStep(0)
     setQuestionsView('list')
     setPanelOpen(true)
+  }
+
+  const missingPublishRequirements = () => {
+    const missing = []
+    if (selectedQuestionIds.length === 0) missing.push('at least one question')
+    if (!selectedBatchIds.length && !selectedCourseIds.length && !form.courseId && !form.batchId) {
+      missing.push('an assignment to at least one batch, course, or student')
+    }
+    return missing
   }
 
   const handleSave = async (publish = false) => {
@@ -163,23 +224,90 @@ export default function QuizzesPage() {
       toast.error('Select at least one question')
       return
     }
+    if (publish) {
+      const missing = missingPublishRequirements()
+      if (missing.length > 0) {
+        toast.error(`Quiz cannot be published. Complete: ${missing.join(', ')}.`)
+        return
+      }
+    }
     setSaving(true)
     try {
-      const payload = { ...form, courseId: form.courseId || null, batchId: form.batchId || null }
+      const payload = {
+        ...form,
+        courseId: form.courseId || null,
+        batchId: form.batchId || null,
+        scheduledStart: form.scheduledStart || null,
+        scheduledEnd: form.scheduledEnd || null,
+      }
       const quiz = await quizService.createQuiz(payload)
-      await quizService.attachQuestions(quiz.data.id, selectedQuestionIds)
+      const quizId = quiz.data.id
+      await quizService.attachQuestions(quizId, selectedQuestionIds)
+      await quizService.reorderQuestions(quizId, selectedQuestionIds.map(id => ({
+        questionId: id,
+        marks: questionMarks[id] ?? null,
+      })))
+      if (selectedBatchIds.length) {
+        await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: selectedBatchIds })
+      }
+      if (selectedCourseIds.length) {
+        await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: selectedCourseIds })
+      }
       if (publish) {
-        await quizService.updateQuiz(quiz.data.id, { ...payload, status: 'PUBLISHED' })
+        await quizService.updateQuiz(quizId, { ...payload, status: 'PUBLISHED' })
       }
       toast.success(publish ? 'Quiz published!' : 'Quiz saved as draft')
       setPanelOpen(false); setStep(0)
       setForm(EMPTY_FORM)
       setSelectedQuestionIds([])
+      setQuestionMarks({})
+      setSelectedBatchIds([])
+      setSelectedCourseIds([])
       load()
     } catch (err) { toast.error(err.message || 'Failed to save quiz') } finally { setSaving(false) }
   }
 
-  const filtered = typeFilter ? quizzes.filter(q => q.type === typeFilter) : quizzes
+  const openAssign = async (quiz) => {
+    setAssigningQuiz(quiz)
+    try {
+      const res = await quizService.getQuizAssignments(quiz.id)
+      setQuizAssignments(res.data || [])
+    } catch { toast.error('Failed to load assignments') }
+  }
+
+  const addAssignment = async (targetType, targetIds) => {
+    if (!assigningQuiz || !targetIds.length) return
+    try {
+      const res = await quizService.assignQuiz(assigningQuiz.id, { targetType, targetIds })
+      setQuizAssignments(res.data || [])
+      toast.success('Assignment updated')
+    } catch (err) { toast.error(err.message || 'Failed to assign') }
+  }
+
+  const removeAssignmentRow = async (assignmentId) => {
+    if (!assigningQuiz) return
+    try {
+      await quizService.removeQuizAssignment(assigningQuiz.id, assignmentId)
+      setQuizAssignments(prev => prev.filter(a => a.id !== assignmentId))
+    } catch { toast.error('Failed to remove assignment') }
+  }
+
+  const handleReleaseResults = async (quiz) => {
+    try {
+      await quizService.releaseResults(quiz.id)
+      toast.success('Results released to students')
+      load()
+    } catch (err) { toast.error(err.message || 'Failed to release results') }
+  }
+
+  const filtered = quizzes.filter(q => {
+    if (typeFilter && q.type !== typeFilter) return false
+    if (statusFilter && q.effectiveStatus !== statusFilter) return false
+    if (courseFilter && String(q.courseId) !== String(courseFilter)) return false
+    if (batchFilter && String(q.batchId) !== String(batchFilter)) return false
+    if (quizSearch && !q.title?.toLowerCase().includes(quizSearch.toLowerCase())) return false
+    return true
+  })
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -220,15 +348,70 @@ export default function QuizzesPage() {
 
       {activeTab === 'quizzes' && (
       <>
-      {/* Type filter pills */}
-      <div className="flex gap-2 flex-wrap">
-        {[['', 'All'], ['MCQ', 'MCQ'], ['APTITUDE', 'Aptitude'], ['CODING', 'Coding'], ['INTERVIEW_PREP', 'Interview Prep']].map(([val, label]) => (
-          <button key={val} onClick={() => { setTypeFilter(val); setQuizPage(1); }}
-            className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all ${typeFilter === val ? 'bg-purple-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'}`}>
-            {label}
-          </button>
-        ))}
+      {/* Search + Filters Toolbar Card */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-2xl p-4 shadow-sm">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={quizSearch}
+              onChange={e => { setQuizSearch(e.target.value); setQuizPage(1); }}
+              placeholder="Search quizzes by title..."
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 pl-10 pr-4 py-2 text-sm text-gray-800 dark:text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white dark:focus:bg-gray-800 transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Course Filter Dropdown */}
+            <select
+              value={courseFilter}
+              onChange={e => { setCourseFilter(e.target.value); setQuizPage(1); }}
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            >
+              <option value="">All Courses</option>
+              {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+
+            {/* Batch Filter Dropdown */}
+            <select
+              value={batchFilter}
+              onChange={e => { setBatchFilter(e.target.value); setQuizPage(1); }}
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            >
+              <option value="">All Batches</option>
+              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+
+            {/* Type Filter Dropdown */}
+            <select
+              value={typeFilter}
+              onChange={e => { setTypeFilter(e.target.value); setQuizPage(1); }}
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            >
+              <option value="">All Types</option>
+              <option value="MCQ">MCQ</option>
+              <option value="APTITUDE">Aptitude</option>
+              <option value="CODING">Coding</option>
+              <option value="INTERVIEW_PREP">Interview Prep</option>
+            </select>
+
+            {/* Status Filter Dropdown */}
+            <select
+              value={statusFilter}
+              onChange={e => { setStatusFilter(e.target.value); setQuizPage(1); }}
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            >
+              <option value="">All Statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="SCHEDULED">Scheduled</option>
+              <option value="LIVE">Live</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </div>
+        </div>
       </div>
+
 
       {/* Quiz Table */}
       {(() => {
@@ -255,7 +438,17 @@ export default function QuizzesPage() {
                     </thead>
                     <tbody>
                       {paginatedQuizzes.length === 0 ? (
-                        <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No quizzes found</td></tr>
+                        <tr>
+                          <td colSpan={10} className="px-4 py-12 text-center">
+                            <div className="max-w-xs mx-auto flex flex-col items-center justify-center">
+                              <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-500 mb-3">
+                                <Search size={22} />
+                              </div>
+                              <h4 className="font-bold text-gray-800 dark:text-white text-base">No Quizzes Found</h4>
+                              <p className="text-xs text-gray-500 mt-1">Try adjusting your filter or search query to find available quizzes.</p>
+                            </div>
+                          </td>
+                        </tr>
                       ) : (
                         paginatedQuizzes.map(q => (
                           <tr key={q.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
@@ -280,11 +473,23 @@ export default function QuizzesPage() {
                             <td className="px-3 py-3 text-xs text-gray-500">{q.duration}m</td>
                             <td className="px-3 py-3 text-xs text-gray-500">{q.passingScore}%</td>
                             <td className="px-3 py-3 text-xs text-gray-500">{q.maxAttempts}</td>
-                            <td className="px-3 py-3">
-                              <button onClick={() => handleStatusToggle(q)}
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${q.status === 'PUBLISHED' ? 'bg-purple-500' : 'bg-gray-200'}`}
-                                title={q.status}>
-                                <span className="inline-block h-3.5 w-3.5 rounded-full bg-white shadow" style={{ transform: q.status === 'PUBLISHED' ? 'translateX(18px)' : 'translateX(2px)' }} />
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <button
+                                onClick={() => handleStatusToggle(q)}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border shadow-sm ${
+                                  q.status === 'PUBLISHED' || q.effectiveStatus === 'LIVE'
+                                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800/50 hover:bg-green-100 dark:hover:bg-green-900/50'
+                                    : q.effectiveStatus === 'SCHEDULED'
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/50 hover:bg-amber-100'
+                                    : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                                }`}
+                                title={q.status === 'PUBLISHED' ? 'Click to unpublish (set to Draft)' : 'Click to publish (set to Live)'}
+                              >
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${q.status === 'PUBLISHED' || q.effectiveStatus === 'LIVE' ? 'bg-green-500 animate-pulse' : q.effectiveStatus === 'SCHEDULED' ? 'bg-amber-500' : 'bg-gray-400'}`} />
+                                <span>{q.effectiveStatus || (q.status === 'PUBLISHED' ? 'LIVE' : 'DRAFT')}</span>
+                                <span className={`relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors ml-1 shrink-0 ${q.status === 'PUBLISHED' ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                  <span className={`inline-block h-2.5 w-2.5 rounded-full bg-white shadow transition-transform ${q.status === 'PUBLISHED' ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                                </span>
                               </button>
                             </td>
                             <td className="px-3 py-3">
@@ -292,9 +497,17 @@ export default function QuizzesPage() {
                                 <button onClick={() => handleViewQuiz(q)} className="w-7 h-7 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 flex items-center justify-center transition-colors" title="View Quiz Details">
                                   <Eye size={13} />
                                 </button>
+                                <button onClick={() => openAssign(q)} className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-300 flex items-center justify-center transition-colors" title="Assign">
+                                  <Users size={13} />
+                                </button>
                                 <button onClick={() => handleViewAnalytics(q)} className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 flex items-center justify-center transition-colors" title="Analytics">
                                   <BarChart3 size={13} />
                                 </button>
+                                {q.resultVisibility === 'MANUAL' && !q.resultsReleased && (
+                                  <button onClick={() => handleReleaseResults(q)} className="w-7 h-7 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 flex items-center justify-center transition-colors" title="Release Results">
+                                    <Send size={13} />
+                                  </button>
+                                )}
                                 <button onClick={() => handleDelete(q)} className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                                   <Trash2 size={13} />
                                 </button>
@@ -462,6 +675,27 @@ export default function QuizzesPage() {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date/Time</label>
+                <input type="datetime-local" value={form.scheduledStart} onChange={e => setForm(f => ({ ...f, scheduledStart: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">End Date/Time</label>
+                <input type="datetime-local" value={form.scheduledEnd} onChange={e => setForm(f => ({ ...f, scheduledEnd: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility</label>
+              <select value={form.resultVisibility} onChange={e => setForm(f => ({ ...f, resultVisibility: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="IMMEDIATE">Show result immediately</option>
+                <option value="AFTER_CLOSE">Show result after quiz closes</option>
+                <option value="MANUAL">Release result manually</option>
+              </select>
+            </div>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer select-none">
                 <input type="checkbox" checked={form.randomQuestions} onChange={e => setForm(f => ({ ...f, randomQuestions: e.target.checked }))}
@@ -472,6 +706,11 @@ export default function QuizzesPage() {
                 <input type="checkbox" checked={form.randomOptions} onChange={e => setForm(f => ({ ...f, randomOptions: e.target.checked }))}
                   className="w-4 h-4 rounded accent-purple-600" />
                 <span className="text-sm font-semibold text-gray-700">Randomize option order</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" checked={form.negativeMarking} onChange={e => setForm(f => ({ ...f, negativeMarking: e.target.checked }))}
+                  className="w-4 h-4 rounded accent-purple-600" />
+                <span className="text-sm font-semibold text-gray-700">Negative marking (wrong answers deduct full marks)</span>
               </label>
               <label className="flex items-center gap-3 cursor-pointer select-none">
                 <input type="checkbox" checked={form.showExplanation} onChange={e => setForm(f => ({ ...f, showExplanation: e.target.checked }))}
@@ -635,15 +874,23 @@ export default function QuizzesPage() {
                   {selectedQuestions.map((q, idx) => (
                     <div key={q.id || idx} className="p-3 border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 space-y-1.5">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2">
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
                           <span className="w-5 h-5 rounded bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                             {idx + 1}
                           </span>
                           <p className="text-xs font-semibold text-gray-800 dark:text-white">{q.questionText}</p>
                         </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 shrink-0">
-                          {q.points || 1} pt{q.points > 1 ? 's' : ''}
-                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input type="number" min={1} value={questionMarks[q.id] ?? q.points ?? 1}
+                            onChange={e => setQuestionMark(q.id, e.target.value)}
+                            className="w-12 text-[10px] font-bold text-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 py-0.5" />
+                          <button type="button" onClick={() => moveQuestion(q.id, -1)} disabled={idx === 0}
+                            className="w-5 h-5 rounded bg-gray-100 text-gray-500 disabled:opacity-30 flex items-center justify-center">↑</button>
+                          <button type="button" onClick={() => moveQuestion(q.id, 1)} disabled={idx === selectedQuestions.length - 1}
+                            className="w-5 h-5 rounded bg-gray-100 text-gray-500 disabled:opacity-30 flex items-center justify-center">↓</button>
+                          <button type="button" onClick={() => toggleQuestion(q.id)}
+                            className="w-5 h-5 rounded bg-red-50 text-red-500 flex items-center justify-center">×</button>
+                        </div>
                       </div>
                       {q.options && q.options.length > 0 && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-1 pt-1 pl-7">
@@ -659,6 +906,42 @@ export default function QuizzesPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Assign To */}
+            <div className="glass-card p-4 space-y-3">
+              <p className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">Assign To</p>
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Batches</p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {batches.map(b => (
+                    <label key={b.id} className="flex items-center gap-1.5 text-[11px] bg-gray-50 dark:bg-gray-800 rounded-full px-2.5 py-1 cursor-pointer">
+                      <input type="checkbox" checked={selectedBatchIds.includes(b.id)}
+                        onChange={() => setSelectedBatchIds(prev => prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id])}
+                        className="w-3 h-3 accent-purple-600" />
+                      {b.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Courses</p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {courses.map(c => (
+                    <label key={c.id} className="flex items-center gap-1.5 text-[11px] bg-gray-50 dark:bg-gray-800 rounded-full px-2.5 py-1 cursor-pointer">
+                      <input type="checkbox" checked={selectedCourseIds.includes(c.id)}
+                        onChange={() => setSelectedCourseIds(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
+                        className="w-3 h-3 accent-purple-600" />
+                      {c.title}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                {selectedBatchIds.length || selectedCourseIds.length
+                  ? `Assigned to: ${selectedBatchIds.length} batch(es), ${selectedCourseIds.length} course(s)`
+                  : 'No batches/courses selected yet — pick at least one, or use the Course/Batch fields in Step 1, before publishing.'}
+              </p>
             </div>
 
             <div className="flex gap-3 pt-2">
@@ -778,6 +1061,64 @@ export default function QuizzesPage() {
             ) : (
               <p className="text-sm text-gray-400">No data</p>
             )}
+          </div>
+        )}
+      </SlidePanel>
+
+      {/* Assign Quiz SlidePanel */}
+      <SlidePanel open={!!assigningQuiz} onClose={() => { setAssigningQuiz(null); setQuizAssignments([]) }} title="Assign Quiz" width="w-[460px]">
+        {assigningQuiz && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 dark:text-white">{assigningQuiz.title}</h3>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-1.5">Current Assignments</p>
+              {quizAssignments.length === 0 ? (
+                <p className="text-xs text-gray-400">Not assigned yet — visible to all students.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {quizAssignments.map(a => (
+                    <div key={a.id} className="flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2">
+                      <span>
+                        <span className="font-semibold text-gray-500 mr-1">{a.targetType}:</span>
+                        {a.targetLabel}
+                      </span>
+                      <button onClick={() => removeAssignmentRow(a.id)} className="text-red-500 hover:text-red-700">
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-1.5">Add Batches</p>
+              <div className="flex flex-wrap gap-1.5">
+                {batches.map(b => (
+                  <button key={b.id} onClick={() => addAssignment('BATCH', [b.id])}
+                    className="text-[11px] bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-full px-2.5 py-1">
+                    + {b.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-1.5">Add Courses</p>
+              <div className="flex flex-wrap gap-1.5">
+                {courses.map(c => (
+                  <button key={c.id} onClick={() => addAssignment('COURSE', [c.id])}
+                    className="text-[11px] bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-full px-2.5 py-1">
+                    + {c.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              Individual-student assignment is supported by the API but not yet exposed here — assign by batch or course for now.
+            </p>
           </div>
         )}
       </SlidePanel>

@@ -24,6 +24,15 @@ public record QuestionResponse(
 ) {
 
     public static QuestionResponse from(Question question) {
+        return from(question, null);
+    }
+
+    /**
+     * Same as {@link #from(Question)}, but reports {@code points} as the given
+     * per-quiz marks override when set — used when a question is rendered inside
+     * a specific quiz's context, without touching the bank question's own points.
+     */
+    public static QuestionResponse from(Question question, Integer marksOverride) {
         return new QuestionResponse(
                 question.getId(),
                 question.getTopic() != null ? question.getTopic().getId() : null,
@@ -33,7 +42,7 @@ public record QuestionResponse(
                 question.getDifficulty(),
                 question.getExplanation(),
                 question.getCodeSnippet(),
-                question.getPoints(),
+                marksOverride != null ? marksOverride : question.getPoints(),
                 question.isActive(),
                 question.getOptions().stream().map(QuestionOptionResponse::from).toList(),
                 question.getCreatedAt(),

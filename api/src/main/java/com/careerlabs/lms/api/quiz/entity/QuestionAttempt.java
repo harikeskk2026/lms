@@ -58,6 +58,15 @@ public class QuestionAttempt {
     @Column(name = "points_earned", nullable = false)
     private int pointsEarned = 0;
 
+    /**
+     * Snapshot of the effective max points for this question at attempt-creation
+     * time (the quiz's per-question marks override if set, else the bank
+     * question's own points) — null on rows created before this column existed,
+     * in which case scoring falls back to {@code question.getPoints()}.
+     */
+    @Column(name = "max_points")
+    private Integer maxPoints;
+
     @Column(name = "topic_id")
     private Long topicId;
 
@@ -122,6 +131,14 @@ public class QuestionAttempt {
 
     public void setPointsEarned(int pointsEarned) {
         this.pointsEarned = pointsEarned;
+    }
+
+    public Integer getMaxPoints() {
+        return maxPoints;
+    }
+
+    public void setMaxPoints(Integer maxPoints) {
+        this.maxPoints = maxPoints;
     }
 
     public Long getTopicId() {

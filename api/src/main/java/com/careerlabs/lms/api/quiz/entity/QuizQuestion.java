@@ -34,6 +34,13 @@ public class QuizQuestion {
     @Column(name = "order_index", nullable = false)
     private int orderIndex;
 
+    /**
+     * Per-quiz marks override for this question; null means "use the bank
+     * question's own {@code points}" so existing quizzes need no backfill.
+     */
+    @Column(name = "marks")
+    private Integer marks;
+
     public Long getId() {
         return id;
     }
@@ -60,5 +67,13 @@ public class QuizQuestion {
 
     public void setOrderIndex(int orderIndex) {
         this.orderIndex = orderIndex;
+    }
+
+    public Integer getMarks() {
+        return marks;
+    }
+
+    public void setMarks(Integer marks) {
+        this.marks = marks;
     }
 }

@@ -11,6 +11,15 @@ const quizService = {
     apiCall({ method: 'POST', url: `/admin/quizzes/${quizId}/questions`, data: { questionIds } }),
   detachQuestion: (quizId, questionId) =>
     apiCall({ method: 'DELETE', url: `/admin/quizzes/${quizId}/questions/${questionId}` }),
+  reorderQuestions: (quizId, items) =>
+    apiCall({ method: 'PUT', url: `/admin/quizzes/${quizId}/questions/reorder`, data: { items } }),
+
+  // Admin - quiz assignment & result release
+  assignQuiz: (quizId, data) => apiCall({ method: 'POST', url: `/admin/quizzes/${quizId}/assignments`, data }),
+  getQuizAssignments: (quizId) => apiCall({ method: 'GET', url: `/admin/quizzes/${quizId}/assignments` }),
+  removeQuizAssignment: (quizId, assignmentId) =>
+    apiCall({ method: 'DELETE', url: `/admin/quizzes/${quizId}/assignments/${assignmentId}` }),
+  releaseResults: (quizId) => apiCall({ method: 'POST', url: `/admin/quizzes/${quizId}/release-results` }),
 
   // Admin - question bank
   listQuestions: (filters = {}) => apiCall({ method: 'GET', url: '/admin/questions', params: filters }),

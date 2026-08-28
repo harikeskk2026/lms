@@ -1,18 +1,17 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Search, X, Eye } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Search, X, Eye, User, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 
 const STATUS_BADGE = {
-  PRESENT:  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  ABSENT:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  LATE:     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  HALF_DAY: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  LEAVE:    'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
-  EXCUSED:  'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  PRESENT: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/40',
+  ABSENT:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800/40',
+  LATE:    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
+  LEAVE:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40',
 }
 
 function GlassCard({ children, className = '' }) {
@@ -31,8 +30,13 @@ const PAGE_SIZE = 20
 const emptyFilters = { from: '', to: '', batchId: '', courseId: '', status: '', search: '' }
 
 function StudentDetailModal({ studentId, onClose }) {
+  const [mounted, setMounted] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     adminApi.getStudentAttHistory(studentId)
@@ -41,51 +45,109 @@ function StudentDetailModal({ studentId, onClose }) {
       .finally(() => setLoading(false))
   }, [studentId])
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="glass-card w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-800 dark:text-white">Student Attendance</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+  if (!mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 shadow-2xl w-full max-w-lg relative overflow-hidden space-y-5" onClick={e => e.stopPropagation()}>
+        
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center font-bold text-sm">
+              <User size={18} />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-gray-900 dark:text-white leading-tight">Student Attendance Profile</h3>
+              <p className="text-[11px] text-gray-400">Detailed record & summary</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-gray-700 dark:hover:text-white flex items-center justify-center transition-colors"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         {loading ? (
-          <Skeleton className="h-48" />
+          <Skeleton className="h-56" />
         ) : !detail ? (
-          <p className="text-sm text-gray-400">Could not load attendance details.</p>
+          <p className="text-sm text-gray-400 py-6 text-center">Could not load attendance details.</p>
         ) : (
-          <div className="space-y-4">
-            <div>
-              <p className="font-semibold text-gray-800 dark:text-white">{detail.student?.name}</p>
-              <p className="text-xs text-gray-500">{detail.student?.email} · {detail.student?.enrollmentNo}</p>
+          <div className="space-y-5">
+            {/* Student Info */}
+            <div className="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 rounded-2xl p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-bold text-sm text-gray-900 dark:text-white truncate">{detail.student?.name}</p>
+                <p className="text-xs text-gray-500 truncate">{detail.student?.email}</p>
+              </div>
+              {detail.student?.enrollmentNo && (
+                <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-mono font-bold shrink-0">
+                  {detail.student.enrollmentNo}
+                </span>
+              )}
             </div>
+
+            {/* Main Stats Grid */}
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
-                <p className="text-xl font-extrabold text-gray-900 dark:text-white">{detail.overallPct}%</p>
-                <p className="text-[10px] text-gray-400 uppercase">Overall</p>
+              <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-2xl p-3.5">
+                <p className={`text-2xl font-extrabold ${
+                  detail.overallPct >= 85 ? 'text-green-600 dark:text-green-400' :
+                  detail.overallPct >= 75 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500'
+                }`}>
+                  {detail.overallPct}%
+                </p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Overall</p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
-                <p className="text-xl font-extrabold text-green-600">{detail.totalPresent}</p>
-                <p className="text-[10px] text-gray-400 uppercase">Present</p>
+
+              <div className="bg-green-50/50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 rounded-2xl p-3.5">
+                <p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{detail.totalPresent}</p>
+                <p className="text-[10px] text-green-600/70 dark:text-green-400/70 font-bold uppercase tracking-wider mt-0.5">Present</p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
-                <p className="text-xl font-extrabold text-yellow-600">{detail.totalAbsent}</p>
-                <p className="text-[10px] text-gray-400 uppercase">Absent</p>
+
+              <div className="bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-2xl p-3.5">
+                <p className="text-2xl font-extrabold text-red-500 dark:text-red-400">{detail.totalAbsent}</p>
+                <p className="text-[10px] text-red-500/70 dark:text-red-400/70 font-bold uppercase tracking-wider mt-0.5">Absent</p>
               </div>
             </div>
-            <div className="flex gap-4 text-sm text-gray-500">
-              <span>Late: <span className="font-semibold text-gray-700 dark:text-gray-300">{detail.totalLate}</span></span>
-              <span>Total classes: <span className="font-semibold text-gray-700 dark:text-gray-300">{detail.totalAll}</span></span>
-              <span>Streak: <span className="font-semibold text-gray-700 dark:text-gray-300">{detail.streak}</span></span>
-            </div>
-            {detail.recentRecords?.length > 0 && (
+
+            {/* Secondary Stats Row */}
+            <div className="grid grid-cols-3 gap-2 bg-gray-50/70 dark:bg-gray-800/40 rounded-xl p-3 text-center text-xs text-gray-600 dark:text-gray-300">
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Recent Records</p>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold block">Late</span>
+                <span className="font-bold text-yellow-600 dark:text-yellow-400">{detail.totalLate || 0}</span>
+              </div>
+              <div className="border-x border-gray-200 dark:border-gray-700">
+                <span className="text-[10px] text-gray-400 uppercase font-semibold block">Total Classes</span>
+                <span className="font-bold text-gray-800 dark:text-white">{detail.totalAll || 0}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400 uppercase font-semibold block">Streak</span>
+                <span className="font-bold text-purple-600 dark:text-purple-400">🔥 {detail.streak || 0}</span>
+              </div>
+            </div>
+
+            {/* Recent Attendance Logs */}
+            {detail.recentRecords?.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar size={13} className="text-purple-500" /> Recent Attendance Logs
+                  </p>
+                  <span className="text-[10px] text-gray-400 font-medium">Last 10 sessions</span>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
                   {detail.recentRecords.slice(0, 10).map((r, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600 dark:text-gray-400">{format(new Date(r.date), 'MMM d, yyyy')} · {r.classTitle}</span>
-                      <span className={`px-2 py-0.5 rounded-lg font-bold uppercase ${STATUS_BADGE[r.status] || ''}`}>{r.status}</span>
+                    <div key={i} className="flex items-center justify-between p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 hover:bg-purple-50/30 transition-colors">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{r.classTitle}</p>
+                        <p className="text-[10px] text-gray-400">{format(new Date(r.date), 'MMM d, yyyy')}</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider shrink-0 ${STATUS_BADGE[r.status] || ''}`}>
+                        {r.status}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -94,8 +156,10 @@ function StudentDetailModal({ studentId, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
+
 }
 
 export default function HistoryTab() {

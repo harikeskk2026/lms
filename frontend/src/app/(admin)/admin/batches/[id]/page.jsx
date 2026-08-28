@@ -559,9 +559,9 @@ export default function BatchDetailPage() {
             <div className="flex items-center gap-3 flex-wrap text-[11px] text-gray-400">
               <span className="font-semibold uppercase tracking-wider text-[10px]">Legend</span>
               <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-green-500 text-white text-[9px] font-bold flex items-center justify-center">P</span> Present</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-red-400 text-white text-[9px] font-bold flex items-center justify-center">A</span> Absent</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-yellow-400 text-white text-[9px] font-bold flex items-center justify-center">L</span> Late</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-blue-400 text-white text-[9px] font-bold flex items-center justify-center">E</span> Excused</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-yellow-400 text-white text-[9px] font-bold flex items-center justify-center">A</span> Absent</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-blue-400 text-white text-[9px] font-bold flex items-center justify-center">L</span> Late</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-400 text-white text-[9px] font-bold flex items-center justify-center">Lv</span> Leave</span>
             </div>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {attSheet.map(s => (
@@ -571,15 +571,16 @@ export default function BatchDetailPage() {
                     <p className="text-xs text-gray-400">{s.email}</p>
                   </div>
                   <div className="flex gap-1">
-                    {['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map(st => (
+                    {['PRESENT', 'ABSENT', 'LATE', 'LEAVE'].map(st => (
                       <button key={st} onClick={() => setAttStatuses(prev => ({ ...prev, [s.studentId]: st }))}
-                        title={st[0] + st.slice(1).toLowerCase()}
-                        aria-label={st[0] + st.slice(1).toLowerCase()}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${attStatuses[s.studentId] === st ? (st === 'PRESENT' ? 'bg-green-500 text-white' : st === 'ABSENT' ? 'bg-red-400 text-white' : st === 'LATE' ? 'bg-yellow-400 text-white' : 'bg-blue-400 text-white') : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                        {st[0]}
+                        title={st === 'LEAVE' ? 'Leave' : st[0] + st.slice(1).toLowerCase()}
+                        aria-label={st === 'LEAVE' ? 'Leave' : st[0] + st.slice(1).toLowerCase()}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${attStatuses[s.studentId] === st ? (st === 'PRESENT' ? 'bg-green-500 text-white' : st === 'ABSENT' ? 'bg-yellow-400 text-white' : st === 'LATE' ? 'bg-blue-400 text-white' : 'bg-teal-400 text-white') : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                        {st === 'LEAVE' ? 'Lv' : st[0]}
                       </button>
                     ))}
                   </div>
+
                 </div>
               ))}
             </div>

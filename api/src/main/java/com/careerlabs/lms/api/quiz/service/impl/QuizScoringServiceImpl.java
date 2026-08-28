@@ -13,6 +13,11 @@ public class QuizScoringServiceImpl implements QuizScoringService {
 
     @Override
     public void score(QuestionAttempt questionAttempt) {
+        score(questionAttempt, false);
+    }
+
+    @Override
+    public void score(QuestionAttempt questionAttempt, boolean negativeMarking) {
         Set<Long> correctOptionIds = questionAttempt.getQuestion().getOptions().stream()
                 .filter(QuestionOption::isCorrect)
                 .map(QuestionOption::getId)
@@ -22,9 +27,19 @@ public class QuizScoringServiceImpl implements QuizScoringService {
                 .map(QuestionOption::getId)
                 .collect(Collectors.toSet());
 
-        boolean correct = !selectedOptionIds.isEmpty() && selectedOptionIds.equals(correctOptionIds);
+        boolean skipped = selectedOptionIds.isEmpty();
+        boolean correct = !skipped && selectedOptionIds.equals(correctOptionIds);
+        int maxPoints = questionAttempt.getMaxPoints() != null
+                ? questionAttempt.getMaxPoints()
+                : questionAttempt.getQuestion().getPoints();
 
         questionAttempt.setCorrect(correct);
-        questionAttempt.setPointsEarned(correct ? questionAttempt.getQuestion().getPoints() : 0);
+        if (correct) {
+            questionAttempt.setPointsEarned(maxPoints);
+        } else if (negativeMarking && !skipped) {
+            questionAttempt.setPointsEarned(-maxPoints);
+        } else {
+            questionAttempt.setPointsEarned(0);
+        }
     }
 }
