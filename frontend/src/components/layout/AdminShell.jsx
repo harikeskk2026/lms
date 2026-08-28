@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, BookOpen, ClipboardList,
   BarChart2, LogOut, LogIn, Menu, X, ChevronRight,
   Layers, Calendar, Brain, Briefcase, Megaphone, Search,
-  Moon, Sun
+  Moon, Sun, Video
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
@@ -21,6 +21,7 @@ const navItems = [
   { href: '/admin/courses',       icon: BookOpen,        label: 'Courses' },
   { href: '/admin/course-catalog',icon: BookOpen,        label: 'Course Catalog' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
+  { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/admin/assignments',   icon: ClipboardList,   label: 'Assignments',  badge: 'assignments' },
   { href: '/admin/quizzes',       icon: Brain,           label: 'Quizzes' },
   { href: '/admin/placement',     icon: Briefcase,       label: 'Placement' },

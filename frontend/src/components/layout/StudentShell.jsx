@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, BookOpen, Compass, Calendar, ClipboardList,
-  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight
+  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { studentApi } from '@/lib/api'
@@ -16,6 +16,7 @@ const navItems = [
   { href: '/student/my-courses',    icon: BookOpen,        label: 'My Courses' },
   { href: '/student/course-catalog', icon: Compass,        label: 'Course Catalog' },
   { href: '/student/attendance',    icon: Calendar,        label: 'Attendance' },
+  { href: '/student/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/student/assignments',   icon: ClipboardList,   label: 'Assignments', badge: 'assignments' },
   { href: '/student/quizzes',       icon: Brain,           label: 'Quizzes' },
   { href: '/student/placement',     icon: Briefcase,       label: 'Placement' },

@@ -25,11 +25,13 @@ httpClient.interceptors.request.use(config => {
  * @param {Object} [options.data] - request body
  * @param {Object} [options.params] - query params
  * @param {Object} [options.headers] - extra headers
+ * @param {Function} [options.onUploadProgress] - axios upload progress callback, for large file uploads
+ * @param {number} [options.timeout] - overrides the default 10s timeout, e.g. for large video uploads
  * @returns {Promise<any>} the response body's `data` field (the ApiResponse envelope)
  */
-export default async function apiCall({ method = 'GET', url, data, params, headers }) {
+export default async function apiCall({ method = 'GET', url, data, params, headers, onUploadProgress, timeout }) {
   try {
-    const response = await httpClient.request({ method, url, data, params, headers })
+    const response = await httpClient.request({ method, url, data, params, headers, onUploadProgress, timeout })
     return response.data
   } catch (error) {
     const message = error.response?.data?.message || error.message || 'Request failed'

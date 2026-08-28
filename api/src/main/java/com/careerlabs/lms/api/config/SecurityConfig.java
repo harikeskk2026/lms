@@ -1,11 +1,13 @@
 package com.careerlabs.lms.api.config;
 
+import com.careerlabs.lms.api.recordedsession.security.PlaybackTokenAuthenticationFilter;
 import com.careerlabs.lms.api.security.JwtAuthenticationFilter;
 import com.careerlabs.lms.api.security.RestAccessDeniedHandler;
 import com.careerlabs.lms.api.security.RestAuthenticationEntryPoint;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -28,13 +30,16 @@ public class SecurityConfig {
     private String allowedOrigins;
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final PlaybackTokenAuthenticationFilter playbackTokenAuthenticationFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                           PlaybackTokenAuthenticationFilter playbackTokenAuthenticationFilter,
                            RestAuthenticationEntryPoint authenticationEntryPoint,
                            RestAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.playbackTokenAuthenticationFilter = playbackTokenAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
     }
@@ -44,7 +49,32 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Narrow chain, evaluated first (lower @Order = higher precedence): only the
+     * recorded-session HLS stream endpoints, authenticated by a short-lived
+     * playback token in a query param instead of the normal login JWT. Everything
+     * else falls through to {@link #filterChain(HttpSecurity)} below, unchanged.
+     */
     @Bean
+    @Order(1)
+    public SecurityFilterChain playbackStreamFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/api/student/recorded-sessions/*/stream/**")
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
+                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .addFilterBefore(playbackTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
