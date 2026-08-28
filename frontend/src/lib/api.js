@@ -189,7 +189,26 @@ export const adminApi = {
   getAnnouncements: (params) => api.get('/admin/announcements', { params }),
   createAnnouncement: (data) => api.post('/admin/announcements', data),
   updateAnnouncement: (id, data) => api.patch(`/admin/announcements/${id}`, data),
+  publishAnnouncement: (id) => api.patch(`/admin/announcements/${id}/publish`),
+  scheduleAnnouncement: (id, scheduledAt) => api.patch(`/admin/announcements/${id}/schedule`, { scheduledAt }),
+  submitAnnouncementForApproval: (id) => api.post(`/admin/announcements/${id}/submit-for-approval`),
+  approveAnnouncement: (id) => api.post(`/admin/announcements/${id}/approve`),
+  rejectAnnouncement: (id) => api.post(`/admin/announcements/${id}/reject`),
+  duplicateAnnouncement: (id) => api.post(`/admin/announcements/${id}/duplicate`),
   deleteAnnouncement: (id) => api.delete(`/admin/announcements/${id}`),
+  getAnnouncementAnalytics: (id) => api.get(`/admin/announcements/${id}/analytics`),
+  getAnnouncementHistory: (id) => api.get(`/admin/announcements/${id}/history`),
+  getAnnouncementSuggestions: () => api.get('/admin/announcements/suggestions'),
+  getAnnouncementComments: (id) => api.get(`/admin/announcements/${id}/comments`),
+  addAnnouncementComment: (id, data) => api.post(`/admin/announcements/${id}/comments`, data),
+  previewAnnouncementPlaceholders: (title, body) => api.post('/admin/announcements/preview-placeholders', { title, body }),
+
+  // Announcement Templates
+  getAnnouncementTemplates: () => api.get('/admin/announcement-templates'),
+  createAnnouncementTemplate: (data) => api.post('/admin/announcement-templates', data),
+  updateAnnouncementTemplate: (id, data) => api.patch(`/admin/announcement-templates/${id}`, data),
+  deleteAnnouncementTemplate: (id) => api.delete(`/admin/announcement-templates/${id}`),
+  applyAnnouncementTemplate: (templateId, variables) => api.post('/admin/announcement-templates/apply', { templateId, variables }),
 
   // Notifications
   getNotifications:    ()    => api.get('/admin/notifications'),
@@ -257,4 +276,11 @@ export const studentApi = {
 
   // Mock Analytics
   getMockAnalytics:         ()      => api.get('/student/mock-analytics'),
+
+  // Announcements
+  getAnnouncements:         ()      => api.get('/student/announcements'),
+  markAnnouncementViewed:   (id)    => api.post(`/student/announcements/${id}/view`),
+  acknowledgeAnnouncement:  (id)    => api.post(`/student/announcements/${id}/acknowledge`),
+  getAnnouncementComments:  (id)    => api.get(`/student/announcements/${id}/comments`),
+  addAnnouncementComment:   (id, data) => api.post(`/student/announcements/${id}/comments`, data),
 }
