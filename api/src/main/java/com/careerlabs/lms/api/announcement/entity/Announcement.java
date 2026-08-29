@@ -88,6 +88,7 @@ public class Announcement {
     @Column(name = "action_url")
     private String actionUrl;
 
+
     /** Additional targeting filters, combined (AND) with batch and each other. All optional. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "college_id")
@@ -262,6 +263,7 @@ public class Announcement {
     public void setActionUrl(String actionUrl) {
         this.actionUrl = actionUrl;
     }
+
 
     public College getCollege() {
         return college;

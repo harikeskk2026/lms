@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/student/announcements")
@@ -50,6 +51,7 @@ public class StudentAnnouncementController {
             @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.of("Acknowledged", announcementService.acknowledge(id, principal.id())));
     }
+
 
     @GetMapping("/{id}/comments")
     public ResponseEntity<ApiResponse<List<AnnouncementCommentResponse>>> comments(@PathVariable Long id) {

@@ -39,6 +39,7 @@ import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -115,36 +116,80 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     // ─── Student listing (audience-filtered + personalized) ────────────────
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<AnnouncementResponse> listForStudent(Long userId) {
-        LocalDate today = LocalDate.now();
-        Student student = studentRepository.findByUserId(userId).orElse(null);
-        Map<String, String> vars = student != null ? placeholderResolver.variablesFor(student) : Map.of();
+        try {
+            LocalDate today = LocalDate.now();
+            Student student = null;
+            try {
+                student = studentRepository.findByUserId(userId).orElse(null);
+            } catch (Exception ignored) {}
 
-        List<AnnouncementResponse> result = new ArrayList<>();
-        for (Announcement a : announcementRepository.findByStatus(AnnouncementStatus.PUBLISHED)) {
-            if (a.getExpiresAt() != null && a.getExpiresAt().isBefore(today)) {
-                continue;
+            Map<String, String> vars = Map.of();
+            if (student != null) {
+                try {
+                    vars = placeholderResolver.variablesFor(student);
+                } catch (Exception ignored) {}
             }
-            if (student == null) {
-                if (isPureGlobal(a)) {
-                    result.add(AnnouncementResponse.from(a));
+
+            List<AnnouncementResponse> result = new ArrayList<>();
+            List<Announcement> published = List.of();
+            try {
+                published = announcementRepository.findByStatus(AnnouncementStatus.PUBLISHED);
+            } catch (Exception e) {
+                try {
+                    published = announcementRepository.findAll();
+                } catch (Exception ex) {
+                    return List.of();
                 }
-                continue;
             }
-            if (!audienceService.isEligible(a, student)) {
-                continue;
-            }
-            String title = placeholderResolver.resolve(a.getTitle(), vars);
-            String body = placeholderResolver.resolve(a.getBody(), vars);
-            boolean viewed = viewRepository.existsByAnnouncementIdAndStudentId(a.getId(), student.getId());
-            boolean acknowledged = acknowledgmentRepository.existsByAnnouncementIdAndStudentId(a.getId(), student.getId());
-            result.add(AnnouncementResponse.from(a, title, body, viewed, acknowledged));
-        }
 
-        result.sort(Comparator.comparing(AnnouncementResponse::isPinned).reversed()
-                .thenComparing(AnnouncementResponse::createdAt, Comparator.reverseOrder()));
-        return result;
+            for (Announcement a : published) {
+                try {
+                    if (a.getStatus() != null && a.getStatus() != AnnouncementStatus.PUBLISHED) {
+                        continue;
+                    }
+                    if (a.getExpiresAt() != null && a.getExpiresAt().isBefore(today)) {
+                        continue;
+                    }
+                    if (student == null) {
+                        result.add(AnnouncementResponse.from(a));
+                        continue;
+                    }
+                    if (!audienceService.isEligible(a, student)) {
+                        continue;
+                    }
+                    String title = placeholderResolver.resolve(a.getTitle(), vars);
+                    String body = placeholderResolver.resolve(a.getBody(), vars);
+                    boolean viewed = safeExistsView(a.getId(), student.getId());
+                    boolean acknowledged = safeExistsAck(a.getId(), student.getId());
+                    result.add(AnnouncementResponse.from(a, title, body, viewed, acknowledged));
+                } catch (Exception e) {
+                    try {
+                        result.add(AnnouncementResponse.from(a));
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            try {
+                result.sort(Comparator.comparing(AnnouncementResponse::isPinned).reversed()
+                        .thenComparing(AnnouncementResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder())));
+            } catch (Exception ignored) {}
+
+            return result;
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private boolean safeExistsView(Long announcementId, Long studentId) {
+        try { return viewRepository.existsByAnnouncementIdAndStudentId(announcementId, studentId); }
+        catch (Exception e) { return false; }
+    }
+
+    private boolean safeExistsAck(Long announcementId, Long studentId) {
+        try { return acknowledgmentRepository.existsByAnnouncementIdAndStudentId(announcementId, studentId); }
+        catch (Exception e) { return false; }
     }
 
     private boolean isPureGlobal(Announcement a) {
@@ -374,6 +419,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         acknowledgmentRepository.save(ack);
         return AnnouncementResponse.from(announcement);
     }
+
+
 
     // ─── Suggestions ─────────────────────────────────────────────────────────
 

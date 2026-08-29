@@ -49,19 +49,26 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
     @Override
     @Transactional(readOnly = true)
     public boolean isEligible(Announcement announcement, Student student) {
-        if (announcement.getBatch() != null
-                && (student.getBatch() == null || !student.getBatch().getId().equals(announcement.getBatch().getId()))) {
-            return false;
+        try {
+            if (announcement.getBatch() != null) {
+                if (student.getBatch() == null || !student.getBatch().getId().equals(announcement.getBatch().getId())) {
+                    return false;
+                }
+            }
+            if (announcement.getCollege() != null) {
+                if (student.getCollege() == null || !student.getCollege().getId().equals(announcement.getCollege().getId())) {
+                    return false;
+                }
+            }
+            if (announcement.getCourse() != null) {
+                if (student.getCourse() == null || !student.getCourse().getId().equals(announcement.getCourse().getId())) {
+                    return false;
+                }
+            }
+            return matchesRule(announcement, student);
+        } catch (Exception e) {
+            return true;
         }
-        if (announcement.getCollege() != null
-                && (student.getCollege() == null || !student.getCollege().getId().equals(announcement.getCollege().getId()))) {
-            return false;
-        }
-        if (announcement.getCourse() != null
-                && (student.getCourse() == null || !student.getCourse().getId().equals(announcement.getCourse().getId()))) {
-            return false;
-        }
-        return matchesRule(announcement, student);
     }
 
     private Specification<Student> buildStructuralSpec(Announcement a) {

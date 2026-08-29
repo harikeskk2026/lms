@@ -52,5 +52,4 @@ public record AnnouncementRequest(
         AudienceRuleType audienceRuleType,
         Double audienceRuleValue,
         Long audienceRuleReferenceId
-) {
-}
+) {}

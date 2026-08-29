@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
-  Pin, Trash2, Pencil, Plus, Send, Copy,
+  Pin, Trash2, Pencil, Plus, Send, Copy, ArrowLeft,
   BarChart3, History, MessageSquare, Sparkles, CalendarDays, Check, X as XIcon,
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -236,34 +236,36 @@ export default function AnnouncementsPage() {
         </div>
       </div>
 
-      {formOpen && (
+      {formOpen ? (
         <AnnouncementForm
           form={form} setForm={setForm} editId={editId} saving={saving} onSave={handleSave}
           onCancel={() => { setFormOpen(false); setEditId(null) }}
           batches={batches} colleges={colleges} courses={courses}
         />
-      )}
-
-      {view !== 'calendar' && (
-        <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-          {sections.map(s => (
-            <button key={s.key} onClick={() => setActiveSection(s.key)}
-              className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors ${activeSection === s.key ? `border-current ${s.color}` : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-              {s.label} ({s.items.length})
-            </button>
-          ))}
-        </div>
-      )}
-
-      {view === 'calendar' ? (
-        <CalendarView announcements={announcements} />
-      ) : loading ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-24 glass-card animate-pulse" />)}
-        </div>
       ) : (
-        <AnnouncementSection title={activeTabData.label} color={activeTabData.color} items={activeTabData.items}
-          emptyText={activeTabData.emptyText} cardProps={cardProps} hideTitle />
+        <>
+          {view !== 'calendar' && (
+            <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+              {sections.map(s => (
+                <button key={s.key} onClick={() => setActiveSection(s.key)}
+                  className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors ${activeSection === s.key ? `border-current ${s.color}` : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                  {s.label} ({s.items.length})
+                </button>
+              ))}
+            </div>
+          )}
+
+          {view === 'calendar' ? (
+            <CalendarView announcements={announcements} />
+          ) : loading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => <div key={i} className="h-24 glass-card animate-pulse" />)}
+            </div>
+          ) : (
+            <AnnouncementSection title={activeTabData.label} color={activeTabData.color} items={activeTabData.items}
+              emptyText={activeTabData.emptyText} cardProps={cardProps} hideTitle />
+          )}
+        </>
       )}
 
       {templatesOpen && (
@@ -340,7 +342,14 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
 
   return (
     <div className="glass-card p-6">
-      <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">{editId ? 'Edit Announcement' : 'New Announcement'}</h3>
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onCancel} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 transition-colors">
+            <ArrowLeft size={14} /> Back
+          </button>
+          <h3 className="font-display font-bold text-gray-800 dark:text-white">{editId ? 'Edit Announcement' : 'New Announcement'}</h3>
+        </div>
+      </div>
       <form className="space-y-4">
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
@@ -474,7 +483,9 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
 
         <div className="flex flex-wrap gap-3">
           <button type="button" onClick={onCancel}
-            className="flex-1 min-w-[100px] py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+            className="flex-1 min-w-[100px] py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 inline-flex items-center justify-center gap-1.5">
+            <ArrowLeft size={14} /> Back
+          </button>
           <button type="button" disabled={saving} onClick={e => onSave(e, 'DRAFT')}
             className="flex-1 min-w-[100px] py-2.5 rounded-xl border border-purple-300 text-sm font-semibold text-purple-600 hover:bg-purple-50 disabled:opacity-60">
             Save as Draft
@@ -576,7 +587,7 @@ function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onP
           {isScheduled && a.scheduledAt && <p className="text-[10px] text-sky-500 mt-0.5">Scheduled for {format(new Date(a.scheduledAt), 'dd MMM yyyy, HH:mm')}</p>}
           {a.expiresAt && <p className="text-[10px] text-amber-500 mt-0.5">Expires {format(new Date(a.expiresAt), 'dd MMM yyyy')}</p>}
         </div>
-        <div className="flex flex-wrap justify-end gap-1 flex-shrink-0 max-w-[180px]">
+        <div className="flex items-center justify-end gap-1 flex-shrink-0">
           {isPending && (
             <>
               <IconButton title="Approve" onClick={() => onApprove(a.id)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100"><Check size={12} /></IconButton>
@@ -817,6 +828,17 @@ function ViewAnnouncementModal({ a, batches, colleges, courses, onClose }) {
           </div>
         )}
 
+        {a.attachmentUrl && (
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Attachment</p>
+            <a href={resolveFileUrl(a.attachmentUrl)} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 bg-sky-50 border border-sky-200 rounded-lg px-3 py-1.5 hover:bg-sky-100 transition-colors">
+              <Paperclip size={14} />
+              <span>{a.attachmentName || 'Download Attachment'}</span>
+            </a>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created</p>
@@ -898,7 +920,7 @@ function CalendarView({ announcements }) {
         <div className="grid grid-cols-7 gap-1">
           {cells.map((d, i) => (
             <button key={i} type="button" disabled={!d} onClick={() => setSelectedDay(d)}
-              className={`h-16 rounded-lg border p-1 text-xs text-left ${!d ? 'border-transparent cursor-default' : selectedDay === d ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-gray-800 hover:border-purple-200'}`}>
+              className={`h-11 sm:h-12 rounded-lg border p-1 text-xs text-left ${!d ? 'border-transparent cursor-default' : selectedDay === d ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-gray-800 hover:border-purple-200'}`}>
               {d && (
                 <>
                   <span className={selectedDay === d ? 'text-purple-600 font-bold' : 'text-gray-500'}>{d}</span>

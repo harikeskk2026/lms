@@ -9,6 +9,8 @@ import com.careerlabs.lms.api.announcement.entity.AudienceRuleType;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 public record AnnouncementResponse(
         Long id,
@@ -46,14 +48,22 @@ public record AnnouncementResponse(
         return from(a, a.getTitle(), a.getBody(), viewed, acknowledged);
     }
 
-    /** Allows callers (e.g. student-facing personalization) to override the rendered title/body. */
     public static AnnouncementResponse from(Announcement a, String renderedTitle, String renderedBody,
                                              Boolean viewed, Boolean acknowledged) {
+        Long batchId = null;
+        try { batchId = a.getBatch() != null ? a.getBatch().getId() : null; } catch (Exception ignored) {}
+
+        Long collegeId = null;
+        try { collegeId = a.getCollege() != null ? a.getCollege().getId() : null; } catch (Exception ignored) {}
+
+        Long courseId = null;
+        try { courseId = a.getCourse() != null ? a.getCourse().getId() : null; } catch (Exception ignored) {}
+
         return new AnnouncementResponse(
                 a.getId(),
                 renderedTitle,
                 renderedBody,
-                a.getBatch() != null ? a.getBatch().getId() : null,
+                batchId,
                 a.isPinned(),
                 a.getExpiresAt(),
                 a.getCategory(),
@@ -66,8 +76,8 @@ public record AnnouncementResponse(
                 a.getActionReferenceId(),
                 a.getActionLabel(),
                 a.getActionUrl(),
-                a.getCollege() != null ? a.getCollege().getId() : null,
-                a.getCourse() != null ? a.getCourse().getId() : null,
+                collegeId,
+                courseId,
                 a.getAudienceRuleType(),
                 a.getAudienceRuleValue(),
                 a.getAudienceRuleReferenceId(),

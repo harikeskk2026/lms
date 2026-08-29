@@ -52,6 +52,7 @@ public interface AnnouncementService {
     /** Records a student's acknowledgment (idempotent, requires requiresAcknowledgment=true). */
     AnnouncementResponse acknowledge(Long announcementId, Long userId);
 
+
     /** Rule-based draft suggestions (e.g. batches with low attendance) for the admin to review and create. */
     List<AnnouncementSuggestionResponse> suggestions();
 }
