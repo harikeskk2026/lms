@@ -52,8 +52,6 @@ public class StudentUpdateRequest {
 
     private Long courseId;
 
-    private Long departmentId;
-
     public String getName() {
         return name;
     }
@@ -180,13 +178,5 @@ public class StudentUpdateRequest {
 
     public void setCourseId(Long courseId) {
         this.courseId = courseId;
-    }
-
-    public Long getDepartmentId() {
-        return departmentId;
-    }
-
-    public void setDepartmentId(Long departmentId) {
-        this.departmentId = departmentId;
     }
 }

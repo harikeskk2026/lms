@@ -32,8 +32,6 @@ import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
-import com.careerlabs.lms.api.department.entity.Department;
-import com.careerlabs.lms.api.department.repository.DepartmentRepository;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -58,7 +56,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     private final AnnouncementViewRepository viewRepository;
     private final AnnouncementAcknowledgmentRepository acknowledgmentRepository;
     private final BatchRepository batchRepository;
-    private final DepartmentRepository departmentRepository;
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
@@ -74,7 +71,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                                     AnnouncementViewRepository viewRepository,
                                     AnnouncementAcknowledgmentRepository acknowledgmentRepository,
                                     BatchRepository batchRepository,
-                                    DepartmentRepository departmentRepository,
                                     CollegeRepository collegeRepository,
                                     CourseRepository courseRepository,
                                     UserRepository userRepository,
@@ -89,7 +85,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         this.viewRepository = viewRepository;
         this.acknowledgmentRepository = acknowledgmentRepository;
         this.batchRepository = batchRepository;
-        this.departmentRepository = departmentRepository;
         this.collegeRepository = collegeRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
@@ -153,7 +148,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     }
 
     private boolean isPureGlobal(Announcement a) {
-        return a.getBatch() == null && a.getDepartment() == null && a.getCollege() == null && a.getCourse() == null
+        return a.getBatch() == null && a.getCollege() == null && a.getCourse() == null
                 && (a.getAudienceRuleType() == null || a.getAudienceRuleType() == AudienceRuleType.NONE);
     }
 
@@ -304,7 +299,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         copy.setActionReferenceId(source.getActionReferenceId());
         copy.setActionLabel(source.getActionLabel());
         copy.setActionUrl(source.getActionUrl());
-        copy.setDepartment(source.getDepartment());
         copy.setCollege(source.getCollege());
         copy.setCourse(source.getCourse());
         copy.setAudienceRuleType(source.getAudienceRuleType());
@@ -425,8 +419,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                 || announcement.getPriority() == AnnouncementPriority.HIGH)
                 ? NotificationType.URGENT : NotificationType.INFO;
 
-        boolean advancedTargeting = announcement.getDepartment() != null
-                || announcement.getCollege() != null
+        boolean advancedTargeting = announcement.getCollege() != null
                 || announcement.getCourse() != null
                 || (announcement.getAudienceRuleType() != null && announcement.getAudienceRuleType() != AudienceRuleType.NONE);
 
@@ -471,8 +464,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
         announcement.setBatch(request.batchId() != null
                 ? findBatch(request.batchId()) : null);
-        announcement.setDepartment(request.departmentId() != null
-                ? findDepartment(request.departmentId()) : null);
         announcement.setCollege(request.collegeId() != null
                 ? findCollege(request.collegeId()) : null);
         announcement.setCourse(request.courseId() != null
@@ -505,11 +496,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     private Batch findBatch(Long id) {
         return batchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + id));
-    }
-
-    private Department findDepartment(Long id) {
-        return departmentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Department not found: " + id));
     }
 
     private College findCollege(Long id) {

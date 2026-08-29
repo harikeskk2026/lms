@@ -5,8 +5,6 @@ import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
-import com.careerlabs.lms.api.department.entity.Department;
-import com.careerlabs.lms.api.department.repository.DepartmentRepository;
 import com.careerlabs.lms.api.placement.dto.request.CreateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateDriveStatusRequest;
@@ -37,19 +35,17 @@ public class DriveServiceImpl implements DriveService {
     private final DriveApplicationRepository driveApplicationRepository;
     private final StudentRepository studentRepository;
     private final BatchRepository batchRepository;
-    private final DepartmentRepository departmentRepository;
     private final CourseRepository courseRepository;
     private final PlacementEligibilityGuard eligibilityGuard;
 
     public DriveServiceImpl(DriveRepository driveRepository, DriveApplicationRepository driveApplicationRepository,
                              StudentRepository studentRepository, BatchRepository batchRepository,
-                             DepartmentRepository departmentRepository, CourseRepository courseRepository,
+                             CourseRepository courseRepository,
                              PlacementEligibilityGuard eligibilityGuard) {
         this.driveRepository = driveRepository;
         this.driveApplicationRepository = driveApplicationRepository;
         this.studentRepository = studentRepository;
         this.batchRepository = batchRepository;
-        this.departmentRepository = departmentRepository;
         this.courseRepository = courseRepository;
         this.eligibilityGuard = eligibilityGuard;
     }
@@ -132,7 +128,6 @@ public class DriveServiceImpl implements DriveService {
         drive.setMaxBacklogs(request.getMaxBacklogs());
         drive.setMinAttendancePct(request.getMinAttendancePct());
         drive.setEligibleBatches(resolveBatches(request.getEligibleBatchIds()));
-        drive.setEligibleDepartments(resolveDepartments(request.getEligibleDepartmentIds()));
         drive.setEligibleCourses(resolveCourses(request.getEligibleCourseIds()));
     }
 
@@ -154,16 +149,11 @@ public class DriveServiceImpl implements DriveService {
         drive.setMaxBacklogs(request.getMaxBacklogs());
         drive.setMinAttendancePct(request.getMinAttendancePct());
         drive.setEligibleBatches(resolveBatches(request.getEligibleBatchIds()));
-        drive.setEligibleDepartments(resolveDepartments(request.getEligibleDepartmentIds()));
         drive.setEligibleCourses(resolveCourses(request.getEligibleCourseIds()));
     }
 
     private Set<Batch> resolveBatches(List<Long> ids) {
         return ids == null || ids.isEmpty() ? new LinkedHashSet<>() : new LinkedHashSet<>(batchRepository.findAllById(ids));
-    }
-
-    private Set<Department> resolveDepartments(List<Long> ids) {
-        return ids == null || ids.isEmpty() ? new LinkedHashSet<>() : new LinkedHashSet<>(departmentRepository.findAllById(ids));
     }
 
     private Set<Course> resolveCourses(List<Long> ids) {

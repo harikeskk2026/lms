@@ -54,11 +54,6 @@ public class PlacementEligibilityGuard {
             reasons.add("Not part of an eligible batch for this opportunity");
         }
 
-        if (!drive.getEligibleDepartments().isEmpty()
-                && (student.getDepartment() == null || !drive.getEligibleDepartments().contains(student.getDepartment()))) {
-            reasons.add("Not part of an eligible department for this opportunity");
-        }
-
         if (!drive.getEligibleCourses().isEmpty()
                 && (student.getCourse() == null || !drive.getEligibleCourses().contains(student.getCourse()))) {
             reasons.add("Not enrolled in an eligible course for this opportunity");

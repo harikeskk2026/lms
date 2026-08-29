@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import batchService from '@/services/batchService'
-import departmentService from '@/services/departmentService'
 import courseService from '@/services/courseService'
 
 // Eligibility is never hard-coded - it's expressed entirely through these
@@ -9,12 +8,10 @@ import courseService from '@/services/courseService'
 // checklist empty, means "no restriction on that dimension".
 export default function EligibilityCriteriaFields({ value, onChange }) {
   const [batches, setBatches] = useState([])
-  const [departments, setDepartments] = useState([])
   const [courses, setCourses] = useState([])
 
   useEffect(() => {
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
-    departmentService.list().then(r => setDepartments(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
   }, [])
 
@@ -70,11 +67,9 @@ export default function EligibilityCriteriaFields({ value, onChange }) {
             className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <ChecklistBox label="Eligible Batches" items={batches} selectedIds={value.eligibleBatchIds || []}
           onToggle={id => toggleId('eligibleBatchIds', id)} getLabel={b => b.name} />
-        <ChecklistBox label="Eligible Departments" items={departments} selectedIds={value.eligibleDepartmentIds || []}
-          onToggle={id => toggleId('eligibleDepartmentIds', id)} getLabel={d => d.name} />
         <ChecklistBox label="Eligible Courses" items={courses} selectedIds={value.eligibleCourseIds || []}
           onToggle={id => toggleId('eligibleCourseIds', id)} getLabel={c => c.title} />
       </div>

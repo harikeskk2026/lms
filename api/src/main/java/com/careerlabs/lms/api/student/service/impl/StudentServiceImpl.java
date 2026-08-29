@@ -8,8 +8,6 @@ import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
-import com.careerlabs.lms.api.department.entity.Department;
-import com.careerlabs.lms.api.department.repository.DepartmentRepository;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.dto.request.StudentCreateRequest;
@@ -47,20 +45,18 @@ public class StudentServiceImpl implements StudentService {
     private final BatchRepository batchRepository;
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
-    private final DepartmentRepository departmentRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final PasswordEncoder passwordEncoder;
 
     public StudentServiceImpl(StudentRepository studentRepository, UserRepository userRepository,
                                BatchRepository batchRepository, CollegeRepository collegeRepository,
-                               CourseRepository courseRepository, DepartmentRepository departmentRepository,
+                               CourseRepository courseRepository,
                                EnrollmentRepository enrollmentRepository, PasswordEncoder passwordEncoder) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
         this.batchRepository = batchRepository;
         this.collegeRepository = collegeRepository;
         this.courseRepository = courseRepository;
-        this.departmentRepository = departmentRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -124,9 +120,6 @@ public class StudentServiceImpl implements StudentService {
         }
         if (request.getCourseId() != null) {
             student.setCourse(findCourseOrThrow(request.getCourseId()));
-        }
-        if (request.getDepartmentId() != null) {
-            student.setDepartment(findDepartmentOrThrow(request.getDepartmentId()));
         }
 
         student = studentRepository.save(student);
@@ -205,11 +198,6 @@ public class StudentServiceImpl implements StudentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
     }
 
-    private Department findDepartmentOrThrow(Long departmentId) {
-        return departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Department not found: " + departmentId));
-    }
-
     private void applyRequest(Student student, StudentUpdateRequest request) {
         student.getUser().setName(request.getName());
         student.setPhone(request.getPhone());
@@ -227,7 +215,6 @@ public class StudentServiceImpl implements StudentService {
         assignBatch(student, request.getBatchId());
         student.setCollege(request.getCollegeId() != null ? findCollegeOrThrow(request.getCollegeId()) : null);
         student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);
-        student.setDepartment(request.getDepartmentId() != null ? findDepartmentOrThrow(request.getDepartmentId()) : null);
     }
 
     /**

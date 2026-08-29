@@ -1,5 +1,14 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.careerlabs.lms.api.quiz.entity.AchievementCode;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
@@ -10,13 +19,6 @@ import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.repository.StudentAchievementRepository;
 import com.careerlabs.lms.api.quiz.repository.StudentGameStatsRepository;
 import com.careerlabs.lms.api.quiz.service.GamificationService;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 
 @Service
 public class GamificationServiceImpl implements GamificationService {
@@ -37,7 +39,7 @@ public class GamificationServiceImpl implements GamificationService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public StudentGameStats getOrCreateStats(Long studentId) {
         return studentGameStatsRepository.findByStudentId(studentId).orElseGet(() -> {
             StudentGameStats stats = new StudentGameStats();

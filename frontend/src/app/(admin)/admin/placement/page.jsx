@@ -13,7 +13,7 @@ const EMPTY_DRIVE_FORM = {
   companyName: '', role: '', packageOffered: '', location: '', driveDate: '', applyDeadline: '',
   description: '', requirements: '', skills: '', driveType: 'CAMPUS', status: 'UPCOMING', applyLink: '',
   minCgpa: null, minPercentage: null, maxBacklogs: null,
-  eligibleBatchIds: [], eligibleDepartmentIds: [], eligibleCourseIds: [],
+  eligibleBatchIds: [], eligibleCourseIds: [],
 }
 
 const TABS = ['Students', 'Mock Interviews', 'Interview Questions', 'Company Drives']

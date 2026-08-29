@@ -3,7 +3,6 @@ package com.careerlabs.lms.api.student.entity;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.department.entity.Department;
 import com.careerlabs.lms.api.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -83,10 +82,6 @@ public class Student {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id")
     private Course course;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id")
-    private Department department;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -252,14 +247,6 @@ public class Student {
 
     public void setCourse(Course course) {
         this.course = course;
-    }
-
-    public Department getDepartment() {
-        return department;
-    }
-
-    public void setDepartment(Department department) {
-        this.department = department;
     }
 
     public Instant getCreatedAt() {

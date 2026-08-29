@@ -4,7 +4,6 @@ import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.entity.BatchMode;
 import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.department.entity.Department;
 import com.careerlabs.lms.api.student.entity.AcademicScoreType;
 import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -35,7 +34,6 @@ public record StudentResponse(
         BatchSummary batch,
         CollegeSummary college,
         CourseSummary course,
-        DepartmentSummary department,
         Instant lastLoginAt,
         Instant createdAt,
         Instant updatedAt
@@ -46,7 +44,6 @@ public record StudentResponse(
         Batch batch = student.getBatch();
         College college = student.getCollege();
         Course course = student.getCourse();
-        Department department = student.getDepartment();
 
         return new StudentResponse(
                 student.getId(),
@@ -70,7 +67,6 @@ public record StudentResponse(
                 batch != null ? BatchSummary.from(batch) : null,
                 college != null ? new CollegeSummary(college.getId(), college.getName()) : null,
                 course != null ? new CourseSummary(course.getId(), course.getTitle()) : null,
-                department != null ? new DepartmentSummary(department.getId(), department.getName()) : null,
                 user.getLastLoginAt(),
                 student.getCreatedAt(),
                 student.getUpdatedAt());
@@ -101,8 +97,5 @@ public record StudentResponse(
     }
 
     public record CollegeSummary(Long id, String name) {
-    }
-
-    public record DepartmentSummary(Long id, String name) {
     }
 }

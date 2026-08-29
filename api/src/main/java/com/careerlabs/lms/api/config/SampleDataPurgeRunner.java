@@ -6,7 +6,6 @@ import com.careerlabs.lms.api.attendance.repository.*;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
-import com.careerlabs.lms.api.department.repository.DepartmentRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
@@ -94,7 +93,6 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
     private final SessionRepository sessionRepository;
     private final MaterialRepository materialRepository;
     private final CourseRepository courseRepository;
-    private final DepartmentRepository departmentRepository;
     private final CollegeRepository collegeRepository;
 
     private final UserRepository userRepository;
@@ -139,7 +137,6 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             SessionRepository sessionRepository,
             MaterialRepository materialRepository,
             CourseRepository courseRepository,
-            DepartmentRepository departmentRepository,
             CollegeRepository collegeRepository,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder) {
@@ -181,7 +178,6 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
         this.sessionRepository = sessionRepository;
         this.materialRepository = materialRepository;
         this.courseRepository = courseRepository;
-        this.departmentRepository = departmentRepository;
         this.collegeRepository = collegeRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -242,7 +238,6 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             sessionRepository.deleteAllInBatch();
             materialRepository.deleteAllInBatch();
             courseRepository.deleteAllInBatch();
-            departmentRepository.deleteAllInBatch();
             collegeRepository.deleteAllInBatch();
 
             // Retain or recreate active Admin user

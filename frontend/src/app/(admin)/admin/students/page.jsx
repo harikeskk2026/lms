@@ -6,7 +6,6 @@ import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 import collegeService from '@/services/collegeService'
-import departmentService from '@/services/departmentService'
 import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
@@ -20,7 +19,7 @@ const PLACEMENT_COLORS = {
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '', password: '', batchId: '',
-  collegeName: '', courseId: '', departmentName: '',
+  collegeName: '', courseId: '',
   academicScoreType: 'CGPA', academicScore: '', passedOutYear: '',
   address: '', qualification: '', linkedinUrl: '', githubUrl: '', placementStatus: 'SEEKING',
 }
@@ -46,7 +45,6 @@ export default function StudentsPage() {
   const [batches, setBatches] = useState([])
   const [colleges, setColleges] = useState([])
   const [courses, setCourses] = useState([])
-  const [departmentSuggestions, setDepartmentSuggestions] = useState([])
   const [panelOpen, setPanelOpen] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -76,28 +74,13 @@ export default function StudentsPage() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    // Course and Batch are independent of College/Department - every
-    // CareerLabs course ever created shows up here; batches are filtered
-    // down to the selected course below.
+    // Course and Batch are independent of College - every CareerLabs course
+    // ever created shows up here; batches are filtered down to the selected
+    // course below.
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
   }, [])
-
-  // College Name and Department are free-typed. As the admin types a college
-  // name that matches one already on file, pull that college's departments in
-  // as autocomplete suggestions for the Department box (still just a text
-  // field - this only powers the suggestion list, nothing is forced).
-  useEffect(() => {
-    const typed = form.collegeName.trim().toLowerCase()
-    const match = typed ? colleges.find(c => c.name.toLowerCase() === typed) : null
-    if (!match) { setDepartmentSuggestions([]); return }
-    let cancelled = false
-    departmentService.list(match.id)
-      .then(r => { if (!cancelled) setDepartmentSuggestions(r.data || []) })
-      .catch(() => { if (!cancelled) setDepartmentSuggestions([]) })
-    return () => { cancelled = true }
-  }, [form.collegeName, colleges])
 
   const handleSearch = (v) => {
     clearTimeout(searchTimer.current)
@@ -120,7 +103,6 @@ export default function StudentsPage() {
       batchId: student.batch?.id ? String(student.batch.id) : '',
       collegeName: student.college?.name || '',
       courseId: student.course?.id ? String(student.course.id) : '',
-      departmentName: student.department?.name || '',
       academicScoreType: student.academicScoreType || 'CGPA',
       academicScore: student.academicScore != null ? String(student.academicScore) : '',
       passedOutYear: student.passedOutYear != null ? String(student.passedOutYear) : '',
@@ -140,11 +122,10 @@ export default function StudentsPage() {
     setForm(f => ({ ...f, courseId, batchId: '' }))
   }
 
-  // College Name / Department are plain typed text, not tied to an id while
-  // typing. On submit, resolve each typed name to an existing record (case
-  // insensitive match) or create a brand-new one on the fly, so the admin
-  // never has to leave this form to add a college/department that isn't in
-  // the system yet.
+  // College Name is plain typed text, not tied to an id while typing. On
+  // submit, resolve the typed name to an existing record (case insensitive
+  // match) or create a brand-new one on the fly, so the admin never has to
+  // leave this form to add a college that isn't in the system yet.
   const resolveCollegeId = async (name) => {
     const trimmed = name.trim()
     if (!trimmed) return null
@@ -155,16 +136,6 @@ export default function StudentsPage() {
     return r.data.id
   }
 
-  const resolveDepartmentId = async (name, collegeId) => {
-    const trimmed = name.trim()
-    if (!trimmed || !collegeId) return null
-    const existing = await departmentService.list(collegeId).then(r => r.data || []).catch(() => [])
-    const match = existing.find(d => d.name.toLowerCase() === trimmed.toLowerCase())
-    if (match) return match.id
-    const r = await departmentService.create({ name: trimmed, collegeId })
-    return r.data.id
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
@@ -172,7 +143,6 @@ export default function StudentsPage() {
       const batchId = form.batchId ? Number(form.batchId) : null
       const courseId = form.courseId ? Number(form.courseId) : null
       const collegeId = await resolveCollegeId(form.collegeName)
-      const departmentId = await resolveDepartmentId(form.departmentName, collegeId)
       const academicScore = form.academicScore !== '' ? Number(form.academicScore) : null
       const academicScoreType = academicScore !== null ? form.academicScoreType : null
       const passedOutYear = form.passedOutYear !== '' ? Number(form.passedOutYear) : null
@@ -186,7 +156,7 @@ export default function StudentsPage() {
           linkedinUrl: form.linkedinUrl,
           githubUrl: form.githubUrl,
           placementStatus: form.placementStatus,
-          batchId, collegeId, courseId, departmentId,
+          batchId, collegeId, courseId,
         })
         toast.success('Student updated successfully')
       } else {
@@ -196,7 +166,7 @@ export default function StudentsPage() {
           phone: form.phone,
           password: form.password,
           academicScoreType, academicScore, passedOutYear,
-          batchId, collegeId, courseId, departmentId,
+          batchId, collegeId, courseId,
         })
         toast.success('Student created successfully')
       }
@@ -218,13 +188,12 @@ export default function StudentsPage() {
   }
 
   const downloadCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Department', 'Batch', 'Placement', 'Status']
+    const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Status']
     const rows = students.map(s => [
       s.name, s.email, s.phone || '',
       s.enrollmentNo || '',
       s.college?.name || '',
       s.course?.title || '',
-      s.department?.name || '',
       s.batch?.name || '',
       s.placementStatus || '',
       s.active ? 'Active' : 'Inactive',
@@ -312,14 +281,14 @@ export default function StudentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['#', 'Student', 'Enrollment', 'College / Course', 'Department', 'Batch', 'Placement', 'Status', 'Actions'].map(h => (
+                  {['#', 'Student', 'Enrollment', 'College / Course', 'Batch', 'Placement', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {students.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
                 ) : (
                   students.map((s, i) => (
                     <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
@@ -345,9 +314,6 @@ export default function StudentsPage() {
                             <p className="text-[10px] text-gray-400">{s.course?.title || ''}</p>
                           </div>
                         ) : <span className="text-gray-400 text-xs">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs text-gray-600 dark:text-gray-300">{s.department?.name || '—'}</span>
                       </td>
                       <td className="px-4 py-3">
                         {s.batch ? (
@@ -481,10 +447,10 @@ export default function StudentsPage() {
 
           {/*
             Two independent groups:
-            1. College -> Department: the student's own college background.
-               Both are plain typed text fields (with autocomplete via a
-               native datalist) - the value is resolved to an existing or
-               newly-created record on submit.
+            1. College: the student's own college background. A plain typed
+               text field (with autocomplete via a native datalist) - the
+               value is resolved to an existing or newly-created record on
+               submit.
             2. Course + Batch: what CareerLabs is training this student on.
                Course lists every course ever created; Batch is filtered down
                to batches that belong to the selected course.
@@ -504,20 +470,6 @@ export default function StudentsPage() {
                 />
                 <datalist id="college-name-options">
                   {colleges.map(c => <option key={c.id} value={c.name} />)}
-                </datalist>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Department</label>
-                <input
-                  type="text"
-                  list="department-name-options"
-                  value={form.departmentName}
-                  onChange={e => setForm(f => ({ ...f, departmentName: e.target.value }))}
-                  placeholder="Type the student's department"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-                <datalist id="department-name-options">
-                  {departmentSuggestions.map(d => <option key={d.id} value={d.name} />)}
                 </datalist>
               </div>
               <div>

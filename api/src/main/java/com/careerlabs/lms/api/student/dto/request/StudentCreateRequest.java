@@ -34,8 +34,6 @@ public class StudentCreateRequest {
 
     private Long courseId;
 
-    private Long departmentId;
-
     private AcademicScoreType academicScoreType;
 
     @DecimalMin(value = "0", message = StudentValidationMessages.ACADEMIC_SCORE_INVALID)
@@ -100,14 +98,6 @@ public class StudentCreateRequest {
 
     public void setCourseId(Long courseId) {
         this.courseId = courseId;
-    }
-
-    public Long getDepartmentId() {
-        return departmentId;
-    }
-
-    public void setDepartmentId(Long departmentId) {
-        this.departmentId = departmentId;
     }
 
     public AcademicScoreType getAcademicScoreType() {

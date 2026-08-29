@@ -2,7 +2,6 @@ package com.careerlabs.lms.api.placement.entity;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.department.entity.Department;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -105,14 +104,6 @@ public class Drive {
             inverseJoinColumns = @JoinColumn(name = "batch_id")
     )
     private Set<Batch> eligibleBatches = new LinkedHashSet<>();
-
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "drive_departments",
-            joinColumns = @JoinColumn(name = "drive_id"),
-            inverseJoinColumns = @JoinColumn(name = "department_id")
-    )
-    private Set<Department> eligibleDepartments = new LinkedHashSet<>();
 
     /** Also doubles as the LMS-integration link (Phase 5): which course(s) this opportunity relates to. */
     @ManyToMany(fetch = FetchType.LAZY)
@@ -282,14 +273,6 @@ public class Drive {
 
     public void setEligibleBatches(Set<Batch> eligibleBatches) {
         this.eligibleBatches = eligibleBatches;
-    }
-
-    public Set<Department> getEligibleDepartments() {
-        return eligibleDepartments;
-    }
-
-    public void setEligibleDepartments(Set<Department> eligibleDepartments) {
-        this.eligibleDepartments = eligibleDepartments;
     }
 
     public Set<Course> getEligibleCourses() {

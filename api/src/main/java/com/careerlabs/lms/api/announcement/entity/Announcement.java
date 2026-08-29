@@ -3,7 +3,6 @@ package com.careerlabs.lms.api.announcement.entity;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.department.entity.Department;
 import com.careerlabs.lms.api.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -90,10 +89,6 @@ public class Announcement {
     private String actionUrl;
 
     /** Additional targeting filters, combined (AND) with batch and each other. All optional. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id")
-    private Department department;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "college_id")
     private College college;
@@ -266,14 +261,6 @@ public class Announcement {
 
     public void setActionUrl(String actionUrl) {
         this.actionUrl = actionUrl;
-    }
-
-    public Department getDepartment() {
-        return department;
-    }
-
-    public void setDepartment(Department department) {
-        this.department = department;
     }
 
     public College getCollege() {

@@ -10,7 +10,6 @@ import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import collegeService from '@/services/collegeService'
-import departmentService from '@/services/departmentService'
 import courseService from '@/services/courseService'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
@@ -36,7 +35,7 @@ const PRIORITY_STYLES = {
 
 const emptyForm = {
   title: '', body: '',
-  batchId: '', departmentId: '', collegeId: '', courseId: '',
+  batchId: '', collegeId: '', courseId: '',
   isPinned: false, expiresAt: '', category: 'GENERAL', priority: 'NORMAL',
   requiresAcknowledgment: false, allowComments: false,
   actionType: '', actionReferenceId: '', actionLabel: '', actionUrl: '',
@@ -48,7 +47,6 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState([])
   const [batches, setBatches] = useState([])
   const [colleges, setColleges] = useState([])
-  const [departments, setDepartments] = useState([])
   const [courses, setCourses] = useState([])
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
@@ -78,7 +76,6 @@ export default function AnnouncementsPage() {
     loadTemplates()
     adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
     collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
-    departmentService.list().then(r => setDepartments(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
   }, [])
 
@@ -98,7 +95,6 @@ export default function AnnouncementsPage() {
     actionReferenceId: form.actionReferenceId ? Number(form.actionReferenceId) : null,
     actionLabel: form.actionLabel || null,
     actionUrl: form.actionUrl || null,
-    departmentId: form.departmentId || null,
     collegeId: form.collegeId || null,
     courseId: form.courseId || null,
     audienceRuleType: form.audienceRuleType || 'NONE',
@@ -160,7 +156,7 @@ export default function AnnouncementsPage() {
     setEditId(a.id)
     setForm({
       title: a.title, body: a.body,
-      batchId: a.batchId || '', departmentId: a.departmentId || '', collegeId: a.collegeId || '', courseId: a.courseId || '',
+      batchId: a.batchId || '', collegeId: a.collegeId || '', courseId: a.courseId || '',
       isPinned: a.isPinned, expiresAt: a.expiresAt ? a.expiresAt.split('T')[0] : '',
       category: a.category || 'GENERAL', priority: a.priority || 'NORMAL',
       requiresAcknowledgment: !!a.requiresAcknowledgment, allowComments: !!a.allowComments,
@@ -211,7 +207,7 @@ export default function AnnouncementsPage() {
   }
   const activeTabData = sections.find(s => s.key === activeSection) || sections[0]
 
-  const cardProps = { batches, departments, colleges, courses, onEdit: handleEdit, onDelete: handleDelete,
+  const cardProps = { batches, colleges, courses, onEdit: handleEdit, onDelete: handleDelete,
     onPublish: handlePublish, onApprove: handleApprove, onReject: handleReject, onDuplicate: handleDuplicate,
     onDetails: setDetailsFor, onView: setViewingAnnouncement }
 
@@ -244,7 +240,7 @@ export default function AnnouncementsPage() {
         <AnnouncementForm
           form={form} setForm={setForm} editId={editId} saving={saving} onSave={handleSave}
           onCancel={() => { setFormOpen(false); setEditId(null) }}
-          batches={batches} departments={departments} colleges={colleges} courses={courses}
+          batches={batches} colleges={colleges} courses={courses}
         />
       )}
 
@@ -301,7 +297,7 @@ export default function AnnouncementsPage() {
       )}
 
       {viewingAnnouncement && (
-        <ViewAnnouncementModal a={viewingAnnouncement} batches={batches} departments={departments}
+        <ViewAnnouncementModal a={viewingAnnouncement} batches={batches}
           colleges={colleges} courses={courses} onClose={() => setViewingAnnouncement(null)} />
       )}
     </div>
@@ -310,7 +306,7 @@ export default function AnnouncementsPage() {
 
 const PLACEHOLDER_TOKENS = ['{{studentName}}', '{{batchName}}', '{{courseName}}', '{{attendancePercentage}}', '{{date}}']
 
-function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, departments, colleges, courses }) {
+function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, colleges, courses }) {
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
   const toggle = (key) => () => setForm(f => ({ ...f, [key]: !f[key] }))
   const bodyRef = useRef(null)
@@ -381,9 +377,8 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
         </div>
 
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Audience</p>
-        <div className="grid sm:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-3 gap-4">
           <Select label="Batch" value={form.batchId} onChange={set('batchId')} options={batches.map(b => [b.id, b.name])} allLabel="All Students" />
-          <Select label="Department" value={form.departmentId} onChange={set('departmentId')} options={departments.map(d => [d.id, d.name])} allLabel="Any" />
           <Select label="College" value={form.collegeId} onChange={set('collegeId')} options={colleges.map(c => [c.id, c.name])} allLabel="Any" />
           <Select label="Course" value={form.courseId} onChange={set('courseId')} options={courses.map(c => [c.id, c.title])} allLabel="Any" />
         </div>
@@ -535,9 +530,8 @@ function AnnouncementSection({ title, color, items, emptyText, cardProps, hideTi
   )
 }
 
-function AnnouncementCard({ a, batches, departments, colleges, courses, onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
+function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
   const batch = batches.find(b => b.id === a.batchId)
-  const department = departments.find(d => d.id === a.departmentId)
   const college = colleges.find(c => c.id === a.collegeId)
   const course = courses.find(c => c.id === a.courseId)
   const isDraft = a.status === 'DRAFT'
@@ -563,7 +557,6 @@ function AnnouncementCard({ a, batches, departments, colleges, courses, onEdit, 
               </span>
             )}
             {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-            {department && <Badge color="teal">{department.name}</Badge>}
             {college && <Badge color="pink">{college.name}</Badge>}
             {course && <Badge color="cyan">{course.title}</Badge>}
             {a.audienceRuleType && a.audienceRuleType !== 'NONE' && <Badge color="amber">{a.audienceRuleType.replaceAll('_', ' ')}</Badge>}
@@ -781,9 +774,8 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
   )
 }
 
-function ViewAnnouncementModal({ a, batches, departments, colleges, courses, onClose }) {
+function ViewAnnouncementModal({ a, batches, colleges, courses, onClose }) {
   const batch = batches.find(b => b.id === a.batchId)
-  const department = departments.find(d => d.id === a.departmentId)
   const college = colleges.find(c => c.id === a.collegeId)
   const course = courses.find(c => c.id === a.courseId)
 
@@ -804,7 +796,6 @@ function ViewAnnouncementModal({ a, batches, departments, colleges, courses, onC
             </span>
           )}
           {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-          {department && <Badge color="teal">{department.name}</Badge>}
           {college && <Badge color="pink">{college.name}</Badge>}
           {course && <Badge color="cyan">{course.title}</Badge>}
           {a.audienceRuleType && a.audienceRuleType !== 'NONE' && <Badge color="amber">{a.audienceRuleType.replaceAll('_', ' ')}</Badge>}

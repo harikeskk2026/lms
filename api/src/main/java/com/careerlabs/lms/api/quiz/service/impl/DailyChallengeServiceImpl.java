@@ -1,5 +1,14 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.quiz.dto.response.DailyChallengeResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StartAttemptResponse;
@@ -19,13 +28,6 @@ import com.careerlabs.lms.api.quiz.repository.QuizQuestionRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizRepository;
 import com.careerlabs.lms.api.quiz.service.DailyChallengeService;
 import com.careerlabs.lms.api.quiz.service.QuizAttemptService;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 @Service
 public class DailyChallengeServiceImpl implements DailyChallengeService {
@@ -54,7 +56,7 @@ public class DailyChallengeServiceImpl implements DailyChallengeService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public DailyChallengeResponse getToday(Long studentId) {
         DailyChallenge challenge = getOrCreateToday();
         Quiz quiz = challenge.getQuiz();
@@ -68,7 +70,7 @@ public class DailyChallengeServiceImpl implements DailyChallengeService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public StartAttemptResponse start(Long studentId) {
         DailyChallenge challenge = getOrCreateToday();
         return quizAttemptService.start(challenge.getQuiz().getId(), studentId);

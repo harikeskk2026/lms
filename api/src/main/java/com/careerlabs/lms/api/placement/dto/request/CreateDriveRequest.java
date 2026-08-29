@@ -52,8 +52,6 @@ public class CreateDriveRequest {
 
     private List<Long> eligibleBatchIds = List.of();
 
-    private List<Long> eligibleDepartmentIds = List.of();
-
     private List<Long> eligibleCourseIds = List.of();
 
     public String getCompanyName() {
@@ -190,14 +188,6 @@ public class CreateDriveRequest {
 
     public void setEligibleBatchIds(List<Long> eligibleBatchIds) {
         this.eligibleBatchIds = eligibleBatchIds;
-    }
-
-    public List<Long> getEligibleDepartmentIds() {
-        return eligibleDepartmentIds;
-    }
-
-    public void setEligibleDepartmentIds(List<Long> eligibleDepartmentIds) {
-        this.eligibleDepartmentIds = eligibleDepartmentIds;
     }
 
     public List<Long> getEligibleCourseIds() {

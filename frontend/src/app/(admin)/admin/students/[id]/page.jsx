@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Layers, Calendar,
+  ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Calendar,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -54,7 +54,6 @@ export default function StudentDetailPage() {
     batchId: student.batch?.id || null,
     collegeId: student.college?.id || null,
     courseId: student.course?.id || null,
-    departmentId: student.department?.id || null,
     ...overrides,
   })
 
@@ -163,7 +162,6 @@ export default function StudentDetailPage() {
             {[
               { icon: Building2, label: 'College',    value: student.college?.name || '—' },
               { icon: BookOpen,  label: 'Course',      value: student.course?.title || '—' },
-              { icon: Layers,    label: 'Department',  value: student.department?.name || '—' },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-3">
                 <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">

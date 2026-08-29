@@ -1,5 +1,7 @@
 package com.careerlabs.lms.api.announcement.service.impl;
 
+import org.springframework.stereotype.Service;
+
 import com.careerlabs.lms.api.announcement.dto.request.AnnouncementRequest;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementCategory;
@@ -7,7 +9,6 @@ import com.careerlabs.lms.api.announcement.entity.AnnouncementPriority;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementStatus;
 import com.careerlabs.lms.api.announcement.service.AnnouncementService;
 import com.careerlabs.lms.api.announcement.service.SystemAnnouncementService;
-import org.springframework.stereotype.Service;
 
 @Service
 public class SystemAnnouncementServiceImpl implements SystemAnnouncementService {
@@ -25,7 +26,7 @@ public class SystemAnnouncementServiceImpl implements SystemAnnouncementService 
                 title, body, batchId, false, null,
                 category, AnnouncementStatus.PUBLISHED, priority, null,
                 false, false, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null,  null, null, null);
         return announcementService.create(request, systemUserId);
     }
 }

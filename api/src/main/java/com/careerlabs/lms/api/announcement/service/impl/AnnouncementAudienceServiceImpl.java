@@ -53,10 +53,6 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                 && (student.getBatch() == null || !student.getBatch().getId().equals(announcement.getBatch().getId()))) {
             return false;
         }
-        if (announcement.getDepartment() != null
-                && (student.getDepartment() == null || !student.getDepartment().getId().equals(announcement.getDepartment().getId()))) {
-            return false;
-        }
         if (announcement.getCollege() != null
                 && (student.getCollege() == null || !student.getCollege().getId().equals(announcement.getCollege().getId()))) {
             return false;
@@ -73,9 +69,6 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
             List<Predicate> predicates = new ArrayList<>();
             if (a.getBatch() != null) {
                 predicates.add(cb.equal(root.get("batch").get("id"), a.getBatch().getId()));
-            }
-            if (a.getDepartment() != null) {
-                predicates.add(cb.equal(root.get("department").get("id"), a.getDepartment().getId()));
             }
             if (a.getCollege() != null) {
                 predicates.add(cb.equal(root.get("college").get("id"), a.getCollege().getId()));

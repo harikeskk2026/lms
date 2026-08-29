@@ -4,8 +4,6 @@ import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
-import com.careerlabs.lms.api.department.entity.Department;
-import com.careerlabs.lms.api.department.repository.DepartmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,11 +17,10 @@ import java.util.Set;
 
 /**
  * Seeds a couple of colleges (linked to whatever CareerLabs courses already
- * exist, purely so the "Course" dropdown has data) and a couple of academic
- * departments per college, so the College -> Department dropdown on the
- * Student form has real data to exercise locally. Controlled by the same
- * APP_SEED_ENABLED flag as {@link DevUserSeeder}; only runs once, when the
- * colleges table is empty and at least one course already exists.
+ * exist, purely so the "Course" dropdown has data), so the College dropdown
+ * on the Student form has real data to exercise locally. Controlled by the
+ * same APP_SEED_ENABLED flag as {@link DevUserSeeder}; only runs once, when
+ * the colleges table is empty and at least one course already exists.
  */
 @Component
 public class CollegeDataSeeder implements CommandLineRunner {
@@ -34,20 +31,15 @@ public class CollegeDataSeeder implements CommandLineRunner {
             "National College of Engineering",
             "Metro City University"
     );
-    private static final List<String> DEPARTMENT_NAMES = List.of("General", "Advanced");
-
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
-    private final DepartmentRepository departmentRepository;
     private final boolean seedEnabled;
 
     public CollegeDataSeeder(CollegeRepository collegeRepository,
                               CourseRepository courseRepository,
-                              DepartmentRepository departmentRepository,
                               @Value("${app.seed.enabled}") boolean seedEnabled) {
         this.collegeRepository = collegeRepository;
         this.courseRepository = courseRepository;
-        this.departmentRepository = departmentRepository;
         this.seedEnabled = seedEnabled;
     }
 
@@ -60,7 +52,7 @@ public class CollegeDataSeeder implements CommandLineRunner {
 
         List<Course> courses = courseRepository.findAllByOrderByCreatedAtDesc();
         if (courses.isEmpty()) {
-            log.info("Skipping college/department seed: no courses exist yet");
+            log.info("Skipping college seed: no courses exist yet");
             return;
         }
 
@@ -73,16 +65,6 @@ public class CollegeDataSeeder implements CommandLineRunner {
             colleges.add(collegeRepository.save(college));
         }
 
-        for (College college : colleges) {
-            for (String departmentName : DEPARTMENT_NAMES) {
-                Department department = new Department();
-                department.setName(departmentName);
-                department.setCollege(college);
-                departmentRepository.save(department);
-            }
-        }
-
-        log.info("Seeded {} colleges and {} departments for local development",
-                colleges.size(), colleges.size() * DEPARTMENT_NAMES.size());
+        log.info("Seeded {} colleges for local development", colleges.size());
     }
 }

@@ -45,7 +45,6 @@ public record AnnouncementRequest(
         String actionLabel,
         String actionUrl,
 
-        Long departmentId,
         Long collegeId,
         Long courseId,
 
