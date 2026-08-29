@@ -16,13 +16,13 @@ import java.util.UUID;
 
 /**
  * Stores uploaded files on local disk under {@code app.upload.dir}, exposed back
- * to clients at {@code /uploads/**} (see WebConfig). Only PDF/DOC/DOCX files are
- * accepted, matching the LMS-wide assignment/submission attachment policy.
+ * to clients at {@code /uploads/**} (see WebConfig). Only PDF/DOCX/XLS/XLSX files
+ * are accepted, matching the LMS-wide assignment/submission attachment policy.
  */
 @Service
 public class FileStorageService {
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "doc", "docx");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "xls", "xlsx");
     private static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024;
 
     private final Path root;

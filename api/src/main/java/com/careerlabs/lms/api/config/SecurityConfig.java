@@ -49,6 +49,25 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    // Uploaded files (assignment attachments, etc.) are viewed inline in an <iframe> by the
+    // frontend, which runs on a different origin than this API. Spring Security's default
+    // X-Frame-Options: DENY blocks that framing entirely, so this path gets its own chain
+    // with frame options relaxed to same-origin-with-the-serving-origin (the file itself has
+    // no auth check either way — see the permitAll below).
+    @Bean
+    @Order(1)
+    public SecurityFilterChain uploadsFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/uploads/**")
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .headers(headers -> headers.frameOptions(frame -> frame.disable()));
+
+        return http.build();
+    }
+
     /**
      * Narrow chain, evaluated first (lower @Order = higher precedence): only the
      * recorded-session HLS stream endpoints, authenticated by a short-lived
@@ -56,7 +75,7 @@ public class SecurityConfig {
      * else falls through to {@link #filterChain(HttpSecurity)} below, unchanged.
      */
     @Bean
-    @Order(1)
+    @Order(2)
     public SecurityFilterChain playbackStreamFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/student/recorded-sessions/*/stream/**")
@@ -74,7 +93,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @Order(2)
+    @Order(3)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
@@ -113,7 +132,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
-                        .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/student/**").authenticated()
                         .anyRequest().authenticated()

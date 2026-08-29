@@ -111,9 +111,6 @@ public class StudentServiceImpl implements StudentService {
         student.setUser(user);
         student.setPhone(request.getPhone());
         student.setEnrollmentNo(generateEnrollmentNo(user.getId()));
-        student.setAcademicScoreType(request.getAcademicScoreType());
-        student.setAcademicScore(request.getAcademicScore());
-        student.setPassedOutYear(request.getPassedOutYear());
         assignBatch(student, request.getBatchId());
         if (request.getCollegeId() != null) {
             student.setCollege(findCollegeOrThrow(request.getCollegeId()));
@@ -203,15 +200,9 @@ public class StudentServiceImpl implements StudentService {
         student.setPhone(request.getPhone());
         student.setAddress(request.getAddress());
         student.setQualification(request.getQualification());
-        student.setAcademicScoreType(request.getAcademicScoreType());
-        student.setAcademicScore(request.getAcademicScore());
-        student.setPassedOutYear(request.getPassedOutYear());
         student.setLinkedinUrl(request.getLinkedinUrl());
         student.setGithubUrl(request.getGithubUrl());
         student.setPlacementStatus(request.getPlacementStatus());
-        student.setCgpa(request.getCgpa());
-        student.setPercentage(request.getPercentage());
-        student.setBacklogs(request.getBacklogs());
         assignBatch(student, request.getBatchId());
         student.setCollege(request.getCollegeId() != null ? findCollegeOrThrow(request.getCollegeId()) : null);
         student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);

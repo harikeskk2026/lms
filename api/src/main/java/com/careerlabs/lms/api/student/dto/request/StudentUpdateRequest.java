@@ -1,12 +1,7 @@
 package com.careerlabs.lms.api.student.dto.request;
 
-import com.careerlabs.lms.api.student.entity.AcademicScoreType;
 import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.validation.StudentValidationMessages;
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -23,28 +18,12 @@ public class StudentUpdateRequest {
 
     private String qualification;
 
-    private AcademicScoreType academicScoreType;
-
-    @DecimalMin(value = "0", message = StudentValidationMessages.ACADEMIC_SCORE_INVALID)
-    @DecimalMax(value = "100", message = StudentValidationMessages.ACADEMIC_SCORE_INVALID)
-    private Double academicScore;
-
-    @Min(value = 1950, message = StudentValidationMessages.PASSED_OUT_YEAR_INVALID)
-    @Max(value = 2100, message = StudentValidationMessages.PASSED_OUT_YEAR_INVALID)
-    private Integer passedOutYear;
-
     private String linkedinUrl;
 
     private String githubUrl;
 
     @NotNull(message = StudentValidationMessages.PLACEMENT_STATUS_REQUIRED)
     private PlacementStatus placementStatus;
-
-    private Double cgpa;
-
-    private Double percentage;
-
-    private Integer backlogs;
 
     private Long batchId;
 
@@ -84,30 +63,6 @@ public class StudentUpdateRequest {
         this.qualification = qualification;
     }
 
-    public AcademicScoreType getAcademicScoreType() {
-        return academicScoreType;
-    }
-
-    public void setAcademicScoreType(AcademicScoreType academicScoreType) {
-        this.academicScoreType = academicScoreType;
-    }
-
-    public Double getAcademicScore() {
-        return academicScore;
-    }
-
-    public void setAcademicScore(Double academicScore) {
-        this.academicScore = academicScore;
-    }
-
-    public Integer getPassedOutYear() {
-        return passedOutYear;
-    }
-
-    public void setPassedOutYear(Integer passedOutYear) {
-        this.passedOutYear = passedOutYear;
-    }
-
     public String getLinkedinUrl() {
         return linkedinUrl;
     }
@@ -130,30 +85,6 @@ public class StudentUpdateRequest {
 
     public void setPlacementStatus(PlacementStatus placementStatus) {
         this.placementStatus = placementStatus;
-    }
-
-    public Double getCgpa() {
-        return cgpa;
-    }
-
-    public void setCgpa(Double cgpa) {
-        this.cgpa = cgpa;
-    }
-
-    public Double getPercentage() {
-        return percentage;
-    }
-
-    public void setPercentage(Double percentage) {
-        this.percentage = percentage;
-    }
-
-    public Integer getBacklogs() {
-        return backlogs;
-    }
-
-    public void setBacklogs(Integer backlogs) {
-        this.backlogs = backlogs;
     }
 
     public Long getBatchId() {

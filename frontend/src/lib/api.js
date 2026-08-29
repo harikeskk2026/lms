@@ -236,7 +236,7 @@ export const studentApi = {
   getMyCorrections:   ()        => api.get('/student/attendance/corrections'),
   requestCorrection:  (data)    => api.post('/student/attendance/corrections', data),
   getAssignments:    ()         => api.get('/student/assignments'),
-  submitAssignment:  (id, form) => api.post(`/student/assignments/${id}/submit`, form, {
+  submitAssignment:  (id, form) => api.post(`/assignments/${id}/submissions`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   getQuizzes:        ()         => api.get('/student/quizzes'),

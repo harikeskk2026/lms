@@ -7,6 +7,7 @@ import {
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
+import academicDetailsService from '@/services/academicDetailsService'
 
 const PLACEMENT_COLORS = {
   SEEKING: 'bg-blue-100 text-blue-700',
@@ -15,30 +16,168 @@ const PLACEMENT_COLORS = {
   NOT_SEEKING: 'bg-gray-100 text-gray-600',
 }
 
+const EMPTY_ACADEMIC_FORM = {
+  tenthYearOfPassing: '', tenthPercentage: '',
+  twelfthYearOfPassing: '', twelfthPercentage: '',
+  diplomaYearOfPassing: '', diplomaPercentage: '',
+  ugDegree: '', ugDepartment: '', ugYearOfPassing: '', ugScoreType: 'CGPA', ugScore: '', ugBacklogs: '',
+  pgDegree: '', pgDepartment: '', pgYearOfPassing: '', pgScoreType: 'CGPA', pgScore: '', pgBacklogs: '',
+}
+
+const ACADEMIC_INPUT_CLS = 'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500'
+const ACADEMIC_LABEL_CLS = 'block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1'
+
+// 10th / 12th / Diploma all share the same two fields (Year of Passing + Percentage).
+function AcademicLevelFields({ title, optional, values, setValues, yearKey, percentageKey }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">
+        {title}{optional && <span className="font-normal text-gray-400"> (optional)</span>}
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={ACADEMIC_LABEL_CLS}>Year of Passing</label>
+          <input type="number" step="1" min="1950" max="2100" value={values[yearKey]}
+            onChange={e => setValues(f => ({ ...f, [yearKey]: e.target.value }))}
+            className={ACADEMIC_INPUT_CLS} />
+        </div>
+        <div>
+          <label className={ACADEMIC_LABEL_CLS}>Percentage</label>
+          <input type="number" step="0.1" min="0" max="100" value={values[percentageKey]}
+            onChange={e => setValues(f => ({ ...f, [percentageKey]: e.target.value }))}
+            className={ACADEMIC_INPUT_CLS} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// UG and PG share the same five fields (Degree/Course, Department, Year of Passing,
+// CGPA/Percentage with a type toggle, and Backlogs).
+function DegreeLevelFields({ title, optional, values, setValues, prefix }) {
+  const degreeKey = `${prefix}Degree`
+  const departmentKey = `${prefix}Department`
+  const yearKey = `${prefix}YearOfPassing`
+  const scoreTypeKey = `${prefix}ScoreType`
+  const scoreKey = `${prefix}Score`
+  const backlogsKey = `${prefix}Backlogs`
+
+  return (
+    <div>
+      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">
+        {title}{optional && <span className="font-normal text-gray-400"> (optional)</span>}
+      </p>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className={ACADEMIC_LABEL_CLS}>Degree / Course</label>
+          <input type="text" value={values[degreeKey]}
+            onChange={e => setValues(f => ({ ...f, [degreeKey]: e.target.value }))}
+            placeholder="e.g. B.Tech"
+            className={ACADEMIC_INPUT_CLS} />
+        </div>
+        <div>
+          <label className={ACADEMIC_LABEL_CLS}>Department</label>
+          <input type="text" value={values[departmentKey]}
+            onChange={e => setValues(f => ({ ...f, [departmentKey]: e.target.value }))}
+            placeholder="e.g. Computer Science"
+            className={ACADEMIC_INPUT_CLS} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className={ACADEMIC_LABEL_CLS}>Year of Passing</label>
+          <input type="number" step="1" min="1950" max="2100" value={values[yearKey]}
+            onChange={e => setValues(f => ({ ...f, [yearKey]: e.target.value }))}
+            className={ACADEMIC_INPUT_CLS} />
+        </div>
+        <div>
+          <label className={ACADEMIC_LABEL_CLS}>Backlogs</label>
+          <input type="number" step="1" min="0" value={values[backlogsKey]}
+            onChange={e => setValues(f => ({ ...f, [backlogsKey]: e.target.value }))}
+            className={ACADEMIC_INPUT_CLS} />
+        </div>
+      </div>
+      <div>
+        <label className={ACADEMIC_LABEL_CLS}>CGPA / Percentage</label>
+        <div className="flex gap-2">
+          <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-0.5 flex-shrink-0">
+            {['CGPA', 'PERCENTAGE'].map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setValues(f => ({ ...f, [scoreTypeKey]: type }))}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  values[scoreTypeKey] === type ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {type === 'CGPA' ? 'CGPA' : 'Percentage'}
+              </button>
+            ))}
+          </div>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            max={values[scoreTypeKey] === 'CGPA' ? 10 : 100}
+            value={values[scoreKey]}
+            onChange={e => setValues(f => ({ ...f, [scoreKey]: e.target.value }))}
+            placeholder={values[scoreTypeKey] === 'CGPA' ? 'e.g. 8.5' : 'e.g. 82.5'}
+            className={`flex-1 min-w-0 ${ACADEMIC_INPUT_CLS}`}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StudentDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [student, setStudent] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [academicForm, setAcademicForm] = useState({ cgpa: '', percentage: '', backlogs: '' })
+  const [academicForm, setAcademicForm] = useState(EMPTY_ACADEMIC_FORM)
+  const [loadingAcademics, setLoadingAcademics] = useState(true)
   const [savingAcademics, setSavingAcademics] = useState(false)
 
   const load = () => {
     setLoading(true)
     studentService.get(id)
-      .then(r => {
-        setStudent(r.data)
-        setAcademicForm({
-          cgpa: r.data.cgpa ?? '',
-          percentage: r.data.percentage ?? '',
-          backlogs: r.data.backlogs ?? '',
-        })
-      })
+      .then(r => setStudent(r.data))
       .catch(err => toast.error(err.message || 'Failed to load student'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [id])
+  const loadAcademics = () => {
+    setLoadingAcademics(true)
+    academicDetailsService.get(id)
+      .then(r => {
+        const d = r.data
+        setAcademicForm({
+          tenthYearOfPassing: d.tenthYearOfPassing ?? '',
+          tenthPercentage: d.tenthPercentage ?? '',
+          twelfthYearOfPassing: d.twelfthYearOfPassing ?? '',
+          twelfthPercentage: d.twelfthPercentage ?? '',
+          diplomaYearOfPassing: d.diplomaYearOfPassing ?? '',
+          diplomaPercentage: d.diplomaPercentage ?? '',
+          ugDegree: d.ugDegree ?? '',
+          ugDepartment: d.ugDepartment ?? '',
+          ugYearOfPassing: d.ugYearOfPassing ?? '',
+          ugScoreType: d.ugScoreType ?? 'CGPA',
+          ugScore: d.ugScore ?? '',
+          ugBacklogs: d.ugBacklogs ?? '',
+          pgDegree: d.pgDegree ?? '',
+          pgDepartment: d.pgDepartment ?? '',
+          pgYearOfPassing: d.pgYearOfPassing ?? '',
+          pgScoreType: d.pgScoreType ?? 'CGPA',
+          pgScore: d.pgScore ?? '',
+          pgBacklogs: d.pgBacklogs ?? '',
+        })
+      })
+      .catch(err => toast.error(err.message || 'Failed to load academic details'))
+      .finally(() => setLoadingAcademics(false))
+  }
+
+  useEffect(() => { load(); loadAcademics() }, [id])
 
   const buildUpdatePayload = (overrides) => ({
     name: student.name,
@@ -48,9 +187,6 @@ export default function StudentDetailPage() {
     linkedinUrl: student.linkedinUrl,
     githubUrl: student.githubUrl,
     placementStatus: student.placementStatus,
-    cgpa: student.cgpa ?? null,
-    percentage: student.percentage ?? null,
-    backlogs: student.backlogs ?? null,
     batchId: student.batch?.id || null,
     collegeId: student.college?.id || null,
     courseId: student.course?.id || null,
@@ -65,17 +201,34 @@ export default function StudentDetailPage() {
     } catch (err) { toast.error(err.message || 'Failed to update') }
   }
 
+  const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
+
   const handleAcademicsSave = async (e) => {
     e.preventDefault()
     setSavingAcademics(true)
     try {
-      await studentService.update(id, buildUpdatePayload({
-        cgpa: academicForm.cgpa === '' ? null : Number(academicForm.cgpa),
-        percentage: academicForm.percentage === '' ? null : Number(academicForm.percentage),
-        backlogs: academicForm.backlogs === '' ? null : Number(academicForm.backlogs),
-      }))
+      await academicDetailsService.update(id, {
+        tenthYearOfPassing: num(academicForm.tenthYearOfPassing),
+        tenthPercentage: num(academicForm.tenthPercentage),
+        twelfthYearOfPassing: num(academicForm.twelfthYearOfPassing),
+        twelfthPercentage: num(academicForm.twelfthPercentage),
+        diplomaYearOfPassing: num(academicForm.diplomaYearOfPassing),
+        diplomaPercentage: num(academicForm.diplomaPercentage),
+        ugDegree: academicForm.ugDegree || null,
+        ugDepartment: academicForm.ugDepartment || null,
+        ugYearOfPassing: num(academicForm.ugYearOfPassing),
+        ugScoreType: academicForm.ugScoreType,
+        ugScore: num(academicForm.ugScore),
+        ugBacklogs: num(academicForm.ugBacklogs),
+        pgDegree: academicForm.pgDegree || null,
+        pgDepartment: academicForm.pgDepartment || null,
+        pgYearOfPassing: num(academicForm.pgYearOfPassing),
+        pgScoreType: academicForm.pgScoreType,
+        pgScore: num(academicForm.pgScore),
+        pgBacklogs: num(academicForm.pgBacklogs),
+      })
       toast.success('Academic details updated')
-      load()
+      loadAcademics()
     } catch (err) { toast.error(err.message || 'Failed to update') }
     finally { setSavingAcademics(false) }
   }
@@ -128,9 +281,6 @@ export default function StudentDetailPage() {
             { icon: Phone,   label: 'Phone',         value: student.phone || '—' },
             { icon: MapPin,  label: 'Address',       value: student.address || '—' },
             { icon: Award,   label: 'Qualification', value: student.qualification || '—' },
-            { icon: Award,   label: student.academicScoreType === 'PERCENTAGE' ? 'Percentage' : 'CGPA',
-              value: student.academicScore != null ? `${student.academicScore}${student.academicScoreType === 'PERCENTAGE' ? '%' : ''}` : '—' },
-            { icon: Calendar,label: 'Passed Out Year', value: student.passedOutYear || '—' },
             { icon: Linkedin,label: 'LinkedIn',      value: student.linkedinUrl || '—', href: student.linkedinUrl },
             { icon: Github,  label: 'GitHub',        value: student.githubUrl || '—', href: student.githubUrl },
           ].map(({ icon: Icon, label, value, href }) => (
@@ -177,30 +327,51 @@ export default function StudentDetailPage() {
           <div className="glass-card p-6">
             <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1">Academic Details</h3>
             <p className="text-xs text-gray-400 mb-4">Used to automatically check eligibility for placement opportunities.</p>
-            <form onSubmit={handleAcademicsSave} className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">CGPA</label>
-                <input type="number" step="0.1" min="0" max="10" value={academicForm.cgpa}
-                  onChange={e => setAcademicForm(f => ({ ...f, cgpa: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Percentage</label>
-                <input type="number" step="0.1" min="0" max="100" value={academicForm.percentage}
-                  onChange={e => setAcademicForm(f => ({ ...f, percentage: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Backlogs</label>
-                <input type="number" step="1" min="0" value={academicForm.backlogs}
-                  onChange={e => setAcademicForm(f => ({ ...f, backlogs: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              </div>
-              <button type="submit" disabled={savingAcademics}
-                className="col-span-3 mt-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-                {savingAcademics ? 'Saving...' : 'Save Academic Details'}
-              </button>
-            </form>
+            {loadingAcademics ? (
+              <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
+            ) : (
+              <form onSubmit={handleAcademicsSave} className="space-y-5">
+                <AcademicLevelFields
+                  title="10th / SSLC"
+                  values={academicForm}
+                  setValues={setAcademicForm}
+                  yearKey="tenthYearOfPassing"
+                  percentageKey="tenthPercentage"
+                />
+                <AcademicLevelFields
+                  title="12th / HSC"
+                  values={academicForm}
+                  setValues={setAcademicForm}
+                  yearKey="twelfthYearOfPassing"
+                  percentageKey="twelfthPercentage"
+                />
+                <AcademicLevelFields
+                  title="Diploma"
+                  optional
+                  values={academicForm}
+                  setValues={setAcademicForm}
+                  yearKey="diplomaYearOfPassing"
+                  percentageKey="diplomaPercentage"
+                />
+                <DegreeLevelFields
+                  title="UG / Degree"
+                  values={academicForm}
+                  setValues={setAcademicForm}
+                  prefix="ug"
+                />
+                <DegreeLevelFields
+                  title="PG / Master's"
+                  optional
+                  values={academicForm}
+                  setValues={setAcademicForm}
+                  prefix="pg"
+                />
+                <button type="submit" disabled={savingAcademics}
+                  className="w-full py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+                  {savingAcademics ? 'Saving...' : 'Save Academic Details'}
+                </button>
+              </form>
+            )}
           </div>
           <div className="glass-card p-5">
             <h3 className="font-display font-bold text-gray-800 dark:text-white mb-3">Current Batch</h3>

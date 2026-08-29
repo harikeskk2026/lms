@@ -42,16 +42,6 @@ public class Student {
 
     private String qualification;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "academic_score_type")
-    private AcademicScoreType academicScoreType;
-
-    @Column(name = "academic_score")
-    private Double academicScore;
-
-    @Column(name = "passed_out_year")
-    private Integer passedOutYear;
-
     @Column(name = "linkedin_url")
     private String linkedinUrl;
 
@@ -64,12 +54,6 @@ public class Student {
     @Enumerated(EnumType.STRING)
     @Column(name = "placement_status", nullable = false)
     private PlacementStatus placementStatus = PlacementStatus.SEEKING;
-
-    private Double cgpa;
-
-    private Double percentage;
-
-    private Integer backlogs;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "batch_id")
@@ -145,30 +129,6 @@ public class Student {
         this.qualification = qualification;
     }
 
-    public AcademicScoreType getAcademicScoreType() {
-        return academicScoreType;
-    }
-
-    public void setAcademicScoreType(AcademicScoreType academicScoreType) {
-        this.academicScoreType = academicScoreType;
-    }
-
-    public Double getAcademicScore() {
-        return academicScore;
-    }
-
-    public void setAcademicScore(Double academicScore) {
-        this.academicScore = academicScore;
-    }
-
-    public Integer getPassedOutYear() {
-        return passedOutYear;
-    }
-
-    public void setPassedOutYear(Integer passedOutYear) {
-        this.passedOutYear = passedOutYear;
-    }
-
     public String getLinkedinUrl() {
         return linkedinUrl;
     }
@@ -199,30 +159,6 @@ public class Student {
 
     public void setPlacementStatus(PlacementStatus placementStatus) {
         this.placementStatus = placementStatus;
-    }
-
-    public Double getCgpa() {
-        return cgpa;
-    }
-
-    public void setCgpa(Double cgpa) {
-        this.cgpa = cgpa;
-    }
-
-    public Double getPercentage() {
-        return percentage;
-    }
-
-    public void setPercentage(Double percentage) {
-        this.percentage = percentage;
-    }
-
-    public Integer getBacklogs() {
-        return backlogs;
-    }
-
-    public void setBacklogs(Integer backlogs) {
-        this.backlogs = backlogs;
     }
 
     public Batch getBatch() {

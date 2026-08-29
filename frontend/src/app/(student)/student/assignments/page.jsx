@@ -1,15 +1,19 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns'
-import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Download } from 'lucide-react'
+import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye, ZoomIn, ZoomOut } from 'lucide-react'
 import { useAssignments } from '@/hooks/useStudentDashboard'
 import { studentApi, resolveFileUrl } from '@/lib/api'
 import toast from 'react-hot-toast'
 import SkeletonCard from '@/components/student/SkeletonCard'
 
 const FILTERS = ['All', 'Pending', 'Submitted', 'Graded', 'Overdue']
+const ALLOWED_SUBMISSION_EXTENSIONS = ['.pdf', '.docx', '.xls', '.xlsx']
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 3
+const ZOOM_STEP = 0.25
 
 function dueDateLabel(dueDate) {
   const due = new Date(dueDate)
@@ -34,6 +38,18 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
   const [file, setFile] = useState(null)
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const handleFileChange = (e) => {
+    const picked = e.target.files[0]
+    if (!picked) return
+    const ext = picked.name.slice(picked.name.lastIndexOf('.')).toLowerCase()
+    if (!ALLOWED_SUBMISSION_EXTENSIONS.includes(ext)) {
+      toast.error('Only PDF, DOCX, XLS, or XLSX files are allowed')
+      e.target.value = ''
+      return
+    }
+    setFile(picked)
+  }
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -72,9 +88,9 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
           {file ? (
             <p className="text-sm font-medium text-purple-700 dark:text-purple-300">{file.name}</p>
           ) : (
-            <p className="text-sm text-gray-400">Click to upload or drag & drop<br /><span className="text-xs font-normal">PDF, ZIP, PY, JS, TXT, DOCX</span></p>
+            <p className="text-sm text-gray-400">Click to upload or drag & drop<br /><span className="text-xs">PDF, DOCX, XLS, XLSX</span></p>
           )}
-          <input type="file" className="hidden" onChange={e => setFile(e.target.files[0])} />
+          <input type="file" accept=".pdf,.docx,.xls,.xlsx" className="hidden" onChange={handleFileChange} />
         </label>
 
         <textarea
@@ -97,9 +113,181 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
   )
 }
 
+// Renders each PDF page onto its own <canvas> via pdf.js instead of relying on
+// the browser's built-in PDF plugin (which upscales blurrily inside a resized
+// iframe). The canvas's pixel buffer is rendered at `effectiveScale * devicePixelRatio`
+// (clamped 2x–3x) while its CSS size stays at `effectiveScale` — a sharp bitmap
+// displayed at a smaller/matching CSS size, so text and lines stay crisp on
+// Retina/high-DPI screens instead of being scaled up from a low-res render.
+// `effectiveScale` itself is `containerWidth-fit-baseline * zoomMultiplier`, so the
+// page fills the available width by default and the +/-/reset controls zoom
+// further from there — every zoom level re-renders at full sharpness rather than
+// stretching a fixed-resolution bitmap.
+function PdfCanvasViewer({ url, zoomMultiplier }) {
+  const scrollRef = useRef(null)
+  const canvasRefs = useRef([])
+  const renderTasksRef = useRef([])
+  const pdfRef = useRef(null)
+  const nativeWidthRef = useRef(null)
+
+  const [numPages, setNumPages] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setNumPages(0)
+    pdfRef.current = null
+    nativeWidthRef.current = null
+
+    ;(async () => {
+      try {
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+        const pdf = await pdfjsLib.getDocument(url).promise
+        if (cancelled) return
+        const firstPage = await pdf.getPage(1)
+        nativeWidthRef.current = firstPage.getViewport({ scale: 1 }).width
+        pdfRef.current = pdf
+        setNumPages(pdf.numPages)
+      } catch (e) {
+        console.error(e)
+        if (!cancelled) setError('Failed to load PDF preview')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [url])
+
+  // Auto-fit the page to the available width on load and on modal/window resize.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect?.width
+      if (width) setContainerWidth(width)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const baseScale = containerWidth && nativeWidthRef.current
+    ? (containerWidth - 32) / nativeWidthRef.current
+    : 1
+  const effectiveScale = Math.max(0.1, baseScale * zoomMultiplier)
+
+  useEffect(() => {
+    const pdf = pdfRef.current
+    if (!pdf || numPages === 0 || !containerWidth) return
+    let cancelled = false
+
+    renderTasksRef.current.forEach(t => t?.cancel?.())
+    renderTasksRef.current = []
+
+    const outputScale = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3)
+
+    ;(async () => {
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        if (cancelled) return
+        const canvas = canvasRefs.current[pageNum - 1]
+        if (!canvas) continue
+        const page = await pdf.getPage(pageNum)
+        const cssViewport = page.getViewport({ scale: effectiveScale })
+        const renderViewport = page.getViewport({ scale: effectiveScale * outputScale })
+
+        canvas.width = Math.ceil(renderViewport.width)
+        canvas.height = Math.ceil(renderViewport.height)
+        canvas.style.width = `${Math.ceil(cssViewport.width)}px`
+        canvas.style.height = `${Math.ceil(cssViewport.height)}px`
+
+        const ctx = canvas.getContext('2d')
+        const task = page.render({ canvasContext: ctx, viewport: renderViewport })
+        renderTasksRef.current[pageNum - 1] = task
+        try {
+          await task.promise
+        } catch (e) {
+          if (e?.name !== 'RenderingCancelledException') console.error(e)
+        }
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [numPages, containerWidth, effectiveScale])
+
+  useEffect(() => () => pdfRef.current?.destroy?.(), [])
+
+  if (error) {
+    return <div className="flex-1 flex items-center justify-center text-sm text-gray-500">{error}</div>
+  }
+
+  return (
+    <div
+      ref={scrollRef}
+      onContextMenu={e => e.preventDefault()}
+      className="flex-1 min-h-0 w-full overflow-auto bg-gray-100 flex flex-col items-center gap-4 p-4"
+    >
+      {loading && <p className="text-sm text-gray-500 py-8">Loading preview…</p>}
+      {Array.from({ length: numPages }).map((_, i) => (
+        <canvas key={i} ref={el => (canvasRefs.current[i] = el)} className="shadow-md bg-white" />
+      ))}
+    </div>
+  )
+}
+
+function ViewAttachmentModal({ url, name, onClose }) {
+  const [zoomMultiplier, setZoomMultiplier] = useState(1)
+  const isPdf = /\.pdf($|\?)/i.test(url)
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 flex-shrink-0 bg-white rounded-t-2xl">
+          <h3 className="font-display font-bold text-sm sm:text-base text-gray-800 truncate">{name || 'Assignment attachment'}</h3>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {isPdf && (
+              <>
+                <button type="button" onClick={() => setZoomMultiplier(z => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(2)))}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100" title="Zoom out">
+                  <ZoomOut size={18} />
+                </button>
+                <button type="button" onClick={() => setZoomMultiplier(1)}
+                  className="text-xs font-semibold text-gray-500 hover:text-gray-800 w-12 text-center" title="Reset zoom">
+                  {Math.round(zoomMultiplier * 100)}%
+                </button>
+                <button type="button" onClick={() => setZoomMultiplier(z => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(2)))}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100" title="Zoom in">
+                  <ZoomIn size={18} />
+                </button>
+                <div className="w-px h-5 bg-gray-200 mx-1" />
+              </>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0"><X size={20} /></button>
+          </div>
+        </div>
+        {isPdf ? (
+          <PdfCanvasViewer url={url} zoomMultiplier={zoomMultiplier} />
+        ) : (
+          <div className="flex-1 min-h-0 w-full flex items-center justify-center text-sm text-gray-500 p-6 text-center">
+            Preview isn't available for this file type. Ask your instructor for a PDF version if you need to view it here.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 
 function AssignmentCard({ a, onSubmit }) {
   const [expanded, setExpanded] = useState(false)
+  const [viewingAttachment, setViewingAttachment] = useState(false)
   const s = a.submission
   const isOverdue = a.isOverdue
   const statusLabel = s ? s.status : isOverdue ? 'OVERDUE' : 'PENDING'
@@ -141,12 +329,20 @@ function AssignmentCard({ a, onSubmit }) {
           </button>
         )}
         {a.attachmentUrl && (
-          <a href={resolveFileUrl(a.attachmentUrl)} target="_blank" rel="noopener noreferrer"
+          <button type="button" onClick={() => setViewingAttachment(true)}
             className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:underline font-medium mt-2">
-            <Paperclip size={12} /> {a.attachmentName || 'Assignment attachment'} <Download size={11} />
-          </a>
+            <Paperclip size={12} /> {a.attachmentName || 'Assignment attachment'} <Eye size={11} />
+          </button>
         )}
       </div>
+
+      {viewingAttachment && (
+        <ViewAttachmentModal
+          url={resolveFileUrl(a.attachmentUrl)}
+          name={a.attachmentName}
+          onClose={() => setViewingAttachment(false)}
+        />
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between flex-wrap gap-2">

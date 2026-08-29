@@ -152,7 +152,6 @@ export default function StudentsPage() {
           phone: form.phone,
           address: form.address,
           qualification: form.qualification,
-          academicScoreType, academicScore, passedOutYear,
           linkedinUrl: form.linkedinUrl,
           githubUrl: form.githubUrl,
           placementStatus: form.placementStatus,

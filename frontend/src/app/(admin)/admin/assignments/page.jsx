@@ -410,7 +410,7 @@ export default function AssignmentsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF or DOC only)</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF, DOCX, or XLS only)</label>
             {form.attachmentName ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
                 <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate">
@@ -424,7 +424,7 @@ export default function AssignmentsPage() {
             ) : (
               <input
                 type="file"
-                accept=".pdf,.doc,.docx"
+                accept=".pdf,.docx,.xls,.xlsx"
                 onChange={handleFileChange}
                 disabled={uploading}
                 className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:text-sm file:font-semibold hover:file:bg-purple-100"

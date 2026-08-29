@@ -1,9 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Download,
-  Send, Lock, Trash2, CheckCircle2,
+  Send, Lock, Trash2, CheckCircle2, Search, RefreshCw,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -23,17 +23,34 @@ const ROW_STATUS_COLORS = {
   LATE:      'bg-amber-100 text-amber-700',
 }
 
+const ROW_STATUS_LABELS = {
+  PENDING:   'Not Submitted',
+  SUBMITTED: 'Submitted',
+  LATE:      'Late',
+}
+
+const EVAL_STATUS_COLORS = {
+  EVALUATED: 'bg-green-100 text-green-700',
+  PENDING:   'bg-gray-100 text-gray-500',
+}
+
+const SUBMISSIONS_PAGE_SIZE = 10
+const EMPTY_SUBMISSION_FILTERS = { search: '', status: '', evaluation: '', dateFrom: '', dateTo: '' }
+
 export default function AssignmentDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [assignment, setAssignment] = useState(null)
   const [submissions, setSubmissions] = useState([])
-  const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [subLoading, setSubLoading] = useState(true)
+  const [subError, setSubError] = useState(false)
   const [gradeInputs, setGradeInputs] = useState({})
   const [feedbackInputs, setFeedbackInputs] = useState({})
   const [saving, setSaving] = useState({})
+  const [filters, setFilters] = useState(EMPTY_SUBMISSION_FILTERS)
+  const [page, setPage] = useState(1)
+  const searchTimer = useRef(null)
 
   const loadAssignment = () => {
     setLoading(true)
@@ -45,10 +62,10 @@ export default function AssignmentDetailPage() {
 
   const loadSubmissions = () => {
     setSubLoading(true)
+    setSubError(false)
     submissionService.list(id)
       .then(r => {
         setSubmissions(r.data.submissions)
-        setSummary(r.data.summary)
         const grades = {}, feedbacks = {}
         r.data.submissions.forEach(s => {
           if (s.submissionId) {
@@ -59,11 +76,57 @@ export default function AssignmentDetailPage() {
         setGradeInputs(grades)
         setFeedbackInputs(feedbacks)
       })
-      .catch(err => toast.error(err.message || 'Failed to load submissions'))
+      .catch(err => { toast.error(err.message || 'Failed to load submissions'); setSubError(true) })
       .finally(() => setSubLoading(false))
   }
 
   useEffect(() => { loadAssignment(); loadSubmissions() }, [id])
+
+  // Summary cards always reflect every student in the batch, independent of the
+  // filters/search applied to the table below.
+  const stats = useMemo(() => ({
+    totalStudents: submissions.length,
+    submitted: submissions.filter(s => s.status === 'SUBMITTED').length,
+    notSubmitted: submissions.filter(s => s.status === 'PENDING').length,
+    late: submissions.filter(s => s.status === 'LATE').length,
+    evaluated: submissions.filter(s => s.reviewed).length,
+    pendingEvaluation: submissions.filter(s => s.submissionId && !s.reviewed).length,
+  }), [submissions])
+
+  const filteredSubmissions = useMemo(() => {
+    const q = filters.search.trim().toLowerCase()
+    return submissions.filter(row => {
+      if (q) {
+        const matches = row.studentName?.toLowerCase().includes(q)
+          || row.studentEmail?.toLowerCase().includes(q)
+          || String(row.studentId).includes(q)
+        if (!matches) return false
+      }
+      if (filters.status && row.status !== filters.status) return false
+      if (filters.evaluation === 'EVALUATED' && !row.reviewed) return false
+      if (filters.evaluation === 'PENDING' && (!row.submissionId || row.reviewed)) return false
+      if (filters.dateFrom && (!row.submittedAt || new Date(row.submittedAt) < new Date(filters.dateFrom))) return false
+      if (filters.dateTo && (!row.submittedAt || new Date(row.submittedAt) > new Date(`${filters.dateTo}T23:59:59`))) return false
+      return true
+    })
+  }, [submissions, filters])
+
+  const totalSubmissionPages = Math.max(1, Math.ceil(filteredSubmissions.length / SUBMISSIONS_PAGE_SIZE))
+  const validSubmissionPage = Math.min(page, totalSubmissionPages)
+  const pagedSubmissions = filteredSubmissions.slice(
+    (validSubmissionPage - 1) * SUBMISSIONS_PAGE_SIZE,
+    validSubmissionPage * SUBMISSIONS_PAGE_SIZE
+  )
+
+  const handleSearch = (v) => {
+    clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => { setFilters(f => ({ ...f, search: v })); setPage(1) }, 300)
+  }
+
+  const updateFilter = (key, value) => {
+    setFilters(f => ({ ...f, [key]: value }))
+    setPage(1)
+  }
 
   const handlePublish = async () => {
     try { await assignmentService.publish(id); toast.success('Assignment published'); loadAssignment() }
@@ -194,10 +257,12 @@ export default function AssignmentDetailPage() {
           <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Submissions</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: 'Total Students', value: summary?.totalStudents ?? '—', color: 'text-gray-700 dark:text-gray-300' },
-              { label: 'Submitted',      value: summary?.submitted ?? '—',     color: 'text-green-600' },
-              { label: 'Pending',        value: summary?.pending ?? '—',       color: 'text-gray-500' },
-              { label: 'Late',           value: summary?.late ?? '—',          color: 'text-amber-600' },
+              { label: 'Total Students',     value: subLoading ? '—' : stats.totalStudents,     color: 'text-gray-700 dark:text-gray-300' },
+              { label: 'Submitted',          value: subLoading ? '—' : stats.submitted,          color: 'text-green-600' },
+              { label: 'Not Submitted',      value: subLoading ? '—' : stats.notSubmitted,       color: 'text-gray-500' },
+              { label: 'Late Submissions',   value: subLoading ? '—' : stats.late,               color: 'text-amber-600' },
+              { label: 'Evaluated',          value: subLoading ? '—' : stats.evaluated,          color: 'text-purple-600' },
+              { label: 'Pending Evaluation', value: subLoading ? '—' : stats.pendingEvaluation,  color: 'text-blue-600' },
             ].map(({ label, value, color }) => (
               <div key={label} className="text-center px-3 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
                 <p className={`text-xl font-extrabold font-display ${color}`}>{value}</p>
@@ -213,29 +278,80 @@ export default function AssignmentDetailPage() {
         <div className="px-5 py-4 border-b border-purple-100 dark:border-purple-900/30">
           <h3 className="font-display font-bold text-gray-800 dark:text-white">Submission Management</h3>
         </div>
+
+        {/* Filters */}
+        <div className="px-5 py-4 border-b border-purple-100 dark:border-purple-900/30 flex flex-wrap gap-3">
+          <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 flex-1 min-w-[220px]">
+            <Search size={15} className="text-purple-400 flex-shrink-0" />
+            <input
+              placeholder="Search by name, email, or student ID..."
+              className="bg-transparent text-sm outline-none w-full text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
+              onChange={e => handleSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+            value={filters.status} onChange={e => updateFilter('status', e.target.value)}
+          >
+            <option value="">All Statuses</option>
+            <option value="PENDING">Not Submitted</option>
+            <option value="SUBMITTED">Submitted (On-time)</option>
+            <option value="LATE">Late</option>
+          </select>
+          <select
+            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+            value={filters.evaluation} onChange={e => updateFilter('evaluation', e.target.value)}
+          >
+            <option value="">All Evaluations</option>
+            <option value="EVALUATED">Evaluated</option>
+            <option value="PENDING">Pending Evaluation</option>
+          </select>
+          <input
+            type="date" value={filters.dateFrom} onChange={e => updateFilter('dateFrom', e.target.value)}
+            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+            title="Submitted from"
+          />
+          <input
+            type="date" value={filters.dateTo} onChange={e => updateFilter('dateTo', e.target.value)}
+            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+            title="Submitted to"
+          />
+          <button onClick={loadSubmissions} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+            <RefreshCw size={15} />
+          </button>
+        </div>
+
         {subLoading ? (
           <div className="p-6 space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
+        ) : subError ? (
+          <div className="p-10 text-center text-gray-400">
+            Failed to load submissions.
+            <button onClick={loadSubmissions} className="block mx-auto mt-2 text-sm text-purple-600 font-semibold hover:underline">Try again</button>
+          </div>
         ) : submissions.length === 0 ? (
           <div className="p-10 text-center text-gray-400">No students in this batch</div>
+        ) : filteredSubmissions.length === 0 ? (
+          <div className="p-10 text-center text-gray-400">No submissions match your filters</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['Student', 'Status', 'Submitted', 'File', 'Marks', 'Feedback', 'Reviewed', ''].map(h => (
+                  {['Student ID', 'Student', 'Status', 'Submitted', 'File', 'Marks', 'Feedback', 'Evaluation', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {submissions.map(row => (
+                {pagedSubmissions.map(row => (
                   <tr key={row.studentId} className="border-b border-gray-50 dark:border-gray-800/50">
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{row.studentId}</td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-gray-800 dark:text-white">{row.studentName}</p>
                       <p className="text-xs text-gray-400">{row.studentEmail}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROW_STATUS_COLORS[row.status]}`}>{row.status}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROW_STATUS_COLORS[row.status]}`}>{ROW_STATUS_LABELS[row.status]}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {row.submittedAt ? format(new Date(row.submittedAt), 'dd MMM, HH:mm') : '—'}
@@ -273,9 +389,9 @@ export default function AssignmentDetailPage() {
                     <td className="px-4 py-3">
                       {row.submissionId ? (
                         <button onClick={() => handleMarkReviewed(row)}
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${row.reviewed ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-                          title={row.reviewed ? 'Reviewed' : 'Mark as reviewed'}>
-                          <CheckCircle2 size={14} />
+                          className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full transition-colors ${row.reviewed ? EVAL_STATUS_COLORS.EVALUATED : EVAL_STATUS_COLORS.PENDING} hover:opacity-80`}
+                          title={row.reviewed ? 'Evaluated — click to mark pending' : 'Mark as evaluated'}>
+                          <CheckCircle2 size={12} /> {row.reviewed ? 'Evaluated' : 'Pending'}
                         </button>
                       ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
@@ -291,6 +407,26 @@ export default function AssignmentDetailPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!subLoading && !subError && filteredSubmissions.length > SUBMISSIONS_PAGE_SIZE && (
+          <div className="flex items-center justify-between px-5 py-4 border-t border-purple-100 dark:border-purple-900/30">
+            <p className="text-xs text-gray-500">
+              Showing {(validSubmissionPage - 1) * SUBMISSIONS_PAGE_SIZE + 1}–{Math.min(validSubmissionPage * SUBMISSIONS_PAGE_SIZE, filteredSubmissions.length)} of {filteredSubmissions.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={validSubmissionPage === 1}
+                className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
+                ← Prev
+              </button>
+              <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{validSubmissionPage} / {totalSubmissionPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalSubmissionPages, p + 1))} disabled={validSubmissionPage === totalSubmissionPages}
+                className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
+                Next →
+              </button>
+            </div>
           </div>
         )}
       </div>
