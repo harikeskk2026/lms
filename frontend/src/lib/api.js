@@ -1,4 +1,5 @@
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import tokenStorage from '@/utilities/tokenStorage'
 
 const api = axios.create({
@@ -14,62 +15,24 @@ api.interceptors.request.use(config => {
   return config
 })
 
-// ─── Response: auto-refresh on TOKEN_EXPIRED ──────────────────────────────────
-let isRefreshing = false
-let failedQueue = []
-
-function processQueue(error, token = null) {
-  failedQueue.forEach(prom => {
-    if (error) prom.reject(error)
-    else prom.resolve(token)
-  })
-  failedQueue = []
-}
+// ─── Response: on an expired/invalid session, log out once and redirect ──────
+// The API has no refresh-token endpoint - a 401 here means the token is gone
+// for good, so there's nothing to retry. Log out immediately instead of
+// letting every subsequent call (including polling components) 401 again and
+// show its own error - that's what caused "authorization error" to reappear
+// repeatedly instead of the user just being sent back to the login page once.
+let sessionExpiredHandled = false
 
 api.interceptors.response.use(
   res => res,
-  async err => {
-    const original = err.config
-
-    if (
-      err.response?.status === 401 &&
-      err.response?.data?.code === 'TOKEN_EXPIRED' &&
-      !original._retry
-    ) {
-      original._retry = true
-
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        }).then(token => {
-          original.headers.Authorization = `Bearer ${token}`
-          return api(original)
-        }).catch(e => Promise.reject(e))
-      }
-
-      isRefreshing = true
-
-      try {
-        const baseURL = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api'
-        const { data } = await axios.post(
-          `${baseURL}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        )
-        const newToken = data.accessToken
-        tokenStorage.setSession(newToken, tokenStorage.getUser())
-        processQueue(null, newToken)
-        original.headers.Authorization = `Bearer ${newToken}`
-        return api(original)
-      } catch (refreshErr) {
-        processQueue(refreshErr, null)
+  err => {
+    if (err.response?.status === 401 && typeof window !== 'undefined') {
+      const alreadyOnLogin = window.location.pathname.startsWith('/login')
+      if (!alreadyOnLogin && !sessionExpiredHandled) {
+        sessionExpiredHandled = true
         tokenStorage.clear()
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-        return Promise.reject(refreshErr)
-      } finally {
-        isRefreshing = false
+        toast.error(err.response?.data?.message || 'Your session has expired. Please log in again.')
+        window.location.href = '/login'
       }
     }
 

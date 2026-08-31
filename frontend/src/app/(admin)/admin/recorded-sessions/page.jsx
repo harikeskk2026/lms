@@ -59,11 +59,19 @@ export default function RecordedSessionsPage() {
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
   }, [])
 
-  // Poll processing status for any session stuck in PROCESSING
+  // Poll processing status for any session stuck in PROCESSING. Runs silently
+  // (no toast per tick) and stops on the first failure instead of retrying
+  // every 5s forever - a stale token would otherwise toast "authorization
+  // error" repeatedly until the tab is closed.
   useEffect(() => {
     const processing = sessions.filter(s => s.status === 'PROCESSING')
     if (processing.length === 0) return
-    const timer = setInterval(load, 5000)
+    const timer = setInterval(async () => {
+      const ok = await recordedSessionService.listSessions()
+        .then(r => { setSessions(r.data || []); return true })
+        .catch(() => false)
+      if (!ok) clearInterval(timer)
+    }, 5000)
     return () => clearInterval(timer)
   }, [sessions])
 

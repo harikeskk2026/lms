@@ -1,23 +1,15 @@
-import axios from 'axios'
-import tokenStorage from '@/utilities/tokenStorage'
-
-const JAVA_API_BASE_URL = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:8081/api'
-
-const httpClient = axios.create({
-  baseURL: JAVA_API_BASE_URL,
-  timeout: 10000,
-})
-
-httpClient.interceptors.request.use(config => {
-  const token = tokenStorage.getToken()
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
+import api from '@/lib/api'
 
 /**
  * Single choke point for every HTTP request made against the Java API.
  * Components never call axios/fetch directly - they go through a `services/*`
  * file, which calls this.
+ *
+ * Routes through the shared `api` axios instance in `@/lib/api` so every
+ * service gets the same base URL and the same 401/expired-session handling
+ * (previously this had its own axios client with no auth-error handling at
+ * all, which let expired-token errors surface repeatedly to the user instead
+ * of logging them out).
  *
  * @param {Object} options
  * @param {'GET'|'POST'|'PUT'|'PATCH'|'DELETE'} [options.method='GET']
@@ -31,12 +23,13 @@ httpClient.interceptors.request.use(config => {
  */
 export default async function apiCall({ method = 'GET', url, data, params, headers, onUploadProgress, timeout }) {
   try {
-    const response = await httpClient.request({ method, url, data, params, headers, onUploadProgress, timeout })
+    const response = await api.request({ method, url, data, params, headers, onUploadProgress, timeout })
     return response.data
   } catch (error) {
     const message = error.response?.data?.message || error.message || 'Request failed'
     const apiError = new Error(message)
     apiError.status = error.response?.status
+    apiError.code = error.response?.data?.code
     apiError.errors = error.response?.data?.errors
     throw apiError
   }

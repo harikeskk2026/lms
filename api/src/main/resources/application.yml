@@ -30,7 +30,7 @@ app:
     dir: ${SECURE_VIDEO_DIR:secure-video}
   jwt:
     secret: ${JWT_SECRET}
-    expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   playback-token:
     expiration-seconds: ${PLAYBACK_TOKEN_EXPIRATION_SECONDS:600}
   cors:

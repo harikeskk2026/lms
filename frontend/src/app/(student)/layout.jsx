@@ -5,14 +5,14 @@ import { useAuth } from '@/context/AuthContext'
 import StudentShell from '@/components/layout/StudentShell'
 
 export default function StudentLayout({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, isLoggingOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     if (loading) return
     if (!user) {
-      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
+      router.replace(isLoggingOut() ? '/login' : `/login?redirect=${encodeURIComponent(pathname)}`)
     } else if (user.role !== 'STUDENT') {
       router.replace('/admin/dashboard')
     }

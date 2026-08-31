@@ -13,6 +13,14 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 
+/**
+ * The plain unique index on {@code email} can't back the case-insensitive lookup
+ * ({@code findByEmailIgnoreCase}, used on every login) because that query wraps both
+ * sides in {@code LOWER(...)}. A functional index (create index ... on users (lower(email)))
+ * fixes that, but Hibernate's ddl-auto=update quotes @Index.columnList as a literal
+ * identifier rather than emitting it as SQL, so it can't generate this DDL - it was
+ * applied directly against the database instead (this project has no migration tool).
+ */
 @Entity
 @Table(name = "users")
 public class User {

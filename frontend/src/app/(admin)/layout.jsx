@@ -7,14 +7,14 @@ import AdminShell from '@/components/layout/AdminShell'
 const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN', 'TRAINER']
 
 export default function AdminLayout({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, isLoggingOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     if (loading) return
     if (!user) {
-      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
+      router.replace(isLoggingOut() ? '/login' : `/login?redirect=${encodeURIComponent(pathname)}`)
     } else if (!ADMIN_ROLES.includes(user.role)) {
       router.replace('/student/dashboard')
     }

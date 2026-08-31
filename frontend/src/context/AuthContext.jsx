@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import api from '@/lib/api'
 import authService from '@/services/authService'
 import tokenStorage from '@/utilities/tokenStorage'
@@ -11,6 +11,14 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
+
+  // Set while an explicit logout is in flight, so the route guards in
+  // (admin)/layout.jsx and (student)/layout.jsx - which also redirect to
+  // /login whenever `user` goes null, tagging the current path as `?redirect=`
+  // so a session-expiry redirect can return here after re-login - know not to
+  // race logout's own plain redirect to /login with a `?redirect=` one.
+  const loggingOutRef = useRef(false)
+  const isLoggingOut = useCallback(() => loggingOutRef.current, [])
 
   // On mount: hydrate from the cached user immediately (avoids a blank flash
   // on refresh), then re-verify the token against /auth/me in the background.
@@ -45,6 +53,7 @@ export function AuthProvider({ children }) {
   }, [router])
 
   const logout = useCallback(async () => {
+    loggingOutRef.current = true
     try { await api.post('/auth/logout') } catch {}
     tokenStorage.clear()
     setUser(null)
@@ -52,6 +61,7 @@ export function AuthProvider({ children }) {
   }, [router])
 
   const logoutAll = useCallback(async () => {
+    loggingOutRef.current = true
     try { await api.post('/auth/logout-all') } catch {}
     tokenStorage.clear()
     setUser(null)
@@ -59,7 +69,7 @@ export function AuthProvider({ children }) {
   }, [router])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, logoutAll, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, logoutAll, setUser, isLoggingOut }}>
       {children}
     </AuthContext.Provider>
   )
