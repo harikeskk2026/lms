@@ -264,10 +264,10 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             recordedSessionAuditLogRepository.deleteAllInBatch();
             recordedSessionRepository.deleteAllInBatch();
 
-            syllabusTopicRepository.deleteAllInBatch();
-            syllabusModuleRepository.deleteAllInBatch();
             sessionRepository.deleteAllInBatch();
             materialRepository.deleteAllInBatch();
+            syllabusTopicRepository.deleteAllInBatch();
+            syllabusModuleRepository.deleteAllInBatch();
             courseRepository.deleteAllInBatch();
 
             // Retain or recreate active Super Admin, Admin, and Student system accounts
