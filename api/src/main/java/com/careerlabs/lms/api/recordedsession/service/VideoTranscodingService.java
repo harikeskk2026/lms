@@ -19,23 +19,41 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
 /**
- * Packages an uploaded video into AES-128-encrypted HLS via FFmpeg, run in the
- * background so the upload request returns immediately. This is real content-key
- * encryption (not "hide the URL") — the generated .m3u8's EXT-X-KEY line points
- * back at our own token-gated /stream/key endpoint, never at a bare file path.
+ * Packages an uploaded video into an adaptive, AES-128-encrypted HLS ladder via
+ * FFmpeg, run in the background so the upload request returns immediately. This
+ * is real content-key encryption (not "hide the URL") — the generated .m3u8's
+ * EXT-X-KEY line points back at our own token-gated /stream/key endpoint, never
+ * at a bare file path.
  *
- * Single 720p-capped rendition in this phase; a multi-bitrate ladder would repeat
- * this same FFmpeg step per resolution rather than needing a redesign.
+ * A separate FFmpeg pass runs per rendition (simpler and more robust to reason
+ * about than a single multi-output -var_stream_map invocation), all sharing one
+ * AES key so a single authorized /stream/key request covers every rendition.
+ * Renditions taller than the source are skipped — this never upscales.
  */
 @Service
 public class VideoTranscodingService {
 
     private static final Logger log = LoggerFactory.getLogger(VideoTranscodingService.class);
     private static final int STDERR_TAIL_LINES = 40;
+
+    /** label, target height, video bitrate (kbps), audio bitrate (kbps). */
+    private record Rendition(String label, int height, int videoKbps, int audioKbps) {
+        int bandwidthBps() {
+            return (videoKbps + audioKbps) * 1000;
+        }
+    }
+
+    private static final List<Rendition> LADDER = List.of(
+            new Rendition("360p", 360, 800, 96),
+            new Rendition("480p", 480, 1400, 128),
+            new Rendition("720p", 720, 2800, 128),
+            new Rendition("1080p", 1080, 5000, 192)
+    );
 
     private final RecordedSessionRepository recordedSessionRepository;
     private final RecordedSessionAssetRepository recordedSessionAssetRepository;
@@ -64,7 +82,14 @@ public class VideoTranscodingService {
             // URI at serve time to include the caller's current playback token.
             Files.writeString(keyInfoFile, "key\n" + keyFile.toAbsolutePath() + "\n", StandardCharsets.UTF_8);
 
-            runFfmpeg(sourceFile, dir, keyInfoFile, manifestPath);
+            int[] sourceDimensions = probeVideoDimensions(sourceFile);
+            List<Rendition> renditions = selectRenditions(sourceDimensions);
+
+            for (Rendition rendition : renditions) {
+                runFfmpegForRendition(sourceFile, dir, keyInfoFile, rendition);
+            }
+            writeMasterPlaylist(manifestPath, renditions, sourceDimensions);
+
             Integer durationSeconds = probeDurationSeconds(sourceFile);
             long fileSizeBytes = sumSegmentSizes(dir);
 
@@ -76,26 +101,67 @@ public class VideoTranscodingService {
         }
     }
 
+    /** Never upscales: a tier is skipped if the source is meaningfully shorter than it. Falls back to 720p alone if the source resolution couldn't be probed. */
+    private List<Rendition> selectRenditions(int[] sourceDimensions) {
+        if (sourceDimensions == null) {
+            return List.of(LADDER.get(2));
+        }
+        int sourceHeight = sourceDimensions[1];
+        List<Rendition> selected = new ArrayList<>();
+        for (Rendition rendition : LADDER) {
+            if (sourceHeight >= rendition.height() * 0.9) {
+                selected.add(rendition);
+            }
+        }
+        return selected.isEmpty() ? List.of(LADDER.get(0)) : selected;
+    }
+
     private void writeRandomKey(Path keyFile) throws IOException {
         byte[] key = new byte[16];
         new SecureRandom().nextBytes(key);
         Files.write(keyFile, key);
     }
 
-    private void runFfmpeg(Path source, Path outDir, Path keyInfoFile, Path manifestPath) throws IOException, InterruptedException {
+    private void runFfmpegForRendition(Path source, Path outDir, Path keyInfoFile, Rendition rendition)
+            throws IOException, InterruptedException {
+        Path playlistPath = outDir.resolve(rendition.label() + ".m3u8");
         List<String> command = List.of(
                 "ffmpeg", "-y",
                 "-i", source.toAbsolutePath().toString(),
-                "-vf", "scale='min(1280,iw)':'-2'",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-profile:v", "main",
-                "-c:a", "aac", "-b:a", "128k", "-ac", "2",
+                "-vf", "scale=-2:" + rendition.height(),
+                "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "main",
+                "-b:v", rendition.videoKbps() + "k", "-maxrate", rendition.videoKbps() + "k",
+                "-bufsize", (rendition.videoKbps() * 2) + "k",
+                "-c:a", "aac", "-b:a", rendition.audioKbps() + "k", "-ac", "2",
                 "-hls_time", "6",
                 "-hls_playlist_type", "vod",
                 "-hls_key_info_file", keyInfoFile.toAbsolutePath().toString(),
-                "-hls_segment_filename", outDir.resolve("segment%03d.ts").toAbsolutePath().toString(),
-                manifestPath.toAbsolutePath().toString()
+                "-hls_segment_filename", outDir.resolve(rendition.label() + "_segment%03d.ts").toAbsolutePath().toString(),
+                playlistPath.toAbsolutePath().toString()
         );
+        runProcess(command, "FFmpeg (" + rendition.label() + ")");
+    }
 
+    private void writeMasterPlaylist(Path manifestPath, List<Rendition> renditions, int[] sourceDimensions) throws IOException {
+        StringBuilder sb = new StringBuilder("#EXTM3U\n#EXT-X-VERSION:3\n");
+        for (Rendition rendition : renditions) {
+            int width = scaledWidth(sourceDimensions, rendition.height());
+            sb.append("#EXT-X-STREAM-INF:BANDWIDTH=").append(rendition.bandwidthBps())
+                    .append(",RESOLUTION=").append(width).append('x').append(rendition.height())
+                    .append('\n')
+                    .append(rendition.label()).append(".m3u8\n");
+        }
+        Files.writeString(manifestPath, sb.toString(), StandardCharsets.UTF_8);
+    }
+
+    private int scaledWidth(int[] sourceDimensions, int targetHeight) {
+        if (sourceDimensions == null) return (targetHeight * 16) / 9;
+        double aspect = (double) sourceDimensions[0] / sourceDimensions[1];
+        int width = (int) Math.round(targetHeight * aspect);
+        return width % 2 == 0 ? width : width + 1;
+    }
+
+    private void runProcess(List<String> command, String label) throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.redirectErrorStream(true);
         Process process = builder.start();
@@ -120,10 +186,10 @@ public class VideoTranscodingService {
         boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.MINUTES);
         if (!finished) {
             process.destroyForcibly();
-            throw new IOException("FFmpeg timed out after 30 minutes");
+            throw new IOException(label + " timed out after 30 minutes");
         }
         if (process.exitValue() != 0) {
-            throw new IOException("FFmpeg exited with code " + process.exitValue() + ":\n" + String.join("\n", tail));
+            throw new IOException(label + " exited with code " + process.exitValue() + ":\n" + String.join("\n", tail));
         }
     }
 
@@ -144,6 +210,29 @@ public class VideoTranscodingService {
             return (int) Math.round(Double.parseDouble(durationNode.asText()));
         } catch (Exception e) {
             log.warn("Could not probe video duration: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** Returns [width, height], or null if the source resolution couldn't be probed. */
+    private int[] probeVideoDimensions(Path source) {
+        try {
+            List<String> command = List.of("ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams",
+                    "-select_streams", "v:0", source.toAbsolutePath().toString());
+            Process process = new ProcessBuilder(command).start();
+            String output;
+            try (InputStream in = process.getInputStream()) {
+                output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            process.waitFor(1, java.util.concurrent.TimeUnit.MINUTES);
+
+            JsonNode stream = objectMapper.readTree(output).path("streams").path(0);
+            int width = stream.path("width").asInt(-1);
+            int height = stream.path("height").asInt(-1);
+            if (width <= 0 || height <= 0) return null;
+            return new int[]{width, height};
+        } catch (Exception e) {
+            log.warn("Could not probe video dimensions: {}", e.getMessage());
             return null;
         }
     }

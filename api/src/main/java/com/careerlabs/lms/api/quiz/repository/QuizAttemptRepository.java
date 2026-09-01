@@ -28,7 +28,7 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
 
     List<QuizAttempt> findByQuizIdAndStatus(Long quizId, AttemptStatus status);
 
-    @Query("SELECT a FROM QuizAttempt a WHERE a.status = 'SUBMITTED' AND a.completedAt >= :since")
+    @Query("SELECT a FROM QuizAttempt a WHERE a.status = 'SUBMITTED' AND COALESCE(a.completedAt, a.startedAt) >= :since")
     List<QuizAttempt> findAllSubmittedSince(@Param("since") Instant since);
 
     List<QuizAttempt> findByStudentIdInAndStatus(List<Long> studentIds, AttemptStatus status);

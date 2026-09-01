@@ -89,6 +89,20 @@ export default function SecureVideoPlayer({ recordedSessionId }) {
             setLoading(false)
           })
           hls.on(Hls.Events.ERROR, (_evt, data) => {
+            console.error('HLS Event Error details JSON:', JSON.stringify({
+              type: data.type,
+              details: data.details,
+              fatal: data.fatal,
+              networkDetails: data.networkDetails ? {
+                status: data.networkDetails.status,
+                statusText: data.networkDetails.statusText,
+                url: data.networkDetails.url
+              } : null,
+              response: data.response ? {
+                code: data.response.code,
+                text: data.response.text
+              } : null
+            }))
             if (data.fatal) {
               setError('Playback error — please reload the page.')
             }

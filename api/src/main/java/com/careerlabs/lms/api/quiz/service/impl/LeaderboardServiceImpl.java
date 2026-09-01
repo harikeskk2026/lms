@@ -58,6 +58,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
 
     private List<Map.Entry<Long, Double>> globalXp() {
         return studentGameStatsRepository.findAll().stream()
+                .filter(s -> s.getTotalXp() > 0)
                 .sorted(Comparator.comparingInt(StudentGameStats::getTotalXp).reversed())
                 .map(s -> Map.entry(s.getStudentId(), (double) s.getTotalXp()))
                 .toList();
@@ -66,9 +67,13 @@ public class LeaderboardServiceImpl implements LeaderboardService {
     private List<Map.Entry<Long, Double>> xpSince(Instant since) {
         Map<Long, Double> xpByStudent = new HashMap<>();
         for (QuizAttempt attempt : quizAttemptRepository.findAllSubmittedSince(since)) {
-            xpByStudent.merge(attempt.getStudentId(), (double) xpFor(attempt), Double::sum);
+            double xp = xpFor(attempt);
+            if (xp > 0) {
+                xpByStudent.merge(attempt.getStudentId(), xp, Double::sum);
+            }
         }
         return xpByStudent.entrySet().stream()
+                .filter(e -> e.getValue() > 0)
                 .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
                 .toList();
     }

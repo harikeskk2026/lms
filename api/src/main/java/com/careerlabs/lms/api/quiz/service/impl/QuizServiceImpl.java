@@ -195,10 +195,22 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional(readOnly = true)
     public List<StudentQuizResponse> listPublished(Long studentId) {
-        return quizRepository.findAllByStatusOrderByCreatedAtDesc(QuizStatus.PUBLISHED).stream()
-                .filter(quiz -> quizAvailabilityService.isAssignedTo(quiz, studentId))
-                .map(quiz -> toStudentResponse(quiz, studentId))
-                .toList();
+        // Use a LinkedHashMap to deduplicate by key (ID for standard quizzes, title for practice quizzes)
+        // while preserving creation-time order. This prevents duplicate practice quizzes (e.g. "Weak Area Practice" ids 8 & 12)
+        // from polluting the student quiz list and Analytics' improvementHistory.
+        java.util.Map<String, StudentQuizResponse> seen = new java.util.LinkedHashMap<>();
+        for (Quiz quiz : quizRepository.findAllByStatusOrderByCreatedAtDesc(QuizStatus.PUBLISHED)) {
+            if (!quizAvailabilityService.isAssignedTo(quiz, studentId)) {
+                continue;
+            }
+            String dedupeKey = (quiz.getTitle() != null && quiz.getTitle().toLowerCase().contains("practice"))
+                    ? "PRACTICE_" + quiz.getTitle().trim().toLowerCase()
+                    : "QUIZ_" + quiz.getId();
+            if (!seen.containsKey(dedupeKey)) {
+                seen.put(dedupeKey, toStudentResponse(quiz, studentId));
+            }
+        }
+        return new java.util.ArrayList<>(seen.values());
     }
 
     @Override

@@ -59,6 +59,9 @@ public class DailyChallengeServiceImpl implements DailyChallengeService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public DailyChallengeResponse getToday(Long studentId) {
         DailyChallenge challenge = getOrCreateToday();
+        if (challenge == null) {
+            return null;
+        }
         Quiz quiz = challenge.getQuiz();
         int totalQuestions = (int) quizQuestionRepository.countByQuizId(quiz.getId());
         boolean attempted = quizAttemptRepository
@@ -73,6 +76,9 @@ public class DailyChallengeServiceImpl implements DailyChallengeService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public StartAttemptResponse start(Long studentId) {
         DailyChallenge challenge = getOrCreateToday();
+        if (challenge == null) {
+            throw new ConflictException("No active questions available for today's challenge yet");
+        }
         return quizAttemptService.start(challenge.getQuiz().getId(), studentId);
     }
 
@@ -86,7 +92,7 @@ public class DailyChallengeServiceImpl implements DailyChallengeService {
                 .filter(Question::isActive)
                 .toList());
         if (pool.isEmpty()) {
-            throw new ConflictException("No active questions available for today's challenge yet");
+            return null;
         }
         Collections.shuffle(pool);
         List<Question> selected = pool.stream().limit(QUESTION_COUNT).toList();

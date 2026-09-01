@@ -267,7 +267,13 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
       const data = res.data
       setAttempt(data)
       const elapsedSec = Math.max(0, Math.floor((Date.now() - new Date(data.startedAt).getTime()) / 1000))
-      setTimeLeft(Math.max(0, data.duration * 60 - elapsedSec))
+      const remainingSec = data.duration * 60 - elapsedSec
+      if (remainingSec <= 0) {
+        toast.error('Quiz attempt time expired.')
+        onComplete?.()
+        return
+      }
+      setTimeLeft(remainingSec)
       questionStartedAt.current = Date.now()
       setPhase('playing')
     } catch (err) {

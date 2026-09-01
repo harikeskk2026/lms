@@ -77,16 +77,21 @@ public class QuizAnalyticsServiceImpl implements QuizAnalyticsService {
     }
 
     private List<QuizAnalyticsResponse.ImprovementItem> buildImprovementHistory(List<QuizAttempt> submitted) {
-        Map<Long, List<QuizAttempt>> byQuiz = submitted.stream()
-                .collect(Collectors.groupingBy(attempt -> attempt.getQuiz().getId()));
+        Map<String, List<QuizAttempt>> byKey = submitted.stream()
+                .collect(Collectors.groupingBy(attempt -> {
+                    com.careerlabs.lms.api.quiz.entity.Quiz q = attempt.getQuiz();
+                    return (q.getTitle() != null && q.getTitle().toLowerCase().contains("practice"))
+                            ? "PRACTICE_" + q.getTitle().trim().toLowerCase()
+                            : "QUIZ_" + q.getId();
+                }));
 
         List<QuizAnalyticsResponse.ImprovementItem> items = new ArrayList<>();
-        for (List<QuizAttempt> attempts : byQuiz.values()) {
+        for (List<QuizAttempt> attempts : byKey.values()) {
             if (attempts.size() < 2) {
                 continue;
             }
             List<QuizAttempt> ordered = attempts.stream()
-                    .sorted(Comparator.comparingInt(QuizAttempt::getAttemptNumber))
+                    .sorted(Comparator.comparing(QuizAttempt::getStartedAt))
                     .toList();
             QuizAttempt first = ordered.get(0);
             QuizAttempt latest = ordered.get(ordered.size() - 1);

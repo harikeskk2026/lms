@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.config;
 
+import com.careerlabs.lms.api.academic.repository.AcademicDetailsRepository;
 import com.careerlabs.lms.api.announcement.repository.*;
 import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
 import com.careerlabs.lms.api.attendance.repository.*;
@@ -13,7 +14,9 @@ import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
 import com.careerlabs.lms.api.placement.repository.DriveRepository;
 import com.careerlabs.lms.api.placement.repository.ResumeDataRepository;
 import com.careerlabs.lms.api.quiz.repository.*;
+import com.careerlabs.lms.api.recordedsession.repository.*;
 import com.careerlabs.lms.api.session.repository.SessionRepository;
+import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
@@ -33,17 +36,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Runner to purge all sample / seed data from the database when app.seed.enabled is false
- * or when app.purge-sample-data is enabled. Preserves active Admin accounts.
+ * Runner to purge all sample / seed data from the database when app.purge-sample-data is enabled.
+ * Preserves active Admin accounts.
  */
 @Component
 @Order(0)
 public class SampleDataPurgeRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(SampleDataPurgeRunner.class);
-
-    @Value("${app.seed.enabled:false}")
-    private boolean seedEnabled;
 
     @Value("${app.purge-sample-data:true}")
     private boolean purgeEnabled;
@@ -86,7 +86,15 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
 
     private final EnrollmentRepository enrollmentRepository;
     private final StudentRepository studentRepository;
+    private final AcademicDetailsRepository academicDetailsRepository;
     private final BatchRepository batchRepository;
+
+    private final PlaybackEventRepository playbackEventRepository;
+    private final PlaybackSessionRepository playbackSessionRepository;
+    private final RecordedSessionAccessBlockRepository recordedSessionAccessBlockRepository;
+    private final RecordedSessionAssetRepository recordedSessionAssetRepository;
+    private final RecordedSessionAuditLogRepository recordedSessionAuditLogRepository;
+    private final RecordedSessionRepository recordedSessionRepository;
 
     private final SyllabusTopicRepository syllabusTopicRepository;
     private final SyllabusModuleRepository syllabusModuleRepository;
@@ -131,7 +139,14 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             NotificationRepository notificationRepository,
             EnrollmentRepository enrollmentRepository,
             StudentRepository studentRepository,
+            AcademicDetailsRepository academicDetailsRepository,
             BatchRepository batchRepository,
+            PlaybackEventRepository playbackEventRepository,
+            PlaybackSessionRepository playbackSessionRepository,
+            RecordedSessionAccessBlockRepository recordedSessionAccessBlockRepository,
+            RecordedSessionAssetRepository recordedSessionAssetRepository,
+            RecordedSessionAuditLogRepository recordedSessionAuditLogRepository,
+            RecordedSessionRepository recordedSessionRepository,
             SyllabusTopicRepository syllabusTopicRepository,
             SyllabusModuleRepository syllabusModuleRepository,
             SessionRepository sessionRepository,
@@ -172,7 +187,14 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
         this.notificationRepository = notificationRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.studentRepository = studentRepository;
+        this.academicDetailsRepository = academicDetailsRepository;
         this.batchRepository = batchRepository;
+        this.playbackEventRepository = playbackEventRepository;
+        this.playbackSessionRepository = playbackSessionRepository;
+        this.recordedSessionAccessBlockRepository = recordedSessionAccessBlockRepository;
+        this.recordedSessionAssetRepository = recordedSessionAssetRepository;
+        this.recordedSessionAuditLogRepository = recordedSessionAuditLogRepository;
+        this.recordedSessionRepository = recordedSessionRepository;
         this.syllabusTopicRepository = syllabusTopicRepository;
         this.syllabusModuleRepository = syllabusModuleRepository;
         this.sessionRepository = sessionRepository;
@@ -186,7 +208,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        if (seedEnabled || !purgeEnabled) {
+        if (!purgeEnabled) {
             return;
         }
 
@@ -200,16 +222,16 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             dailyClassRepository.deleteAllInBatch();
             attendancePolicyRepository.deleteAllInBatch();
 
+            dailyChallengeRepository.deleteAllInBatch();
+            questionAttemptRepository.deleteAllInBatch();
             quizAttemptRepository.deleteAllInBatch();
             quizAssignmentRepository.deleteAllInBatch();
             quizQuestionRepository.deleteAllInBatch();
             quizRepository.deleteAllInBatch();
-            questionAttemptRepository.deleteAllInBatch();
             questionOptionRepository.deleteAllInBatch();
             questionRepository.deleteAllInBatch();
             quizTopicRepository.deleteAllInBatch();
             interviewQuestionRepository.deleteAllInBatch();
-            dailyChallengeRepository.deleteAllInBatch();
 
             assignmentSubmissionRepository.deleteAllInBatch();
             assignmentRepository.deleteAllInBatch();
@@ -229,32 +251,68 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             studentAchievementRepository.deleteAllInBatch();
             notificationRepository.deleteAllInBatch();
 
+            academicDetailsRepository.deleteAllInBatch();
             enrollmentRepository.deleteAllInBatch();
             studentRepository.deleteAllInBatch();
+            collegeRepository.deleteAllInBatch();
             batchRepository.deleteAllInBatch();
+
+            playbackEventRepository.deleteAllInBatch();
+            playbackSessionRepository.deleteAllInBatch();
+            recordedSessionAccessBlockRepository.deleteAllInBatch();
+            recordedSessionAssetRepository.deleteAllInBatch();
+            recordedSessionAuditLogRepository.deleteAllInBatch();
+            recordedSessionRepository.deleteAllInBatch();
 
             syllabusTopicRepository.deleteAllInBatch();
             syllabusModuleRepository.deleteAllInBatch();
             sessionRepository.deleteAllInBatch();
             materialRepository.deleteAllInBatch();
             courseRepository.deleteAllInBatch();
-            collegeRepository.deleteAllInBatch();
 
-            // Retain or recreate active Admin user
+            // Retain or recreate active Super Admin, Admin, and Student system accounts
             List<User> users = userRepository.findAll();
             for (User u : users) {
-                if (u.getRole() != Role.ADMIN) {
+                if (!u.getEmail().equalsIgnoreCase("superadmin@careerlabs.com") &&
+                    !u.getEmail().equalsIgnoreCase("admin@careerlabs.com") &&
+                    !u.getEmail().equalsIgnoreCase("student@careerlabs.com")) {
                     userRepository.delete(u);
                 }
             }
 
-            if (userRepository.count() == 0) {
+            if (userRepository.findByEmailIgnoreCase("superadmin@careerlabs.com").isEmpty()) {
+                User superAdmin = new User();
+                superAdmin.setName("Super Admin");
+                superAdmin.setEmail("superadmin@careerlabs.com");
+                superAdmin.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
+                superAdmin.setRole(Role.ADMIN);
+                userRepository.save(superAdmin);
+            }
+
+            if (userRepository.findByEmailIgnoreCase("admin@careerlabs.com").isEmpty()) {
                 User admin = new User();
                 admin.setName("Admin User");
                 admin.setEmail("admin@careerlabs.com");
                 admin.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
                 admin.setRole(Role.ADMIN);
                 userRepository.save(admin);
+            }
+
+            User studentUser = userRepository.findByEmailIgnoreCase("student@careerlabs.com")
+                    .orElseGet(() -> {
+                        User s = new User();
+                        s.setName("Demo Student");
+                        s.setEmail("student@careerlabs.com");
+                        s.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
+                        s.setRole(Role.STUDENT);
+                        return userRepository.save(s);
+                    });
+
+            if (studentRepository.findByUserId(studentUser.getId()).isEmpty()) {
+                Student studentProfile = new Student();
+                studentProfile.setUser(studentUser);
+                studentProfile.setEnrollmentNo("STU001");
+                studentRepository.save(studentProfile);
             }
 
             log.info("Successfully purged all sample data. Database is now clean with Admin User account ready.");

@@ -31,7 +31,7 @@
 - `GET /api/auth/me` — returns the current user from the JWT principal (no DB session; principal is decoded straight from token claims for authorization, then one DB fetch for profile data).
 - `JwtAuthenticationFilter` sets a single `ROLE_<ROLE>` authority per request; no per-request active-user re-check (a disabled account's already-issued token stays valid until it expires).
 - `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler` produce consistent JSON 401/403 instead of Spring's default HTML/error pages.
-- `DevUserSeeder` seeds a fixed admin (`admin@careerlabs.com`) and demo student (`student@careerlabs.com`), both password `ChangeMe123!`, shown as clickable "Demo Credentials" on the login page.
+- Admin accounts (`admin@careerlabs.com`) are available for system administration.
 
 ### Workflow: Login
 1. Student/admin submits email+password on `/login` (React Hook Form + Zod).
@@ -40,7 +40,7 @@
 4. On page load: cached token/user render instantly (no flash), then `GET /auth/me` silently re-validates in the background; failure clears storage and logs out.
 
 ### ⚠️ Confirmed gaps (frontend expects, backend doesn't have)
-- **No registration endpoint** — accounts are only created by an admin (via Student module) or the dev seeder.
+- **No registration endpoint** — accounts are created by an admin (via Student module).
 - **Password reset / OTP flow is 100% frontend-only.** `forgot-password` and `reset-password` pages implement a full 3-step OTP wizard calling `POST /auth/forgot-password`, `/auth/verify-otp`, `/auth/reset-password` — **none of these routes exist in the Spring backend.**
 - **Logout/refresh are also frontend-only.** `AuthContext.logout()`/`logoutAll()` call `POST /auth/logout` / `/auth/logout-all`; `lib/api.js`'s interceptor implements silent-refresh-on-401 via `POST /auth/refresh` keyed on a `TOKEN_EXPIRED` error code the backend never emits. All of these calls fail server-side; the frontend swallows the error and just clears local storage anyway, so the UX still "works" for logout, but nothing is invalidated server-side.
 - No token revocation/blacklist — a stolen/valid JWT works until natural expiry regardless of account state changes.

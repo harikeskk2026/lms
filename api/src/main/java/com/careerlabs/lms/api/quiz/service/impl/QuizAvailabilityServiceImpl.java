@@ -48,6 +48,9 @@ public class QuizAvailabilityServiceImpl implements QuizAvailabilityService {
     public boolean isAssignedTo(Quiz quiz, Long studentUserId) {
         List<QuizAssignment> assignments = quizAssignmentRepository.findByQuizId(quiz.getId());
         if (assignments.isEmpty()) {
+            if (quiz.getCreatedBy() != null && quiz.getTitle() != null && quiz.getTitle().toLowerCase().contains("practice")) {
+                return quiz.getCreatedBy().equals(studentUserId);
+            }
             return true;
         }
 

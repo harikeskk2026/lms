@@ -52,6 +52,7 @@ public class RecordedSessionStreamController {
         this.storageService = storageService;
     }
 
+    /** Top-level master playlist: lists each rendition's own playlist, adaptively selected by the player. */
     @GetMapping("/manifest.m3u8")
     public ResponseEntity<String> manifest(@PathVariable Long id,
                                             @AuthenticationPrincipal PlaybackTokenPrincipal principal,
@@ -59,8 +60,28 @@ public class RecordedSessionStreamController {
         RecordedSessionAsset asset = authorize(id, principal);
         String token = request.getParameter("token");
         Path manifestPath = storageService.resolveAssetFile(id, asset.getStorageDir(), asset.getManifestFileName());
+        String content = readFile(manifestPath);
 
-        String rewritten = rewriteManifest(readFile(manifestPath), id, token);
+        String rewritten = content.contains("#EXT-X-STREAM-INF")
+                ? rewriteMasterPlaylist(content, id, token)
+                : rewriteRenditionManifest(content, id, token, false);
+
+        return ResponseEntity.ok()
+                .contentType(HLS_MANIFEST_TYPE)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(rewritten);
+    }
+
+    /** One rendition's own playlist (e.g. 720p.m3u8) — segment/key URIs rewritten exactly like the old single-rendition manifest was. */
+    @GetMapping("/rendition/{fileName}")
+    public ResponseEntity<String> rendition(@PathVariable Long id, @PathVariable String fileName,
+                                             @AuthenticationPrincipal PlaybackTokenPrincipal principal,
+                                             HttpServletRequest request) {
+        RecordedSessionAsset asset = authorize(id, principal);
+        String token = request.getParameter("token");
+        Path renditionPath = storageService.resolveAssetFile(id, asset.getStorageDir(), fileName);
+
+        String rewritten = rewriteRenditionManifest(readFile(renditionPath), id, token, true);
         return ResponseEntity.ok()
                 .contentType(HLS_MANIFEST_TYPE)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
@@ -98,18 +119,34 @@ public class RecordedSessionStreamController {
                 .orElseThrow(() -> new ResourceNotFoundException("Recorded session video not found: " + id));
     }
 
-    private String rewriteManifest(String manifest, Long id, String token) {
+    /** Rewrites a rendition playlist's EXT-X-KEY and segment lines into relative, token-bearing URLs. */
+    private String rewriteRenditionManifest(String manifest, Long id, String token, boolean isRendition) {
+        String prefix = isRendition ? "../" : "";
         StringBuilder out = new StringBuilder();
         for (String line : manifest.split("\n", -1)) {
             String trimmed = line.strip();
             if (trimmed.startsWith("#EXT-X-KEY")) {
                 Matcher matcher = KEY_URI_PATTERN.matcher(line);
                 String rewritten = matcher.replaceFirst(Matcher.quoteReplacement(
-                        "URI=\"/api/student/recorded-sessions/" + id + "/stream/key?token=" + token + "\""));
+                        "URI=\"" + prefix + "key?token=" + token + "\""));
                 out.append(rewritten).append('\n');
             } else if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
-                out.append("/api/student/recorded-sessions/").append(id).append("/stream/segments/")
+                out.append(prefix).append("segments/")
                         .append(trimmed).append("?token=").append(token).append('\n');
+            } else {
+                out.append(line).append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    /** Rewrites the master playlist's bare rendition-filename lines (e.g. "720p.m3u8") into relative, token-bearing rendition URLs. */
+    private String rewriteMasterPlaylist(String manifest, Long id, String token) {
+        StringBuilder out = new StringBuilder();
+        for (String line : manifest.split("\n", -1)) {
+            String trimmed = line.strip();
+            if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                out.append("rendition/").append(trimmed).append("?token=").append(token).append('\n');
             } else {
                 out.append(line).append('\n');
             }

@@ -88,6 +88,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
 
         QuizAttempt attempt = quizAttemptRepository
                 .findByQuizIdAndStudentIdAndStatus(quizId, studentId, AttemptStatus.IN_PROGRESS)
+                .map(existing -> expireIfStale(existing, quiz))
                 .orElseGet(() -> createAttempt(quiz, studentId));
 
         List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attempt.getId());
@@ -96,6 +97,27 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
                 .toList();
 
         return StartAttemptResponse.from(attempt, questions);
+    }
+
+    private QuizAttempt expireIfStale(QuizAttempt attempt, Quiz quiz) {
+        if (quiz.getDuration() != null && quiz.getDuration() > 0) {
+            Instant expiryTime = attempt.getStartedAt().plusSeconds(quiz.getDuration() * 60L);
+            if (Instant.now().isAfter(expiryTime)) {
+                List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attempt.getId());
+                attempt.setStatus(AttemptStatus.SUBMITTED);
+                attempt.setCompletedAt(expiryTime);
+                attempt.setTimeTaken(quiz.getDuration() * 60);
+                attempt.setScore(0);
+                attempt.setAccuracy(0.0);
+                attempt.setCorrectCount(0);
+                attempt.setSkippedCount(questionAttempts.size());
+                attempt.setWrongCount(0);
+                attempt.setPassed(false);
+                quizAttemptRepository.save(attempt);
+                return null;
+            }
+        }
+        return attempt;
     }
 
     private QuizAttempt createAttempt(Quiz quiz, Long studentId) {

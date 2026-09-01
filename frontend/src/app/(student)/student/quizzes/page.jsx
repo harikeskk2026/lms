@@ -1154,7 +1154,7 @@ function BadgeCaseItem({ achievement }) {
 function AchievementsTab() {
   const [achievements, setAchievements] = useState([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('locked') // 'unlocked' | 'locked'
+  const [view, setView] = useState('unlocked') // 'unlocked' | 'locked'
 
   useEffect(() => {
     quizService.getAchievements()

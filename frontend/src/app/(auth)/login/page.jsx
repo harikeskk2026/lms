@@ -17,8 +17,9 @@ const stats = [
   { icon: TrendingUp,    label: 'Placement Rate',    value: '94%' },
 ]
 
-// Matches the users seeded by api/.../DevUserSeeder on run
+// Demo login credentials for development testing
 const demoAccounts = [
+  { role: 'Super Admin', email: 'superadmin@careerlabs.com', password: 'ChangeMe123!' },
   { role: 'Admin', email: 'admin@careerlabs.com', password: 'ChangeMe123!' },
   { role: 'Student', email: 'student@careerlabs.com', password: 'ChangeMe123!' },
 ]
