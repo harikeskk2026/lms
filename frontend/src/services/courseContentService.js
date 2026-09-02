@@ -1,0 +1,45 @@
+import apiCall from '@/utilities/apiCall'
+
+const courseContentService = {
+  // Syllabus - modules
+  getModules: (courseId) => apiCall({ method: 'GET', url: `/courses/${courseId}/modules` }),
+  createModule: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/modules`, data }),
+  updateModule: (id, data) => apiCall({ method: 'PUT', url: `/modules/${id}`, data }),
+  deleteModule: (id) => apiCall({ method: 'DELETE', url: `/modules/${id}` }),
+  reorderModules: (courseId, orderedIds) =>
+    apiCall({ method: 'PUT', url: `/courses/${courseId}/modules/reorder`, data: { orderedIds } }),
+
+  // Syllabus - topics
+  createTopic: (moduleId, data) => apiCall({ method: 'POST', url: `/modules/${moduleId}/topics`, data }),
+  updateTopic: (id, data) => apiCall({ method: 'PUT', url: `/topics/${id}`, data }),
+  deleteTopic: (id) => apiCall({ method: 'DELETE', url: `/topics/${id}` }),
+  reorderTopics: (moduleId, orderedIds) =>
+    apiCall({ method: 'PUT', url: `/modules/${moduleId}/topics/reorder`, data: { orderedIds } }),
+
+  // Sessions
+  getSessions: (topicId) => apiCall({ method: 'GET', url: `/topics/${topicId}/sessions` }),
+  createSession: (topicId, data) => apiCall({ method: 'POST', url: `/topics/${topicId}/sessions`, data }),
+  updateSession: (id, data) => apiCall({ method: 'PUT', url: `/sessions/${id}`, data }),
+  deleteSession: (id) => apiCall({ method: 'DELETE', url: `/sessions/${id}` }),
+  reorderSessions: (topicId, orderedIds) =>
+    apiCall({ method: 'PUT', url: `/topics/${topicId}/sessions/reorder`, data: { orderedIds } }),
+
+  // Materials
+  getMaterials: (params) => apiCall({ method: 'GET', url: '/materials', params }),
+  createMaterial: (data) => apiCall({ method: 'POST', url: '/materials', data }),
+  updateMaterial: (id, data) => apiCall({ method: 'PUT', url: `/materials/${id}`, data }),
+  deleteMaterial: (id) => apiCall({ method: 'DELETE', url: `/materials/${id}` }),
+  reorderMaterials: (orderedIds) => apiCall({ method: 'PUT', url: '/materials/reorder', data: { orderedIds } }),
+  uploadMaterial: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiCall({
+      method: 'POST',
+      url: '/materials/upload',
+      data: formData,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
+export default courseContentService

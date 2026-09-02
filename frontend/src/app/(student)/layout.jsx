@@ -1,11 +1,30 @@
 'use client'
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import StudentShell from '@/components/layout/StudentShell'
 
 export default function StudentLayout({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, isLoggingOut } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
 
-  if (loading) {
+  useEffect(() => {
+    if (loading) return
+    if (!user) {
+      router.replace(isLoggingOut() ? '/login' : `/login?redirect=${encodeURIComponent(pathname)}`)
+    } else if (user.role !== 'STUDENT') {
+      router.replace('/admin/dashboard')
+    }
+  }, [loading, user, pathname, router])
+
+  // Gate on `user` (hydrated synchronously from the cached session in
+  // AuthContext), not `loading` — otherwise every refresh/deep-link blocks
+  // on the /auth/me round-trip before painting, even though the cached user
+  // is already known. The background /auth/me re-verification in AuthContext
+  // still runs and will flip `user` to null (redirecting here) if the token
+  // turns out to be invalid.
+  if (!user || user.role !== 'STUDENT') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <svg className="animate-spin h-8 w-8 text-brand-600" viewBox="0 0 24 24" fill="none">
@@ -14,11 +33,6 @@ export default function StudentLayout({ children }) {
         </svg>
       </div>
     )
-  }
-
-  // Middleware handles redirect, but belt-and-suspenders check
-  if (!user || user.role !== 'STUDENT') {
-    return null
   }
 
   return <StudentShell>{children}</StudentShell>

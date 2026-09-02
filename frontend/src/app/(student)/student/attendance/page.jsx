@@ -1,24 +1,32 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { format, addMonths, subMonths } from 'date-fns'
-import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, Legend, CartesianGrid
-} from 'recharts'
 import { ChevronLeft, ChevronRight, Flame, AlertTriangle, TrendingUp } from 'lucide-react'
 import { useAttendance } from '@/hooks/useStudentDashboard'
 import AttendanceCalendar from '@/components/student/AttendanceCalendar'
+import AttendanceHealthCard from '@/components/student/AttendanceHealthCard'
+import AttendanceGoalTracker from '@/components/student/AttendanceGoalTracker'
+import AttendanceDayModal from '@/components/student/AttendanceDayModal'
+import CorrectionRequestModal from '@/components/student/CorrectionRequestModal'
+import AttendanceCorrectionsList from '@/components/student/AttendanceCorrectionsList'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import { studentApi } from '@/lib/api'
 
-const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
+// recharts is a heavy dependency - load it only for the trend chart below,
+// and only on the client (SSR doesn't need it).
+const AttendanceTrendChart = dynamic(
+  () => import('@/components/student/attendance/AttendanceTrendChart'),
+  { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" /> }
+)
 
 function StatusChip({ status }) {
   const cls =
     status === 'PRESENT' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
-    status === 'LATE'    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
-    status === 'EXCUSED' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' :
-                           'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
+    status === 'ABSENT'  ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
+    status === 'LATE'    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' :
+    status === 'LEAVE'   ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+                           'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
   return (
     <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase ${cls}`}>
       {status}
@@ -26,12 +34,28 @@ function StatusChip({ status }) {
   )
 }
 
+
 export default function AttendancePage() {
   const [activeMonth, setActiveMonth] = useState(format(new Date(), 'yyyy-MM'))
   const [view, setView]               = useState('calendar')
   const [trend, setTrend]             = useState([])
   const [trendLoading, setTrendLoading] = useState(true)
   const { data, loading } = useAttendance(activeMonth)
+
+  const [selectedDate, setSelectedDate]   = useState(null)
+  const [dayRecords, setDayRecords]       = useState([])
+  const [dayLoading, setDayLoading]       = useState(false)
+  const [correctionRecord, setCorrectionRecord] = useState(null)
+  const correctionsRef = useRef(null)
+
+  const openDay = (dateStr) => {
+    setSelectedDate(dateStr)
+    setDayLoading(true)
+    studentApi.getCalendarDay(dateStr)
+      .then(r => setDayRecords(r.data.data || []))
+      .catch(() => setDayRecords([]))
+      .finally(() => setDayLoading(false))
+  }
 
   const prev = () => setActiveMonth(m => format(subMonths(new Date(m + '-01'), 1), 'yyyy-MM'))
   const next = () => setActiveMonth(m => format(addMonths(new Date(m + '-01'), 1), 'yyyy-MM'))
@@ -90,6 +114,12 @@ export default function AttendancePage() {
             Today
           </button>
         </div>
+      </div>
+
+      {/* Health Score + Goal Tracker */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <AttendanceHealthCard />
+        <AttendanceGoalTracker />
       </div>
 
       {/* Summary Strip */}
@@ -169,7 +199,7 @@ export default function AttendancePage() {
       ) : (
         <div className="glass-card p-5">
           {view === 'calendar' ? (
-            <AttendanceCalendar calendarData={calendar} activeMonth={activeMonth} />
+            <AttendanceCalendar calendarData={calendar} activeMonth={activeMonth} onDayClick={openDay} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -205,20 +235,7 @@ export default function AttendancePage() {
         {trendLoading ? (
           <div className="h-[220px] rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" />
         ) : trend.length > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={trend} margin={{ left: -10, right: 20 }}>
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.3} />
-              <Bar yAxisId="left" dataKey="present" name="Present" fill="#6d28d9" radius={[4, 4, 0, 0]} stackId="a" />
-              <Bar yAxisId="left" dataKey="absent"  name="Absent"  fill="#ffd668" radius={[0, 0, 0, 0]} stackId="a" />
-              <Bar yAxisId="left" dataKey="late"    name="Late"    fill="#93c5fd" radius={[4, 4, 0, 0]} stackId="a" />
-              <Line yAxisId="right" type="monotone" dataKey="pct" name="Rate %" stroke="#f59e0b" strokeWidth={2.5} dot={{ fill: '#f59e0b', r: 4 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <AttendanceTrendChart trend={trend} />
         ) : (
           <p className="text-sm text-gray-400 text-center py-10">No attendance data available yet.</p>
         )}
@@ -262,6 +279,33 @@ export default function AttendancePage() {
           <p className="text-sm text-gray-400 text-center py-6">No records for this month.</p>
         )}
       </div>
+
+      {/* Correction Requests */}
+      <AttendanceCorrectionsList ref={correctionsRef} />
+
+      {/* Day detail modal */}
+      {selectedDate && (
+        <AttendanceDayModal
+          date={selectedDate}
+          records={dayRecords}
+          loading={dayLoading}
+          onClose={() => setSelectedDate(null)}
+          onRequestCorrection={(record) => setCorrectionRecord(record)}
+        />
+      )}
+
+      {/* Correction request modal */}
+      {correctionRecord && (
+        <CorrectionRequestModal
+          record={correctionRecord}
+          onClose={() => setCorrectionRecord(null)}
+          onSubmitted={() => {
+            setCorrectionRecord(null)
+            setSelectedDate(null)
+            correctionsRef.current?.reload()
+          }}
+        />
+      )}
     </div>
   )
 }

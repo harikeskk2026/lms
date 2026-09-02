@@ -5,7 +5,7 @@ spring:
   application:
     name: lms-api
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:lms_db}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:lms}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   jpa:
@@ -16,17 +16,40 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  servlet:
+    multipart:
+      # Raised from the original 10MB so recorded-session video uploads fit;
+      # FileStorageService still separately caps PDF/DOC uploads at 10MB in code.
+      max-file-size: ${MAX_UPLOAD_SIZE:400MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:400MB}
 
 app:
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
+  secure-video:
+    dir: ${SECURE_VIDEO_DIR:secure-video}
+  s3:
+    # Leave S3_BUCKET empty (the default) to keep using local disk storage.
+    # Set S3_BUCKET=my-bucket to switch to S3 automatically — no code change needed.
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-south-1}
+    prefix: ${S3_KEY_PREFIX:recorded-sessions}
+  google-drive:
+    refresh-token: ${GOOGLE_DRIVE_REFRESH_TOKEN:}
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}
   jwt:
     secret: ${JWT_SECRET}
-    expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  playback-token:
+    expiration-seconds: ${PLAYBACK_TOKEN_EXPIRATION_SECONDS:600}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   seed:
-    enabled: ${APP_SEED_ENABLED:true}
+    enabled: ${APP_SEED_ENABLED:false}
     admin-email: ${SEED_ADMIN_EMAIL:admin@careerlabs.com}
     admin-password: ${SEED_ADMIN_PASSWORD:ChangeMe123!}
+  purge-sample-data: ${PURGE_SAMPLE_DATA:false}
+
 
 logging:
   level:

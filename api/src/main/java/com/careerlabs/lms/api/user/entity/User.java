@@ -13,6 +13,14 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 
+/**
+ * The plain unique index on {@code email} can't back the case-insensitive lookup
+ * ({@code findByEmailIgnoreCase}, used on every login) because that query wraps both
+ * sides in {@code LOWER(...)}. A functional index (create index ... on users (lower(email)))
+ * fixes that, but Hibernate's ddl-auto=update quotes @Index.columnList as a literal
+ * identifier rather than emitting it as SQL, so it can't generate this DDL - it was
+ * applied directly against the database instead (this project has no migration tool).
+ */
 @Entity
 @Table(name = "users")
 public class User {
@@ -39,6 +47,17 @@ public class User {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    private String phone;
+
+    @Column(name = "photo_url")
+    private String photoUrl;
+
+    /** Professional info, only meaningful for non-STUDENT roles - null for students. */
+    private String designation;
+
+    /** Professional info, only meaningful for non-STUDENT roles - null for students. */
+    private String department;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -116,5 +135,37 @@ public class User {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getPhotoUrl() {
+        return photoUrl;
+    }
+
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
+    }
+
+    public String getDesignation() {
+        return designation;
+    }
+
+    public void setDesignation(String designation) {
+        this.designation = designation;
+    }
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(String department) {
+        this.department = department;
     }
 }

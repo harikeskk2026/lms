@@ -1,76 +1,60 @@
 import axios from 'axios'
-import Cookies from 'js-cookie'
+import toast from 'react-hot-toast'
+import tokenStorage from '@/utilities/tokenStorage'
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api',
+  baseURL: process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api',
   withCredentials: true,
   timeout: 10000,
 })
 
 // ─── Request: attach access token ─────────────────────────────────────────────
 api.interceptors.request.use(config => {
-  const token = Cookies.get('clms_at')
+  const token = tokenStorage.getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// ─── Response: auto-refresh on TOKEN_EXPIRED ──────────────────────────────────
-let isRefreshing = false
-let failedQueue = []
+// ─── De-dupe concurrent identical GET requests ────────────────────────────────
+// Several independent components (e.g. the sidebar badge counts and a page's
+// own data hook) fetch the same endpoint on mount within the same tick - e.g.
+// notifications is fetched by StudentShell, NotificationDropdown and
+// useNotifications() all at once on dashboard load. Rather than firing 3
+// identical network requests, share the in-flight promise for any GET with
+// the same url+params; the entry is cleared as soon as it settles, so this
+// never serves stale data on a later, separate fetch.
+const inFlightGETs = new Map()
+const rawRequest = api.request.bind(api)
+api.request = (config = {}) => {
+  if ((config.method || 'get').toLowerCase() !== 'get') return rawRequest(config)
 
-function processQueue(error, token = null) {
-  failedQueue.forEach(prom => {
-    if (error) prom.reject(error)
-    else prom.resolve(token)
-  })
-  failedQueue = []
+  const key = `${config.url}?${JSON.stringify(config.params || {})}`
+  const pending = inFlightGETs.get(key)
+  if (pending) return pending
+
+  const promise = rawRequest(config).finally(() => inFlightGETs.delete(key))
+  inFlightGETs.set(key, promise)
+  return promise
 }
+
+// ─── Response: on an expired/invalid session, log out once and redirect ──────
+// The API has no refresh-token endpoint - a 401 here means the token is gone
+// for good, so there's nothing to retry. Log out immediately instead of
+// letting every subsequent call (including polling components) 401 again and
+// show its own error - that's what caused "authorization error" to reappear
+// repeatedly instead of the user just being sent back to the login page once.
+let sessionExpiredHandled = false
 
 api.interceptors.response.use(
   res => res,
-  async err => {
-    const original = err.config
-
-    if (
-      err.response?.status === 401 &&
-      err.response?.data?.code === 'TOKEN_EXPIRED' &&
-      !original._retry
-    ) {
-      original._retry = true
-
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        }).then(token => {
-          original.headers.Authorization = `Bearer ${token}`
-          return api(original)
-        }).catch(e => Promise.reject(e))
-      }
-
-      isRefreshing = true
-
-      try {
-        const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5040/api'
-        const { data } = await axios.post(
-          `${baseURL}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        )
-        const newToken = data.accessToken
-        // 15 minutes = 1/96 of a day
-        Cookies.set('clms_at', newToken, { expires: 1 / 96, sameSite: 'strict' })
-        processQueue(null, newToken)
-        original.headers.Authorization = `Bearer ${newToken}`
-        return api(original)
-      } catch (refreshErr) {
-        processQueue(refreshErr, null)
-        Cookies.remove('clms_at')
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-        return Promise.reject(refreshErr)
-      } finally {
-        isRefreshing = false
+  err => {
+    if (err.response?.status === 401 && typeof window !== 'undefined') {
+      const alreadyOnLogin = window.location.pathname.startsWith('/login')
+      if (!alreadyOnLogin && !sessionExpiredHandled) {
+        sessionExpiredHandled = true
+        tokenStorage.clear()
+        toast.error(err.response?.data?.message || 'Your session has expired. Please log in again.')
+        window.location.href = '/login'
       }
     }
 
@@ -80,8 +64,20 @@ api.interceptors.response.use(
 
 export default api
 
+// Files (e.g. assignment attachments, submissions) come back from the API as
+// paths relative to the API origin (e.g. "/uploads/assignments/x.pdf"), not
+// the frontend origin — resolve them to an absolute URL before linking.
+const API_ORIGIN = (process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api').replace(/\/api\/?$/, '')
+
+export function resolveFileUrl(path) {
+  if (!path) return path
+  if (/^https?:\/\//i.test(path)) return path
+  return `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`
+}
+
 export const adminApi = {
   // Dashboard
+  getDashboard: () => api.get('/admin/dashboard'),
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
 
   // Students
@@ -93,19 +89,13 @@ export const adminApi = {
   resetStudentPassword: (id, data) => api.post(`/admin/students/${id}/reset-password`, data),
 
   // Batches
-  getBatches: (params) => api.get('/admin/batches', { params }),
-  createBatch: (data) => api.post('/admin/batches', data),
-  getBatchDetail: (id) => api.get(`/admin/batches/${id}`),
-  updateBatch: (id, data) => api.patch(`/admin/batches/${id}`, data),
+  getBatches: (params) => api.get('/batches', { params }),
+  createBatch: (data) => api.post('/batches', data),
+  getBatchDetail: (id) => api.get(`/batches/${id}`),
+  updateBatch: (id, data) => api.put(`/batches/${id}`, data),
+  toggleBatchStatus: (id) => api.patch(`/batches/${id}/status`),
   enrollStudent: (batchId, studentId) => api.post(`/admin/batches/${batchId}/enroll`, { studentId }),
   removeFromBatch: (batchId, studentId) => api.delete(`/admin/batches/${batchId}/students/${studentId}`),
-
-  // Courses (list/create now served by the Java API - see @/services/courseService)
-  addMaterial: (courseId, data) => api.post(`/admin/courses/${courseId}/materials`, data),
-  deleteMaterial: (courseId, materialId) => api.delete(`/admin/courses/${courseId}/materials/${materialId}`),
-  addSession: (courseId, data) => api.post(`/admin/courses/${courseId}/sessions`, data),
-  addSyllabusModule: (courseId, data) => api.post(`/admin/courses/${courseId}/syllabus/modules`, data),
-  addSyllabusTopic: (courseId, moduleId, data) => api.post(`/admin/courses/${courseId}/syllabus/modules/${moduleId}/topics`, data),
 
   // Classes
   getClasses: (params) => api.get('/admin/classes', { params }),
@@ -124,6 +114,18 @@ export const adminApi = {
   getAttendanceAlerts:    (params)  => api.get('/admin/attendance/alerts', { params }),
   generateAlerts:         (params)  => api.post('/admin/attendance/alerts/generate', null, { params }),
   resolveAlert:           (id)      => api.patch(`/admin/attendance/alerts/${id}/resolve`),
+  getAttendanceDashboard: ()        => api.get('/admin/attendance/dashboard'),
+  getTodayClasses:        ()        => api.get('/admin/attendance/today'),
+  copyPreviousAttendance: (classId) => api.get(`/admin/attendance/${classId}/copy-previous`),
+  saveAttendanceDraft:    (classId, records) => api.post(`/admin/attendance/${classId}`, { records }, { params: { submit: false } }),
+  submitAttendance:       (classId, records) => api.post(`/admin/attendance/${classId}`, { records }, { params: { submit: true } }),
+  editAttendanceRecord:   (id, data) => api.put(`/admin/attendance/${id}`, data),
+  getCorrections:         (params)  => api.get('/admin/attendance/corrections', { params }),
+  reviewCorrection:       (id, data) => api.put(`/admin/attendance/corrections/${id}`, data),
+  getAttendancePolicy:    (params)  => api.get('/admin/attendance/policy', { params }),
+  saveAttendancePolicy:   (data)    => api.put('/admin/attendance/policy', data),
+  getAttendanceHistory:   (params)  => api.get('/admin/attendance/history', { params }),
+  exportCSV:              (params)  => api.get('/reports/export', { params }),
 
   // Quizzes
   getQuizzes: (params) => api.get('/admin/quizzes', { params }),
@@ -145,6 +147,7 @@ export const adminApi = {
   getDrives:              (p)           => api.get('/admin/drives', { params: p }),
   createDrive:            (d)           => api.post('/admin/drives', d),
   updateDrive:            (id, d)       => api.patch(`/admin/drives/${id}`, d),
+  updateDriveStatus:      (id, status)  => api.patch(`/admin/drives/${id}/status`, { status }),
   getDriveApplications:   (id)          => api.get(`/admin/drives/${id}/applications`),
   updateDriveApplication: (driveId, appId, d) => api.patch(`/admin/drives/${driveId}/applications/${appId}`, d),
 
@@ -165,12 +168,32 @@ export const adminApi = {
   getAnnouncements: (params) => api.get('/admin/announcements', { params }),
   createAnnouncement: (data) => api.post('/admin/announcements', data),
   updateAnnouncement: (id, data) => api.patch(`/admin/announcements/${id}`, data),
+  publishAnnouncement: (id) => api.patch(`/admin/announcements/${id}/publish`),
+  scheduleAnnouncement: (id, scheduledAt) => api.patch(`/admin/announcements/${id}/schedule`, { scheduledAt }),
+  submitAnnouncementForApproval: (id) => api.post(`/admin/announcements/${id}/submit-for-approval`),
+  approveAnnouncement: (id) => api.post(`/admin/announcements/${id}/approve`),
+  rejectAnnouncement: (id) => api.post(`/admin/announcements/${id}/reject`),
+  duplicateAnnouncement: (id) => api.post(`/admin/announcements/${id}/duplicate`),
   deleteAnnouncement: (id) => api.delete(`/admin/announcements/${id}`),
+  getAnnouncementAnalytics: (id) => api.get(`/admin/announcements/${id}/analytics`),
+  getAnnouncementHistory: (id) => api.get(`/admin/announcements/${id}/history`),
+  getAnnouncementSuggestions: () => api.get('/admin/announcements/suggestions'),
+  getAnnouncementComments: (id) => api.get(`/admin/announcements/${id}/comments`),
+  addAnnouncementComment: (id, data) => api.post(`/admin/announcements/${id}/comments`, data),
+  previewAnnouncementPlaceholders: (title, body) => api.post('/admin/announcements/preview-placeholders', { title, body }),
 
-  // Reports
-  getAttendanceReport: (params) => api.get('/admin/reports/attendance', { params }),
-  getPerformanceReport: (params) => api.get('/admin/reports/performance', { params }),
-  exportCSV: (params) => api.get('/admin/reports/export', { params }),
+  // Announcement Templates
+  getAnnouncementTemplates: () => api.get('/admin/announcement-templates'),
+  createAnnouncementTemplate: (data) => api.post('/admin/announcement-templates', data),
+  updateAnnouncementTemplate: (id, data) => api.patch(`/admin/announcement-templates/${id}`, data),
+  deleteAnnouncementTemplate: (id) => api.delete(`/admin/announcement-templates/${id}`),
+  applyAnnouncementTemplate: (templateId, variables) => api.post('/admin/announcement-templates/apply', { templateId, variables }),
+
+  // Notifications
+  getNotifications:    ()    => api.get('/admin/notifications'),
+  markNotifRead:       (id)  => api.patch(`/admin/notifications/${id}/read`),
+  markAllNotifsRead:   ()    => api.patch('/admin/notifications/read-all'),
+  getUnreadCount:      ()    => api.get('/admin/notifications/unread-count'),
 }
 
 export const studentApi = {
@@ -184,8 +207,14 @@ export const studentApi = {
   getAttendance:     (month)    => api.get(`/student/attendance?month=${month || ''}`),
   getAttSummary:     ()         => api.get('/student/attendance/summary'),
   getAttendanceTrend: ()        => api.get('/student/attendance/trend'),
+  getAttendanceHealth: ()       => api.get('/student/attendance/health'),
+  getAttendanceGoal:  ()        => api.get('/student/attendance/goal'),
+  setAttendanceGoal:  (targetPercentage) => api.post('/student/attendance/goal', { targetPercentage }),
+  getCalendarDay:     (date)    => api.get('/student/attendance/calendar/day', { params: { date } }),
+  getMyCorrections:   ()        => api.get('/student/attendance/corrections'),
+  requestCorrection:  (data)    => api.post('/student/attendance/corrections', data),
   getAssignments:    ()         => api.get('/student/assignments'),
-  submitAssignment:  (id, form) => api.post(`/student/assignments/${id}/submit`, form, {
+  submitAssignment:  (id, form) => api.post(`/assignments/${id}/submissions`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   getQuizzes:        ()         => api.get('/student/quizzes'),
@@ -217,8 +246,20 @@ export const studentApi = {
 
   // Drives
   getDrives:                ()      => api.get('/student/drives'),
-  applyDrive:               (id)    => api.post(`/student/drives/${id}/apply`),
+  expressInterest:          (id)    => api.post(`/student/drives/${id}/interest`),
+
+  // Resume upload (actual PDF file - distinct from the Resume Builder above)
+  uploadResumeFile:         (form)  => api.post('/student/resume-file', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 
   // Mock Analytics
   getMockAnalytics:         ()      => api.get('/student/mock-analytics'),
+
+  // Announcements
+  getAnnouncements:         ()      => api.get('/student/announcements'),
+  markAnnouncementViewed:   (id)    => api.post(`/student/announcements/${id}/view`),
+  acknowledgeAnnouncement:  (id)    => api.post(`/student/announcements/${id}/acknowledge`),
+  getAnnouncementComments:  (id)    => api.get(`/student/announcements/${id}/comments`),
+  addAnnouncementComment:   (id, data) => api.post(`/student/announcements/${id}/comments`, data),
 }

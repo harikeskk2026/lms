@@ -3,21 +3,26 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, BookOpen, Calendar, ClipboardList,
-  Brain, Briefcase, Bell, LogOut, LogIn, Menu, X, ChevronRight
+  LayoutDashboard, BookOpen, Compass, Calendar, ClipboardList,
+  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video, UserCircle
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { studentApi } from '@/lib/api'
+import NotificationDropdown from '@/components/ui/NotificationDropdown'
 import clsx from 'clsx'
 
 const navItems = [
   { href: '/student/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/student/courses',       icon: BookOpen,        label: 'My Courses' },
+  { href: '/student/my-courses',    icon: BookOpen,        label: 'My Courses' },
+  { href: '/student/course-catalog', icon: Compass,        label: 'Course Catalog' },
   { href: '/student/attendance',    icon: Calendar,        label: 'Attendance' },
+  { href: '/student/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/student/assignments',   icon: ClipboardList,   label: 'Assignments', badge: 'assignments' },
   { href: '/student/quizzes',       icon: Brain,           label: 'Quizzes' },
   { href: '/student/placement',     icon: Briefcase,       label: 'Placement' },
+  { href: '/student/announcements', icon: Megaphone,       label: 'Announcements' },
   { href: '/student/notifications', icon: Bell,            label: 'Notifications', badge: 'notifications' },
+  { href: '/student/profile',       icon: UserCircle,      label: 'My Profile' },
 ]
 
 function Sidebar({ open, onClose, badges }) {
@@ -144,17 +149,14 @@ function TopBar({ onMenuClick, user, unreadCount }) {
           {dark ? '☀️' : '🌙'}
         </button>
 
-        {/* Bell */}
-        <Link href="/student/notifications"
-          className="relative w-9 h-9 rounded-xl bg-slate-100 dark:bg-gray-800 flex items-center justify-center text-slate-500 dark:text-gray-400 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
-        >
-          <Bell size={18} />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-brand-600 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </Link>
+        {/* Notifications Dropdown */}
+        <NotificationDropdown
+          fetchFn={studentApi.getNotifications}
+          markReadFn={studentApi.markRead}
+          markAllFn={studentApi.markAllRead}
+          viewAllHref="/student/notifications"
+          pollInterval={30000}
+        />
 
         {/* Avatar */}
         <div className="flex items-center gap-2">
@@ -182,10 +184,18 @@ export default function StudentShell({ children }) {
       studentApi.getAssignments(),
       studentApi.getNotifications()
     ]).then(([aRes, nRes]) => {
-      const assignments = aRes.status === 'fulfilled' ? aRes.value.data.data : []
-      const notifs      = nRes.status === 'fulfilled' ? nRes.value.data.data : []
-      const pendingAsgn = assignments.filter(a => !a.submission || a.submission.status === 'PENDING').length
-      const unreadNotif = notifs.filter(n => !n.isRead).length
+      const assignments = aRes.status === 'fulfilled' ? (aRes.value.data.data ?? []) : []
+      // New Spring Boot API returns { notifications: [...], unreadCount: N }
+      // Old Node.js API returned a plain array — handle both shapes
+      const notifsData  = nRes.status === 'fulfilled' ? nRes.value.data.data : null
+      const unreadNotif = notifsData
+        ? typeof notifsData.unreadCount === 'number'
+          ? notifsData.unreadCount                                    // new shape
+          : (Array.isArray(notifsData) ? notifsData.filter(n => !n.isRead).length : 0) // old shape
+        : 0
+      const pendingAsgn = Array.isArray(assignments)
+        ? assignments.filter(a => !a.submission || a.submission.status === 'PENDING').length
+        : 0
       setBadges({ assignments: pendingAsgn, notifications: unreadNotif })
     })
   }, [])

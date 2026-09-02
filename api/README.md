@@ -6,7 +6,7 @@ Java 21 + Spring Boot 3 + Maven service, backed by PostgreSQL. Currently exposes
 
 ```
 src/main/java/com/careerlabs/lms/api/
-  config/          # Security, CORS, health check, dev data seeder
+  config/          # Security, CORS, health check, sample data purge runner
   common/
     response/      # ApiResponse / ApiErrorResponse - shared envelopes for every endpoint
     exception/     # ApiException hierarchy + GlobalExceptionHandler
@@ -33,7 +33,7 @@ Each future module (courses, enrollments, etc.) should get its own top-level pac
 mvn spring-boot:run
 ```
 
-On first run, if the `users` table is empty, a login-ready user is seeded from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (disable via `APP_SEED_ENABLED=false`).
+On first run, sample data is purged if `PURGE_SAMPLE_DATA=true` (default), ensuring a clean database with active Admin user account.
 
 ## API
 

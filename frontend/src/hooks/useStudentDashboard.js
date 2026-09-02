@@ -119,10 +119,17 @@ export function useNotifications() {
 
   useEffect(() => {
     studentApi.getNotifications()
-      .then(r => setData(r.data.data))
+      .then(r => {
+        const raw = r.data.data
+        // Spring Boot API returns { notifications: [...], unreadCount: N }
+        // Node.js API returns a plain array — handle both
+        const list = Array.isArray(raw) ? raw : (raw?.notifications ?? [])
+        setData(list)
+      })
       .catch(e => setError(e?.response?.data?.message || 'Failed to load notifications'))
       .finally(() => setLoading(false))
   }, [refetchTick])
 
   return { data, loading, error, refetch: () => setTick(t => t + 1) }
 }
+

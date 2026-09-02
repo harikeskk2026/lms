@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.course.dto.request;
 
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.entity.Level;
 import com.careerlabs.lms.api.course.validation.CourseValidationMessages;
 import jakarta.validation.constraints.NotBlank;
@@ -23,6 +24,9 @@ public class CourseRequest {
     private Level level;
 
     private String thumbnail;
+
+    @NotNull(message = CourseValidationMessages.STATUS_REQUIRED)
+    private CourseStatus status;
 
     public String getTitle() {
         return title;
@@ -62,5 +66,13 @@ public class CourseRequest {
 
     public void setThumbnail(String thumbnail) {
         this.thumbnail = thumbnail;
+    }
+
+    public CourseStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(CourseStatus status) {
+        this.status = status;
     }
 }

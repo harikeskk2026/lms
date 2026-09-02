@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Mail, Lock, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -16,14 +17,23 @@ const stats = [
   { icon: TrendingUp,    label: 'Placement Rate',    value: '94%' },
 ]
 
-// Matches the user seeded by api/.../DevUserSeeder on first run (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD)
+// Demo login credentials for development testing
 const demoAccounts = [
+  { role: 'Super Admin', email: 'superadmin@careerlabs.com', password: 'ChangeMe123!' },
   { role: 'Admin', email: 'admin@careerlabs.com', password: 'ChangeMe123!' },
+  { role: 'Student', email: 'student@careerlabs.com', password: 'ChangeMe123!' },
 ]
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { user, loading, login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace(user.role === 'STUDENT' ? '/student/dashboard' : '/admin/dashboard')
+    }
+  }, [loading, user, router])
 
   const {
     register,

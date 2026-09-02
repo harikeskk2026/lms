@@ -1,20 +1,26 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
-} from 'recharts'
+import dynamic from 'next/dynamic'
 import { format, formatDistanceToNow, isToday } from 'date-fns'
 import {
   Calendar, ClipboardList, Brain, BookOpen, Play,
-  FileText, Download, Star, ChevronRight, CheckCircle,
-  Circle, Flame, ExternalLink, Bell
+  FileText, Download, Star, ChevronRight, Flame,
+  ExternalLink, Bell, Trophy, Award, Zap
 } from 'lucide-react'
-import { useDashboard } from '@/hooks/useStudentDashboard'
+import { useDashboard, useNotifications } from '@/hooks/useStudentDashboard'
+import { resolveFileUrl } from '@/lib/api'
+import { useAuth } from '@/context/AuthContext'
 import ProgressRing from '@/components/student/ProgressRing'
-import ActivityFeed from '@/components/student/ActivityFeed'
-import { SkeletonStat } from '@/components/student/SkeletonCard'
+import { SkeletonStat, ErrorCard } from '@/components/student/SkeletonCard'
 import { studentApi } from '@/lib/api'
+
+// recharts is a heavy dependency - load it only for pages that render a chart,
+// and only on the client (SSR doesn't need it).
+const AttendanceCompareChart = dynamic(
+  () => import('@/components/student/dashboard/AttendanceCompareChart'),
+  { ssr: false, loading: () => <div className="animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" style={{ height: 200 }} /> }
+)
 
 // ─── Countdown timer component ────────────────────────────────────────────────
 function Countdown({ targetDate }) {
@@ -55,84 +61,28 @@ function Sparkline({ scores }) {
   )
 }
 
-// ─── Status chip helper ────────────────────────────────────────────────────────
-function StatusChip({ status, small }) {
-  const map = {
-    GRADED:    'bg-green-100 text-green-700',
-    SUBMITTED: 'bg-blue-100 text-blue-700',
-    PENDING:   'bg-yellow-100 text-yellow-800',
-    LATE:      'bg-orange-100 text-orange-700',
-    OVERDUE:   'bg-yellow-200 text-yellow-900',
-    PASSED:    'bg-green-100 text-green-700',
-    FAILED:    'bg-yellow-100 text-yellow-700',
-  }
-  return (
-    <span className={`chip ${map[status] || 'bg-gray-100 text-gray-600'} ${small ? 'text-[10px] px-2 py-0.5' : ''}`}>
-      {status}
-    </span>
-  )
-}
-
 // ─── Material type icon ───────────────────────────────────────────────────────
 function MaterialIcon({ type }) {
-  const icons = { PDF: '📄', CHEATSHEET: '📋', SLIDE: '🖥️', EBOOK: '📚', OTHER: '📁' }
+  const icons = { PDF: '📄', DOCUMENT: '📋', PRESENTATION: '🖥️', VIDEO: '🎬', LINK: '🔗', OTHER: '📁' }
   return <span className="text-xl">{icons[type] || '📁'}</span>
-}
-
-// ─── Module accordion ─────────────────────────────────────────────────────────
-function ModuleRow({ mod }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="border-b border-purple-50 dark:border-purple-900/20 last:border-0">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between py-3 px-1 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 rounded-lg transition-colors"
-      >
-        <div className="flex items-center gap-2 text-left">
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{mod.title}</span>
-          <span className="chip bg-brand-50 text-brand-600 text-[10px] px-1.5 py-0.5">
-            {mod.completed}/{mod.total}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full bg-brand-600 rounded-full" style={{ width: `${mod.pct}%` }} />
-          </div>
-          <span className="text-xs text-gray-400 w-8 text-right">{mod.pct}%</span>
-          <ChevronRight size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
-        </div>
-      </button>
-      {open && (
-        <div className="pb-2 pl-3 space-y-1.5">
-          {mod.topics.map(t => (
-            <div key={t.id} className="flex items-center gap-2 text-sm">
-              {t.isCompleted
-                ? <CheckCircle size={13} className="text-green-500 flex-shrink-0" />
-                : <Circle size={13} className="text-gray-300 dark:text-gray-600 flex-shrink-0" />
-              }
-              <span className={t.isCompleted ? 'text-gray-400 line-through' : 'text-gray-600 dark:text-gray-300'}>
-                {t.title}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ─── Main dashboard page ──────────────────────────────────────────────────────
 export default function StudentDashboardPage() {
-  const { data, loading, error } = useDashboard()
+  const { user } = useAuth()
+  const { data, loading, error, refetch } = useDashboard()
+  const { data: notifications } = useNotifications()
   const [materials, setMaterials] = useState([])
   const [sessions,  setSessions]  = useState([])
 
+  const primaryCourseId = data?.continueLearning?.[0]?.courseId
+
   useEffect(() => {
-    if (data?.batch) {
-      studentApi.getMaterials(data.batch.courseId || 1).then(r => setMaterials(r.data.data || [])).catch(() => {})
-      studentApi.getSessions(data.batch.courseId || 1).then(r => setSessions(r.data.data || [])).catch(() => {})
+    if (primaryCourseId) {
+      studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
+      studentApi.getSessions(primaryCourseId).then(r => setSessions(r.data.data || [])).catch(() => {})
     }
-  }, [data?.batch])
+  }, [primaryCourseId])
 
   if (loading) return (
     <div className="page-wrapper">
@@ -144,41 +94,30 @@ export default function StudentDashboardPage() {
 
   if (error || !data) return (
     <div className="page-wrapper">
-      <div className="glass-card p-8 text-center">
-        <p className="text-yellow-600 font-semibold">Unable to load dashboard. Please refresh.</p>
-      </div>
+      <ErrorCard message={error} onRetry={refetch} />
     </div>
   )
 
-  const { student, batch, attendance, assignments, quizzes, upcomingClasses,
-          notifications, syllabusProgress, nextMock, placements, activityFeed } = data
+  const { overview, continueLearning, todaysTasks, performance, attendance, gamification, placement, upcomingClasses } = data
 
   const todayClass = upcomingClasses.find(c => isToday(new Date(c.date)))
+  const overdueCount = (todaysTasks.pendingAssignments || []).filter(a => a.isOverdue).length
 
-  // Weekly attendance chart (last 14 classes from syllabus modules context — simplified)
-  const attendanceChartData = [
-    { day: 'Mon', present: 1, absent: 0, late: 0 },
-    { day: 'Tue', present: 1, absent: 0, late: 0 },
-    { day: 'Wed', present: 1, absent: 0, late: 0 },
-    { day: 'Thu', present: 0, absent: 1, late: 0 },
-    { day: 'Fri', present: 1, absent: 0, late: 0 },
-    { day: 'Mon', present: 1, absent: 0, late: 0 },
-    { day: 'Tue', present: 0, absent: 0, late: 1 },
-    { day: 'Wed', present: 1, absent: 0, late: 0 },
-    { day: 'Thu', present: 1, absent: 0, late: 0 },
-    { day: 'Fri', present: 1, absent: 0, late: 0 },
-    { day: 'Mon', present: 1, absent: 0, late: 0 },
-    { day: 'Tue', present: 0, absent: 1, late: 0 },
-    { day: 'Wed', present: 1, absent: 0, late: 0 },
-    { day: 'Thu', present: 0, absent: 0, late: 1 },
+  const attendanceCompareData = [
+    { label: 'Previous', pct: attendance.previousPercentage },
+    { label: 'Current', pct: attendance.currentPercentage },
   ]
 
-  const moduleChartData = (syllabusProgress.modules || []).map(m => ({
-    name: m.title.replace('& ', '&\n').substring(0, 18),
-    pct: m.pct
+  const topicPerformanceData = (performance.quiz?.topicPerformance || []).slice(0, 6).map(t => ({
+    name: t.topicName?.length > 18 ? t.topicName.slice(0, 18) + '…' : t.topicName,
+    pct: Math.round(t.accuracy),
   }))
 
-  const placementTypeIcon = { SHORTLIST: '⭐', INTERVIEW: '📅', ACTION: '📋', FEEDBACK: '💬', UPDATE: '📌' }
+  const quizSparkline = (performance.quiz?.recentAttempts || [])
+    .filter(a => a.totalScore)
+    .map(a => Math.round((a.score / a.totalScore) * 100))
+
+  const unlockedAchievements = (gamification.achievements || []).filter(a => a.unlocked).length
 
   return (
     <div className="page-wrapper">
@@ -186,19 +125,19 @@ export default function StudentDashboardPage() {
       {/* ── ROW 1: Greeting + Stat Cards ─────────────────────────── */}
       <div className="animate-fadeInUp">
         <h1 className="font-display text-2xl font-extrabold text-gray-800 dark:text-white mb-0.5">
-          Good morning, {student.name.split(' ')[0]} 👋
+          Good morning, {user?.name ? user.name.split(' ')[0] : 'there'} 👋
         </h1>
         <p className="text-sm text-gray-500 mb-5">
-          {batch?.name} · Day {attendance.total} of 90
+          Enrolled in {overview.myCourses} course{overview.myCourses === 1 ? '' : 's'} · {overview.pendingAssignments} pending assignment{overview.pendingAssignments === 1 ? '' : 's'}
         </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeInUp delay-100">
         {/* Progress Ring */}
         <div className="stat-card flex flex-col items-center text-center">
-          <ProgressRing pct={syllabusProgress.percentage} size={88} strokeWidth={9} />
-          <p className="font-display font-bold text-sm text-gray-700 dark:text-gray-200 mt-2">Overall Progress</p>
-          <p className="text-xs text-gray-400">Across all modules</p>
+          <ProgressRing pct={Math.round(overview.assignmentCompletionPct ?? 0)} size={88} strokeWidth={9} />
+          <p className="font-display font-bold text-sm text-gray-700 dark:text-gray-200 mt-2">Assignment Completion</p>
+          <p className="text-xs text-gray-400">Share of assignments submitted</p>
         </div>
 
         {/* Attendance */}
@@ -207,11 +146,11 @@ export default function StudentDashboardPage() {
             <Calendar size={16} className="text-green-500" />
             <span className="text-xs text-gray-500 font-medium">Attendance</span>
           </div>
-          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{attendance.percentage}%</p>
-          <p className="text-xs text-gray-400 mt-0.5">↑ Good standing</p>
+          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{overview.attendancePct}%</p>
+          <p className="text-xs text-gray-400 mt-0.5">{attendance.riskLevel}</p>
           <div className="mt-2 flex items-center gap-1.5">
             <Flame size={14} className="text-orange-500" />
-            <span className="text-xs font-semibold text-orange-600">6 day streak</span>
+            <span className="text-xs font-semibold text-orange-600">{overview.streak} day streak</span>
           </div>
         </div>
 
@@ -221,11 +160,11 @@ export default function StudentDashboardPage() {
             <ClipboardList size={16} className="text-brand-600" />
             <span className="text-xs text-gray-500 font-medium">Assignments</span>
           </div>
-          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{assignments.pending}</p>
+          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{overview.pendingAssignments}</p>
           <p className="text-xs text-gray-400">Pending</p>
-          {assignments.overdue > 0 && (
+          {overdueCount > 0 && (
             <span className="chip bg-yellow-100 text-yellow-800 text-[10px] px-2 py-0.5 mt-1.5">
-              {assignments.overdue} Overdue
+              {overdueCount} Overdue
             </span>
           )}
         </div>
@@ -234,11 +173,11 @@ export default function StudentDashboardPage() {
         <div className="stat-card">
           <div className="flex items-center gap-2 mb-1">
             <Brain size={16} className="text-brand-600" />
-            <span className="text-xs text-gray-500 font-medium">Avg Quiz Score</span>
+            <span className="text-xs text-gray-500 font-medium">Quiz Skill</span>
           </div>
-          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{quizzes.avgScore}/100</p>
-          <p className="text-xs text-gray-400">{quizzes.taken} quizzes taken</p>
-          <Sparkline scores={quizzes.scores.map(q => q.pct)} />
+          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{Math.round(overview.quizScorePct ?? 0)}%</p>
+          <p className="text-xs text-gray-400">{performance.quiz?.quizzesCompleted ?? 0} quizzes taken</p>
+          <Sparkline scores={quizSparkline} />
         </div>
       </div>
 
@@ -252,20 +191,20 @@ export default function StudentDashboardPage() {
                 <span className="chip bg-brand-100 text-brand-700 text-[10px]">TODAY'S CLASS</span>
               </div>
               <h2 className="font-display text-lg font-bold text-gray-800 dark:text-white">{todayClass.title}</h2>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {batch?.name} · {batch?.timing} · Senthil Kumar
-              </p>
+              <p className="text-sm text-gray-500 mt-0.5">{todayClass.batchName}</p>
             </div>
             <div className="flex flex-col items-center md:items-end gap-2">
-              <Countdown targetDate={new Date().setHours(18, 0, 0, 0)} />
-              <a
-                href={todayClass.meetLink || 'https://meet.google.com'}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all"
-              >
-                <ExternalLink size={15} />
-                Join Google Meet →
-              </a>
+              <Countdown targetDate={new Date(todayClass.date).getTime()} />
+              {todayClass.meetLink && (
+                <a
+                  href={todayClass.meetLink}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all"
+                >
+                  <ExternalLink size={15} />
+                  Join Meeting →
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -282,64 +221,68 @@ export default function StudentDashboardPage() {
 
       {/* ── ROW 3: Charts ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Weekly Attendance */}
+        {/* Attendance: current vs previous */}
         <div className="glass-card p-5">
-          <h3 className="section-title"><Calendar size={16} /> Weekly Attendance</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={attendanceChartData} barSize={14} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} domain={[0, 1]} />
-              <Tooltip
-                contentStyle={{ borderRadius: 12, border: '1px solid #e9d5ff', fontSize: 12 }}
-                formatter={(v, name) => [v ? 'Yes' : 'No', name]}
-              />
-              <Bar dataKey="present" fill="#6d28d9" radius={[4,4,0,0]} name="Present" />
-              <Bar dataKey="absent"  fill="#ffd668" radius={[4,4,0,0]} name="Absent" />
-              <Bar dataKey="late"    fill="#93c5fd" radius={[4,4,0,0]} name="Late" />
-            </BarChart>
-          </ResponsiveContainer>
+          <h3 className="section-title"><Calendar size={16} /> Attendance: Current vs Previous</h3>
+          <AttendanceCompareChart data={attendanceCompareData} />
         </div>
 
-        {/* Module Progress */}
+        {/* Quiz Topic Performance */}
         <div className="glass-card p-5">
-          <h3 className="section-title"><BookOpen size={16} /> Course Progress by Module</h3>
-          <div className="space-y-3">
-            {(syllabusProgress.modules || []).map((mod, i) => {
-              const colors = ['from-purple-600 to-violet-600','from-indigo-500 to-blue-600','from-violet-500 to-purple-600','from-fuchsia-500 to-violet-600','from-blue-500 to-indigo-600']
-              return (
-                <div key={mod.id}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-600 dark:text-gray-300 font-medium truncate">{mod.title}</span>
-                    <span className="text-brand-600 font-semibold ml-2">{mod.pct}%</span>
+          <h3 className="section-title"><Brain size={16} /> Topic Performance</h3>
+          {topicPerformanceData.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Take a few quizzes to see topic-level performance</p>
+          ) : (
+            <div className="space-y-3">
+              {topicPerformanceData.map((t, i) => {
+                const colors = ['from-purple-600 to-violet-600','from-indigo-500 to-blue-600','from-violet-500 to-purple-600','from-fuchsia-500 to-violet-600','from-blue-500 to-indigo-600']
+                return (
+                  <div key={t.name + i}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-600 dark:text-gray-300 font-medium truncate">{t.name}</span>
+                      <span className="text-brand-600 font-semibold ml-2">{t.pct}%</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full bg-gradient-to-r ${colors[i % colors.length]} rounded-full transition-all duration-700`}
+                        style={{ width: `${t.pct}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full bg-gradient-to-r ${colors[i % colors.length]} rounded-full transition-all duration-700`}
-                      style={{ width: `${mod.pct}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── ROW 4: Syllabus + Upcoming Classes ───────────────────── */}
+      {/* ── ROW 4: Continue Learning + Upcoming Classes ───────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Syllabus Progress */}
+        {/* Continue Learning */}
         <div className="glass-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="section-title mb-0"><BookOpen size={16} /> Syllabus Progress</h3>
-            <span className="chip bg-brand-100 text-brand-700 text-xs">
-              {syllabusProgress.completed}/{syllabusProgress.total}
-            </span>
-          </div>
-          <div className="max-h-72 overflow-y-auto scrollbar-thin">
-            {(syllabusProgress.modules || []).map(mod => (
-              <ModuleRow key={mod.id} mod={mod} />
-            ))}
-          </div>
+          <h3 className="section-title"><BookOpen size={16} /> Continue Learning</h3>
+          {continueLearning.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">Enroll in a course to get started</p>
+          ) : (
+            <div className="space-y-3">
+              {continueLearning.map(c => (
+                <div key={c.courseId} className="flex items-center justify-between p-3 rounded-xl bg-purple-50/60 dark:bg-purple-900/10">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{c.courseTitle}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {[c.moduleTitle, c.topicTitle, c.sessionTitle].filter(Boolean).join(' · ') || 'No content yet'}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/student/my-courses/${c.courseId}`}
+                    className="flex-shrink-0 flex items-center gap-1 chip bg-brand-100 text-brand-700 text-xs px-3 py-1.5 hover:bg-brand-200 transition-colors"
+                  >
+                    Continue <ChevronRight size={12} />
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Upcoming Classes */}
@@ -349,29 +292,20 @@ export default function StudentDashboardPage() {
             <p className="text-sm text-gray-400 text-center py-6">No upcoming classes</p>
           ) : (
             <div className="space-y-3">
-              {upcomingClasses.map((cls, i) => {
+              {upcomingClasses.map((cls) => {
                 const classIsToday = isToday(new Date(cls.date))
                 return (
-                  <div key={cls.id} className="flex items-start gap-3 p-3 rounded-xl bg-purple-50/60 dark:bg-purple-900/10 hover:bg-purple-100/60 dark:hover:bg-purple-900/20 transition-colors">
+                  <div key={cls.classId} className="flex items-start gap-3 p-3 rounded-xl bg-purple-50/60 dark:bg-purple-900/10 hover:bg-purple-100/60 dark:hover:bg-purple-900/20 transition-colors">
                     <div className={`flex-shrink-0 px-2 py-1.5 rounded-lg text-center min-w-[52px] ${classIsToday ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-800'}`}>
                       <p className="text-[10px] font-bold uppercase">{classIsToday ? 'TODAY' : format(new Date(cls.date), 'EEE')}</p>
                       {!classIsToday && <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{format(new Date(cls.date), 'dd')}</p>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{cls.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{batch?.timing}</p>
-                      {cls.topics?.length > 0 && (
-                        <div className="flex gap-1 flex-wrap mt-1.5">
-                          {cls.topics.slice(0, 2).map(t => (
-                            <span key={t.id} className="chip bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[10px] border border-purple-100 dark:border-purple-800 px-2 py-0.5">
-                              {t.title}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <p className="text-xs text-gray-400 mt-0.5">{cls.batchName}</p>
                     </div>
-                    {classIsToday && (
-                      <a href={cls.meetLink || '#'} target="_blank" rel="noopener noreferrer"
+                    {classIsToday && cls.meetLink && (
+                      <a href={cls.meetLink} target="_blank" rel="noopener noreferrer"
                         className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 whitespace-nowrap">
                         Join →
                       </a>
@@ -418,20 +352,21 @@ export default function StudentDashboardPage() {
               <p className="text-sm text-gray-400 text-center py-4">No sessions yet</p>
             ) : sessions.slice(0, 5).map(s => (
               <div key={s.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors group">
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${s.gradient} flex items-center justify-center flex-shrink-0 relative overflow-hidden`}>
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
                   <Play size={20} className="text-white" fill="white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{s.title}</p>
-                  <p className="text-xs text-gray-400">{s.duration} · {s.views} views</p>
-                  {s.classDate && <p className="text-xs text-gray-400">{format(new Date(s.classDate), 'MMM d, yyyy')}</p>}
+                  {s.sessionDate && <p className="text-xs text-gray-400">{format(new Date(s.sessionDate), 'MMM d, yyyy')}</p>}
                 </div>
-                <a
-                  href={s.videoUrl} target="_blank" rel="noopener noreferrer"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity chip bg-brand-100 text-brand-700 text-xs px-2 py-1"
-                >
-                  Watch
-                </a>
+                {s.recordingUrl && (
+                  <a
+                    href={resolveFileUrl(s.recordingUrl)} target="_blank" rel="noopener noreferrer"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity chip bg-brand-100 text-brand-700 text-xs px-2 py-1"
+                  >
+                    Watch
+                  </a>
+                )}
               </div>
             ))}
           </div>
@@ -448,13 +383,10 @@ export default function StudentDashboardPage() {
                 <MaterialIcon type={m.type} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{m.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] px-2 py-0.5">{m.type}</span>
-                    {m.fileSize && <span className="text-xs text-gray-400">{m.fileSize}</span>}
-                  </div>
+                  <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] px-2 py-0.5">{m.type}</span>
                 </div>
                 <a
-                  href={m.fileUrl} target="_blank" rel="noopener noreferrer"
+                  href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1 chip bg-brand-100 text-brand-700 text-xs px-2 py-1 hover:bg-brand-200 transition-colors"
                 >
                   <Download size={12} /> Get
@@ -465,13 +397,49 @@ export default function StudentDashboardPage() {
         </div>
       </div>
 
-      {/* ── ROW 7: Placement + Activity ───────────────────────────── */}
+      {/* ── ROW 7: Gamification + Placement ───────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Gamification */}
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="section-title mb-0"><Trophy size={16} /> Gamification</h3>
+            <Link href="/student/quizzes/leaderboard" className="text-xs text-brand-600 hover:underline">View Leaderboard →</Link>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="text-center p-3 bg-purple-50/70 dark:bg-purple-900/20 rounded-xl">
+              <Zap size={18} className="mx-auto text-brand-600 mb-1" />
+              <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{gamification.xp}</p>
+              <p className="text-[11px] text-gray-400">XP</p>
+            </div>
+            <div className="text-center p-3 bg-orange-50/70 dark:bg-orange-900/10 rounded-xl">
+              <Flame size={18} className="mx-auto text-orange-500 mb-1" />
+              <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{gamification.currentStreak}</p>
+              <p className="text-[11px] text-gray-400">Day Streak</p>
+            </div>
+            <div className="text-center p-3 bg-green-50/70 dark:bg-green-900/10 rounded-xl">
+              <Award size={18} className="mx-auto text-green-600 mb-1" />
+              <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{unlockedAchievements}/{gamification.achievements.length}</p>
+              <p className="text-[11px] text-gray-400">Achievements</p>
+            </div>
+          </div>
+          {gamification.dailyChallenge && (
+            <div className="p-3 bg-brand-50 dark:bg-brand-900/20 rounded-xl border border-brand-100 dark:border-brand-800 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-brand-700 dark:text-brand-300">Daily Challenge</p>
+                <p className="text-sm text-gray-700 dark:text-gray-200">{gamification.dailyChallenge.title}</p>
+              </div>
+              {!gamification.dailyChallenge.attempted && (
+                <Link href="/student/quizzes" className="chip bg-brand-600 text-white text-xs px-3 py-1.5">Start</Link>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Placement */}
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="section-title mb-0"><Star size={16} /> Placement Updates</h3>
-            <Link href="/student/placement" className="text-xs text-brand-600 hover:underline">View all →</Link>
+            <h3 className="section-title mb-0"><Star size={16} /> Placement</h3>
+            <Link href="/student/placement" className="text-xs text-brand-600 hover:underline">View Drives →</Link>
           </div>
           <div className="flex items-center gap-3 mb-4 p-3 bg-purple-50/70 dark:bg-purple-900/20 rounded-xl">
             <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
@@ -479,45 +447,19 @@ export default function StudentDashboardPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500">Current Status</p>
-              <span className="chip bg-blue-100 text-blue-700 text-xs">SEEKING</span>
+              <span className="chip bg-blue-100 text-blue-700 text-xs">{placement.status}</span>
             </div>
           </div>
-          <div className="space-y-2.5 mb-4">
-            {placements.map((p, i) => (
-              <div key={i} className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0 mt-0.5">{placementTypeIcon[p.type] || '📌'}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{p.title}</p>
-                  <p className="text-xs text-gray-400">
-                    {formatDistanceToNow(new Date(p.createdAt), { addSuffix: true })}
-                  </p>
-                  {p.type === 'ACTION' && (
-                    <span className="chip bg-yellow-100 text-yellow-800 text-[10px] mt-1">ACTION REQUIRED</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          {nextMock && (
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
-              <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1">Next Mock Interview</p>
-              <p className="text-sm text-gray-700 dark:text-gray-200">
-                {nextMock.interviewerName} · {format(new Date(nextMock.scheduledAt), 'EEE, MMM d — h:mm a')}
-              </p>
-              {nextMock.meetLink && (
-                <a href={nextMock.meetLink} target="_blank" rel="noopener noreferrer"
-                   className="text-xs text-brand-600 hover:underline mt-1 block">
-                  Join Meeting →
-                </a>
-              )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+              <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{placement.availableDrives}</p>
+              <p className="text-[11px] text-gray-400">Available Drives</p>
             </div>
-          )}
-        </div>
-
-        {/* Activity Feed */}
-        <div className="glass-card p-5">
-          <h3 className="section-title"><Calendar size={16} /> Activity Feed</h3>
-          <ActivityFeed items={activityFeed} />
+            <div className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+              <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{placement.interestExpressed}</p>
+              <p className="text-[11px] text-gray-400">Interest Expressed</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -526,7 +468,7 @@ export default function StudentDashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="section-title mb-0">
             <Bell size={16} /> Recent Notifications
-            {notifications.length > 0 && (
+            {notifications?.length > 0 && (
               <span className="ml-2 chip bg-brand-600 text-white text-[10px] px-2 py-0.5">
                 {notifications.length}
               </span>
@@ -535,10 +477,10 @@ export default function StudentDashboardPage() {
           <Link href="/student/notifications" className="text-xs text-brand-600 hover:underline">View All →</Link>
         </div>
         <div className="space-y-2.5">
-          {notifications.length === 0 ? (
+          {!notifications?.length ? (
             <p className="text-sm text-gray-400 text-center py-4">You're all caught up! 🎉</p>
-          ) : notifications.map(n => (
-            <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-purple-50/60 dark:hover:bg-purple-900/10 transition-colors cursor-pointer group">
+          ) : notifications.slice(0, 6).map(n => (
+            <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-purple-50/60 dark:hover:bg-purple-900/10 transition-colors">
               <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!n.isRead ? 'bg-brand-600' : 'bg-gray-300'}`} />
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-medium truncate ${n.isRead ? 'text-gray-500' : 'text-gray-800 dark:text-gray-100'}`}>{n.title}</p>
@@ -585,7 +527,7 @@ function AssignmentsDashboard() {
               <p className="text-xs text-gray-400">Due {format(new Date(a.dueDate), 'MMM d')}</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {s?.grade && <span className="chip bg-green-100 text-green-700 text-[10px]">{s.grade}/100</span>}
+              {s?.grade != null && <span className="chip bg-green-100 text-green-700 text-[10px]">{s.grade}/{a.maxMarks}</span>}
               <span className={`chip text-[10px] px-2 py-0.5 ${statusColors[statusLabel] || 'bg-gray-100 text-gray-600'}`}>
                 {statusLabel}
               </span>
@@ -610,34 +552,25 @@ function QuizzesDashboard() {
 
   return (
     <div className="space-y-2.5">
-      {data.slice(0, 4).map(q => {
-        const a = q.attempt
-        return (
-          <div key={q.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors">
-            <div className="flex-1 min-w-0 mr-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{q.title}</p>
-              <p className="text-xs text-gray-400">{q.questionCount} questions · {q.duration}min</p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {a ? (
-                <>
-                  <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${a.pct >= 80 ? 'bg-green-500' : a.pct >= 60 ? 'bg-blue-500' : 'bg-yellow-500'}`}
-                      style={{ width: `${a.pct}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{a.score}/{a.totalMarks}</span>
-                </>
-              ) : (
-                <Link href="/student/quizzes" className="chip bg-brand-100 text-brand-700 text-[10px] px-2 py-0.5 hover:bg-brand-200">
-                  Start →
-                </Link>
-              )}
-            </div>
+      {data.slice(0, 4).map(q => (
+        <div key={q.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors">
+          <div className="flex-1 min-w-0 mr-2">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{q.title}</p>
+            <p className="text-xs text-gray-400">{q.totalQuestions} questions · {q.duration}min</p>
           </div>
-        )
-      })}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {q.attemptsUsed > 0 ? (
+              <span className="chip bg-brand-100 text-brand-700 text-[10px] px-2 py-0.5">
+                {q.attemptsUsed}/{q.maxAttempts ?? '∞'} attempts
+              </span>
+            ) : (
+              <Link href="/student/quizzes" className="chip bg-brand-100 text-brand-700 text-[10px] px-2 py-0.5 hover:bg-brand-200">
+                Start →
+              </Link>
+            )}
+          </div>
+        </div>
+      ))}
       <Link href="/student/quizzes" className="text-xs text-brand-600 hover:underline block text-right mt-1">
         View all quizzes →
       </Link>

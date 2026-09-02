@@ -17,12 +17,22 @@ public class ApiErrorResponse {
     private final String path;
     private final List<FieldErrorDetail> errors;
     private final Instant timestamp = Instant.now();
+    private String code;
 
     public ApiErrorResponse(String message, int status, String path, List<FieldErrorDetail> errors) {
         this.message = message;
         this.status = status;
         this.path = path;
         this.errors = errors;
+    }
+
+    public ApiErrorResponse(String message, int status, String path, List<FieldErrorDetail> errors, String code) {
+        this(message, status, path, errors);
+        this.code = code;
+    }
+
+    public String getCode() {
+        return code;
     }
 
     public boolean isSuccess() {

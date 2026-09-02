@@ -6,4 +6,5 @@ export const courseSchema = z.object({
   duration: z.string().min(1, 'Duration is required'),
   level: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED'], { errorMap: () => ({ message: 'Level is required' }) }),
   thumbnail: z.string().optional().or(z.literal('')),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED'], { errorMap: () => ({ message: 'Status is required' }) }),
 })

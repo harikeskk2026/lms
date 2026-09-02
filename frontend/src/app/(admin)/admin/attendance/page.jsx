@@ -1,31 +1,47 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import {
   CheckSquare, Save, BarChart2, Bell, Users, BookOpen,
   ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
-  Download, RefreshCw, ChevronDown
+  Download, RefreshCw, ChevronDown, Calendar, ClipboardList,
+  Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
-import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
-  CartesianGrid, ReferenceLine, ComposedChart
-} from 'recharts'
+import assignmentService from '@/services/assignmentService'
+
 import { format } from 'date-fns'
 import AttendanceMatrix from '@/components/admin/AttendanceMatrix'
 import AttendanceHeatmap from '@/components/admin/AttendanceHeatmap'
+import HistoryTab from './HistoryTab'
+
+// recharts is a heavy dependency - load it only for the trend charts below,
+// and only on the client (SSR doesn't need it).
+const CHART_SKELETON = <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+const AttendanceDailyTrendChart = dynamic(
+  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.AttendanceDailyTrendChart),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
+const WeeklyAttendanceRateChart = dynamic(
+  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.WeeklyAttendanceRateChart),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
+const MonthlyAttendanceBreakdownChart = dynamic(
+  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.MonthlyAttendanceBreakdownChart),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  PRESENT: { label: 'P', color: 'bg-green-500 text-white', hover: 'hover:bg-green-100 hover:text-green-700' },
-  ABSENT:  { label: 'A', color: 'bg-yellow-400 text-white', hover: 'hover:bg-yellow-100 hover:text-yellow-800' },
-  LATE:    { label: 'L', color: 'bg-blue-400 text-white',   hover: 'hover:bg-blue-100 hover:text-blue-700' },
-  EXCUSED: { label: 'E', color: 'bg-purple-400 text-white', hover: 'hover:bg-purple-100 hover:text-purple-700' },
+  PRESENT: { label: 'P',  color: 'bg-green-500 text-white',  hover: 'hover:bg-green-100 hover:text-green-700' },
+  ABSENT:  { label: 'A',  color: 'bg-red-500 text-white',    hover: 'hover:bg-red-100 hover:text-red-700' },
+  LATE:    { label: 'L',  color: 'bg-yellow-400 text-white', hover: 'hover:bg-yellow-100 hover:text-yellow-800' },
+  LEAVE:   { label: 'Lv', color: 'bg-blue-500 text-white',   hover: 'hover:bg-blue-100 hover:text-blue-700' },
 }
 
-const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
+
 
 function GlassCard({ children, className = '' }) {
   return (
@@ -78,10 +94,50 @@ function MarkAttendanceTab() {
   const [sheet, setSheet]                 = useState(null)
   const [batchDetail, setBatchDetail]     = useState(null)
   const [statuses, setStatuses]           = useState({})
+  const [remarks, setRemarks]             = useState({})
   const [loading, setLoading]             = useState(false)
   const [saving, setSaving]               = useState(false)
   const [saveResult, setSaveResult]       = useState(null)
   const [classNotes, setClassNotes]       = useState('')
+  const [attachments, setAttachments]     = useState([])
+  const [uploading, setUploading]         = useState(false)
+  const [copying, setCopying]             = useState(false)
+  const [history, setHistory]             = useState([])
+  const [studentSearch, setStudentSearch] = useState('')
+  const [selectedIds, setSelectedIds]     = useState([])
+  const [bulkStatus, setBulkStatus]       = useState('PRESENT')
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const res = await assignmentService.upload(file)
+      const newAttachment = {
+        name: res.data?.fileName || file.name,
+        url: res.data?.url || '',
+        size: (file.size / 1024).toFixed(1) + ' KB'
+      }
+      setAttachments(prev => [...prev, newAttachment])
+      toast.success(`Attached ${file.name}`)
+    } catch {
+      const newAttachment = {
+        name: file.name,
+        url: URL.createObjectURL(file),
+        size: (file.size / 1024).toFixed(1) + ' KB'
+      }
+      setAttachments(prev => [...prev, newAttachment])
+      toast.success(`Attached ${file.name}`)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const removeAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
 
   useEffect(() => {
     adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
@@ -106,34 +162,127 @@ function MarkAttendanceTab() {
         adminApi.getAttendanceSheet(selectedClass),
         adminApi.getBatchAttDetail(selectedBatch),
       ])
-      const sheetData = sheetRes.status === 'fulfilled' ? sheetRes.value.data.data : null
+      const rawSheet = sheetRes.status === 'fulfilled' ? sheetRes.value.data.data : null
       const detailData = detailRes.status === 'fulfilled' ? detailRes.value.data.data : null
-      setSheet(sheetData)
-      setBatchDetail(detailData)
-      if (sheetData) {
-        const init = {}
-        for (const s of sheetData.students) init[s.studentId] = s.status || 'ABSENT'
-        setStatuses(init)
+
+      const selectedClassObj = classes.find(c => String(c.id) === String(selectedClass))
+      const selectedBatchObj = batches.find(b => String(b.id) === String(selectedBatch))
+
+      const studentList = Array.isArray(rawSheet) ? rawSheet : (rawSheet?.students || [])
+
+      const formattedSheet = {
+        class: selectedClassObj ? {
+          id: selectedClassObj.id,
+          title: selectedClassObj.title,
+          date: selectedClassObj.date,
+          batch: selectedBatchObj || { name: 'Batch' }
+        } : (rawSheet?.class || { title: 'Class', date: new Date().toISOString(), batch: { name: 'Batch' } }),
+        students: studentList
       }
-    } catch { toast.error('Failed to load attendance sheet') } finally { setLoading(false) }
+
+      setSheet(formattedSheet)
+      setBatchDetail(detailData)
+
+      const init = {}
+      const initRemarks = {}
+      for (const s of studentList) {
+        init[s.studentId] = s.status || 'ABSENT'
+        if (s.remarks) initRemarks[s.studentId] = s.remarks
+      }
+      setStatuses(init)
+      setRemarks(initRemarks)
+      setSelectedIds([])
+      setStudentSearch('')
+      setHistory([])
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load attendance sheet')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const saveAttendance = async () => {
+  const saveAttendance = async (submit = true) => {
     setSaving(true)
     try {
-      const records = Object.entries(statuses).map(([studentId, status]) => ({ studentId: parseInt(studentId), status }))
-      await adminApi.markAttendance(selectedClass, records)
-      const counts = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }
-      for (const s of Object.values(statuses)) counts[s] = (counts[s] || 0) + 1
-      setSaveResult(counts)
-      toast.success('Attendance saved successfully')
+      const records = Object.entries(statuses).map(([studentId, status]) => ({
+        studentId: parseInt(studentId),
+        status,
+        remarks: remarks[studentId]?.trim() || undefined,
+      }))
+      await (submit ? adminApi.submitAttendance(selectedClass, records) : adminApi.saveAttendanceDraft(selectedClass, records))
+      if (submit) {
+        const counts = Object.fromEntries(Object.keys(STATUS_CONFIG).map(s => [s, 0]))
+        for (const s of Object.values(statuses)) counts[s] = (counts[s] || 0) + 1
+        setSaveResult(counts)
+        toast.success('Attendance saved successfully')
+      } else {
+        toast.success('Draft saved — class stays pending')
+      }
     } catch { toast.error('Failed to save attendance') } finally { setSaving(false) }
   }
 
-  const setStatus = (studentId, status) => setStatuses(prev => ({ ...prev, [studentId]: status }))
-  const markAll   = (status) => setStatuses(prev => Object.fromEntries(Object.keys(prev).map(k => [k, status])))
+  const pushHistory = () => setHistory(prev => [...prev, statuses])
+  const undo = () => setHistory(prev => {
+    if (!prev.length) return prev
+    const last = prev[prev.length - 1]
+    setStatuses(last)
+    return prev.slice(0, -1)
+  })
 
-  const counts = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }
+  const resetChanges = () => {
+    const init = {}
+    for (const s of (sheet?.students || [])) init[s.studentId] = s.status || 'ABSENT'
+    setStatuses(init)
+    setHistory([])
+    setSelectedIds([])
+    toast.success('Unsaved changes reset')
+  }
+
+  const setStatus = (studentId, status) => { pushHistory(); setStatuses(prev => ({ ...prev, [studentId]: status })) }
+  const setRemark = (studentId, value) => setRemarks(prev => ({ ...prev, [studentId]: value }))
+  const markAll   = (status) => { pushHistory(); setStatuses(prev => Object.fromEntries(Object.keys(prev).map(k => [k, status]))) }
+
+  const toggleSelected = (studentId) => setSelectedIds(prev =>
+    prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId])
+
+  const applyBulkStatus = () => {
+    if (!selectedIds.length) return
+    pushHistory()
+    setStatuses(prev => {
+      const next = { ...prev }
+      for (const id of selectedIds) next[id] = bulkStatus
+      return next
+    })
+    setSelectedIds([])
+  }
+
+  const filteredStudents = (sheet?.students || []).filter(s => {
+    const q = studentSearch.trim().toLowerCase()
+    if (!q) return true
+    return s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.enrollmentNo?.toLowerCase().includes(q)
+  })
+
+  const copyPrevious = async () => {
+    setCopying(true)
+    try {
+      const r = await adminApi.copyPreviousAttendance(selectedClass)
+      const prevSheet = r.data.data || []
+      pushHistory()
+      setStatuses(prev => {
+        const next = { ...prev }
+        for (const s of prevSheet) {
+          if (s.studentId in next) next[s.studentId] = s.status
+        }
+        return next
+      })
+      toast.success('Copied previous class attendance')
+    } catch {
+      toast.error('No previous completed class found for this batch')
+    } finally { setCopying(false) }
+  }
+
+  const counts = Object.fromEntries(Object.keys(STATUS_CONFIG).map(s => [s, 0]))
   for (const s of Object.values(statuses)) counts[s] = (counts[s] || 0) + 1
 
   // Build student pct map from batch detail
@@ -152,7 +301,8 @@ function MarkAttendanceTab() {
             <p className="font-semibold text-green-800 dark:text-green-300 text-sm">
               Attendance saved — {saveResult.PRESENT} present, {saveResult.ABSENT} absent
               {saveResult.LATE > 0 ? `, ${saveResult.LATE} late` : ''}
-              {saveResult.EXCUSED > 0 ? `, ${saveResult.EXCUSED} excused` : ''}
+              {saveResult.LEAVE > 0 ? `, ${saveResult.LEAVE} on leave` : ''}
+
             </p>
           </div>
         </GlassCard>
@@ -188,7 +338,8 @@ function MarkAttendanceTab() {
 
       {/* Step 2: Mark */}
       {sheet && (
-        <div className="space-y-4">
+        <div className="space-y-5 pb-6">
+
           {/* Class info + counts */}
           <GlassCard className="p-5 flex items-center justify-between flex-wrap gap-3">
             <div>
@@ -205,15 +356,37 @@ function MarkAttendanceTab() {
             </div>
           </GlassCard>
 
-          {/* Quick mark buttons */}
-          <div className="flex gap-2 flex-wrap">
-            {Object.entries(STATUS_CONFIG).map(([s, cfg]) => (
-              <button key={s} onClick={() => markAll(s)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${cfg.color} hover:opacity-80 transition-opacity`}>
-                Mark All {s.charAt(0) + s.slice(1).toLowerCase()}
+          {/* Search + bulk selection + Undo/Reset */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <input value={studentSearch} onChange={e => setStudentSearch(e.target.value)}
+              placeholder="Search student by name, email, or enrollment no..."
+              className="flex-1 min-w-[220px] rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <>
+                  <span className="text-xs text-gray-500">Selected: {selectedIds.length}</span>
+                  <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
+                    className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500">
+                    {Object.keys(STATUS_CONFIG).map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ')}</option>)}
+                  </select>
+                  <button onClick={applyBulkStatus}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors">
+                    Apply to Selected
+                  </button>
+                </>
+              )}
+              <button onClick={undo} disabled={!history.length}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors">
+                Undo
               </button>
-            ))}
+              <button onClick={resetChanges}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Reset
+              </button>
+            </div>
           </div>
+
 
           {/* Student table */}
           <GlassCard className="overflow-hidden">
@@ -221,18 +394,27 @@ function MarkAttendanceTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-900/30">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase">#</th>
+                    <th className="px-4 py-3 text-left">
+                      <input type="checkbox"
+                        checked={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length}
+                        onChange={e => setSelectedIds(e.target.checked ? filteredStudents.map(s => s.studentId) : [])} />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase">Student</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase">Overall</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase">Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(sheet.students || []).map((s, i) => {
+                  {filteredStudents.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">No students match your search.</td></tr>
+                  ) : filteredStudents.map((s) => {
                     const overallPct = studentPctMap[s.studentId]
                     return (
                       <tr key={s.studentId} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10">
-                        <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={selectedIds.includes(s.studentId)} onChange={() => toggleSelected(s.studentId)} />
+                        </td>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-gray-800 dark:text-white">{s.name}</p>
                           <p className="text-xs text-gray-400">{s.email}</p>
@@ -258,6 +440,11 @@ function MarkAttendanceTab() {
                             ))}
                           </div>
                         </td>
+                        <td className="px-4 py-3">
+                          <input value={remarks[s.studentId] || ''} onChange={e => setRemark(s.studentId, e.target.value)}
+                            placeholder="Optional remarks"
+                            className="w-40 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                        </td>
                       </tr>
                     )
                   })}
@@ -266,35 +453,94 @@ function MarkAttendanceTab() {
             </div>
           </GlassCard>
 
-          {/* Class notes */}
-          <GlassCard className="p-5">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Class Notes (optional)</label>
-            <textarea
-              value={classNotes}
-              onChange={e => setClassNotes(e.target.value)}
-              placeholder="Add notes about today's class, topics covered, announcements..."
-              rows={3}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-            />
+          {/* Class notes & Attachments */}
+          <GlassCard className="p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Class Notes (optional)</label>
+              <textarea
+                value={classNotes}
+                onChange={e => setClassNotes(e.target.value)}
+                placeholder="Add notes about today's class, topics covered, announcements..."
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+
+            {/* Class Attachments */}
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <Paperclip size={14} className="text-purple-600 dark:text-purple-400" />
+                  Class Attachments
+                  <span className="text-[10px] text-gray-400 font-normal">(PDF, Slides, Docs, Images)</span>
+                </label>
+
+                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors">
+                  <Upload size={13} />
+                  {uploading ? 'Uploading...' : 'Add Attachment'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.zip"
+                  />
+                </label>
+              </div>
+
+              {/* Attachments list */}
+              {attachments.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {attachments.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-50/70 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800 text-xs">
+                      <FileText size={14} className="text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[180px]">{file.name}</span>
+                      {file.size && <span className="text-[10px] text-gray-400">({file.size})</span>}
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(idx)}
+                        className="text-gray-400 hover:text-red-500 transition-colors ml-1"
+                        title="Remove file"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic mt-1">No attachments added yet.</p>
+              )}
+            </div>
           </GlassCard>
 
-          {/* Sticky save */}
-          <div className="sticky bottom-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm p-4 -mx-6 border-t border-purple-100 dark:border-purple-900/30">
+
+          {/* Sticky save bar */}
+          <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl -mx-6 -mb-6 px-6 py-4 border-t border-purple-100 dark:border-purple-900/30 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <p className="text-sm text-gray-500">
-                <span className="text-green-600 font-semibold">{counts.PRESENT} present</span>
+                <span className="text-green-600 font-semibold">{counts.PRESENT || 0} present</span>
                 {' · '}
-                <span className="text-yellow-600 font-semibold">{counts.ABSENT} absent</span>
+                <span className="text-red-500 font-semibold">{counts.ABSENT || 0} absent</span>
                 {' · '}
-                <span className="text-blue-500 font-semibold">{counts.LATE} late</span>
+                <span className="text-yellow-600 font-semibold">{counts.LATE || 0} late</span>
+                {' · '}
+                <span className="text-blue-500 font-semibold">{counts.LEAVE || 0} leave</span>
               </p>
-              <button onClick={saveAttendance} disabled={saving}
-                className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
-                <Save size={16} />
-                {saving ? 'Saving...' : 'Save Attendance'}
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button onClick={() => saveAttendance(false)} disabled={saving}
+                  className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-60 transition-all">
+                  Save Draft
+                </button>
+                <button onClick={() => saveAttendance(true)} disabled={saving}
+                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
+                  <Save size={16} />
+                  {saving ? 'Saving...' : 'Submit'}
+                </button>
+              </div>
             </div>
           </div>
+
         </div>
       )}
     </div>
@@ -323,7 +569,14 @@ function BatchOverviewTab() {
     setDetailLoading(true)
     try {
       const r = await adminApi.getBatchAttDetail(batch.batchId, monthFilter ? { month: monthFilter } : {})
-      setDetail(r.data.data)
+      const data = r.data.data
+      setDetail(data)
+      if (!monthFilter && data?.classes?.length > 0) {
+        const lastClassDate = data.classes[data.classes.length - 1].date
+        if (lastClassDate) {
+          setMonthFilter(format(new Date(lastClassDate), 'yyyy-MM'))
+        }
+      }
     } catch { toast.error('Failed to load batch detail') } finally { setDetailLoading(false) }
   }
 
@@ -337,6 +590,7 @@ function BatchOverviewTab() {
   }
 
   useEffect(() => { if (selectedBatch) reloadDetail() }, [monthFilter])
+
 
   if (loading) return <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-44" />)}</div>
 
@@ -511,57 +765,19 @@ function AnalyticsTab() {
           {/* Area chart — Attendance Trend */}
           <GlassCard className="p-5">
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Attendance Trend</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={data.dailyTrend} margin={{ left: -10, right: 10 }}>
-                <defs>
-                  <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6d28d9" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorAbsent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ffd668" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ffd668" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" dataKey="present" name="Present" stroke="#6d28d9" fill="url(#colorPresent)" strokeWidth={2} />
-                <Area type="monotone" dataKey="absent"  name="Absent"  stroke="#ffd668" fill="url(#colorAbsent)"  strokeWidth={2} />
-                <Area type="monotone" dataKey="late"    name="Late"    stroke="#93c5fd" fill="none" strokeWidth={1.5} strokeDasharray="4 2" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <AttendanceDailyTrendChart data={data.dailyTrend} />
           </GlassCard>
 
           {/* Weekly + Monthly charts */}
           <div className="grid sm:grid-cols-2 gap-4">
             <GlassCard className="p-5">
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Weekly Attendance Rate</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={data.weeklyTrend} margin={{ left: -10, right: 10 }}>
-                  <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, 'Attendance']} />
-                  <ReferenceLine y={75} stroke="#ffd668" strokeDasharray="4 2" label={{ value: '75% min', fill: '#ffd668', fontSize: 10 }} />
-                  <Line type="monotone" dataKey="pct" name="Rate" stroke="#6d28d9" strokeWidth={2.5} dot={{ fill: '#6d28d9', r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <WeeklyAttendanceRateChart data={data.weeklyTrend} />
             </GlassCard>
 
             <GlassCard className="p-5">
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Monthly Breakdown</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={data.monthlyTrend} barSize={16} margin={{ left: -10, right: 10 }}>
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="present" name="Present" fill="#6d28d9" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="absent"  name="Absent"  fill="#ffd668" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="late"    name="Late"    fill="#93c5fd" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <MonthlyAttendanceBreakdownChart data={data.monthlyTrend} />
             </GlassCard>
           </div>
 
@@ -719,13 +935,211 @@ function AlertsTab() {
   )
 }
 
+// ─── Command Center strip ───────────────────────────────────────────────────────
+
+function CommandCenterStrip() {
+  const [stats, setStats] = useState(null)
+
+  useEffect(() => {
+    adminApi.getAttendanceDashboard().then(r => setStats(r.data.data)).catch(() => {})
+  }, [])
+
+  if (!stats) return <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+
+  const cards = [
+    { label: 'Total Students', value: stats.totalStudents, icon: Users },
+    { label: "Today's Classes", value: stats.todaysClasses, icon: Calendar },
+    { label: 'Average Attendance', value: `${stats.averageAttendance}%`, icon: TrendingUp },
+    { label: 'Below 75%', value: stats.below75Count, icon: AlertTriangle, iconColor: 'text-yellow-500' },
+    { label: 'Critical Students', value: stats.criticalCount, icon: XCircle, iconColor: 'text-red-500' },
+    { label: 'Unmarked Classes', value: stats.unmarkedClasses, icon: FileEdit, iconColor: 'text-orange-500' },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      {cards.map(c => (
+        <GlassCard key={c.label} className="p-4">
+          <c.icon size={16} className={c.iconColor || 'text-purple-600'} />
+          <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-2">{c.value}</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">{c.label}</p>
+        </GlassCard>
+      ))}
+    </div>
+  )
+}
+
+// ─── TAB 5: Today ───────────────────────────────────────────────────────────────
+
+function TodayTab() {
+  const [classes, setClasses] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    adminApi.getTodayClasses()
+      .then(r => setClasses(r.data.data || []))
+      .catch(() => toast.error('Failed to load today\'s classes'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="space-y-3">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+
+  if (classes.length === 0) {
+    return (
+      <GlassCard className="p-8 text-center">
+        <Calendar className="mx-auto mb-3 text-gray-400" size={32} />
+        <p className="text-gray-500 text-sm">No classes scheduled for today.</p>
+      </GlassCard>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {classes.map(c => (
+        <GlassCard key={c.classId} className="p-4 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="font-semibold text-gray-800 dark:text-white">{c.title}</p>
+            <p className="text-xs text-gray-500">{c.batchName} · {format(new Date(c.date), 'h:mm a')}</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <p className="text-sm font-bold text-green-600">{c.present}</p>
+              <p className="text-[10px] text-gray-400">Present</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-bold text-yellow-600">{c.absent}</p>
+              <p className="text-[10px] text-gray-400">Absent</p>
+            </div>
+            <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${c.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
+              {c.status === 'COMPLETED' ? 'Completed' : 'Pending'}
+            </span>
+            {c.meetLink && (
+              <a href={c.meetLink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Join</a>
+            )}
+            {c.recordingUrl && (
+              <a href={c.recordingUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Recording</a>
+            )}
+          </div>
+        </GlassCard>
+      ))}
+    </div>
+  )
+}
+
+// ─── TAB 6: Corrections ─────────────────────────────────────────────────────────
+
+function CorrectionsTab() {
+  const [corrections, setCorrections] = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [statusFilter, setStatusFilter] = useState('PENDING')
+  const [reviewing, setReviewing]     = useState(null)
+  const [rejectingId, setRejectingId] = useState(null)
+  const [rejectComment, setRejectComment] = useState('')
+
+  const load = useCallback(() => {
+    setLoading(true)
+    adminApi.getCorrections(statusFilter ? { status: statusFilter } : {})
+      .then(r => setCorrections(r.data.data || []))
+      .catch(() => toast.error('Failed to load correction requests'))
+      .finally(() => setLoading(false))
+  }, [statusFilter])
+
+  useEffect(() => { load() }, [load])
+
+  const review = async (id, decision, comment) => {
+    setReviewing(id)
+    try {
+      await adminApi.reviewCorrection(id, { decision, comment: comment || undefined })
+      toast.success(`Request ${decision.toLowerCase()}`)
+      setRejectingId(null)
+      setRejectComment('')
+      load()
+    } catch { toast.error('Failed to review request') } finally { setReviewing(null) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl w-fit">
+        {['PENDING', 'APPROVED', 'REJECTED'].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${statusFilter === s ? 'bg-white dark:bg-gray-700 text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            {s.charAt(0) + s.slice(1).toLowerCase()}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+      ) : corrections.length === 0 ? (
+        <GlassCard className="p-8 text-center">
+          <ClipboardList className="mx-auto mb-3 text-gray-400" size={32} />
+          <p className="text-gray-500 text-sm">No {statusFilter.toLowerCase()} correction requests.</p>
+        </GlassCard>
+      ) : (
+        <div className="space-y-3">
+          {corrections.map(c => (
+            <GlassCard key={c.id} className="p-5 flex items-start justify-between flex-wrap gap-3">
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-white">{c.studentName}</p>
+                <p className="text-xs text-gray-500">{c.classTitle} · {format(new Date(c.classDate), 'd MMM yyyy')}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{c.currentStatus} → {c.requestedStatus}</p>
+                <p className="text-xs text-gray-500 mt-1">Reason: {c.reason}</p>
+                {c.comment && <p className="text-xs text-gray-400 mt-0.5">Comment: {c.comment}</p>}
+                {c.documentUrl && (
+                  <a href={c.documentUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-600 hover:underline mt-0.5 inline-block">View document</a>
+                )}
+              </div>
+              {c.status === 'PENDING' ? (
+                rejectingId === c.id ? (
+                  <div className="flex flex-col gap-2 w-full sm:w-64 flex-shrink-0">
+                    <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2}
+                      placeholder="Reason for rejection (optional)"
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+                    <div className="flex gap-2">
+                      <button onClick={() => review(c.id, 'REJECTED', rejectComment)} disabled={reviewing === c.id}
+                        className="flex-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 transition-colors">
+                        Confirm Reject
+                      </button>
+                      <button onClick={() => { setRejectingId(null); setRejectComment('') }}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button onClick={() => review(c.id, 'APPROVED')} disabled={reviewing === c.id}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 transition-colors">
+                      Approve
+                    </button>
+                    <button onClick={() => setRejectingId(c.id)} disabled={reviewing === c.id}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 transition-colors">
+                      Reject
+                    </button>
+                  </div>
+                )
+              ) : (
+                <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${c.status === 'APPROVED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                  {c.status}
+                </span>
+              )}
+            </GlassCard>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'mark',      label: 'Mark Attendance', icon: CheckSquare },
-  { key: 'overview',  label: 'Batch Overview',   icon: Users },
-  { key: 'analytics', label: 'Analytics',        icon: BarChart2 },
-  { key: 'alerts',    label: 'Alerts',           icon: Bell },
+  { key: 'today',       label: 'Today',            icon: Calendar },
+  { key: 'mark',        label: 'Mark Attendance',  icon: CheckSquare },
+  { key: 'overview',    label: 'Batch Overview',   icon: Users },
+  { key: 'analytics',   label: 'Analytics',        icon: BarChart2 },
+  { key: 'alerts',      label: 'Alerts',           icon: Bell },
+  { key: 'history',     label: 'History',          icon: History },
+  { key: 'corrections', label: 'Corrections',      icon: ClipboardList },
 ]
 
 export default function AttendancePage() {
@@ -734,19 +1148,28 @@ export default function AttendancePage() {
   const exportCSV = async () => {
     try {
       const r = await adminApi.exportCSV({ type: 'attendance' })
-      const rows = r.data.data || []
+      const rawData = r.data?.data || r.data || []
+      const rows = Array.isArray(rawData) ? rawData : []
       if (!rows.length) return toast.error('No data to export')
+      
       const headers = Object.keys(rows[0]).join(',')
       const lines = rows.map(row => Object.values(row).map(v => `"${v ?? ''}"`).join(','))
       const csv = [headers, ...lines].join('\n')
-      const blob = new Blob([csv], { type: 'text/csv' })
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
       a.download = `attendance-export-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
       a.click()
+      document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch { toast.error('Export failed') }
+      toast.success('Attendance CSV exported successfully!')
+    } catch (err) {
+      console.error('Export CSV Error:', err)
+      toast.error('Export failed: ' + (err?.response?.data?.message || err.message || 'Unknown error'))
+    }
   }
 
   return (
@@ -764,6 +1187,9 @@ export default function AttendancePage() {
           </button>
         </div>
 
+        {/* Command Center */}
+        <CommandCenterStrip />
+
         {/* Tab bar */}
         <div className="flex items-center gap-1 p-1 bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl w-fit flex-wrap">
           {TABS.map(({ key, label, icon: Icon }) => (
@@ -780,10 +1206,13 @@ export default function AttendancePage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'mark'      && <MarkAttendanceTab />}
-        {activeTab === 'overview'  && <BatchOverviewTab />}
-        {activeTab === 'analytics' && <AnalyticsTab />}
-        {activeTab === 'alerts'    && <AlertsTab />}
+        {activeTab === 'today'       && <TodayTab />}
+        {activeTab === 'mark'        && <MarkAttendanceTab />}
+        {activeTab === 'overview'    && <BatchOverviewTab />}
+        {activeTab === 'analytics'   && <AnalyticsTab />}
+        {activeTab === 'alerts'      && <AlertsTab />}
+        {activeTab === 'history'     && <HistoryTab />}
+        {activeTab === 'corrections' && <CorrectionsTab />}
       </div>
     </div>
   )

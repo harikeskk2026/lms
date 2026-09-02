@@ -1,8 +1,8 @@
 'use client'
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import Cookies from 'js-cookie'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import api from '@/lib/api'
 import authService from '@/services/authService'
+import tokenStorage from '@/utilities/tokenStorage'
 import { useRouter } from 'next/navigation'
 
 const AuthContext = createContext(null)
@@ -12,14 +12,29 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  // On mount: fetch /auth/me if access token exists
+  // Set while an explicit logout is in flight, so the route guards in
+  // (admin)/layout.jsx and (student)/layout.jsx - which also redirect to
+  // /login whenever `user` goes null, tagging the current path as `?redirect=`
+  // so a session-expiry redirect can return here after re-login - know not to
+  // race logout's own plain redirect to /login with a `?redirect=` one.
+  const loggingOutRef = useRef(false)
+  const isLoggingOut = useCallback(() => loggingOutRef.current, [])
+
+  // On mount: hydrate from the cached user immediately (avoids a blank flash
+  // on refresh), then re-verify the token against /auth/me in the background.
   useEffect(() => {
-    const token = Cookies.get('clms_at')
+    const token = tokenStorage.getToken()
     if (token) {
+      const cachedUser = tokenStorage.getUser()
+      if (cachedUser) setUser(cachedUser)
+
       authService.me()
-        .then(r => setUser(r.data))
+        .then(r => {
+          setUser(r.data)
+          tokenStorage.setUser(r.data)
+        })
         .catch(() => {
-          Cookies.remove('clms_at')
+          tokenStorage.clear()
           setUser(null)
         })
         .finally(() => setLoading(false))
@@ -30,8 +45,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { data } = await authService.login(email, password)
-    // 15 min expiry
-    Cookies.set('clms_at', data.accessToken, { expires: 1 / 96, sameSite: 'strict' })
+    tokenStorage.setSession(data.accessToken, data.user)
     setUser(data.user)
     const dest = data.user.role === 'STUDENT' ? '/student/dashboard' : '/admin/dashboard'
     router.push(dest)
@@ -39,21 +53,23 @@ export function AuthProvider({ children }) {
   }, [router])
 
   const logout = useCallback(async () => {
+    loggingOutRef.current = true
     try { await api.post('/auth/logout') } catch {}
-    Cookies.remove('clms_at')
+    tokenStorage.clear()
     setUser(null)
     router.push('/login')
   }, [router])
 
   const logoutAll = useCallback(async () => {
+    loggingOutRef.current = true
     try { await api.post('/auth/logout-all') } catch {}
-    Cookies.remove('clms_at')
+    tokenStorage.clear()
     setUser(null)
     router.push('/login')
   }, [router])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, logoutAll, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, logoutAll, setUser, isLoggingOut }}>
       {children}
     </AuthContext.Provider>
   )

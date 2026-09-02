@@ -1,36 +1,39 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, BookOpen, ClipboardList,
-  BarChart2, Bell, LogOut, LogIn, Menu, X, ChevronRight,
+  BarChart2, LogOut, LogIn, Menu, X, ChevronRight,
   Layers, Calendar, Brain, Briefcase, Megaphone, Search,
-  Moon, Sun
+  Moon, Sun, Video, UserCircle
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
+import NotificationDropdown from '@/components/ui/NotificationDropdown'
 import clsx from 'clsx'
 
 const navItems = [
   { href: '/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students' },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
-  { href: '/admin/courses',       icon: BookOpen,        label: 'Courses' },
+  { href: '/admin/batch-catalog', icon: Layers,          label: 'Batch Catalog' },
   { href: '/admin/course-catalog',icon: BookOpen,        label: 'Course Catalog' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
+  { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/admin/assignments',   icon: ClipboardList,   label: 'Assignments',  badge: 'assignments' },
   { href: '/admin/quizzes',       icon: Brain,           label: 'Quizzes' },
   { href: '/admin/placement',     icon: Briefcase,       label: 'Placement' },
   { href: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
   { href: '/admin/reports',       icon: BarChart2,       label: 'Reports' },
+  { href: '/admin/profile',       icon: UserCircle,      label: 'My Profile' },
 ]
 
 const PAGE_TITLES = {
   '/admin/dashboard':     'Dashboard',
   '/admin/students':      'Students',
   '/admin/batches':       'Batches',
-  '/admin/courses':       'Courses',
+  '/admin/batch-catalog': 'Batch Catalog',
   '/admin/course-catalog':'Course Catalog',
   '/admin/attendance':    'Attendance',
   '/admin/assignments':   'Assignments',
@@ -38,6 +41,7 @@ const PAGE_TITLES = {
   '/admin/placement':     'Placement',
   '/admin/announcements': 'Announcements',
   '/admin/reports':       'Reports',
+  '/admin/profile':       'My Profile',
 }
 
 function Sidebar({ open, onClose, badges }) {
@@ -145,7 +149,6 @@ function Sidebar({ open, onClose, badges }) {
 
 function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
   const pathname = usePathname()
-  const router = useRouter()
   const pageTitle = Object.entries(PAGE_TITLES).find(([k]) => pathname === k || pathname.startsWith(k + '/'))?.[1] || 'Admin'
 
   return (
@@ -173,13 +176,12 @@ function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
         </button>
 
         {/* Notifications */}
-        <button
-          onClick={() => router.push('/admin/students')}
-          className="relative w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-300 hover:bg-purple-100 transition-colors"
-        >
-          <Bell size={16} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-yellow-400 rounded-full" />
-        </button>
+        <NotificationDropdown
+          fetchFn={adminApi.getNotifications}
+          markReadFn={adminApi.markNotifRead}
+          markAllFn={adminApi.markAllNotifsRead}
+          pollInterval={30000}
+        />
 
         {/* Avatar */}
         <div className="flex items-center gap-2 pl-2 border-l border-purple-100 dark:border-purple-900/30">
@@ -204,12 +206,11 @@ export default function AdminShell({ children }) {
 
   // Fetch badge counts
   useEffect(() => {
-    adminApi.getDashboardStats().then(res => {
+    adminApi.getDashboard().then(res => {
       const d = res.data?.data
       if (d) {
         setBadges({
-          students: d.newThisMonth || 0,
-          assignments: d.totalAssignmentsPending || 0,
+          assignments: d.assignments?.pendingSubmissions || 0,
         })
       }
     }).catch(() => {})

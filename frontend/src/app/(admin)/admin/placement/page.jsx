@@ -1,10 +1,20 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+
 import { Plus, ChevronDown, ChevronUp, Star, Trash2, Calendar, Building2, MapPin, Users, CheckCircle, X } from 'lucide-react'
 import { format, differenceInDays, isPast } from 'date-fns'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import SlidePanel from '@/components/admin/SlidePanel'
+import EligibilityCriteriaFields from '@/components/admin/EligibilityCriteriaFields'
+
+const EMPTY_DRIVE_FORM = {
+  companyName: '', role: '', packageOffered: '', location: '', driveDate: '', applyDeadline: '',
+  description: '', requirements: '', skills: '', driveType: 'CAMPUS', status: 'UPCOMING', applyLink: '',
+  minCgpa: null, minPercentage: null, maxBacklogs: null,
+  eligibleBatchIds: [], eligibleCourseIds: [],
+}
 
 const TABS = ['Students', 'Mock Interviews', 'Interview Questions', 'Company Drives']
 const PLACEMENT_COLORS = { SEEKING: 'bg-blue-100 text-blue-700', INTERVIEWING: 'bg-yellow-100 text-yellow-700', PLACED: 'bg-green-100 text-green-700', NOT_SEEKING: 'bg-gray-100 text-gray-500' }
@@ -20,7 +30,7 @@ export default function PlacementPage() {
   const [driveApplications, setDriveApplications] = useState({})
   const [viewingApps, setViewingApps] = useState(null)
   const [drivePanel, setDrivePanel] = useState(false)
-  const [driveForm, setDriveForm] = useState({ companyName: '', role: '', package: '', location: '', driveDate: '', applyDeadline: '', description: '', requirements: '', skills: '', driveType: 'CAMPUS', status: 'UPCOMING', applyLink: '' })
+  const [driveForm, setDriveForm] = useState(EMPTY_DRIVE_FORM)
   const [loading, setLoading] = useState(true)
   const [iqCategory, setIqCategory] = useState('All')
   const [iqDiff, setIqDiff] = useState('')
@@ -35,19 +45,28 @@ export default function PlacementPage() {
   const [feedbackForm, setFeedbackForm] = useState({ feedback: '', rating: 5, status: 'COMPLETED', strengths: '', improvements: '' })
   const [editIq, setEditIq] = useState(null)
 
+  // Each section loads independently - one tab's backend not being ready yet
+  // (rolled out phase by phase) must never blank out an already-working tab.
   const loadData = () => {
     setLoading(true)
-    Promise.all([
+    Promise.allSettled([
       adminApi.getPlacement(),
       adminApi.getMockInterviews(),
       adminApi.getInterviewQuestions({ category: iqCategory === 'All' ? '' : iqCategory, difficulty: iqDiff, search: iqSearch }),
       adminApi.getDrives(),
     ]).then(([p, m, iq, d]) => {
-      setOverview(p.data.data)
-      setMocks(m.data.data || [])
-      setIqList(iq.data.data?.items || [])
-      setDrives(d.data.data || [])
-    }).catch(() => toast.error('Failed to load')).finally(() => setLoading(false))
+      if (p.status === 'fulfilled') setOverview(p.value.data.data)
+      else toast.error('Failed to load student placement overview')
+
+      if (m.status === 'fulfilled') setMocks(m.value.data.data || [])
+      else toast.error('Failed to load mock interviews')
+
+      if (iq.status === 'fulfilled') setIqList(iq.value.data.data?.items || [])
+      else toast.error('Failed to load interview questions')
+
+      if (d.status === 'fulfilled') setDrives(d.value.data.data || [])
+      else toast.error('Failed to load company drives')
+    }).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadData() }, [iqCategory, iqDiff, iqSearch])
@@ -115,7 +134,7 @@ export default function PlacementPage() {
       })
       toast.success('Drive created')
       setDrivePanel(false)
-      setDriveForm({ companyName: '', role: '', package: '', location: '', driveDate: '', applyDeadline: '', description: '', requirements: '', skills: '', driveType: 'CAMPUS', status: 'UPCOMING', applyLink: '' })
+      setDriveForm(EMPTY_DRIVE_FORM)
       loadData()
     } catch { toast.error('Failed to create drive') } finally { setSaving(false) }
   }
@@ -389,52 +408,13 @@ export default function PlacementPage() {
           </div>
 
           {/* Applications modal */}
-          {viewingApps && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-                  <h3 className="font-bold text-gray-900 dark:text-white">Drive Applications</h3>
-                  <button onClick={() => setViewingApps(null)} className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200"><X size={14} /></button>
-                </div>
-                <div className="overflow-y-auto flex-1">
-                  {!driveApplications[viewingApps] ? (
-                    <div className="p-6 text-center text-gray-400">Loading...</div>
-                  ) : driveApplications[viewingApps].length === 0 ? (
-                    <div className="p-6 text-center text-gray-400">No applications yet</div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                          {['Student', 'Email', 'Applied', 'Status'].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {driveApplications[viewingApps].map(app => (
-                          <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800">
-                            <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-white">{app.student?.user?.name}</td>
-                            <td className="px-4 py-2.5 text-xs text-gray-400">{app.student?.user?.email}</td>
-                            <td className="px-4 py-2.5 text-xs text-gray-400">{format(new Date(app.appliedAt), 'dd MMM')}</td>
-                            <td className="px-4 py-2.5">
-                              <select value={app.status}
-                                onChange={e => handleUpdateAppStatus(viewingApps, app.id, e.target.value)}
-                                className="text-xs font-semibold px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none">
-                                <option value="APPLIED">APPLIED</option>
-                                <option value="SHORTLISTED">SHORTLISTED</option>
-                                <option value="SELECTED">SELECTED</option>
-                                <option value="REJECTED">REJECTED</option>
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          <DriveAppsModal
+            viewingApps={viewingApps}
+            driveApplications={driveApplications}
+            onClose={() => setViewingApps(null)}
+            handleUpdateAppStatus={handleUpdateAppStatus}
+          />
+
 
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
@@ -453,7 +433,7 @@ export default function PlacementPage() {
                     <tr key={d.id} className="border-b border-gray-50 hover:bg-purple-50/20">
                       <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{d.companyName}</td>
                       <td className="px-4 py-3 text-xs text-gray-600">{d.role}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600">{d.package}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600">{d.packageOffered}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{format(new Date(d.driveDate), 'dd MMM yyyy')}</td>
                       <td className="px-4 py-3 text-xs">
                         {isPast(new Date(d.applyDeadline)) ? (
@@ -481,7 +461,7 @@ export default function PlacementPage() {
                           <select value={d.status}
                             onChange={async e => {
                               try {
-                                await adminApi.updateDrive(d.id, { status: e.target.value })
+                                await adminApi.updateDriveStatus(d.id, e.target.value)
                                 setDrives(prev => prev.map(dr => dr.id === d.id ? { ...dr, status: e.target.value } : dr))
                                 toast.success('Status updated')
                               } catch { toast.error('Failed') }
@@ -490,6 +470,7 @@ export default function PlacementPage() {
                             <option value="UPCOMING">UPCOMING</option>
                             <option value="ACTIVE">ACTIVE</option>
                             <option value="CLOSED">CLOSED</option>
+                            <option value="CANCELLED">CANCELLED</option>
                           </select>
                         </div>
                       </td>
@@ -580,7 +561,7 @@ export default function PlacementPage() {
             {[
               { label: 'Company Name *', key: 'companyName', placeholder: 'TCS Digital' },
               { label: 'Role *', key: 'role', placeholder: 'Junior Developer' },
-              { label: 'Package', key: 'package', placeholder: '3.5 - 5 LPA' },
+              { label: 'Package', key: 'packageOffered', placeholder: '3.5 - 5 LPA' },
               { label: 'Location', key: 'location', placeholder: 'Chennai' },
             ].map(({ label, key, placeholder }) => (
               <div key={key}>
@@ -593,12 +574,12 @@ export default function PlacementPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Date *</label>
-              <input type="datetime-local" value={driveForm.driveDate} onChange={e => setDriveForm(f => ({ ...f, driveDate: e.target.value }))} required
+              <input type="date" value={driveForm.driveDate} onChange={e => setDriveForm(f => ({ ...f, driveDate: e.target.value }))} required
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Apply Deadline *</label>
-              <input type="datetime-local" value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
+              <input type="date" value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           </div>
@@ -623,8 +604,9 @@ export default function PlacementPage() {
               <select value={driveForm.driveType} onChange={e => setDriveForm(f => ({ ...f, driveType: e.target.value }))}
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
                 <option value="CAMPUS">CAMPUS</option>
-                <option value="ONLINE">ONLINE</option>
-                <option value="WALKIN">WALKIN</option>
+                <option value="OFF_CAMPUS">OFF_CAMPUS</option>
+                <option value="POOL">POOL</option>
+                <option value="VIRTUAL">VIRTUAL</option>
               </select>
             </div>
             <div>
@@ -641,6 +623,11 @@ export default function PlacementPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-1">External Apply Link (optional)</label>
             <input value={driveForm.applyLink} onChange={e => setDriveForm(f => ({ ...f, applyLink: e.target.value }))} placeholder="https://..."
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <p className="text-[10px] text-gray-400 mt-1">Company reference link only - students still express interest through the platform, never apply directly.</p>
+          </div>
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-sm font-semibold text-gray-700 mb-2">Eligibility Criteria</p>
+            <EligibilityCriteriaFields value={driveForm} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setDrivePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
@@ -694,3 +681,61 @@ export default function PlacementPage() {
     </div>
   )
 }
+
+function DriveAppsModal({ viewingApps, driveApplications, onClose, handleUpdateAppStatus }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted || !viewingApps) return null
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="font-bold text-base text-gray-900 dark:text-white">Drive Applications</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-2">
+          {!driveApplications[viewingApps] ? (
+            <div className="p-6 text-center text-gray-400 text-sm">Loading...</div>
+          ) : driveApplications[viewingApps].length === 0 ? (
+            <div className="p-6 text-center text-gray-400 text-sm">No applications yet</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                  {['Student', 'Email', 'Applied', 'Status'].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {driveApplications[viewingApps].map(app => (
+                  <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
+                    <td className="px-4 py-2.5 font-semibold text-gray-800 dark:text-white">{app.student?.user?.name}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{app.student?.user?.email}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{format(new Date(app.appliedAt), 'dd MMM')}</td>
+                    <td className="px-4 py-2.5">
+                      <select value={app.status}
+                        onChange={e => handleUpdateAppStatus(viewingApps, app.id, e.target.value)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none">
+                        <option value="INTERESTED">INTERESTED</option>
+                        <option value="UNDER_REVIEW">UNDER_REVIEW</option>
+                        <option value="SHORTLISTED">SHORTLISTED</option>
+                        <option value="RESUME_SHARED">RESUME_SHARED</option>
+                        <option value="SELECTED">SELECTED</option>
+                        <option value="NOT_SELECTED">NOT_SELECTED</option>
+                        <option value="REJECTED">REJECTED</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+

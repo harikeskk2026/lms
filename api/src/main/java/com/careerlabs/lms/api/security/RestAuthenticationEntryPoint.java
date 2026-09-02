@@ -28,11 +28,17 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                           AuthenticationException authException) throws IOException {
+        String code = (String) request.getAttribute(JwtAuthenticationFilter.JWT_ERROR_CODE_ATTRIBUTE);
+        String message = "TOKEN_EXPIRED".equals(code)
+                ? "Your session has expired. Please log in again."
+                : "Authentication is required to access this resource";
+
         ApiErrorResponse body = new ApiErrorResponse(
-                "Authentication is required to access this resource",
+                message,
                 HttpStatus.UNAUTHORIZED.value(),
                 request.getRequestURI(),
-                null);
+                null,
+                code != null ? code : "UNAUTHENTICATED");
 
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

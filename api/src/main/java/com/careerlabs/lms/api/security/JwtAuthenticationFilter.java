@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,6 +31,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
 
+    /**
+     * Request attribute read by {@link RestAuthenticationEntryPoint} so the client can
+     * tell an expired token (log out silently, no need to alarm the user) apart from a
+     * malformed/tampered one.
+     */
+    public static final String JWT_ERROR_CODE_ATTRIBUTE = "jwt.error.code";
+
     private final JwtService jwtService;
 
     public JwtAuthenticationFilter(JwtService jwtService) {
@@ -55,9 +63,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (ExpiredJwtException ex) {
+                log.debug("Rejecting expired JWT: {}", ex.getMessage());
+                SecurityContextHolder.clearContext();
+                request.setAttribute(JWT_ERROR_CODE_ATTRIBUTE, "TOKEN_EXPIRED");
             } catch (JwtException | IllegalArgumentException ex) {
                 log.debug("Rejecting invalid JWT: {}", ex.getMessage());
                 SecurityContextHolder.clearContext();
+                request.setAttribute(JWT_ERROR_CODE_ATTRIBUTE, "TOKEN_INVALID");
             }
         }
 

@@ -42,6 +42,10 @@ public class Course {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private CourseStatus status = CourseStatus.PUBLISHED;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -118,6 +122,14 @@ public class Course {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public CourseStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(CourseStatus status) {
+        this.status = status;
     }
 
     public Instant getCreatedAt() {
