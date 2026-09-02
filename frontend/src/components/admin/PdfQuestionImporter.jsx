@@ -185,7 +185,7 @@ export default function PdfQuestionImporter({ onImported, onCancel }) {
     setPreviewPage(1)
     try {
       const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
       const buffer = await selectedFile.arrayBuffer()
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise

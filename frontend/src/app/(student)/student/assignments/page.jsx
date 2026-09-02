@@ -146,7 +146,7 @@ function PdfCanvasViewer({ url, zoomMultiplier }) {
     ;(async () => {
       try {
         const pdfjsLib = await import('pdfjs-dist')
-        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
         const pdf = await pdfjsLib.getDocument(url).promise
         if (cancelled) return
         const firstPage = await pdf.getPage(1)
