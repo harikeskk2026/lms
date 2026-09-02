@@ -27,4 +27,6 @@ public interface AssignmentSubmissionRepository extends JpaRepository<Assignment
     long countByLateTrue();
 
     List<AssignmentSubmission> findTop10ByOrderBySubmittedAtDesc();
+
+    void deleteAllByStudentId(Long studentId);
 }

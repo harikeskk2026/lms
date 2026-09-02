@@ -72,7 +72,7 @@ A `department` entity no longer exists; department-like data now lives as free-t
 2. Add `SyllabusModule`s → `SyllabusTopic`s (drag-and-drop reorder) from the course's `[id]` content-authoring screen.
 3. Schedule `Session`s under a topic (title, date/time, type LIVE/RECORDED, meeting/recording URL).
 4. Upload `Material` scoped to exactly one of course/module/topic/session (PDF/DOC/DOCX/PPT/PPTX/MP4/MOV/WEBM, ≤10MB), with DRAFT/PUBLISHED visibility.
-5. Create one or more `Batch`es for the course (name, trainer, dates, timing, mode, `maxStudents` default 30) via **`admin/batch-catalog`** or **`admin/batches`** — both are real and functional today.
+5. Create one or more `Batch`es for the course (name, trainer, dates, timing, mode, `maxStudents` default 30) via **`admin/batches`**.
 
 **⚠️ Known-broken admin page**: `admin/courses` (distinct from `admin/course-catalog`) has its own course list/create working (migrated to the real API), but its **Materials/Syllabus/Sessions management panels call endpoints that don't exist on the backend** (`/admin/courses/{id}/materials`, `/sessions`, `/syllabus/modules`) and its stat badges (`_count.batches`, `_count.materials`) always render blank because `CourseResponse` never returns those fields. **Use `admin/course-catalog` for all course-content authoring — `admin/courses`'s content panels don't work.**
 

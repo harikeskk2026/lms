@@ -19,4 +19,6 @@ public interface QuestionAttemptRepository extends JpaRepository<QuestionAttempt
     @Query("SELECT qa FROM QuestionAttempt qa " +
             "WHERE qa.attempt.studentId = :studentId AND qa.attempt.status = 'SUBMITTED'")
     List<QuestionAttempt> findAllSubmittedByStudentId(@Param("studentId") Long studentId);
+
+    void deleteAllByAttempt_StudentId(Long studentId);
 }

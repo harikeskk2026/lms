@@ -12,4 +12,6 @@ public interface AnnouncementAcknowledgmentRepository extends JpaRepository<Anno
     Optional<AnnouncementAcknowledgment> findByAnnouncementIdAndStudentId(Long announcementId, Long studentId);
 
     long countByAnnouncementId(Long announcementId);
+
+    void deleteAllByStudentId(Long studentId);
 }

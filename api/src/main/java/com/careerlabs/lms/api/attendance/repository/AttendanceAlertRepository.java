@@ -15,4 +15,6 @@ public interface AttendanceAlertRepository extends JpaRepository<AttendanceAlert
     List<AttendanceAlert> findByBatchIdAndIsResolvedOrderByCurrentPctAsc(Long batchId, boolean isResolved);
 
     Optional<AttendanceAlert> findFirstByStudentIdAndBatchIdAndIsResolvedFalse(Long studentId, Long batchId);
+
+    void deleteAllByStudentId(Long studentId);
 }

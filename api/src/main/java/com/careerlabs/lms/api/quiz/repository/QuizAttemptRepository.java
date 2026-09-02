@@ -38,4 +38,6 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     long countByStatus(AttemptStatus status);
 
     List<QuizAttempt> findTop10ByStatusOrderByCompletedAtDesc(AttemptStatus status);
+
+    void deleteAllByStudentId(Long studentId);
 }

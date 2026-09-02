@@ -23,4 +23,6 @@ public interface StudentService {
     StudentResponse toggleStatus(Long id);
 
     StudentResponse assignToBatch(Long studentId, Long batchId);
+
+    void delete(Long id);
 }

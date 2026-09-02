@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface ResumeDataRepository extends JpaRepository<ResumeData, Long> {
 
     Optional<ResumeData> findByStudent_Id(Long studentId);
+
+    void deleteByStudent_Id(Long studentId);
 }

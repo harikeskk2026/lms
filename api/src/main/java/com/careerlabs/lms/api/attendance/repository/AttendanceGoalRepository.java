@@ -10,4 +10,6 @@ import java.util.Optional;
 public interface AttendanceGoalRepository extends JpaRepository<AttendanceGoal, Long> {
 
     Optional<AttendanceGoal> findByStudentId(Long studentId);
+
+    void deleteByStudentId(Long studentId);
 }

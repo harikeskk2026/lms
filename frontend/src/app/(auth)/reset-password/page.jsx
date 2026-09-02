@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import api from '@/lib/api'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
+import { isValidPassword, PASSWORD_ERROR_MESSAGE, isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams()
@@ -32,12 +33,12 @@ function ResetPasswordForm() {
       setPwdErr('Invalid reset link. Please use the forgot password flow.')
       return
     }
-    if (newPassword.length < 8) {
-      setPwdErr('Password must be at least 8 characters')
+    if (!isValidEmail(email)) {
+      setPwdErr(EMAIL_ERROR_MESSAGE)
       return
     }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
-      setPwdErr('Password must have uppercase, lowercase, and number')
+    if (!isValidPassword(newPassword)) {
+      setPwdErr(PASSWORD_ERROR_MESSAGE)
       return
     }
     if (newPassword !== confirmPwd) {

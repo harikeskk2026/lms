@@ -11,4 +11,6 @@ public interface StudentAchievementRepository extends JpaRepository<StudentAchie
     List<StudentAchievement> findByStudentId(Long studentId);
 
     boolean existsByStudentIdAndCode(Long studentId, AchievementCode code);
+
+    void deleteAllByStudentId(Long studentId);
 }

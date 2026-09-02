@@ -610,7 +610,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     <FormInput label="Professional Headline" placeholder="Full Stack Python Developer" value={resumeData.headline || ''} onChange={v => updateField('headline', v)} />
                     <FormTextarea label="Professional Summary" placeholder="Passionate developer with experience in..." value={resumeData.summary || ''} onChange={v => updateField('summary', v)} rows={3} />
                     <div className="grid grid-cols-2 gap-3">
-                      <FormInput label="Phone" placeholder="9876543210" value={resumeData.phone || ''} onChange={v => updateField('phone', v)} />
+                      <FormInput label="Phone" placeholder="9876543210" value={resumeData.phone || ''} onChange={v => updateField('phone', v.replace(/\D/g, '').slice(0, 10))} />
                       <FormInput label="Location" placeholder="Chennai, Tamil Nadu" value={resumeData.location || ''} onChange={v => updateField('location', v)} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">

@@ -1,6 +1,8 @@
 package com.careerlabs.lms.api.profile.dto.request;
 
+import com.careerlabs.lms.api.auth.validation.annotation.ValidPassword;
 import com.careerlabs.lms.api.profile.validation.ProfileValidationMessages;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -11,6 +13,7 @@ public class ChangePasswordRequest {
 
     @NotBlank(message = ProfileValidationMessages.NEW_PASSWORD_REQUIRED)
     @Size(min = 8, message = ProfileValidationMessages.NEW_PASSWORD_SIZE)
+    @ValidPassword
     private String newPassword;
 
     public String getCurrentPassword() {

@@ -4,6 +4,9 @@ import { Mail, Phone, Briefcase, Building2, ShieldCheck, Clock } from 'lucide-re
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import profileService from '@/services/profileService'
+import { useAuth } from '@/context/AuthContext'
+import tokenStorage from '@/utilities/tokenStorage'
+import { isValidPhone, PHONE_ERROR_MESSAGE } from '@/utilities/validators'
 import ProfilePhotoUploader from '@/components/shared/profile/ProfilePhotoUploader'
 import ChangePasswordForm from '@/components/shared/profile/ChangePasswordForm'
 
@@ -17,6 +20,7 @@ const ROLE_CHIP = {
 }
 
 export default function AdminProfilePage() {
+  const { setUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(null)
@@ -44,10 +48,23 @@ export default function AdminProfilePage() {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    if (form.phone && !isValidPhone(form.phone)) {
+      toast.error(PHONE_ERROR_MESSAGE)
+      return
+    }
     setSaving(true)
     try {
       const res = await profileService.update(form)
       setProfile(res.data)
+      // Keep the sidebar/topbar (both read the name from AuthContext, not this
+      // page's own state) and the cached session in sync immediately, instead
+      // of waiting for the next background /auth/me revalidation.
+      setUser(prev => {
+        if (!prev) return prev
+        const updated = { ...prev, name: res.data.name }
+        tokenStorage.setUser(updated)
+        return updated
+      })
       toast.success('Profile updated')
     } catch (err) {
       toast.error(err.message || 'Failed to update profile')
@@ -116,8 +133,9 @@ export default function AdminProfilePage() {
             </div>
             <div>
               <label className={LABEL_CLS}><Phone size={10} className="inline mr-1" />Phone</label>
-              <input type="tel" value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              <input type="tel" inputMode="numeric" maxLength={10} value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                placeholder="9876543210"
                 className={INPUT_CLS} />
             </div>
             <div>
