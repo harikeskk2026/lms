@@ -97,13 +97,6 @@ export const adminApi = {
   enrollStudent: (batchId, studentId) => api.post(`/admin/batches/${batchId}/enroll`, { studentId }),
   removeFromBatch: (batchId, studentId) => api.delete(`/admin/batches/${batchId}/students/${studentId}`),
 
-  // Courses (list/create now served by the Java API - see @/services/courseService)
-  addMaterial: (courseId, data) => api.post(`/admin/courses/${courseId}/materials`, data),
-  deleteMaterial: (courseId, materialId) => api.delete(`/admin/courses/${courseId}/materials/${materialId}`),
-  addSession: (courseId, data) => api.post(`/admin/courses/${courseId}/sessions`, data),
-  addSyllabusModule: (courseId, data) => api.post(`/admin/courses/${courseId}/syllabus/modules`, data),
-  addSyllabusTopic: (courseId, moduleId, data) => api.post(`/admin/courses/${courseId}/syllabus/modules/${moduleId}/topics`, data),
-
   // Classes
   getClasses: (params) => api.get('/admin/classes', { params }),
   createClass: (data) => api.post('/admin/classes', data),
