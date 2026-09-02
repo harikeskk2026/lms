@@ -20,14 +20,23 @@ spring:
     multipart:
       # Raised from the original 10MB so recorded-session video uploads fit;
       # FileStorageService still separately caps PDF/DOC uploads at 10MB in code.
-      max-file-size: ${MAX_UPLOAD_SIZE:2GB}
-      max-request-size: ${MAX_UPLOAD_SIZE:2GB}
+      max-file-size: ${MAX_UPLOAD_SIZE:400MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:400MB}
 
 app:
   upload:
     dir: ${UPLOAD_DIR:uploads}
   secure-video:
     dir: ${SECURE_VIDEO_DIR:secure-video}
+  s3:
+    # Leave S3_BUCKET empty (the default) to keep using local disk storage.
+    # Set S3_BUCKET=my-bucket to switch to S3 automatically — no code change needed.
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-south-1}
+    prefix: ${S3_KEY_PREFIX:recorded-sessions}
+  google-drive:
+    refresh-token: ${GOOGLE_DRIVE_REFRESH_TOKEN:}
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}
   jwt:
     secret: ${JWT_SECRET}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}

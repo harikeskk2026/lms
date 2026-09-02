@@ -26,6 +26,7 @@ public record RecordedSessionResponse(
         LocalDateTime availableFrom,
         LocalDateTime availableUntil,
         String processingError,
+        String driveFileId,
         Long createdBy,
         Instant createdAt,
         Instant updatedAt
@@ -49,6 +50,7 @@ public record RecordedSessionResponse(
                 session.getAvailableFrom(),
                 session.getAvailableUntil(),
                 session.getProcessingError(),
+                session.getDriveFileId(),
                 session.getCreatedBy(),
                 session.getCreatedAt(),
                 session.getUpdatedAt());
