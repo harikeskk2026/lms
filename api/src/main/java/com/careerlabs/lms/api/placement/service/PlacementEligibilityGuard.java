@@ -83,4 +83,27 @@ public class PlacementEligibilityGuard {
     public boolean isEligible(Student student, Drive drive) {
         return ineligibilityReasons(student, drive).isEmpty();
     }
+
+    /**
+     * True when this Drive's own criteria can't be fully evaluated because the
+     * student hasn't filled in the relevant academic data yet (rather than
+     * because they were evaluated and fell short) - lets the frontend show a
+     * distinct "complete your profile" prompt instead of a flat "Not Eligible",
+     * pointed at My Profile. Mirrors the same null-checks as
+     * {@link #ineligibilityReasons}, kept separate so callers get a precise
+     * boolean instead of having to pattern-match reason strings.
+     */
+    public boolean hasIncompleteAcademicData(Student student, Drive drive) {
+        boolean scoreCriterion = drive.getMinCgpa() != null || drive.getMinPercentage() != null;
+        boolean backlogCriterion = drive.getMaxBacklogs() != null;
+        if (!scoreCriterion && !backlogCriterion) {
+            return false;
+        }
+
+        AcademicDetails academic = academicDetailsRepository.findByStudentId(student.getId()).orElse(null);
+        boolean scoreMissing = scoreCriterion
+                && (academic == null || academic.getUgScoreType() == null || academic.getUgScore() == null);
+        boolean backlogMissing = backlogCriterion && (academic == null || academic.getUgBacklogs() == null);
+        return scoreMissing || backlogMissing;
+    }
 }

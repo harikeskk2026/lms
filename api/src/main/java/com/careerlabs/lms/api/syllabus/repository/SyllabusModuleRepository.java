@@ -9,5 +9,7 @@ public interface SyllabusModuleRepository extends JpaRepository<SyllabusModule, 
 
     List<SyllabusModule> findAllByCourseIdOrderByOrderIndexAsc(Long courseId);
 
+    List<SyllabusModule> findAllByCourseIdInOrderByOrderIndexAsc(List<Long> courseIds);
+
     int countByCourseId(Long courseId);
 }

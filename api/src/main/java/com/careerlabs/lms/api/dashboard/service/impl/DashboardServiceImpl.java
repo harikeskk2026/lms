@@ -149,11 +149,15 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminDashboardResponse getAdminDashboard() {
-        OverviewResponse overview = reportService.getOverview();
+        // The full performance report is expensive to compute (course/batch/student
+        // breakdowns) - compute it once and reuse it for both the overview stats and
+        // the performance widget below, instead of the dashboard triggering it twice.
+        PerformanceReportResponse performance = reportService.getPerformanceReport(new PerformanceReportRequest());
+        OverviewResponse overview = reportService.getOverview(performance);
         List<AdminDriveResponse> drives = driveService.listForAdmin();
         return new AdminDashboardResponse(
                 buildAdminOverview(overview, drives),
-                buildAdminPerformance(overview),
+                buildAdminPerformance(overview, performance),
                 buildAdminAttendance(),
                 buildAdminAssignments(),
                 buildAdminQuizzes(),
@@ -173,8 +177,7 @@ public class DashboardServiceImpl implements DashboardService {
                 drives.size());
     }
 
-    private AdminDashboardResponse.Performance buildAdminPerformance(OverviewResponse overview) {
-        PerformanceReportResponse performance = reportService.getPerformanceReport(new PerformanceReportRequest());
+    private AdminDashboardResponse.Performance buildAdminPerformance(OverviewResponse overview, PerformanceReportResponse performance) {
         long needsImprovement = performance.students().stream()
                 .filter(s -> "MEDIUM".equals(s.riskLevel()))
                 .count();
@@ -218,10 +221,7 @@ public class DashboardServiceImpl implements DashboardService {
         long availableDrives = drives.stream()
                 .filter(d -> d.status() == DriveStatus.ACTIVE || d.status() == DriveStatus.UPCOMING)
                 .count();
-        long interestedStudents = driveApplicationRepository.findAll().stream()
-                .map(a -> a.getStudent().getId())
-                .distinct()
-                .count();
+        long interestedStudents = driveApplicationRepository.countDistinctStudents();
         return new AdminDashboardResponse.Placement(activeDrives, interestedStudents, availableDrives);
     }
 
@@ -283,10 +283,13 @@ public class DashboardServiceImpl implements DashboardService {
                 .sorted(Comparator.comparing(StudentAssignmentResponse::dueDate))
                 .toList();
 
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdOrderByEnrolledAtDesc(student.getId());
+        List<StudentDashboardResponse.UpcomingClass> upcomingClasses = buildUpcomingClasses(student);
+
         return new StudentDashboardResponse(
-                buildStudentOverview(student, performance, attendanceHealth, pendingAssignments, quizAnalytics, stats),
-                buildContinueLearning(student),
-                buildTodaysTasks(student, userId, pendingAssignments),
+                buildStudentOverview(enrollments, performance, attendanceHealth, pendingAssignments, quizAnalytics, stats),
+                buildContinueLearning(enrollments),
+                buildTodaysTasks(userId, pendingAssignments, upcomingClasses),
                 new StudentDashboardResponse.Performance(quizAnalytics, performance),
                 new StudentDashboardResponse.Attendance(
                         attendanceHealth.currentPercentage(),
@@ -295,19 +298,18 @@ public class DashboardServiceImpl implements DashboardService {
                         attendanceHealth.riskLevel().name()),
                 buildGamification(userId, stats),
                 buildStudentPlacement(student, userId),
-                buildUpcomingClasses(student));
+                upcomingClasses);
     }
 
     private StudentDashboardResponse.Overview buildStudentOverview(
-            Student student,
+            List<Enrollment> enrollments,
             ReportStudentResponse performance,
             com.careerlabs.lms.api.attendance.dto.response.AttendanceHealthResponse attendanceHealth,
             List<StudentAssignmentResponse> pendingAssignments,
             com.careerlabs.lms.api.quiz.dto.response.QuizAnalyticsResponse quizAnalytics,
             StudentGameStats stats) {
-        long myCourses = enrollmentRepository.findAllByStudentIdOrderByEnrolledAtDesc(student.getId()).size();
         return new StudentDashboardResponse.Overview(
-                myCourses,
+                enrollments.size(),
                 performance.assignmentCompletionPct(),
                 attendanceHealth.currentPercentage(),
                 pendingAssignments.size(),
@@ -316,21 +318,35 @@ public class DashboardServiceImpl implements DashboardService {
                 stats.getCurrentStreak());
     }
 
-    private List<StudentDashboardResponse.ContinueLearningItem> buildContinueLearning(Student student) {
-        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdOrderByEnrolledAtDesc(student.getId());
+    private List<StudentDashboardResponse.ContinueLearningItem> buildContinueLearning(List<Enrollment> enrollments) {
+        if (enrollments.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> courseIds = enrollments.stream().map(e -> e.getCourse().getId()).distinct().toList();
+
+        Map<Long, SyllabusModule> firstModuleByCourseId = syllabusModuleRepository
+                .findAllByCourseIdInOrderByOrderIndexAsc(courseIds).stream()
+                .collect(Collectors.toMap(m -> m.getCourse().getId(), m -> m, (a, b) -> a));
+
+        List<Long> firstModuleIds = firstModuleByCourseId.values().stream().map(SyllabusModule::getId).distinct().toList();
+        Map<Long, SyllabusTopic> firstTopicByModuleId = firstModuleIds.isEmpty()
+                ? Map.of()
+                : syllabusTopicRepository.findAllByModuleIdInOrderByOrderIndexAsc(firstModuleIds).stream()
+                        .collect(Collectors.toMap(t -> t.getModule().getId(), t -> t, (a, b) -> a));
+
+        List<Long> firstTopicIds = firstTopicByModuleId.values().stream().map(SyllabusTopic::getId).distinct().toList();
+        Map<Long, Session> firstSessionByTopicId = firstTopicIds.isEmpty()
+                ? Map.of()
+                : sessionRepository.findAllByTopicIdInOrderByOrderIndexAsc(firstTopicIds).stream()
+                        .collect(Collectors.toMap(s -> s.getTopic().getId(), s -> s, (a, b) -> a));
+
         return enrollments.stream()
                 .map(e -> {
                     Long courseId = e.getCourse().getId();
-                    List<SyllabusModule> modules = syllabusModuleRepository.findAllByCourseIdOrderByOrderIndexAsc(courseId);
-                    SyllabusModule firstModule = modules.isEmpty() ? null : modules.get(0);
-                    List<SyllabusTopic> topics = firstModule == null
-                            ? List.<SyllabusTopic>of()
-                            : syllabusTopicRepository.findAllByModuleIdOrderByOrderIndexAsc(firstModule.getId());
-                    SyllabusTopic firstTopic = topics.isEmpty() ? null : topics.get(0);
-                    List<Session> sessions = firstTopic == null
-                            ? List.<Session>of()
-                            : sessionRepository.findAllByTopicIdOrderByOrderIndexAsc(firstTopic.getId());
-                    Session firstSession = sessions.isEmpty() ? null : sessions.get(0);
+                    SyllabusModule firstModule = firstModuleByCourseId.get(courseId);
+                    SyllabusTopic firstTopic = firstModule == null ? null : firstTopicByModuleId.get(firstModule.getId());
+                    Session firstSession = firstTopic == null ? null : firstSessionByTopicId.get(firstTopic.getId());
                     return new StudentDashboardResponse.ContinueLearningItem(
                             courseId,
                             e.getCourse().getTitle(),
@@ -343,12 +359,13 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private StudentDashboardResponse.TodaysTasks buildTodaysTasks(
-            Student student, Long userId, List<StudentAssignmentResponse> pendingAssignments) {
+            Long userId, List<StudentAssignmentResponse> pendingAssignments,
+            List<StudentDashboardResponse.UpcomingClass> upcomingClasses) {
         List<com.careerlabs.lms.api.quiz.dto.response.StudentQuizResponse> availableQuizzes = quizService.listPublished(userId).stream()
                 .filter(q -> q.maxAttempts() == null || q.attemptsUsed() < q.maxAttempts())
                 .limit(5)
                 .toList();
-        List<StudentDashboardResponse.UpcomingClass> upcomingSessions = buildUpcomingClasses(student).stream()
+        List<StudentDashboardResponse.UpcomingClass> upcomingSessions = upcomingClasses.stream()
                 .limit(5)
                 .toList();
         return new StudentDashboardResponse.TodaysTasks(

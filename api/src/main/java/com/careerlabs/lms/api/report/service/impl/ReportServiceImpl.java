@@ -299,18 +299,46 @@ public class ReportServiceImpl implements ReportService {
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         Map<Long, List<AssignmentSubmission>> byStudent = submissionsByStudent(studentIds);
         Map<Long, List<QuizAttempt>> quizByStudent = quizAttemptsByStudent(studentIds);
+        Map<Long, List<Attendance>> attendanceByStudent = attendanceByStudent(studentIds);
 
         List<ReportStudentResponse> rows = students.stream()
-                .map(s -> toStudentRow(s, byStudent.getOrDefault(s.getId(), List.of()), quizByStudent.getOrDefault(s.getId(), List.of())))
+                .map(s -> toStudentRow(s, byStudent.getOrDefault(s.getId(), List.of()),
+                        quizByStudent.getOrDefault(s.getId(), List.of()),
+                        attendanceByStudent.getOrDefault(s.getId(), List.of())))
                 .sorted(Comparator.comparing(ReportStudentResponse::studentName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
-        List<PerformanceReportResponse.CourseBreakdown> courseBreakdown = courseRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toCourseBreakdown)
+        List<Course> allCourses = courseRepository.findAllByOrderByCreatedAtDesc();
+        Map<Long, List<Assignment>> assignmentsByCourse = allCourses.isEmpty() ? Map.of() : assignmentRepository
+                .findByCourseIdIn(allCourses.stream().map(Course::getId).toList()).stream()
+                .collect(Collectors.groupingBy(a -> a.getCourse().getId()));
+        List<Long> courseAssignmentIds = assignmentsByCourse.values().stream()
+                .flatMap(List::stream).map(Assignment::getId).distinct().toList();
+        Map<Long, List<AssignmentSubmission>> courseSubmissionsByAssignmentId = courseAssignmentIds.isEmpty()
+                ? Map.of()
+                : submissionRepository.findByAssignmentIdIn(courseAssignmentIds).stream()
+                        .collect(Collectors.groupingBy(s -> s.getAssignment().getId()));
+        List<PerformanceReportResponse.CourseBreakdown> courseBreakdown = allCourses.stream()
+                .map(c -> toCourseBreakdown(c, assignmentsByCourse.getOrDefault(c.getId(), List.of()), courseSubmissionsByAssignmentId))
                 .toList();
 
-        List<PerformanceReportResponse.BatchBreakdown> batchBreakdown = batchRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toBatchBreakdown)
+        List<Batch> allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
+        Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : studentRepository
+                .findByBatchIdIn(allBatches.stream().map(Batch::getId).toList()).stream()
+                .collect(Collectors.groupingBy(s -> s.getBatch().getId()));
+        Map<Long, List<Assignment>> assignmentsByBatch = allBatches.isEmpty() ? Map.of() : assignmentRepository
+                .findByBatchIdInAndStatusIn(allBatches.stream().map(Batch::getId).toList(),
+                        List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED)).stream()
+                .collect(Collectors.groupingBy(a -> a.getBatch().getId()));
+        List<Long> batchAssignmentIds = assignmentsByBatch.values().stream()
+                .flatMap(List::stream).map(Assignment::getId).distinct().toList();
+        Map<Long, List<AssignmentSubmission>> batchSubmissionsByAssignmentId = batchAssignmentIds.isEmpty()
+                ? Map.of()
+                : submissionRepository.findByAssignmentIdIn(batchAssignmentIds).stream()
+                        .collect(Collectors.groupingBy(s -> s.getAssignment().getId()));
+        List<PerformanceReportResponse.BatchBreakdown> batchBreakdown = allBatches.stream()
+                .map(b -> toBatchBreakdown(b, studentsByBatch.getOrDefault(b.getId(), List.of()),
+                        assignmentsByBatch.getOrDefault(b.getId(), List.of()), batchSubmissionsByAssignmentId))
                 .toList();
 
         List<AssignmentSubmission> allSubmissions = byStudent.values().stream().flatMap(List::stream).toList();
@@ -437,12 +465,20 @@ public class ReportServiceImpl implements ReportService {
         long placed = statusCounts.getOrDefault(PlacementStatus.PLACED, 0L);
         double conversionRate = total > 0 ? round1(placed * 100.0 / total) : 0.0;
 
-        List<PlacementReportResponse.BatchPlacement> byBatch = batchRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toBatchPlacement)
+        List<Batch> allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
+        Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : studentRepository
+                .findByBatchIdIn(allBatches.stream().map(Batch::getId).toList()).stream()
+                .collect(Collectors.groupingBy(s -> s.getBatch().getId()));
+        List<PlacementReportResponse.BatchPlacement> byBatch = allBatches.stream()
+                .map(b -> toBatchPlacement(b, studentsByBatch.getOrDefault(b.getId(), List.of())))
                 .toList();
 
-        List<PlacementReportResponse.CoursePlacement> byCourse = courseRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toCoursePlacement)
+        List<Course> allCourses = courseRepository.findAllByOrderByCreatedAtDesc();
+        Map<Long, List<Student>> studentsByCourse = allCourses.isEmpty() ? Map.of() : studentRepository
+                .findByCourseIdIn(allCourses.stream().map(Course::getId).toList()).stream()
+                .collect(Collectors.groupingBy(s -> s.getCourse().getId()));
+        List<PlacementReportResponse.CoursePlacement> byCourse = allCourses.stream()
+                .map(c -> toCoursePlacement(c, studentsByCourse.getOrDefault(c.getId(), List.of())))
                 .toList();
 
         return new PlacementReportResponse(statusCounts, conversionRate, byBatch, byCourse);
@@ -465,11 +501,16 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public OverviewResponse getOverview() {
+        return getOverview(getPerformanceReport(new PerformanceReportRequest()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OverviewResponse getOverview(PerformanceReportResponse performance) {
         long totalStudents = studentRepository.count();
         long activeBatches = batchRepository.findAllByOrderByCreatedAtDesc().stream().filter(Batch::isActive).count();
         long activeCourses = courseRepository.findAllByOrderByCreatedAtDesc().stream().filter(Course::isActive).count();
 
-        PerformanceReportResponse performance = getPerformanceReport(new PerformanceReportRequest());
         PlacementReportResponse placement = getPlacementReport(new PlacementReportRequest());
 
         long atRiskCount = performance.students().stream()
@@ -812,6 +853,14 @@ public class ReportServiceImpl implements ReportService {
                 .collect(Collectors.groupingBy(s -> s.getStudent().getId()));
     }
 
+    private Map<Long, List<Attendance>> attendanceByStudent(List<Long> studentIds) {
+        if (studentIds.isEmpty()) {
+            return Map.of();
+        }
+        return attendanceRepository.findByStudentIdIn(studentIds).stream()
+                .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
+    }
+
     private Map<Long, List<QuizAttempt>> quizAttemptsByStudent(List<Long> studentIds) {
         if (studentIds.isEmpty()) {
             return Map.of();
@@ -927,7 +976,10 @@ public class ReportServiceImpl implements ReportService {
                 .map(id -> avgQuizAccuracy(quizByStudent.getOrDefault(id, List.of())))
                 .toList());
 
-        Double attendancePct = average(studentIds.stream().map(this::attendancePctForStudent).toList());
+        Map<Long, List<Attendance>> attendanceByStudent = attendanceByStudent(studentIds);
+        Double attendancePct = average(studentIds.stream()
+                .map(id -> attendancePctFrom(attendanceByStudent.getOrDefault(id, List.of())))
+                .toList());
 
         long placed = students.stream().filter(s -> s.getPlacementStatus() == PlacementStatus.PLACED).count();
         Double placementRate = students.isEmpty() ? null : round1(placed * 100.0 / students.size());
@@ -998,12 +1050,12 @@ public class ReportServiceImpl implements ReportService {
                 .toList();
     }
 
-    private ReportStudentResponse toStudentRow(Student student, List<AssignmentSubmission> submissions, List<QuizAttempt> quizAttempts) {
+    private ReportStudentResponse toStudentRow(Student student, List<AssignmentSubmission> submissions,
+                                                List<QuizAttempt> quizAttempts, List<Attendance> attendances) {
         Double avgGrade = averageScorePct(submissions);
         Double completionPct = completionPctForStudent(student, submissions.size());
         Double quizPct = avgQuizAccuracy(quizAttempts);
 
-        List<Attendance> attendances = attendanceRepository.findByStudentId(student.getId());
         long presentCount = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
         long absentCount = attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
         Double attPct = attendances.isEmpty() ? null : round1(presentCount * 100.0 / attendances.size());
@@ -1029,12 +1081,11 @@ public class ReportServiceImpl implements ReportService {
                 attendances.isEmpty() ? null : (int) absentCount);
     }
 
-    private PerformanceReportResponse.CourseBreakdown toCourseBreakdown(Course course) {
-        List<Assignment> assignments = assignmentRepository.findByCourseId(course.getId());
-        List<Long> assignmentIds = assignments.stream().map(Assignment::getId).toList();
-        List<AssignmentSubmission> submissions = assignmentIds.isEmpty()
-                ? List.of()
-                : submissionRepository.findByAssignmentIdIn(assignmentIds);
+    private PerformanceReportResponse.CourseBreakdown toCourseBreakdown(
+            Course course, List<Assignment> assignments, Map<Long, List<AssignmentSubmission>> submissionsByAssignmentId) {
+        List<AssignmentSubmission> submissions = assignments.stream()
+                .flatMap(a -> submissionsByAssignmentId.getOrDefault(a.getId(), List.of()).stream())
+                .toList();
 
         Double avg = averageScorePct(submissions);
         long graded = submissions.stream().filter(s -> s.getMarks() != null).count();
@@ -1048,14 +1099,12 @@ public class ReportServiceImpl implements ReportService {
                 course.getId(), course.getTitle(), avg, assignments.size(), submissions.size(), passRate, difficultyStatus(avg));
     }
 
-    private PerformanceReportResponse.BatchBreakdown toBatchBreakdown(Batch batch) {
-        List<Student> students = studentRepository.findByBatchId(batch.getId());
-        List<Assignment> assignments = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
-                batch.getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
-        List<Long> assignmentIds = assignments.stream().map(Assignment::getId).toList();
-        List<AssignmentSubmission> submissions = assignmentIds.isEmpty()
-                ? List.of()
-                : submissionRepository.findByAssignmentIdIn(assignmentIds);
+    private PerformanceReportResponse.BatchBreakdown toBatchBreakdown(
+            Batch batch, List<Student> students, List<Assignment> assignments,
+            Map<Long, List<AssignmentSubmission>> submissionsByAssignmentId) {
+        List<AssignmentSubmission> submissions = assignments.stream()
+                .flatMap(a -> submissionsByAssignmentId.getOrDefault(a.getId(), List.of()).stream())
+                .toList();
 
         long possible = (long) students.size() * assignments.size();
         Double completionPct = possible > 0 ? round1(submissions.size() * 100.0 / possible) : null;
@@ -1065,15 +1114,13 @@ public class ReportServiceImpl implements ReportService {
                 batch.getId(), batch.getName(), students.size(), completionPct, avgScorePct, blend(completionPct, avgScorePct));
     }
 
-    private PlacementReportResponse.BatchPlacement toBatchPlacement(Batch batch) {
-        List<Student> students = studentRepository.findByBatchId(batch.getId());
+    private PlacementReportResponse.BatchPlacement toBatchPlacement(Batch batch, List<Student> students) {
         long placed = students.stream().filter(s -> s.getPlacementStatus() == PlacementStatus.PLACED).count();
         double rate = students.isEmpty() ? 0.0 : round1(placed * 100.0 / students.size());
         return new PlacementReportResponse.BatchPlacement(batch.getId(), batch.getName(), students.size(), placed, rate);
     }
 
-    private PlacementReportResponse.CoursePlacement toCoursePlacement(Course course) {
-        List<Student> students = studentRepository.findByCourseId(course.getId());
+    private PlacementReportResponse.CoursePlacement toCoursePlacement(Course course, List<Student> students) {
         long placed = students.stream().filter(s -> s.getPlacementStatus() == PlacementStatus.PLACED).count();
         double rate = students.isEmpty() ? 0.0 : round1(placed * 100.0 / students.size());
         return new PlacementReportResponse.CoursePlacement(course.getId(), course.getTitle(), students.size(), placed, rate);
@@ -1173,7 +1220,10 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private Double attendancePctForStudent(Long studentId) {
-        List<Attendance> attendances = attendanceRepository.findByStudentId(studentId);
+        return attendancePctFrom(attendanceRepository.findByStudentId(studentId));
+    }
+
+    private Double attendancePctFrom(List<Attendance> attendances) {
         if (attendances.isEmpty()) {
             return null;
         }

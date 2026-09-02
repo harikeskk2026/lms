@@ -117,6 +117,7 @@ public class DriveServiceImpl implements DriveService {
                         drive,
                         eligibilityGuard.isEligible(student, drive),
                         eligibilityGuard.ineligibilityReasons(student, drive),
+                        eligibilityGuard.hasIncompleteAcademicData(student, drive),
                         applicationsByDriveId.containsKey(drive.getId())
                                 ? applicationsByDriveId.get(drive.getId()).getStatus()
                                 : null))

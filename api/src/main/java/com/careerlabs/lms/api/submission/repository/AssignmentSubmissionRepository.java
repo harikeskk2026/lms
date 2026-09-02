@@ -18,6 +18,8 @@ public interface AssignmentSubmissionRepository extends JpaRepository<Assignment
 
     List<AssignmentSubmission> findByAssignmentIdIn(List<Long> assignmentIds);
 
+    List<AssignmentSubmission> findByAssignmentIdInAndStudentId(List<Long> assignmentIds, Long studentId);
+
     long countByReviewedFalse();
 
     long countByReviewedTrue();

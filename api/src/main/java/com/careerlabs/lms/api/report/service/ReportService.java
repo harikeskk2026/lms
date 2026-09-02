@@ -38,6 +38,8 @@ public interface ReportService {
 
     OverviewResponse getOverview();
 
+    OverviewResponse getOverview(PerformanceReportResponse performance);
+
     List<BatchHealthResponse> getBatchHealth();
 
     BatchHealthResponse getBatchHealth(Long batchId);

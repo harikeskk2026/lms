@@ -18,7 +18,13 @@ export default function StudentLayout({ children }) {
     }
   }, [loading, user, pathname, router])
 
-  if (loading || !user || user.role !== 'STUDENT') {
+  // Gate on `user` (hydrated synchronously from the cached session in
+  // AuthContext), not `loading` — otherwise every refresh/deep-link blocks
+  // on the /auth/me round-trip before painting, even though the cached user
+  // is already known. The background /auth/me re-verification in AuthContext
+  // still runs and will flip `user` to null (redirecting here) if the token
+  // turns out to be invalid.
+  if (!user || user.role !== 'STUDENT') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <svg className="animate-spin h-8 w-8 text-brand-600" viewBox="0 0 24 24" fill="none">

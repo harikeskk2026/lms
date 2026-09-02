@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, BookOpen, ClipboardList,
   BarChart2, LogOut, LogIn, Menu, X, ChevronRight,
   Layers, Calendar, Brain, Briefcase, Megaphone, Search,
-  Moon, Sun, Video
+  Moon, Sun, Video, UserCircle
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
@@ -27,6 +27,7 @@ const navItems = [
   { href: '/admin/placement',     icon: Briefcase,       label: 'Placement' },
   { href: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
   { href: '/admin/reports',       icon: BarChart2,       label: 'Reports' },
+  { href: '/admin/profile',       icon: UserCircle,      label: 'My Profile' },
 ]
 
 const PAGE_TITLES = {
@@ -42,6 +43,7 @@ const PAGE_TITLES = {
   '/admin/placement':     'Placement',
   '/admin/announcements': 'Announcements',
   '/admin/reports':       'Reports',
+  '/admin/profile':       'My Profile',
 }
 
 function Sidebar({ open, onClose, badges }) {

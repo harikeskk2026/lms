@@ -15,6 +15,28 @@ api.interceptors.request.use(config => {
   return config
 })
 
+// ─── De-dupe concurrent identical GET requests ────────────────────────────────
+// Several independent components (e.g. the sidebar badge counts and a page's
+// own data hook) fetch the same endpoint on mount within the same tick - e.g.
+// notifications is fetched by StudentShell, NotificationDropdown and
+// useNotifications() all at once on dashboard load. Rather than firing 3
+// identical network requests, share the in-flight promise for any GET with
+// the same url+params; the entry is cleared as soon as it settles, so this
+// never serves stale data on a later, separate fetch.
+const inFlightGETs = new Map()
+const rawRequest = api.request.bind(api)
+api.request = (config = {}) => {
+  if ((config.method || 'get').toLowerCase() !== 'get') return rawRequest(config)
+
+  const key = `${config.url}?${JSON.stringify(config.params || {})}`
+  const pending = inFlightGETs.get(key)
+  if (pending) return pending
+
+  const promise = rawRequest(config).finally(() => inFlightGETs.delete(key))
+  inFlightGETs.set(key, promise)
+  return promise
+}
+
 // ─── Response: on an expired/invalid session, log out once and redirect ──────
 // The API has no refresh-token endpoint - a 401 here means the token is gone
 // for good, so there's nothing to retry. Log out immediately instead of

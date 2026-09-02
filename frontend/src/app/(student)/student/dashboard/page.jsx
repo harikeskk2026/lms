@@ -1,9 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
-} from 'recharts'
+import dynamic from 'next/dynamic'
 import { format, formatDistanceToNow, isToday } from 'date-fns'
 import {
   Calendar, ClipboardList, Brain, BookOpen, Play,
@@ -16,6 +14,13 @@ import { useAuth } from '@/context/AuthContext'
 import ProgressRing from '@/components/student/ProgressRing'
 import { SkeletonStat, ErrorCard } from '@/components/student/SkeletonCard'
 import { studentApi } from '@/lib/api'
+
+// recharts is a heavy dependency - load it only for pages that render a chart,
+// and only on the client (SSR doesn't need it).
+const AttendanceCompareChart = dynamic(
+  () => import('@/components/student/dashboard/AttendanceCompareChart'),
+  { ssr: false, loading: () => <div className="animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" style={{ height: 200 }} /> }
+)
 
 // ─── Countdown timer component ────────────────────────────────────────────────
 function Countdown({ targetDate }) {
@@ -219,17 +224,7 @@ export default function StudentDashboardPage() {
         {/* Attendance: current vs previous */}
         <div className="glass-card p-5">
           <h3 className="section-title"><Calendar size={16} /> Attendance: Current vs Previous</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={attendanceCompareData} barSize={40} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} domain={[0, 100]} />
-              <Tooltip
-                contentStyle={{ borderRadius: 12, border: '1px solid #e9d5ff', fontSize: 12 }}
-                formatter={(v) => [`${v}%`, 'Attendance']}
-              />
-              <Bar dataKey="pct" fill="#6d28d9" radius={[6,6,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <AttendanceCompareChart data={attendanceCompareData} />
         </div>
 
         {/* Quiz Topic Performance */}

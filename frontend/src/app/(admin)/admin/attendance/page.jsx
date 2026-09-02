@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import {
   CheckSquare, Save, BarChart2, Bell, Users, BookOpen,
   ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
@@ -10,15 +11,26 @@ import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import assignmentService from '@/services/assignmentService'
 
-import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
-  CartesianGrid, ReferenceLine, ComposedChart
-} from 'recharts'
 import { format } from 'date-fns'
 import AttendanceMatrix from '@/components/admin/AttendanceMatrix'
 import AttendanceHeatmap from '@/components/admin/AttendanceHeatmap'
 import HistoryTab from './HistoryTab'
+
+// recharts is a heavy dependency - load it only for the trend charts below,
+// and only on the client (SSR doesn't need it).
+const CHART_SKELETON = <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+const AttendanceDailyTrendChart = dynamic(
+  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.AttendanceDailyTrendChart),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
+const WeeklyAttendanceRateChart = dynamic(
+  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.WeeklyAttendanceRateChart),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
+const MonthlyAttendanceBreakdownChart = dynamic(
+  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.MonthlyAttendanceBreakdownChart),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -30,8 +42,6 @@ const STATUS_CONFIG = {
 }
 
 
-
-const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
 
 function GlassCard({ children, className = '' }) {
   return (
@@ -755,57 +765,19 @@ function AnalyticsTab() {
           {/* Area chart — Attendance Trend */}
           <GlassCard className="p-5">
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Attendance Trend</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={data.dailyTrend} margin={{ left: -10, right: 10 }}>
-                <defs>
-                  <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6d28d9" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorAbsent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ffd668" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ffd668" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" dataKey="present" name="Present" stroke="#6d28d9" fill="url(#colorPresent)" strokeWidth={2} />
-                <Area type="monotone" dataKey="absent"  name="Absent"  stroke="#ffd668" fill="url(#colorAbsent)"  strokeWidth={2} />
-                <Area type="monotone" dataKey="late"    name="Late"    stroke="#93c5fd" fill="none" strokeWidth={1.5} strokeDasharray="4 2" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <AttendanceDailyTrendChart data={data.dailyTrend} />
           </GlassCard>
 
           {/* Weekly + Monthly charts */}
           <div className="grid sm:grid-cols-2 gap-4">
             <GlassCard className="p-5">
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Weekly Attendance Rate</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={data.weeklyTrend} margin={{ left: -10, right: 10 }}>
-                  <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, 'Attendance']} />
-                  <ReferenceLine y={75} stroke="#ffd668" strokeDasharray="4 2" label={{ value: '75% min', fill: '#ffd668', fontSize: 10 }} />
-                  <Line type="monotone" dataKey="pct" name="Rate" stroke="#6d28d9" strokeWidth={2.5} dot={{ fill: '#6d28d9', r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <WeeklyAttendanceRateChart data={data.weeklyTrend} />
             </GlassCard>
 
             <GlassCard className="p-5">
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Monthly Breakdown</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={data.monthlyTrend} barSize={16} margin={{ left: -10, right: 10 }}>
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="present" name="Present" fill="#6d28d9" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="absent"  name="Absent"  fill="#ffd668" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="late"    name="Late"    fill="#93c5fd" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <MonthlyAttendanceBreakdownChart data={data.monthlyTrend} />
             </GlassCard>
           </div>
 

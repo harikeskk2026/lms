@@ -1,10 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { format, addMonths, subMonths } from 'date-fns'
-import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, Legend, CartesianGrid
-} from 'recharts'
 import { ChevronLeft, ChevronRight, Flame, AlertTriangle, TrendingUp } from 'lucide-react'
 import { useAttendance } from '@/hooks/useStudentDashboard'
 import AttendanceCalendar from '@/components/student/AttendanceCalendar'
@@ -16,7 +13,12 @@ import AttendanceCorrectionsList from '@/components/student/AttendanceCorrection
 import SkeletonCard from '@/components/student/SkeletonCard'
 import { studentApi } from '@/lib/api'
 
-const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
+// recharts is a heavy dependency - load it only for the trend chart below,
+// and only on the client (SSR doesn't need it).
+const AttendanceTrendChart = dynamic(
+  () => import('@/components/student/attendance/AttendanceTrendChart'),
+  { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" /> }
+)
 
 function StatusChip({ status }) {
   const cls =
@@ -233,20 +235,7 @@ export default function AttendancePage() {
         {trendLoading ? (
           <div className="h-[220px] rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" />
         ) : trend.length > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={trend} margin={{ left: -10, right: 20 }}>
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.3} />
-              <Bar yAxisId="left" dataKey="present" name="Present" fill="#6d28d9" radius={[4, 4, 0, 0]} stackId="a" />
-              <Bar yAxisId="left" dataKey="absent"  name="Absent"  fill="#ffd668" radius={[0, 0, 0, 0]} stackId="a" />
-              <Bar yAxisId="left" dataKey="late"    name="Late"    fill="#93c5fd" radius={[4, 4, 0, 0]} stackId="a" />
-              <Line yAxisId="right" type="monotone" dataKey="pct" name="Rate %" stroke="#f59e0b" strokeWidth={2.5} dot={{ fill: '#f59e0b', r: 4 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <AttendanceTrendChart trend={trend} />
         ) : (
           <p className="text-sm text-gray-400 text-center py-10">No attendance data available yet.</p>
         )}

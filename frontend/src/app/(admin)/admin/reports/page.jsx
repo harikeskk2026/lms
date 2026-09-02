@@ -1,10 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Download, BarChart2, FileText, Users, Eye, X } from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList, ScatterChart, Scatter
-} from 'recharts'
 import toast from 'react-hot-toast'
 import reportService from '@/services/reportService'
 import batchService from '@/services/batchService'
@@ -12,9 +9,31 @@ import courseService from '@/services/courseService'
 
 const TABS = ['Attendance', 'Performance', 'Placement', 'Export']
 
-const CHART_TOOLTIP_STYLE = { borderRadius: '12px', fontSize: '12px' }
-const CHART_TICK_STYLE = { fontSize: 11, fill: '#9ca3af' }
-const CHART_GRID_COLOR = '#f3e8ff'
+// recharts is a heavy dependency - load each report tab's charts only when
+// that tab is viewed, and only on the client (SSR doesn't need them).
+const noSSR = (loader) => dynamic(loader, { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" /> })
+
+const AttendanceTrendChart      = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceTrendChart))
+const AttendanceByBatchChart    = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceByBatchChart))
+const AttendanceDistributionChart = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceDistributionChart))
+
+const CoursePerformanceChart          = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.CoursePerformanceChart))
+const BatchPerformanceChart           = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.BatchPerformanceChart))
+const PerformanceTrendChart           = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.PerformanceTrendChart))
+const AtRiskBreakdownChart            = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.AtRiskBreakdownChart))
+const StudentCourseBreakdownChart     = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.StudentCourseBreakdownChart))
+const StudentProgressTrendChart       = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.StudentProgressTrendChart))
+const BatchHealthChart                = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.BatchHealthChart))
+const QuizBreakdownChart              = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.QuizBreakdownChart))
+const EngagementDistributionChart     = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.EngagementDistributionChart))
+const AssignmentCompletionByBatchChart = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.AssignmentCompletionByBatchChart))
+const ActivityTrendChart              = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.ActivityTrendChart))
+const CorrelationScatterChart         = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.CorrelationScatterChart))
+
+const PlacementDistributionChart = noSSR(() => import('@/components/admin/reports/PlacementReportCharts').then(m => m.PlacementDistributionChart))
+const PlacementByBatchChart      = noSSR(() => import('@/components/admin/reports/PlacementReportCharts').then(m => m.PlacementByBatchChart))
+const PlacementByCourseChart     = noSSR(() => import('@/components/admin/reports/PlacementReportCharts').then(m => m.PlacementByCourseChart))
+const PlacementFunnelChart       = noSSR(() => import('@/components/admin/reports/PlacementReportCharts').then(m => m.PlacementFunnelChart))
 
 const RISK_BADGE = {
   LOW: 'bg-green-100 text-green-700',
@@ -311,39 +330,15 @@ export default function ReportsPage() {
 
               <div className="grid sm:grid-cols-3 gap-5">
                 <ChartCard title="Attendance Trend" empty={!attData.attendanceTrend?.length} emptyMessage="Not enough attendance data yet to show a trend.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={attData.attendanceTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                      <XAxis dataKey="period" tick={CHART_TICK_STYLE} />
-                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Line type="monotone" dataKey="percentage" name="Attendance %" stroke="#9333ea" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <AttendanceTrendChart data={attData.attendanceTrend} />
                 </ChartCard>
 
                 <ChartCard title="Attendance by Batch" empty={!attData.attendanceByBatch?.length} emptyMessage="No batch attendance data available.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={attData.attendanceByBatch}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                      <XAxis dataKey="batchName" tick={CHART_TICK_STYLE} />
-                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="percentage" name="Attendance %" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <AttendanceByBatchChart data={attData.attendanceByBatch} />
                 </ChartCard>
 
                 <ChartCard title="Present / Absent / Late" empty={attendanceDistributionTotal === 0} emptyMessage="No attendance data available.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={attendanceDistributionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                        {attendanceDistributionData.map((e, i) => <Cell key={i} fill={e.fill} />)}
-                      </Pie>
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <AttendanceDistributionChart data={attendanceDistributionData} />
                 </ChartCard>
               </div>
             </>
@@ -433,51 +428,19 @@ export default function ReportsPage() {
 
               <div className="grid sm:grid-cols-2 gap-5">
                 <ChartCard title="Course Performance" empty={!perfData.courseBreakdown?.length} emptyMessage="No course performance data available.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={perfData.courseBreakdown}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                      <XAxis dataKey="courseTitle" tick={CHART_TICK_STYLE} />
-                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="averageScorePct" name="Avg Score %" fill="#9333ea" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <CoursePerformanceChart data={perfData.courseBreakdown} />
                 </ChartCard>
 
                 <ChartCard title="Batch Performance" empty={!perfData.batchBreakdown?.length} emptyMessage="No batch performance data available.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={perfData.batchBreakdown}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                      <XAxis dataKey="batchName" tick={CHART_TICK_STYLE} />
-                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="averageScorePct" name="Avg Score %" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <BatchPerformanceChart data={perfData.batchBreakdown} />
                 </ChartCard>
 
                 <ChartCard title="Performance Trend" empty={!perfData.performanceTrend?.length} emptyMessage="Not enough graded submissions yet to show a trend.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={perfData.performanceTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                      <XAxis dataKey="period" tick={CHART_TICK_STYLE} />
-                      <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Line type="monotone" dataKey="averageScorePct" name="Avg Score %" stroke="#9333ea" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <PerformanceTrendChart data={perfData.performanceTrend} />
                 </ChartCard>
 
                 <ChartCard title="At-Risk Students by Reason" empty={!perfData.atRiskBreakdown?.some(b => b.count > 0)} emptyMessage="No at-risk students for the selected filters.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={perfData.atRiskBreakdown} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#fee2e2" />
-                      <XAxis type="number" allowDecimals={false} tick={CHART_TICK_STYLE} />
-                      <YAxis type="category" dataKey="reason" width={150} tick={CHART_TICK_STYLE} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="count" fill="#f87171" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <AtRiskBreakdownChart data={perfData.atRiskBreakdown} />
                 </ChartCard>
               </div>
 
@@ -509,28 +472,12 @@ export default function ReportsPage() {
                         <p className="text-sm text-gray-400">No graded assignments yet for this student.</p>
                       </div>
                     ) : (
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={studentDetail.courseBreakdown}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                          <XAxis dataKey="courseTitle" tick={CHART_TICK_STYLE} />
-                          <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                          <Bar dataKey="averageScorePct" name="Avg Score %" fill="#22c55e" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      <StudentCourseBreakdownChart data={studentDetail.courseBreakdown} />
                     )}
                     {studentDetail.progressTrend?.length > 0 && (
                       <div className="mt-5">
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Progress Trend</p>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <LineChart data={studentDetail.progressTrend}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                            <XAxis dataKey="period" tick={CHART_TICK_STYLE} />
-                            <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                            <Line type="monotone" dataKey="value" name="Score %" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-                          </LineChart>
-                        </ResponsiveContainer>
+                        <StudentProgressTrendChart data={studentDetail.progressTrend} />
                       </div>
                     )}
                   </>
@@ -552,19 +499,7 @@ export default function ReportsPage() {
               />
 
               <ChartCard title="Batch Health Comparison" empty={!batchHealth.length} emptyMessage="No batch data available.">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={batchHealth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                    <XAxis dataKey="batchName" tick={CHART_TICK_STYLE} />
-                    <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                    <Bar dataKey="healthScore" name="Health Score %" radius={[6, 6, 0, 0]}>
-                      {batchHealth.map((b, i) => (
-                        <Cell key={i} fill={b.status === 'GOOD' ? '#22c55e' : b.status === 'AVERAGE' ? '#f59e0b' : '#ef4444'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <BatchHealthChart data={batchHealth} />
               </ChartCard>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -575,15 +510,7 @@ export default function ReportsPage() {
               </div>
 
               <ChartCard title="Quiz Performance by Quiz" empty={!quizData?.quizBreakdown?.length} emptyMessage="No quiz attempts yet for the selected filters.">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={quizData?.quizBreakdown}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                    <XAxis dataKey="title" tick={CHART_TICK_STYLE} />
-                    <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                    <Bar dataKey="averageScorePct" name="Avg Score %" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <QuizBreakdownChart data={quizData?.quizBreakdown} />
               </ChartCard>
 
               <div className="grid sm:grid-cols-2 gap-5">
@@ -598,43 +525,16 @@ export default function ReportsPage() {
                 </div>
 
                 <ChartCard title="Engagement Distribution" empty={engagementTotal === 0} emptyMessage="No engagement data available.">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={engagementDonutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                        {engagementDonutData.map((e, i) => <Cell key={i} fill={e.fill} />)}
-                      </Pie>
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <EngagementDistributionChart data={engagementDonutData} />
                 </ChartCard>
               </div>
 
               <ChartCard title="Assignment Completion by Batch" empty={!assignmentData?.byBatch?.length} emptyMessage="No batch data available.">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={assignmentData?.byBatch}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                    <XAxis dataKey="batchName" tick={CHART_TICK_STYLE} />
-                    <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                    <Bar dataKey="completionPct" name="Completion %" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <AssignmentCompletionByBatchChart data={assignmentData?.byBatch} />
               </ChartCard>
 
               <ChartCard title="LMS Activity Trends" empty={!activityTrend.length} emptyMessage="Not enough historical data yet." height={240}>
-                <ResponsiveContainer width="100%" height={240}>
-                  <LineChart data={activityTrend}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                    <XAxis dataKey="period" tick={CHART_TICK_STYLE} />
-                    <YAxis tick={CHART_TICK_STYLE} allowDecimals={false} />
-                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <Line type="monotone" dataKey="newStudents" name="New Students" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="assignmentsCreated" name="Assignments" stroke="#9333ea" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="quizAttempts" name="Quiz Attempts" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <ActivityTrendChart data={activityTrend} />
               </ChartCard>
 
               <div className="grid sm:grid-cols-2 gap-5">
@@ -679,16 +579,7 @@ export default function ReportsPage() {
               {correlations.map(corr => (
                 <ChartCard key={corr.label} title={corr.label} empty={!corr.points?.length} emptyMessage="Not enough data for this relationship yet." height={240}
                   footer={corr.points?.length > 0 && <p className="text-[11px] text-gray-400 mt-2">{corr.note}</p>}>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <ScatterChart>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                      <XAxis type="number" dataKey="x" name={corr.xLabel} unit="%" tick={CHART_TICK_STYLE} />
-                      <YAxis type="number" dataKey="y" name={corr.yLabel} unit="%" tick={CHART_TICK_STYLE} />
-                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={CHART_TOOLTIP_STYLE}
-                        formatter={(value, name) => [`${value}%`, name]} />
-                      <Scatter data={corr.points} fill="#9333ea" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
+                  <CorrelationScatterChart points={corr.points} xLabel={corr.xLabel} yLabel={corr.yLabel} />
                 </ChartCard>
               ))}
             </>
@@ -755,15 +646,7 @@ export default function ReportsPage() {
 
           <div className="grid sm:grid-cols-2 gap-5">
             <ChartCard title="Placement Distribution" empty={placementTotal === 0} emptyMessage="No placement data available.">
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={placementChartData} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                    {placementChartData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Pie>
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Legend wrapperStyle={{ fontSize: '11px' }} />
-                </PieChart>
-              </ResponsiveContainer>
+              <PlacementDistributionChart data={placementChartData} />
             </ChartCard>
 
             <div className="glass-card p-5">
@@ -787,39 +670,16 @@ export default function ReportsPage() {
             </div>
 
             <ChartCard title="Placement by Batch" empty={!placementReport?.byBatch?.length} emptyMessage="No batches to compare yet.">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={placementReport?.byBatch}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                  <XAxis dataKey="batchName" tick={CHART_TICK_STYLE} />
-                  <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Bar dataKey="placementRatePct" name="Placement %" fill="#22c55e" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <PlacementByBatchChart data={placementReport?.byBatch} />
             </ChartCard>
 
             <ChartCard title="Placement by Course" empty={!placementReport?.byCourse?.length} emptyMessage="No courses to compare yet.">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={placementReport?.byCourse}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
-                  <XAxis dataKey="courseTitle" tick={CHART_TICK_STYLE} />
-                  <YAxis tick={CHART_TICK_STYLE} unit="%" />
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Bar dataKey="placementRatePct" name="Placement %" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <PlacementByCourseChart data={placementReport?.byCourse} />
             </ChartCard>
 
             <div className="sm:col-span-2">
               <ChartCard title="Placement Funnel" empty={placementTotal === 0} emptyMessage="No placement data available.">
-                <ResponsiveContainer width="100%" height={240}>
-                  <FunnelChart>
-                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                    <Funnel dataKey="value" data={funnelData} isAnimationActive>
-                      <LabelList position="right" dataKey="name" fill="#374151" stroke="none" fontSize={11} />
-                    </Funnel>
-                  </FunnelChart>
-                </ResponsiveContainer>
+                <PlacementFunnelChart data={funnelData} />
               </ChartCard>
             </div>
           </div>

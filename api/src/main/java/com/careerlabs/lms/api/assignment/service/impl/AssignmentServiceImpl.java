@@ -36,7 +36,9 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class AssignmentServiceImpl implements AssignmentService {
@@ -99,14 +101,19 @@ public class AssignmentServiceImpl implements AssignmentService {
         List<Assignment> assignments = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
                 student.getBatch().getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
 
+        List<Long> assignmentIds = assignments.stream().map(Assignment::getId).toList();
+        Map<Long, AssignmentSubmission> submissionsByAssignmentId = assignmentIds.isEmpty()
+                ? Map.of()
+                : submissionRepository.findByAssignmentIdInAndStudentId(assignmentIds, student.getId()).stream()
+                        .collect(Collectors.toMap(s -> s.getAssignment().getId(), s -> s));
+
         return assignments.stream()
-                .map(assignment -> toStudentResponse(assignment, student))
+                .map(assignment -> toStudentResponse(assignment, submissionsByAssignmentId.get(assignment.getId())))
                 .toList();
     }
 
-    private StudentAssignmentResponse toStudentResponse(Assignment assignment, Student student) {
-        Optional<AssignmentSubmission> submission =
-                submissionRepository.findByAssignmentIdAndStudentId(assignment.getId(), student.getId());
+    private StudentAssignmentResponse toStudentResponse(Assignment assignment, AssignmentSubmission submissionEntity) {
+        Optional<AssignmentSubmission> submission = Optional.ofNullable(submissionEntity);
 
         boolean isOverdue = submission.isEmpty() && LocalDate.now().isAfter(assignment.getDueDate());
 

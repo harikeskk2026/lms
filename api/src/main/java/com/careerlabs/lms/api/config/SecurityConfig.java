@@ -105,6 +105,10 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/health").permitAll()
+                        // My Profile - every authenticated role acts on its own account only
+                        // (userId always comes from the JWT principal, never a request param).
+                        .requestMatchers("/api/profile/**").authenticated()
+                        .requestMatchers("/api/student/academic-details/**").hasRole("STUDENT")
                         .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/courses/**", "/api/batches/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/courses/**", "/api/batches/**").hasRole("ADMIN")

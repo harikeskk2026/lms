@@ -24,11 +24,14 @@ public record StudentDriveResponse(
         String applyLink,
         boolean isEligible,
         List<String> ineligibilityReasons,
+        /** True when eligibility couldn't be fully checked because required academic
+         *  details are missing from My Profile - distinct from a flat "not eligible". */
+        boolean profileIncomplete,
         DriveApplicationStatus applicationStatus
 ) {
 
     public static StudentDriveResponse from(Drive drive, boolean isEligible, List<String> ineligibilityReasons,
-                                              DriveApplicationStatus applicationStatus) {
+                                              boolean profileIncomplete, DriveApplicationStatus applicationStatus) {
         return new StudentDriveResponse(
                 drive.getId(),
                 drive.getCompanyName(),
@@ -45,6 +48,7 @@ public record StudentDriveResponse(
                 drive.getApplyLink(),
                 isEligible,
                 ineligibilityReasons,
+                profileIncomplete,
                 applicationStatus);
     }
 }

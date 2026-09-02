@@ -113,12 +113,25 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
         List<DailyClass> classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
 
+        List<Long> classIds = classes.stream().map(DailyClass::getId).toList();
+        Map<Long, List<Attendance>> attendanceByClassId = classIds.isEmpty() ? Map.of() : attendanceRepository
+                .findByDailyClassIdIn(classIds).stream()
+                .collect(Collectors.groupingBy(a -> a.getDailyClass().getId()));
+
+        List<Long> batchIds = classes.stream()
+                .filter(cls -> cls.getBatch() != null)
+                .map(cls -> cls.getBatch().getId())
+                .distinct().toList();
+        Map<Long, Integer> studentCountByBatchId = batchIds.isEmpty() ? Map.of() : studentRepository
+                .findByBatchIdIn(batchIds).stream()
+                .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.collectingAndThen(Collectors.counting(), Long::intValue)));
+
         List<TodayClassResponse> result = new ArrayList<>();
         for (DailyClass cls : classes) {
-            List<Attendance> attendances = attendanceRepository.findByDailyClassId(cls.getId());
+            List<Attendance> attendances = attendanceByClassId.getOrDefault(cls.getId(), List.of());
             int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
             int absent = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
-            int totalStudents = cls.getBatch() != null ? studentRepository.findByBatchId(cls.getBatch().getId()).size() : 0;
+            int totalStudents = cls.getBatch() != null ? studentCountByBatchId.getOrDefault(cls.getBatch().getId(), 0) : 0;
 
             result.add(new TodayClassResponse(
                     cls.getId(),

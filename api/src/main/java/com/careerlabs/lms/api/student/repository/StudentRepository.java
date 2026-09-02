@@ -14,7 +14,11 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     List<Student> findByBatchId(Long batchId);
 
+    List<Student> findByBatchIdIn(List<Long> batchIds);
+
     List<Student> findByCourseId(Long courseId);
+
+    List<Student> findByCourseIdIn(List<Long> courseIds);
 
     Optional<Student> findByUserId(Long userId);
 

@@ -1,9 +1,16 @@
 'use client'
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { PlayCircle, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import recordedSessionService from '@/services/recordedSessionService'
-import SecureVideoPlayer from '@/components/student/SecureVideoPlayer'
+
+// hls.js is a heavy dependency pulled in by the player - load it only when a
+// video is actually opened, and only on the client (SSR doesn't need it).
+const SecureVideoPlayer = dynamic(
+  () => import('@/components/student/SecureVideoPlayer'),
+  { ssr: false, loading: () => <div className="w-full aspect-video rounded-xl bg-gray-900 animate-pulse" /> }
+)
 
 const STATUS_LABELS = {
   SCHEDULED: 'Coming Soon',

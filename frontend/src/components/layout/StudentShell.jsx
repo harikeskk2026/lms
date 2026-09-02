@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, BookOpen, Compass, Calendar, ClipboardList,
-  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video
+  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video, UserCircle
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { studentApi } from '@/lib/api'
@@ -22,6 +22,7 @@ const navItems = [
   { href: '/student/placement',     icon: Briefcase,       label: 'Placement' },
   { href: '/student/announcements', icon: Megaphone,       label: 'Announcements' },
   { href: '/student/notifications', icon: Bell,            label: 'Notifications', badge: 'notifications' },
+  { href: '/student/profile',       icon: UserCircle,      label: 'My Profile' },
 ]
 
 function Sidebar({ open, onClose, badges }) {

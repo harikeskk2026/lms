@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { format, formatDistanceToNow, differenceInDays, isPast } from 'date-fns'
 import {
   Star, Calendar, CheckCircle, Circle, Briefcase, ExternalLink, Plus, Trash2,
@@ -10,12 +12,20 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { studentApi } from '@/lib/api'
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
-} from 'recharts'
 import ResumePreview from '@/components/student/ResumePreview'
 import SkillCard from '@/components/student/SkillCard'
+
+// recharts is a heavy dependency - load each chart only when its tab is
+// viewed, and only on the client (SSR doesn't need it).
+const CHART_SKELETON = <div className="h-[200px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+const MockInterviewTrendChart = dynamic(
+  () => import('@/components/student/placement/MockInterviewTrendChart'),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
+const SkillRadarChart = dynamic(
+  () => import('@/components/student/placement/SkillRadarChart'),
+  { ssr: false, loading: () => CHART_SKELETON }
+)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function StarRating({ rating, max = 5 }) {
@@ -347,15 +357,7 @@ function DashboardTab({ hub, analytics }) {
                 <TrendingUp size={16} className="text-purple-600" />
                 Mock Interview Performance
               </h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={analytics.trend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[0, 5]} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v) => [`${v}/5`, 'Rating']} />
-                  <Line type="monotone" dataKey="rating" stroke="#6d28d9" strokeWidth={2.5} dot={{ r: 4, fill: '#6d28d9' }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <MockInterviewTrendChart trend={analytics.trend} />
             </div>
           ) : (
             <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5 flex flex-col items-center justify-center h-48 text-gray-400">
@@ -900,14 +902,7 @@ function SkillsTab() {
           <h3 className="font-semibold text-gray-800 dark:text-white mb-2 text-sm flex items-center gap-2">
             <BarChart2 size={15} className="text-purple-600" /> Skill Profile
           </h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <RadarChart data={radarData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="category" tick={{ fontSize: 10 }} />
-              <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 9 }} />
-              <Radar dataKey="avg" stroke="#6d28d9" fill="#6d28d9" fillOpacity={0.25} />
-            </RadarChart>
-          </ResponsiveContainer>
+          <SkillRadarChart data={radarData} />
         </div>
       )}
 
@@ -1028,8 +1023,23 @@ function CompanyDrivesTab() {
     )
   }
 
+  const anyProfileIncomplete = drives.some(d => d.profileIncomplete)
+
   return (
     <div className="space-y-5">
+      {/* Profile-completion nudge — eligibility can't be fully checked without it */}
+      {anyProfileIncomplete && (
+        <Link href="/student/profile"
+          className="flex items-center gap-3 p-4 rounded-2xl border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/10 hover:bg-amber-100 dark:hover:bg-amber-900/20 transition-colors">
+          <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-800 dark:text-white">Complete your academic profile to see accurate eligibility</p>
+            <p className="text-xs text-gray-500 mt-0.5">Some drives can't confirm your eligibility until your CGPA/percentage and backlog details are on file.</p>
+          </div>
+          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex-shrink-0">Go to My Profile →</span>
+        </Link>
+      )}
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search company or role..."
@@ -1105,6 +1115,11 @@ function CompanyDrivesTab() {
                       <span className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-bold ${APPLICATION_STATUS_COLORS[drive.applicationStatus] || ''}`}>
                         <CheckCircle size={10} /> {APPLICATION_STATUS_LABELS[drive.applicationStatus] || drive.applicationStatus}
                       </span>
+                    ) : drive.profileIncomplete ? (
+                      <Link href="/student/profile" title={(drive.ineligibilityReasons || []).join('; ')}
+                        className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-xl text-[10px] font-bold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
+                        <AlertCircle size={10} /> Complete Profile
+                      </Link>
                     ) : !drive.isEligible ? (
                       <span title={(drive.ineligibilityReasons || []).join('; ')}
                         className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2.5 py-1 rounded-xl text-[10px] font-bold cursor-help">
