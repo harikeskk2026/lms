@@ -128,6 +128,11 @@ public class SecurityConfig {
                         // Attendance endpoints
                         .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasRole("ADMIN")
                         .requestMatchers("/api/student/attendance/**", "/api/student/classes/**").hasRole("STUDENT")
+                        // Placement endpoints
+                        .requestMatchers("/api/student/placement/**", "/api/student/skills/**",
+                                "/api/student/resume/**", "/api/student/resume-file",
+                                "/api/student/drives/**", "/api/student/mock-interviews/**",
+                                "/api/student/mock-analytics").hasRole("STUDENT")
                         // Course content mutation endpoints (syllabus modules/topics, sessions, materials)
                         .requestMatchers(HttpMethod.POST, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasRole("ADMIN")

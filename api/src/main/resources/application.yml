@@ -39,7 +39,7 @@ app:
     enabled: ${APP_SEED_ENABLED:false}
     admin-email: ${SEED_ADMIN_EMAIL:admin@careerlabs.com}
     admin-password: ${SEED_ADMIN_PASSWORD:ChangeMe123!}
-  purge-sample-data: ${PURGE_SAMPLE_DATA:true}
+  purge-sample-data: ${PURGE_SAMPLE_DATA:false}
 
 
 logging:

@@ -1,29 +1,7 @@
 package com.careerlabs.lms.api.config;
 
-import com.careerlabs.lms.api.academic.repository.AcademicDetailsRepository;
-import com.careerlabs.lms.api.announcement.repository.*;
-import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
-import com.careerlabs.lms.api.attendance.repository.*;
-import com.careerlabs.lms.api.batch.repository.BatchRepository;
-import com.careerlabs.lms.api.college.repository.CollegeRepository;
-import com.careerlabs.lms.api.course.repository.CourseRepository;
-import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
-import com.careerlabs.lms.api.material.repository.MaterialRepository;
-import com.careerlabs.lms.api.notification.repository.NotificationRepository;
-import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
-import com.careerlabs.lms.api.placement.repository.DriveRepository;
-import com.careerlabs.lms.api.placement.repository.ResumeDataRepository;
-import com.careerlabs.lms.api.quiz.repository.*;
-import com.careerlabs.lms.api.recordedsession.repository.*;
-import com.careerlabs.lms.api.session.repository.SessionRepository;
-import com.careerlabs.lms.api.student.entity.Student;
-import com.careerlabs.lms.api.student.repository.StudentRepository;
-import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
-import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
-import com.careerlabs.lms.api.syllabus.repository.SyllabusTopicRepository;
-import com.careerlabs.lms.api.user.entity.Role;
-import com.careerlabs.lms.api.user.entity.User;
-import com.careerlabs.lms.api.user.repository.UserRepository;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,7 +11,56 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import com.careerlabs.lms.api.academic.repository.AcademicDetailsRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementAcknowledgmentRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementCommentRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementTemplateRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementVersionRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementViewRepository;
+import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceAlertRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceCorrectionRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceGoalRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendancePolicyRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
+import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
+import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.college.repository.CollegeRepository;
+import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.material.repository.MaterialRepository;
+import com.careerlabs.lms.api.notification.repository.NotificationRepository;
+import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
+import com.careerlabs.lms.api.placement.repository.DriveRepository;
+import com.careerlabs.lms.api.placement.repository.ResumeDataRepository;
+import com.careerlabs.lms.api.quiz.repository.DailyChallengeRepository;
+import com.careerlabs.lms.api.quiz.repository.InterviewQuestionRepository;
+import com.careerlabs.lms.api.quiz.repository.QuestionAttemptRepository;
+import com.careerlabs.lms.api.quiz.repository.QuestionOptionRepository;
+import com.careerlabs.lms.api.quiz.repository.QuestionRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizAssignmentRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizQuestionRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizTopicRepository;
+import com.careerlabs.lms.api.quiz.repository.StudentAchievementRepository;
+import com.careerlabs.lms.api.quiz.repository.StudentGameStatsRepository;
+import com.careerlabs.lms.api.recordedsession.repository.PlaybackEventRepository;
+import com.careerlabs.lms.api.recordedsession.repository.PlaybackSessionRepository;
+import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionAccessBlockRepository;
+import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionAssetRepository;
+import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionAuditLogRepository;
+import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionRepository;
+import com.careerlabs.lms.api.session.repository.SessionRepository;
+import com.careerlabs.lms.api.student.entity.Student;
+import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
+import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
+import com.careerlabs.lms.api.syllabus.repository.SyllabusTopicRepository;
+import com.careerlabs.lms.api.user.entity.Role;
+import com.careerlabs.lms.api.user.entity.User;
+import com.careerlabs.lms.api.user.repository.UserRepository;
 
 /**
  * Runner to purge all sample / seed data from the database when app.purge-sample-data is enabled.
@@ -45,7 +72,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(SampleDataPurgeRunner.class);
 
-    @Value("${app.purge-sample-data:true}")
+    @Value("${app.purge-sample-data:false}")
     private boolean purgeEnabled;
 
     private final AttendanceCorrectionRepository attendanceCorrectionRepository;
@@ -208,6 +235,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        log.info("Sample data purge enabled: {}", purgeEnabled);
         if (!purgeEnabled) {
             return;
         }

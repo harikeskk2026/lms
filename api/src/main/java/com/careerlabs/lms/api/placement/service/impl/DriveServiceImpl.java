@@ -53,15 +53,18 @@ public class DriveServiceImpl implements DriveService {
     @Override
     @Transactional(readOnly = true)
     public List<AdminDriveResponse> listForAdmin() {
-        return driveRepository.findAllByOrderByDriveDateAsc().stream()
-                .map(AdminDriveResponse::from)
+        List<Drive> drives = driveRepository.findAllByOrderByDriveDateAsc();
+        Map<Long, Long> counts = applicationCountsByDrive(drives.stream().map(Drive::getId).toList());
+        return drives.stream()
+                .map(drive -> AdminDriveResponse.from(drive, counts.getOrDefault(drive.getId(), 0L)))
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public AdminDriveResponse get(Long id) {
-        return AdminDriveResponse.from(findOrThrow(id));
+        Drive drive = findOrThrow(id);
+        return AdminDriveResponse.from(drive, driveApplicationRepository.countByDrive_Id(id));
     }
 
     @Override
@@ -70,7 +73,7 @@ public class DriveServiceImpl implements DriveService {
         Drive drive = new Drive();
         applyCreate(drive, request);
         drive.setCreatedBy(adminUserId);
-        return AdminDriveResponse.from(driveRepository.save(drive));
+        return AdminDriveResponse.from(driveRepository.save(drive), 0L);
     }
 
     @Override
@@ -78,7 +81,8 @@ public class DriveServiceImpl implements DriveService {
     public AdminDriveResponse update(Long id, UpdateDriveRequest request) {
         Drive drive = findOrThrow(id);
         applyUpdate(drive, request);
-        return AdminDriveResponse.from(driveRepository.save(drive));
+        long applicationCount = driveApplicationRepository.countByDrive_Id(id);
+        return AdminDriveResponse.from(driveRepository.save(drive), applicationCount);
     }
 
     @Override
@@ -86,7 +90,16 @@ public class DriveServiceImpl implements DriveService {
     public AdminDriveResponse updateStatus(Long id, UpdateDriveStatusRequest request) {
         Drive drive = findOrThrow(id);
         drive.setStatus(request.getStatus());
-        return AdminDriveResponse.from(driveRepository.save(drive));
+        long applicationCount = driveApplicationRepository.countByDrive_Id(id);
+        return AdminDriveResponse.from(driveRepository.save(drive), applicationCount);
+    }
+
+    private Map<Long, Long> applicationCountsByDrive(List<Long> driveIds) {
+        if (driveIds.isEmpty()) {
+            return Map.of();
+        }
+        return driveApplicationRepository.countGroupedByDriveId(driveIds).stream()
+                .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
     }
 
     @Override

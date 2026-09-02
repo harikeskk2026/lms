@@ -718,9 +718,12 @@ function DriveAppsModal({ viewingApps, driveApplications, onClose, handleUpdateA
                       <select value={app.status}
                         onChange={e => handleUpdateAppStatus(viewingApps, app.id, e.target.value)}
                         className="text-xs font-semibold px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none">
-                        <option value="APPLIED">APPLIED</option>
+                        <option value="INTERESTED">INTERESTED</option>
+                        <option value="UNDER_REVIEW">UNDER_REVIEW</option>
                         <option value="SHORTLISTED">SHORTLISTED</option>
+                        <option value="RESUME_SHARED">RESUME_SHARED</option>
                         <option value="SELECTED">SELECTED</option>
+                        <option value="NOT_SELECTED">NOT_SELECTED</option>
                         <option value="REJECTED">REJECTED</option>
                       </select>
                     </td>

@@ -30,10 +30,14 @@ public record AdminDriveResponse(
         List<DriveEligibilityRef> eligibleCourses,
         Long createdBy,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Count _count
 ) {
 
-    public static AdminDriveResponse from(Drive drive) {
+    public record Count(long applications) {
+    }
+
+    public static AdminDriveResponse from(Drive drive, long applicationCount) {
         return new AdminDriveResponse(
                 drive.getId(),
                 drive.getCompanyName(),
@@ -56,6 +60,7 @@ public record AdminDriveResponse(
                 drive.getEligibleCourses().stream().map(c -> new DriveEligibilityRef(c.getId(), c.getTitle())).toList(),
                 drive.getCreatedBy(),
                 drive.getCreatedAt(),
-                drive.getUpdatedAt());
+                drive.getUpdatedAt(),
+                new Count(applicationCount));
     }
 }

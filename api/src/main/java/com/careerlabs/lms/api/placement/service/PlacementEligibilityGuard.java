@@ -17,7 +17,12 @@ import java.util.List;
  *
  * <p>CGPA/percentage/backlogs criteria are evaluated against the student's UG
  * {@link AcademicDetails} record - the single source of truth for academic
- * history - rather than any field on {@link Student} itself.
+ * history - rather than any field on {@link Student} itself. CGPA and
+ * percentage are mutually exclusive per student ({@link AcademicScoreType}):
+ * only the threshold matching the student's own recorded score type is
+ * checked, and the other one on the Drive is ignored entirely for that
+ * student - a Drive may set either, both (to cover students recording either
+ * type), or neither.
  *
  * <p>{@code minAttendancePct} is intentionally NOT evaluated here: attendance
  * tracking does not exist anywhere in this system yet (see
@@ -39,19 +44,17 @@ public class PlacementEligibilityGuard {
         List<String> reasons = new ArrayList<>();
         AcademicDetails academic = academicDetailsRepository.findByStudentId(student.getId()).orElse(null);
 
-        if (drive.getMinCgpa() != null) {
-            if (academic == null || academic.getUgScoreType() != AcademicScoreType.CGPA || academic.getUgScore() == null) {
-                reasons.add("CGPA not on file (minimum required: " + drive.getMinCgpa() + ")");
-            } else if (academic.getUgScore() < drive.getMinCgpa()) {
-                reasons.add("CGPA below the required minimum of " + drive.getMinCgpa());
-            }
-        }
-
-        if (drive.getMinPercentage() != null) {
-            if (academic == null || academic.getUgScoreType() != AcademicScoreType.PERCENTAGE || academic.getUgScore() == null) {
-                reasons.add("Percentage not on file (minimum required: " + drive.getMinPercentage() + ")");
-            } else if (academic.getUgScore() < drive.getMinPercentage()) {
-                reasons.add("Percentage below the required minimum of " + drive.getMinPercentage());
+        if (drive.getMinCgpa() != null || drive.getMinPercentage() != null) {
+            if (academic == null || academic.getUgScoreType() == null || academic.getUgScore() == null) {
+                reasons.add("Academic score (CGPA/Percentage) not on file");
+            } else if (academic.getUgScoreType() == AcademicScoreType.CGPA) {
+                if (drive.getMinCgpa() != null && academic.getUgScore() < drive.getMinCgpa()) {
+                    reasons.add("CGPA below the required minimum of " + drive.getMinCgpa());
+                }
+            } else {
+                if (drive.getMinPercentage() != null && academic.getUgScore() < drive.getMinPercentage()) {
+                    reasons.add("Percentage below the required minimum of " + drive.getMinPercentage());
+                }
             }
         }
 
