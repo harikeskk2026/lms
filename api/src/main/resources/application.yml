@@ -22,10 +22,23 @@ spring:
       # FileStorageService still separately caps PDF/DOC uploads at 10MB in code.
       max-file-size: ${MAX_UPLOAD_SIZE:400MB}
       max-request-size: ${MAX_UPLOAD_SIZE:400MB}
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
 
 app:
   upload:
     dir: ${UPLOAD_DIR:uploads}
+  mail:
+    from: ${MAIL_FROM:noreply@careerlabs.com}
   secure-video:
     dir: ${SECURE_VIDEO_DIR:secure-video}
   s3:

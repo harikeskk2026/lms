@@ -104,7 +104,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/health", "/oauth2/**", "/api/drive/**", "/error").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/api/auth/verify-otp", "/api/auth/reset-password", "/api/health", "/oauth2/**", "/api/drive/**", "/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/courses/**", "/api/batches/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/courses/**", "/api/batches/**").hasRole("ADMIN")
