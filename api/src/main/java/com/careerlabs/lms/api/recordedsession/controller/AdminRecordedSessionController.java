@@ -71,8 +71,15 @@ public class AdminRecordedSessionController {
     }
 
     @PostMapping("/{id}/upload")
-    public ResponseEntity<ApiResponse<Void>> upload(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
-        recordedSessionService.uploadVideo(id, file);
+    public ResponseEntity<ApiResponse<Void>> upload(
+            @PathVariable Long id,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "video", required = false) MultipartFile video) {
+        MultipartFile uploadFile = file != null ? file : video;
+        if (uploadFile == null || uploadFile.isEmpty()) {
+            throw new com.careerlabs.lms.api.common.exception.BadRequestException("A video file is required (form key 'file' or 'video')");
+        }
+        recordedSessionService.uploadVideo(id, uploadFile);
         return ResponseEntity.accepted().body(ApiResponse.of("Video uploaded — processing started", null));
     }
 

@@ -137,8 +137,14 @@ export default function RecordedSessionsPage() {
     } catch (err) { toast.error(err.message || 'Failed to archive') }
   }
 
+  const MAX_FILE_SIZE_BYTES = 400 * 1024 * 1024 // 400MB
+
   const handleUpload = async () => {
     if (!uploadFile || !uploadTarget) return
+    if (uploadFile.size > MAX_FILE_SIZE_BYTES) {
+      toast.error('File size exceeds the maximum allowed limit of 400MB')
+      return
+    }
     setUploading(true)
     setUploadProgress(0)
     try {
@@ -378,8 +384,16 @@ export default function RecordedSessionsPage() {
         {uploadTarget && (
           <div className="space-y-4">
             <p className="text-sm font-semibold text-gray-800 dark:text-white">{uploadTarget.title}</p>
-            <input type="file" accept="video/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} disabled={uploading}
-              className="w-full text-sm" />
+            <input type="file" accept="video/*" onChange={e => {
+              const file = e.target.files?.[0] || null
+              if (file && file.size > MAX_FILE_SIZE_BYTES) {
+                toast.error('File size exceeds the maximum allowed limit of 400MB')
+                e.target.value = ''
+                setUploadFile(null)
+                return
+              }
+              setUploadFile(file)
+            }} disabled={uploading} className="w-full text-sm" />
             {uploading && (
               <div className="w-full bg-gray-100 rounded-full h-2">
                 <div className="h-2 rounded-full bg-purple-600 transition-all" style={{ width: `${uploadProgress}%` }} />
@@ -389,7 +403,7 @@ export default function RecordedSessionsPage() {
               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
               {uploading ? `Uploading... ${uploadProgress}%` : 'Upload'}
             </button>
-            <p className="text-[11px] text-gray-400">Stored privately, transcoded to encrypted HLS in the background. Never a public URL.</p>
+            <p className="text-[11px] text-gray-400">Max file size: 400MB. Stored privately in Google Drive & transcoded to encrypted HLS in background.</p>
           </div>
         )}
       </SlidePanel>

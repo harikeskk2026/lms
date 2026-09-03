@@ -22,7 +22,20 @@
     <java.version>21</java.version>
     <spring-dotenv.version>4.0.0</spring-dotenv.version>
     <jjwt.version>0.12.6</jjwt.version>
+    <aws.sdk.version>2.26.0</aws.sdk.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws.sdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <dependency>
@@ -89,8 +102,35 @@
       <artifactId>spring-security-test</artifactId>
       <scope>test</scope>
     </dependency>
-  </dependencies>
 
+    <!-- AWS S3 — only active when S3_BUCKET env var is set; compile-scoped so the
+         class is always on the classpath but the S3StorageService bean is
+         conditional (@ConditionalOnProperty). -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.api-client</groupId>
+      <artifactId>google-api-client</artifactId>
+      <version>2.8.1</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.oauth-client</groupId>
+      <artifactId>google-oauth-client-jetty</artifactId>
+      <version>1.39.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.http-client</groupId>
+      <artifactId>google-http-client-gson</artifactId>
+      <version>1.47.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.apis</groupId>
+      <artifactId>google-api-services-drive</artifactId>
+      <version>v3-rev20240521-2.0.0</version>
+    </dependency>
+  </dependencies>
   <build>
     <finalName>lms-api</finalName>
     <plugins>

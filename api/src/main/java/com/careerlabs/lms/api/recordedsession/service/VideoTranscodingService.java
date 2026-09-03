@@ -57,12 +57,12 @@ public class VideoTranscodingService {
 
     private final RecordedSessionRepository recordedSessionRepository;
     private final RecordedSessionAssetRepository recordedSessionAssetRepository;
-    private final SecureVideoStorageService storageService;
+    private final VideoStorageService storageService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public VideoTranscodingService(RecordedSessionRepository recordedSessionRepository,
                                     RecordedSessionAssetRepository recordedSessionAssetRepository,
-                                    SecureVideoStorageService storageService) {
+                                    VideoStorageService storageService) {
         this.recordedSessionRepository = recordedSessionRepository;
         this.recordedSessionAssetRepository = recordedSessionAssetRepository;
         this.storageService = storageService;
@@ -92,6 +92,11 @@ public class VideoTranscodingService {
 
             Integer durationSeconds = probeDurationSeconds(sourceFile);
             long fileSizeBytes = sumSegmentSizes(dir);
+
+            // Hand off the transcoded HLS output to the storage service.
+            // For local storage this is a no-op; for S3 this uploads everything
+            // to the bucket and then deletes the local temp files.
+            storageService.publishTranscodedOutput(recordedSessionId, dir);
 
             saveAsset(recordedSessionId, dir, manifestFileName, keyFile.getFileName().toString(), durationSeconds, fileSizeBytes);
             Files.deleteIfExists(sourceFile);

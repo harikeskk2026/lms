@@ -6,7 +6,7 @@ import com.careerlabs.lms.api.recordedsession.entity.RecordedSessionAsset;
 import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionAssetRepository;
 import com.careerlabs.lms.api.recordedsession.security.PlaybackTokenPrincipal;
 import com.careerlabs.lms.api.recordedsession.service.PlaybackAuthorizationService;
-import com.careerlabs.lms.api.recordedsession.service.SecureVideoStorageService;
+import com.careerlabs.lms.api.recordedsession.service.VideoStorageService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -17,11 +17,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,11 +37,11 @@ public class RecordedSessionStreamController {
 
     private final RecordedSessionAssetRepository assetRepository;
     private final PlaybackAuthorizationService playbackAuthorizationService;
-    private final SecureVideoStorageService storageService;
+    private final VideoStorageService storageService;
 
     public RecordedSessionStreamController(RecordedSessionAssetRepository assetRepository,
                                             PlaybackAuthorizationService playbackAuthorizationService,
-                                            SecureVideoStorageService storageService) {
+                                            VideoStorageService storageService) {
         this.assetRepository = assetRepository;
         this.playbackAuthorizationService = playbackAuthorizationService;
         this.storageService = storageService;
@@ -59,8 +54,7 @@ public class RecordedSessionStreamController {
                                             HttpServletRequest request) {
         RecordedSessionAsset asset = authorize(id, principal);
         String token = request.getParameter("token");
-        Path manifestPath = storageService.resolveAssetFile(id, asset.getStorageDir(), asset.getManifestFileName());
-        String content = readFile(manifestPath);
+        String content = storageService.getAssetText(id, asset.getManifestFileName());
 
         String rewritten = content.contains("#EXT-X-STREAM-INF")
                 ? rewriteMasterPlaylist(content, id, token)
@@ -79,9 +73,8 @@ public class RecordedSessionStreamController {
                                              HttpServletRequest request) {
         RecordedSessionAsset asset = authorize(id, principal);
         String token = request.getParameter("token");
-        Path renditionPath = storageService.resolveAssetFile(id, asset.getStorageDir(), fileName);
-
-        String rewritten = rewriteRenditionManifest(readFile(renditionPath), id, token, true);
+        String rewritten = rewriteRenditionManifest(
+                storageService.getAssetText(id, fileName), id, token, true);
         return ResponseEntity.ok()
                 .contentType(HLS_MANIFEST_TYPE)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
@@ -91,22 +84,20 @@ public class RecordedSessionStreamController {
     @GetMapping("/segments/{fileName}")
     public ResponseEntity<byte[]> segment(@PathVariable Long id, @PathVariable String fileName,
                                            @AuthenticationPrincipal PlaybackTokenPrincipal principal) {
-        RecordedSessionAsset asset = authorize(id, principal);
-        Path segmentPath = storageService.resolveAssetFile(id, asset.getStorageDir(), fileName);
+        authorize(id, principal);
         return ResponseEntity.ok()
                 .contentType(HLS_SEGMENT_TYPE)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(readFileBytes(segmentPath));
+                .body(storageService.getAssetBytes(id, fileName));
     }
 
     @GetMapping("/key")
     public ResponseEntity<byte[]> key(@PathVariable Long id, @AuthenticationPrincipal PlaybackTokenPrincipal principal) {
         RecordedSessionAsset asset = authorize(id, principal);
-        Path keyPath = storageService.resolveAssetFile(id, asset.getStorageDir(), asset.getKeyFileName());
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(readFileBytes(keyPath));
+                .body(storageService.getAssetBytes(id, asset.getKeyFileName()));
     }
 
     private RecordedSessionAsset authorize(Long id, PlaybackTokenPrincipal principal) {
@@ -152,21 +143,5 @@ public class RecordedSessionStreamController {
             }
         }
         return out.toString();
-    }
-
-    private String readFile(Path path) {
-        try {
-            return Files.readString(path, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read manifest", e);
-        }
-    }
-
-    private byte[] readFileBytes(Path path) {
-        try {
-            return Files.readAllBytes(path);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read video asset", e);
-        }
     }
 }

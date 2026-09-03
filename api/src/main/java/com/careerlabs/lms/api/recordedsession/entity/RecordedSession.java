@@ -68,6 +68,9 @@ public class RecordedSession {
     @Column(name = "processing_error", columnDefinition = "TEXT")
     private String processingError;
 
+    @Column(name = "drive_file_id")
+    private String driveFileId;
+
     @Column(name = "created_by")
     private Long createdBy;
 
@@ -195,6 +198,14 @@ public class RecordedSession {
 
     public void setProcessingError(String processingError) {
         this.processingError = processingError;
+    }
+
+    public String getDriveFileId() {
+        return driveFileId;
+    }
+
+    public void setDriveFileId(String driveFileId) {
+        this.driveFileId = driveFileId;
     }
 
     public Long getCreatedBy() {

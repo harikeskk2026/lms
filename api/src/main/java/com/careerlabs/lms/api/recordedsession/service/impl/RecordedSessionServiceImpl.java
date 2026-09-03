@@ -19,12 +19,15 @@ import com.careerlabs.lms.api.recordedsession.entity.RecordedSessionStatus;
 import com.careerlabs.lms.api.recordedsession.repository.PlaybackSessionRepository;
 import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionAssetRepository;
 import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionRepository;
+import com.careerlabs.lms.api.recordedsession.service.GoogleDriveService;
 import com.careerlabs.lms.api.recordedsession.service.RecordedSessionAvailabilityService;
 import com.careerlabs.lms.api.recordedsession.service.RecordedSessionService;
-import com.careerlabs.lms.api.recordedsession.service.SecureVideoStorageService;
+import com.careerlabs.lms.api.recordedsession.service.VideoStorageService;
 import com.careerlabs.lms.api.recordedsession.service.VideoTranscodingService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,15 +39,18 @@ import java.util.List;
 @Service
 public class RecordedSessionServiceImpl implements RecordedSessionService {
 
+    private static final Logger log = LoggerFactory.getLogger(RecordedSessionServiceImpl.class);
+
     private final RecordedSessionRepository recordedSessionRepository;
     private final RecordedSessionAssetRepository recordedSessionAssetRepository;
     private final PlaybackSessionRepository playbackSessionRepository;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final StudentRepository studentRepository;
-    private final SecureVideoStorageService storageService;
+    private final VideoStorageService storageService;
     private final VideoTranscodingService transcodingService;
     private final RecordedSessionAvailabilityService availabilityService;
+    private final GoogleDriveService googleDriveService;
 
     public RecordedSessionServiceImpl(RecordedSessionRepository recordedSessionRepository,
                                        RecordedSessionAssetRepository recordedSessionAssetRepository,
@@ -52,9 +58,10 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
                                        CourseRepository courseRepository,
                                        EnrollmentRepository enrollmentRepository,
                                        StudentRepository studentRepository,
-                                       SecureVideoStorageService storageService,
+                                       VideoStorageService storageService,
                                        VideoTranscodingService transcodingService,
-                                       RecordedSessionAvailabilityService availabilityService) {
+                                       RecordedSessionAvailabilityService availabilityService,
+                                       GoogleDriveService googleDriveService) {
         this.recordedSessionRepository = recordedSessionRepository;
         this.recordedSessionAssetRepository = recordedSessionAssetRepository;
         this.playbackSessionRepository = playbackSessionRepository;
@@ -64,6 +71,7 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
         this.storageService = storageService;
         this.transcodingService = transcodingService;
         this.availabilityService = availabilityService;
+        this.googleDriveService = googleDriveService;
     }
 
     @Override
@@ -116,8 +124,15 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
         if (playbackSessionRepository.countByRecordedSessionId(id) > 0) {
             throw new ConflictException("Cannot delete a recorded session that already has playback history; archive it instead");
         }
+        if (session.getDriveFileId() != null) {
+            try {
+                googleDriveService.deleteFile(session.getDriveFileId());
+            } catch (Exception e) {
+                log.warn("Could not delete Drive file {} for session {}: {}", session.getDriveFileId(), id, e.getMessage());
+            }
+        }
         recordedSessionAssetRepository.deleteByRecordedSessionId(id);
-        storageService.deleteSessionDir(id);
+        storageService.deleteSessionAssets(id);
         recordedSessionRepository.delete(session);
     }
 
@@ -129,7 +144,13 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
             throw new ConflictException("A video is already being processed for this session");
         }
 
+        // 1. Prepare local source upload for transcoding & packaging
         Path sourceFile = storageService.storeSourceUpload(file, id);
+
+        // 2. Upload video to Google Drive
+        String driveFileId = googleDriveService.uploadFile(file, id);
+        session.setDriveFileId(driveFileId);
+
         session.setStatus(RecordedSessionStatus.PROCESSING);
         session.setProcessingError(null);
         recordedSessionRepository.save(session);
