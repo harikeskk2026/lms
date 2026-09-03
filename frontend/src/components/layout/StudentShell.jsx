@@ -7,7 +7,7 @@ import {
   Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video, UserCircle, Search
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { studentApi } from '@/lib/api'
+import { studentApi, resolveFileUrl } from '@/lib/api'
 import NotificationDropdown from '@/components/ui/NotificationDropdown'
 import HeaderSearch from '@/components/ui/HeaderSearch'
 import clsx from 'clsx'
@@ -56,9 +56,13 @@ function Sidebar({ open, onClose, badges }) {
         {/* User Info */}
         <div className="px-5 py-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
-              {user?.name?.[0]?.toUpperCase() || 'S'}
-            </div>
+            {user?.photoUrl ? (
+              <img src={resolveFileUrl(user.photoUrl)} alt={user.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {user?.name?.[0]?.toUpperCase() || 'S'}
+              </div>
+            )}
             <div className="overflow-hidden">
               <p className="text-white text-sm font-semibold truncate">{user?.name}</p>
               <p className="text-purple-300 text-xs truncate">{user?.email}</p>
@@ -177,9 +181,13 @@ function TopBar({ onMenuClick, user, unreadCount }) {
             onClick={() => setProfileOpen(p => !p)}
             className="flex items-center gap-2"
           >
-            <div className="w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center text-brand-700 dark:text-brand-300 font-bold text-sm">
-              {user?.name?.[0]?.toUpperCase() || 'S'}
-            </div>
+            {user?.photoUrl ? (
+              <img src={resolveFileUrl(user.photoUrl)} alt={user.name} className="w-9 h-9 rounded-xl object-cover" />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-700 dark:text-purple-300 font-bold text-sm">
+                {user?.name?.[0]?.toUpperCase() || 'S'}
+              </div>
+            )}
             <div className="hidden sm:block text-left">
               <p className="text-sm font-semibold text-slate-800 dark:text-white leading-tight">{user?.name}</p>
               <p className="text-[11px] text-slate-500 dark:text-gray-400">Student</p>

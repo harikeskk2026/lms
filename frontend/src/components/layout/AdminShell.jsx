@@ -9,7 +9,7 @@ import {
   Moon, Sun, Video, UserCircle
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { adminApi } from '@/lib/api'
+import { adminApi, resolveFileUrl } from '@/lib/api'
 import NotificationDropdown from '@/components/ui/NotificationDropdown'
 import HeaderSearch from '@/components/ui/HeaderSearch'
 import clsx from 'clsx'
@@ -85,9 +85,13 @@ function Sidebar({ open, onClose, badges }) {
         {/* User Info */}
         <div className="px-5 py-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {user?.name?.[0]?.toUpperCase() || 'A'}
-            </div>
+            {user?.photoUrl ? (
+              <img src={resolveFileUrl(user.photoUrl)} alt={user.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {user?.name?.[0]?.toUpperCase() || 'A'}
+              </div>
+            )}
             <div className="overflow-hidden flex-1 min-w-0">
               <p className="text-white text-sm font-semibold truncate">{user?.name}</p>
               <p className="text-purple-300 text-xs truncate">{user?.email}</p>
@@ -197,9 +201,13 @@ function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
             onClick={() => setProfileOpen(p => !p)}
             className="flex items-center gap-2"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-bold text-sm">
-              {user?.name?.[0]?.toUpperCase() || 'A'}
-            </div>
+            {user?.photoUrl ? (
+              <img src={resolveFileUrl(user.photoUrl)} alt={user.name} className="w-9 h-9 rounded-xl object-cover" />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-bold text-sm">
+                {user?.name?.[0]?.toUpperCase() || 'A'}
+              </div>
+            )}
             <div className="hidden sm:block text-left">
               <p className="text-sm font-semibold text-gray-800 dark:text-white leading-tight">{user?.name}</p>
               <p className="text-[11px] text-purple-500">{user?.role}</p>

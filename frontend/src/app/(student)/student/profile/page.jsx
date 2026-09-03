@@ -44,6 +44,12 @@ export default function StudentProfilePage() {
 
   const handlePhotoUploaded = (photoUrl) => {
     setProfile(p => ({ ...p, photoUrl }))
+    setUser(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, photoUrl }
+      tokenStorage.setUser(updated)
+      return updated
+    })
   }
 
   const handleSave = async (e) => {
@@ -136,85 +142,91 @@ export default function StudentProfilePage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-5">
-        {/* Personal Information */}
-        <div className="glass-card p-6 space-y-4">
-          <h3 className="font-display font-bold text-gray-800 dark:text-white">Personal Information</h3>
-          <form onSubmit={handleSave} className="space-y-4">
+      {/* Section 1: Personal Information */}
+      <div className="glass-card p-6 space-y-4">
+        <h3 className="font-display font-bold text-gray-800 dark:text-white">Personal Information</h3>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className={LABEL_CLS}>Full Name</label>
               <input type="text" required value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 className={INPUT_CLS} />
             </div>
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-5">
-                <Mail size={13} className="text-purple-600" />
-              </div>
-              <div className="flex-1">
-                <label className={LABEL_CLS}>Email</label>
-                <p className="text-sm text-gray-500 dark:text-gray-400 py-2">{profile.email}</p>
-              </div>
-            </div>
             <div>
               <label className={LABEL_CLS}><Phone size={10} className="inline mr-1" />Phone</label>
               <input type="tel" inputMode="numeric" maxLength={10} value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                placeholder="9876543210"
+                placeholder="e.g. 9876543210"
                 className={INPUT_CLS} />
             </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}><MapPin size={10} className="inline mr-1" />Address</label>
-              <input type="text" value={form.address}
-                onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                className={INPUT_CLS} />
+              <label className={LABEL_CLS}><Mail size={10} className="inline mr-1" />Email</label>
+              <input type="email" disabled value={profile.email}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-500 cursor-not-allowed" />
             </div>
             <div>
               <label className={LABEL_CLS}><Award size={10} className="inline mr-1" />Qualification</label>
               <input type="text" value={form.qualification}
                 onChange={e => setForm(f => ({ ...f, qualification: e.target.value }))}
+                placeholder="e.g. B.Tech Computer Science & Engineering"
                 className={INPUT_CLS} />
             </div>
+          </div>
+
+          <div>
+            <label className={LABEL_CLS}><MapPin size={10} className="inline mr-1" />Address</label>
+            <input type="text" value={form.address}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              placeholder="e.g. 123 Main St, Madurai, Tamil Nadu"
+              className={INPUT_CLS} />
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className={LABEL_CLS}><Linkedin size={10} className="inline mr-1" />LinkedIn URL</label>
               <input type="url" value={form.linkedinUrl}
                 onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))}
-                placeholder="linkedin.com/in/yourname"
+                placeholder="https://linkedin.com/in/yourname"
                 className={INPUT_CLS} />
             </div>
             <div>
               <label className={LABEL_CLS}><Github size={10} className="inline mr-1" />GitHub URL</label>
               <input type="url" value={form.githubUrl}
                 onChange={e => setForm(f => ({ ...f, githubUrl: e.target.value }))}
-                placeholder="github.com/yourname"
+                placeholder="https://github.com/yourname"
                 className={INPUT_CLS} />
             </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
             <button type="submit" disabled={saving}
-              className="w-full py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+              className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 transition-all shadow-sm disabled:opacity-60">
               {saving ? 'Saving...' : 'Save Personal Information'}
             </button>
-          </form>
-        </div>
-
-        <div className="space-y-5">
-          {/* Academic Details */}
-          <div className="glass-card p-6">
-            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1">Academic Details</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Used as the single source of truth to automatically check your eligibility for{' '}
-              <Link href="/student/placement" className="text-purple-600 hover:underline">placement opportunities</Link>.
-            </p>
-            <AcademicDetailsSection onSaved={load} />
           </div>
+        </form>
+      </div>
 
-          {/* Security */}
-          <div className="glass-card p-6">
-            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-              <ShieldCheck size={16} className="text-purple-600" /> Security
-            </h3>
-            <ChangePasswordForm />
-          </div>
-        </div>
+      {/* Section 2: Academic Details */}
+      <div className="glass-card p-6">
+        <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1">Academic Details</h3>
+        <p className="text-xs text-gray-400 mb-4">
+          Used as the single source of truth to automatically check your eligibility for{' '}
+          <Link href="/student/placement" className="text-purple-600 hover:underline">placement opportunities</Link>.
+        </p>
+        <AcademicDetailsSection onSaved={load} />
+      </div>
+
+      {/* Section 3: Security */}
+      <div className="glass-card p-6">
+        <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+          <ShieldCheck size={16} className="text-purple-600" /> Security
+        </h3>
+        <ChangePasswordForm />
       </div>
     </div>
   )

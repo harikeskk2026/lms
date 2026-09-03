@@ -44,7 +44,15 @@ export default function AdminProfilePage() {
 
   useEffect(() => { load() }, [])
 
-  const handlePhotoUploaded = (photoUrl) => setProfile(p => ({ ...p, photoUrl }))
+  const handlePhotoUploaded = (photoUrl) => {
+    setProfile(p => ({ ...p, photoUrl }))
+    setUser(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, photoUrl }
+      tokenStorage.setUser(updated)
+      return updated
+    })
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()

@@ -59,10 +59,12 @@ export default function ChangePasswordForm() {
           onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
           className={INPUT_CLS} />
       </div>
-      <button type="submit" disabled={saving}
-        className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-        <Lock size={14} /> {saving ? 'Updating...' : 'Change Password'}
-      </button>
+      <div className="flex justify-end pt-2">
+        <button type="submit" disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 transition-all shadow-sm disabled:opacity-60">
+          <Lock size={12} /> {saving ? 'Updating...' : 'Change Password'}
+        </button>
+      </div>
     </form>
   )
 }
