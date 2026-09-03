@@ -8,4 +8,8 @@ import java.util.List;
 public interface BatchRepository extends JpaRepository<Batch, Long> {
 
     List<Batch> findAllByOrderByCreatedAtDesc();
+
+    long countByActive(boolean active);
+
+    List<Batch> findByTrainerId(Long trainerId);
 }

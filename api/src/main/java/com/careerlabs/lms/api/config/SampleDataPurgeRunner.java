@@ -298,11 +298,12 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             syllabusModuleRepository.deleteAllInBatch();
             courseRepository.deleteAllInBatch();
 
-            // Retain or recreate active Super Admin, Admin, and Student system accounts
+            // Retain or recreate active Super Admin, Admin, Trainer, and Student system accounts
             List<User> users = userRepository.findAll();
             for (User u : users) {
                 if (!u.getEmail().equalsIgnoreCase("superadmin@careerlabs.com") &&
                     !u.getEmail().equalsIgnoreCase("admin@careerlabs.com") &&
+                    !u.getEmail().equalsIgnoreCase("trainer@careerlabs.com") &&
                     !u.getEmail().equalsIgnoreCase("student@careerlabs.com")) {
                     userRepository.delete(u);
                 }
@@ -326,6 +327,15 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
                 userRepository.save(admin);
             }
 
+            if (userRepository.findByEmailIgnoreCase("trainer@careerlabs.com").isEmpty()) {
+                User trainer = new User();
+                trainer.setName("Demo Trainer");
+                trainer.setEmail("trainer@careerlabs.com");
+                trainer.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
+                trainer.setRole(Role.TRAINER);
+                userRepository.save(trainer);
+            }
+
             User studentUser = userRepository.findByEmailIgnoreCase("student@careerlabs.com")
                     .orElseGet(() -> {
                         User s = new User();
@@ -343,7 +353,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
                 studentRepository.save(studentProfile);
             }
 
-            log.info("Successfully purged all sample data. Database is now clean with Admin User account ready.");
+            log.info("Successfully purged sample data while keeping system accounts (Super Admin, Admin, Trainer, Student).");
         } catch (Exception e) {
             log.error("Failed to purge sample data: {}", e.getMessage(), e);
         }

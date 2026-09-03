@@ -46,10 +46,19 @@ import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusTopic;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusTopicRepository;
+import com.careerlabs.lms.api.batch.entity.Batch;
+import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.college.repository.CollegeRepository;
+import com.careerlabs.lms.api.dashboard.dto.response.SuperAdminDashboardResponse;
+import com.careerlabs.lms.api.dashboard.dto.response.TrainerDashboardResponse;
+import com.careerlabs.lms.api.submission.entity.AssignmentSubmission;
+import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -77,6 +86,8 @@ public class DashboardServiceImpl implements DashboardService {
     private final SyllabusTopicRepository syllabusTopicRepository;
     private final SessionRepository sessionRepository;
     private final UserRepository userRepository;
+    private final BatchRepository batchRepository;
+    private final CollegeRepository collegeRepository;
 
     private final ReportService reportService;
     private final AttendanceAnalyticsService attendanceAnalyticsService;
@@ -105,6 +116,8 @@ public class DashboardServiceImpl implements DashboardService {
             SyllabusTopicRepository syllabusTopicRepository,
             SessionRepository sessionRepository,
             UserRepository userRepository,
+            BatchRepository batchRepository,
+            CollegeRepository collegeRepository,
             ReportService reportService,
             AttendanceAnalyticsService attendanceAnalyticsService,
             AttendanceRiskService attendanceRiskService,
@@ -130,6 +143,8 @@ public class DashboardServiceImpl implements DashboardService {
         this.syllabusTopicRepository = syllabusTopicRepository;
         this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
+        this.batchRepository = batchRepository;
+        this.collegeRepository = collegeRepository;
         this.reportService = reportService;
         this.attendanceAnalyticsService = attendanceAnalyticsService;
         this.attendanceRiskService = attendanceRiskService;
@@ -164,6 +179,147 @@ public class DashboardServiceImpl implements DashboardService {
                 buildAdminPlacement(drives),
                 buildUpcomingSessions(),
                 buildRecentActivity());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SuperAdminDashboardResponse getSuperAdminDashboard() {
+        PerformanceReportResponse performance = reportService.getPerformanceReport(new PerformanceReportRequest());
+        OverviewResponse overview = reportService.getOverview(performance);
+        List<AdminDriveResponse> drives = driveService.listForAdmin();
+
+        long totalStudents = studentRepository.count();
+        long activeStudents = studentRepository.countByUser_ActiveTrue();
+        long totalTrainers = userRepository.countByRole(Role.TRAINER);
+        long activeTrainers = userRepository.countByRoleAndActive(Role.TRAINER, true);
+        long totalBatches = batchRepository.count();
+        long activeBatches = batchRepository.countByActive(true);
+        long totalCourses = courseRepository.count();
+        long totalColleges = collegeRepository.count();
+
+        SuperAdminDashboardResponse.Overview saOverview = new SuperAdminDashboardResponse.Overview(
+                totalStudents, activeStudents, totalTrainers, activeTrainers, totalBatches, activeBatches, totalCourses, totalColleges
+        );
+
+        AdminDashboardResponse.Performance adminPerf = buildAdminPerformance(overview, performance);
+        SuperAdminDashboardResponse.Performance saPerformance = new SuperAdminDashboardResponse.Performance(
+                adminPerf.averagePerformancePct(),
+                adminPerf.trend(),
+                adminPerf.atRiskCount(),
+                adminPerf.needsImprovementCount()
+        );
+
+        AdminDashboardResponse.Attendance adminAtt = buildAdminAttendance();
+        SuperAdminDashboardResponse.Attendance saAttendance = new SuperAdminDashboardResponse.Attendance(
+                adminAtt.healthy(), adminAtt.atRisk(), adminAtt.critical(), adminAtt.overallPct()
+        );
+
+        AdminDashboardResponse.Placement adminPlac = buildAdminPlacement(drives);
+        SuperAdminDashboardResponse.Placement saPlacement = new SuperAdminDashboardResponse.Placement(
+                adminPlac.activeDrives(), adminPlac.interestedStudents(), adminPlac.availableDrives()
+        );
+
+        return new SuperAdminDashboardResponse(
+                saOverview,
+                saPerformance,
+                saAttendance,
+                saPlacement,
+                buildUpcomingSessions(),
+                buildRecentActivity()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TrainerDashboardResponse getTrainerDashboard(Long userId) {
+        List<Batch> myBatchEntities = userId != null ? batchRepository.findByTrainerId(userId) : java.util.Collections.emptyList();
+        if (myBatchEntities.isEmpty()) {
+            myBatchEntities = batchRepository.findAll();
+        }
+
+        // Real student count: students in trainer's batches only
+        List<Long> batchIds = myBatchEntities.stream().map(Batch::getId).toList();
+        long myStudentsCount = batchIds.isEmpty()
+                ? studentRepository.count()
+                : studentRepository.findByBatchIdIn(batchIds).size();
+
+        long myBatchesCount = myBatchEntities.size();
+
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = LocalDate.now().atTime(23, 59, 59);
+        List<DailyClass> todayClasses = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
+        long todaySessionsCount = todayClasses.size();
+
+        List<TrainerDashboardResponse.TodayScheduleItem> todaySchedule = todayClasses.stream()
+                .map(c -> new TrainerDashboardResponse.TodayScheduleItem(
+                        c.getId(),
+                        c.getDate() != null ? c.getDate().toLocalTime().toString() : "09:00",
+                        c.getBatch() != null && c.getBatch().getCourse() != null ? c.getBatch().getCourse().getTitle() : "Course",
+                        c.getBatch() != null ? c.getBatch().getName() : "Batch",
+                        c.getStatus() != null ? c.getStatus().name() : "UPCOMING",
+                        c.getMeetLink()
+                ))
+                .toList();
+
+        // Real attendance data from analytics service
+        var cc = attendanceAnalyticsService.getCommandCenter();
+        int overallAttendancePct = cc.averageAttendance();
+
+        // Real per-batch: actual student counts + progress from completed/total daily classes
+        List<TrainerDashboardResponse.TrainerBatchItem> myBatches = myBatchEntities.stream()
+                .map(b -> {
+                    long studentCount = studentRepository.findByBatchId(b.getId()).size();
+                    long totalClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(b.getId()).size();
+                    long completedClasses = dailyClassRepository.countByBatchIdAndStatus(b.getId(), com.careerlabs.lms.api.attendance.entity.ClassStatus.COMPLETED);
+                    int progressPct = totalClasses > 0 ? (int) (completedClasses * 100L / totalClasses) : 0;
+                    return new TrainerDashboardResponse.TrainerBatchItem(
+                            b.getId(),
+                            b.getName(),
+                            b.getCourse() != null ? b.getCourse().getTitle() : "General Course",
+                            studentCount,
+                            overallAttendancePct,
+                            progressPct
+                    );
+                })
+                .toList();
+
+        long pendingGradingCount = assignmentSubmissionRepository.countByReviewedFalse();
+        List<AssignmentSubmission> unsubmittedList = assignmentSubmissionRepository.findTop10ByOrderBySubmittedAtDesc();
+
+        List<TrainerDashboardResponse.PendingGradingItem> pendingGrading = unsubmittedList.stream()
+                .filter(sub -> !sub.isReviewed())
+                .map(sub -> new TrainerDashboardResponse.PendingGradingItem(
+                        sub.getId(),
+                        sub.getAssignment() != null ? sub.getAssignment().getId() : null,
+                        sub.getAssignment() != null ? sub.getAssignment().getTitle() : "Assignment",
+                        sub.getStudent() != null && sub.getStudent().getUser() != null ? sub.getStudent().getUser().getName() : "Student",
+                        sub.getStudent() != null && sub.getStudent().getBatch() != null ? sub.getStudent().getBatch().getName() : "Batch",
+                        sub.getSubmittedAt() != null ? sub.getSubmittedAt().toString() : ""
+                ))
+                .toList();
+
+        TrainerDashboardResponse.Overview overview = new TrainerDashboardResponse.Overview(
+                myBatchesCount,
+                myStudentsCount,
+                todaySessionsCount,
+                pendingGradingCount,
+                overallAttendancePct,
+                myBatchEntities.stream().map(b -> b.getCourse() != null ? b.getCourse().getId() : 0L).distinct().count()
+        );
+
+        TrainerDashboardResponse.AttendanceSummary attendanceSummary = new TrainerDashboardResponse.AttendanceSummary(
+                overallAttendancePct,
+                overallAttendancePct,
+                cc.below75Count()
+        );
+
+        return new TrainerDashboardResponse(
+                overview,
+                todaySchedule,
+                myBatches,
+                pendingGrading,
+                attendanceSummary
+        );
     }
 
     private AdminDashboardResponse.Overview buildAdminOverview(OverviewResponse overview, List<AdminDriveResponse> drives) {

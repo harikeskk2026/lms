@@ -21,8 +21,10 @@ const stats = [
 const demoAccounts = [
   { role: 'Super Admin', email: 'superadmin@careerlabs.com', password: 'Superadmin@123' },
   { role: 'Admin', email: 'admin@careerlabs.com', password: 'Admin@123' },
+  { role: 'Trainer', email: 'trainer@careerlabs.com', password: 'ChangeMe123!' },
   { role: 'Student', email: 'student@careerlabs.com', password: 'Student@123' },
 ]
+
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth()

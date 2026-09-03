@@ -106,27 +106,28 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/api/auth/verify-otp", "/api/auth/reset-password", "/api/health", "/oauth2/**", "/api/drive/**", "/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PUT, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/courses/**", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.POST, "/api/colleges/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/colleges/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/colleges/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/students/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers("/api/trainers/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/reports/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/assignments/*/submissions").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/assignments/*/submissions").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/assignments/*/submissions/*").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/assignments/*/submissions").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/assignments/*/submissions/*").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.POST, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/assignments/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         // Notification endpoints
                         .requestMatchers("/api/student/notifications/**").hasRole("STUDENT")
-                        .requestMatchers("/api/admin/notifications/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers("/api/admin/notifications/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         // Attendance endpoints
-                        .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/attendance/**", "/api/student/classes/**").hasRole("STUDENT")
                         // Placement endpoints
                         .requestMatchers("/api/student/placement/**", "/api/student/skills/**",
@@ -134,12 +135,13 @@ public class SecurityConfig {
                                 "/api/student/drives/**", "/api/student/mock-interviews/**",
                                 "/api/student/mock-analytics").hasRole("STUDENT")
                         // Course content mutation endpoints (syllabus modules/topics, sessions, materials)
-                        .requestMatchers(HttpMethod.POST, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PUT, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/modules/**", "/api/topics/**", "/api/sessions/**", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/**").authenticated()
                         .anyRequest().authenticated()
+
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

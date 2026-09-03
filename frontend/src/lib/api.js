@@ -78,6 +78,8 @@ export function resolveFileUrl(path) {
 export const adminApi = {
   // Dashboard
   getDashboard: () => api.get('/admin/dashboard'),
+  getSuperAdminDashboard: () => api.get('/admin/dashboard/superadmin'),
+  getTrainerDashboard: () => api.get('/admin/dashboard/trainer'),
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
 
   // Students
@@ -87,6 +89,15 @@ export const adminApi = {
   updateStudent: (id, data) => api.patch(`/admin/students/${id}`, data),
   toggleStudentStatus: (id) => api.patch(`/admin/students/${id}/status`),
   resetStudentPassword: (id, data) => api.post(`/admin/students/${id}/reset-password`, data),
+
+  // Trainers
+  getTrainers: (params) => api.get('/trainers', { params }),
+  createTrainer: (data) => api.post('/trainers', data),
+  getTrainerDetail: (id) => api.get(`/trainers/${id}`),
+  updateTrainer: (id, data) => api.put(`/trainers/${id}`, data),
+  toggleTrainerStatus: (id) => api.patch(`/trainers/${id}/status`),
+  deleteTrainer: (id) => api.delete(`/trainers/${id}`),
+
 
   // Batches
   getBatches: (params) => api.get('/batches', { params }),

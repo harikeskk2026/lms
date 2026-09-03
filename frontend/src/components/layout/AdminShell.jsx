@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Users, BookOpen, ClipboardList,
+  LayoutDashboard, Users, UserCheck, BookOpen, ClipboardList,
   BarChart2, LogOut, LogIn, Menu, X, ChevronRight,
   Layers, Calendar, Brain, Briefcase, Megaphone, Search,
   Moon, Sun, Video, UserCircle
@@ -16,21 +16,23 @@ import clsx from 'clsx'
 
 const navItems = [
   { href: '/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students' },
+  { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students', roles: ['SUPERADMIN', 'ADMIN'] },
+  { href: '/admin/trainers',      icon: UserCheck,       label: 'Trainers',     roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
   { href: '/admin/course-catalog',icon: BookOpen,        label: 'Course Catalog' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/admin/assignments',   icon: ClipboardList,   label: 'Assignments',  badge: 'assignments' },
   { href: '/admin/quizzes',       icon: Brain,           label: 'Quizzes' },
-  { href: '/admin/placement',     icon: Briefcase,       label: 'Placement' },
+  { href: '/admin/placement',     icon: Briefcase,       label: 'Placement',    roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
-  { href: '/admin/reports',       icon: BarChart2,       label: 'Reports' },
+  { href: '/admin/reports',       icon: BarChart2,       label: 'Reports',      roles: ['SUPERADMIN', 'ADMIN'] },
 ]
 
 const PAGE_TITLES = {
   '/admin/dashboard':     'Dashboard',
   '/admin/students':      'Students',
+  '/admin/trainers':      'Trainers',
   '/admin/batches':       'Batches',
   '/admin/course-catalog':'Course Catalog',
   '/admin/attendance':    'Attendance',
@@ -41,6 +43,7 @@ const PAGE_TITLES = {
   '/admin/reports':       'Reports',
   '/admin/profile':       'My Profile',
 }
+
 
 function Sidebar({ open, onClose, badges }) {
   const pathname = usePathname()
@@ -100,7 +103,7 @@ function Sidebar({ open, onClose, badges }) {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin">
           <p className="text-purple-400 text-[10px] font-bold uppercase tracking-wider px-3 mb-2">Navigation</p>
-          {navItems.map(({ href, icon: Icon, label, badge }) => {
+          {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ href, icon: Icon, label, badge }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
             const count  = badge ? (badges[badge] || 0) : 0
             return (
