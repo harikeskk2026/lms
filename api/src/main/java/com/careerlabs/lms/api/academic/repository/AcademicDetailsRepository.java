@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface AcademicDetailsRepository extends JpaRepository<AcademicDetails, Long> {
 
     Optional<AcademicDetails> findByStudentId(Long studentId);
+
+    void deleteByStudentId(Long studentId);
 }

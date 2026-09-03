@@ -18,4 +18,6 @@ public interface AttendanceCorrectionRepository extends JpaRepository<Attendance
     List<AttendanceCorrection> findAllByOrderByCreatedAtDesc();
 
     Optional<AttendanceCorrection> findFirstByAttendanceIdAndStatus(Long attendanceId, CorrectionStatus status);
+
+    void deleteAllByStudentId(Long studentId);
 }

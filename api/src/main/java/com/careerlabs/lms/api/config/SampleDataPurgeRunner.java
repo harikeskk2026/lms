@@ -312,8 +312,8 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
                 User superAdmin = new User();
                 superAdmin.setName("Super Admin");
                 superAdmin.setEmail("superadmin@careerlabs.com");
-                superAdmin.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
-                superAdmin.setRole(Role.ADMIN);
+                superAdmin.setPasswordHash(passwordEncoder.encode("Superadmin@123"));
+                superAdmin.setRole(Role.SUPERADMIN);
                 userRepository.save(superAdmin);
             }
 
@@ -321,7 +321,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
                 User admin = new User();
                 admin.setName("Admin User");
                 admin.setEmail("admin@careerlabs.com");
-                admin.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
+                admin.setPasswordHash(passwordEncoder.encode("Admin@123"));
                 admin.setRole(Role.ADMIN);
                 userRepository.save(admin);
             }
@@ -331,7 +331,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
                         User s = new User();
                         s.setName("Demo Student");
                         s.setEmail("student@careerlabs.com");
-                        s.setPasswordHash(passwordEncoder.encode("ChangeMe123!"));
+                        s.setPasswordHash(passwordEncoder.encode("Student@123"));
                         s.setRole(Role.STUDENT);
                         return userRepository.save(s);
                     });

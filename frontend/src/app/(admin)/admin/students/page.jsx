@@ -1,12 +1,12 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Download, RefreshCw } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, Download, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
-import collegeService from '@/services/collegeService'
 import courseService from '@/services/courseService'
+import { isValidPhone, PHONE_ERROR_MESSAGE, isValidPassword, PASSWORD_ERROR_MESSAGE, isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 
@@ -19,14 +19,30 @@ const PLACEMENT_COLORS = {
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '', password: '', batchId: '',
-  collegeName: '', courseId: '',
-  academicScoreType: 'CGPA', academicScore: '', passedOutYear: '',
-  address: '', qualification: '', linkedinUrl: '', githubUrl: '', placementStatus: 'SEEKING',
+  courseId: '', placementStatus: 'SEEKING',
 }
 
+// Guarantees at least one uppercase, one lowercase, one digit, and one
+// special character (not just "likely" via a shared pool), so the generated
+// password always satisfies the password-strength validation below.
 function genPassword() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!'
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower = 'abcdefghjkmnpqrstuvwxyz'
+  const digits = '23456789'
+  const special = '@#$!'
+  const all = upper + lower + digits + special
+  const pick = (pool) => pool[Math.floor(Math.random() * pool.length)]
+
+  const required = [pick(upper), pick(lower), pick(digits), pick(special)]
+  const rest = Array.from({ length: 8 }, () => pick(all))
+  const combined = [...required, ...rest]
+
+  // Shuffle so the guaranteed characters aren't always in the same positions.
+  for (let i = combined.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[combined[i], combined[j]] = [combined[j], combined[i]]
+  }
+  return combined.join('')
 }
 
 const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
@@ -43,7 +59,6 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [placementFilter, setPlacementFilter] = useState('')
   const [batches, setBatches] = useState([])
-  const [colleges, setColleges] = useState([])
   const [courses, setCourses] = useState([])
   const [panelOpen, setPanelOpen] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
@@ -74,12 +89,9 @@ export default function StudentsPage() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    // Course and Batch are independent of College - every CareerLabs course
-    // ever created shows up here; batches are filtered down to the selected
-    // course below.
+    // Batches are filtered down to the selected course below.
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
-    collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
   }, [])
 
   const handleSearch = (v) => {
@@ -101,15 +113,7 @@ export default function StudentsPage() {
       phone: student.phone || '',
       password: '',
       batchId: student.batch?.id ? String(student.batch.id) : '',
-      collegeName: student.college?.name || '',
       courseId: student.course?.id ? String(student.course.id) : '',
-      academicScoreType: student.academicScoreType || 'CGPA',
-      academicScore: student.academicScore != null ? String(student.academicScore) : '',
-      passedOutYear: student.passedOutYear != null ? String(student.passedOutYear) : '',
-      address: student.address || '',
-      qualification: student.qualification || '',
-      linkedinUrl: student.linkedinUrl || '',
-      githubUrl: student.githubUrl || '',
       placementStatus: student.placementStatus || 'SEEKING',
     })
     setPanelOpen(true)
@@ -122,40 +126,30 @@ export default function StudentsPage() {
     setForm(f => ({ ...f, courseId, batchId: '' }))
   }
 
-  // College Name is plain typed text, not tied to an id while typing. On
-  // submit, resolve the typed name to an existing record (case insensitive
-  // match) or create a brand-new one on the fly, so the admin never has to
-  // leave this form to add a college that isn't in the system yet.
-  const resolveCollegeId = async (name) => {
-    const trimmed = name.trim()
-    if (!trimmed) return null
-    const match = colleges.find(c => c.name.toLowerCase() === trimmed.toLowerCase())
-    if (match) return match.id
-    const r = await collegeService.create({ name: trimmed })
-    setColleges(list => [...list, r.data])
-    return r.data.id
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!editStudent && !isValidEmail(form.email)) {
+      toast.error(EMAIL_ERROR_MESSAGE)
+      return
+    }
+    if (form.phone && !isValidPhone(form.phone)) {
+      toast.error(PHONE_ERROR_MESSAGE)
+      return
+    }
+    if (!editStudent && !isValidPassword(form.password)) {
+      toast.error(PASSWORD_ERROR_MESSAGE)
+      return
+    }
     setSaving(true)
     try {
       const batchId = form.batchId ? Number(form.batchId) : null
       const courseId = form.courseId ? Number(form.courseId) : null
-      const collegeId = await resolveCollegeId(form.collegeName)
-      const academicScore = form.academicScore !== '' ? Number(form.academicScore) : null
-      const academicScoreType = academicScore !== null ? form.academicScoreType : null
-      const passedOutYear = form.passedOutYear !== '' ? Number(form.passedOutYear) : null
       if (editStudent) {
         await studentService.update(editStudent.id, {
           name: form.name,
           phone: form.phone,
-          address: form.address,
-          qualification: form.qualification,
-          linkedinUrl: form.linkedinUrl,
-          githubUrl: form.githubUrl,
           placementStatus: form.placementStatus,
-          batchId, collegeId, courseId,
+          batchId, courseId,
         })
         toast.success('Student updated successfully')
       } else {
@@ -164,8 +158,7 @@ export default function StudentsPage() {
           email: form.email,
           phone: form.phone,
           password: form.password,
-          academicScoreType, academicScore, passedOutYear,
-          batchId, collegeId, courseId,
+          batchId, courseId,
         })
         toast.success('Student created successfully')
       }
@@ -184,6 +177,17 @@ export default function StudentsPage() {
       toast.success(`Student ${current ? 'deactivated' : 'activated'}`)
       load()
     } catch { toast.error('Failed to update status') }
+  }
+
+  const handleDelete = async (student) => {
+    if (!confirm(`Permanently delete "${student.name}"? This removes their account and all associated data (attendance, submissions, quiz attempts, placement activity, etc.) and cannot be undone.`)) return
+    try {
+      await studentService.remove(student.id)
+      toast.success('Student deleted')
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete student')
+    }
   }
 
   const downloadCSV = () => {
@@ -345,6 +349,10 @@ export default function StudentsPage() {
                             className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
+                          <button onClick={() => handleDelete(s)}
+                            className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -418,9 +426,11 @@ export default function StudentsPage() {
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Phone</label>
             <input
               type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="+91 98765 43210"
+              onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+              placeholder="9876543210"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
@@ -432,7 +442,7 @@ export default function StudentsPage() {
                   type="text"
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="Min 8 characters"
+                  placeholder="Min 8 chars, upper+lower+number+symbol"
                   className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
                   required
                 />
@@ -445,77 +455,13 @@ export default function StudentsPage() {
           )}
 
           {/*
-            Two independent groups:
-            1. College: the student's own college background. A plain typed
-               text field (with autocomplete via a native datalist) - the
-               value is resolved to an existing or newly-created record on
-               submit.
-            2. Course + Batch: what CareerLabs is training this student on.
-               Course lists every course ever created; Batch is filtered down
-               to batches that belong to the selected course.
+            Course + Batch: what CareerLabs is training this student on.
+            Course lists every course ever created; Batch is filtered down
+            to batches that belong to the selected course. (College
+            background, and the student's own personal-info fields, are now
+            managed entirely by the student via My Profile - see
+            docs/LMS_MODULE_WORKFLOWS.md.)
           */}
-          <div className="pt-1">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Student&apos;s College Background</p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
-                <input
-                  type="text"
-                  list="college-name-options"
-                  value={form.collegeName}
-                  onChange={e => setForm(f => ({ ...f, collegeName: e.target.value }))}
-                  placeholder="Type the student's college name"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-                <datalist id="college-name-options">
-                  {colleges.map(c => <option key={c.id} value={c.name} />)}
-                </datalist>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Academic Score</label>
-                <div className="flex gap-2">
-                  <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-0.5 flex-shrink-0">
-                    {['CGPA', 'PERCENTAGE'].map(type => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setForm(f => ({ ...f, academicScoreType: type }))}
-                        className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                          form.academicScoreType === type ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                        }`}
-                      >
-                        {type === 'CGPA' ? 'CGPA' : 'Percentage'}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={form.academicScoreType === 'CGPA' ? 10 : 100}
-                    value={form.academicScore}
-                    onChange={e => setForm(f => ({ ...f, academicScore: e.target.value }))}
-                    placeholder={form.academicScoreType === 'CGPA' ? 'e.g. 8.5' : 'e.g. 82.5'}
-                    className="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Passed Out Year</label>
-                <input
-                  type="number"
-                  step="1"
-                  min="1950"
-                  max="2100"
-                  value={form.passedOutYear}
-                  onChange={e => setForm(f => ({ ...f, passedOutYear: e.target.value }))}
-                  placeholder="e.g. 2024"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-          </div>
-
           <div className="pt-1">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
             <div className="space-y-4">
@@ -546,59 +492,19 @@ export default function StudentsPage() {
           </div>
 
           {editStudent && (
-            <>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Address</label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Qualification</label>
-                <input
-                  type="text"
-                  value={form.qualification}
-                  onChange={e => setForm(f => ({ ...f, qualification: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">LinkedIn</label>
-                  <input
-                    type="text"
-                    value={form.linkedinUrl}
-                    onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">GitHub</label>
-                  <input
-                    type="text"
-                    value={form.githubUrl}
-                    onChange={e => setForm(f => ({ ...f, githubUrl: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Placement Status</label>
-                <select
-                  value={form.placementStatus}
-                  onChange={e => setForm(f => ({ ...f, placementStatus: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="SEEKING">Seeking</option>
-                  <option value="INTERVIEWING">Interviewing</option>
-                  <option value="PLACED">Placed</option>
-                  <option value="NOT_SEEKING">Not Seeking</option>
-                </select>
-              </div>
-            </>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Placement Status</label>
+              <select
+                value={form.placementStatus}
+                onChange={e => setForm(f => ({ ...f, placementStatus: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="SEEKING">Seeking</option>
+                <option value="INTERVIEWING">Interviewing</option>
+                <option value="PLACED">Placed</option>
+                <option value="NOT_SEEKING">Not Seeking</option>
+              </select>
+            </div>
           )}
 
           <div className="flex gap-3 pt-2">

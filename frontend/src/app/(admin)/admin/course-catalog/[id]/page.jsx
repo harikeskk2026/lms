@@ -754,7 +754,7 @@ function BatchesTab({ courseId, courseTitle }) {
                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{b.name}</p>
                 <p className="text-xs text-gray-400">{b.startDate} — {b.endDate} · {b.mode} · {b.timing}</p>
               </div>
-              <Link href="/admin/batch-catalog" className="text-xs font-semibold text-purple-600 hover:underline">Manage in Batch Catalog</Link>
+              <Link href="/admin/batches" className="text-xs font-semibold text-purple-600 hover:underline">Manage in Batches</Link>
             </div>
           ))}
         </div>

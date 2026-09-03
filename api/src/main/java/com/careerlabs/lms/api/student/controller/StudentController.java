@@ -10,6 +10,7 @@ import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.service.StudentService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,5 +70,11 @@ public class StudentController {
     public ResponseEntity<ApiResponse<StudentResponse>> toggleStatus(@PathVariable Long id) {
         StudentResponse response = studentService.toggleStatus(id);
         return ResponseEntity.ok(ApiResponse.of("Student status updated", response));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+        studentService.delete(id);
+        return ResponseEntity.ok(ApiResponse.of("Student deleted", null));
     }
 }

@@ -1,6 +1,8 @@
 package com.careerlabs.lms.api.student.dto.request;
 
 import com.careerlabs.lms.api.auth.validation.annotation.ValidEmailFormat;
+import com.careerlabs.lms.api.auth.validation.annotation.ValidPassword;
+import com.careerlabs.lms.api.auth.validation.annotation.ValidPhoneNumber;
 import com.careerlabs.lms.api.student.validation.StudentValidationMessages;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -17,15 +19,15 @@ public class StudentCreateRequest {
     @ValidEmailFormat
     private String email;
 
+    @ValidPhoneNumber
     private String phone;
 
     @NotBlank(message = StudentValidationMessages.PASSWORD_REQUIRED)
     @Size(min = 8, max = 128, message = StudentValidationMessages.PASSWORD_SIZE)
+    @ValidPassword
     private String password;
 
     private Long batchId;
-
-    private Long collegeId;
 
     private Long courseId;
 
@@ -67,14 +69,6 @@ public class StudentCreateRequest {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
-    }
-
-    public Long getCollegeId() {
-        return collegeId;
-    }
-
-    public void setCollegeId(Long collegeId) {
-        this.collegeId = collegeId;
     }
 
     public Long getCourseId() {

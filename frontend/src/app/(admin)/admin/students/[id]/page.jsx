@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Calendar,
+  ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Calendar, GraduationCap,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -16,116 +16,47 @@ const PLACEMENT_COLORS = {
   NOT_SEEKING: 'bg-gray-100 text-gray-600',
 }
 
-const EMPTY_ACADEMIC_FORM = {
-  tenthYearOfPassing: '', tenthPercentage: '',
-  twelfthYearOfPassing: '', twelfthPercentage: '',
-  diplomaYearOfPassing: '', diplomaPercentage: '',
-  ugDegree: '', ugDepartment: '', ugYearOfPassing: '', ugScoreType: 'CGPA', ugScore: '', ugBacklogs: '',
-  pgDegree: '', pgDepartment: '', pgYearOfPassing: '', pgScoreType: 'CGPA', pgScore: '', pgBacklogs: '',
-}
-
-const ACADEMIC_INPUT_CLS = 'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500'
-const ACADEMIC_LABEL_CLS = 'block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1'
-
-// 10th / 12th / Diploma all share the same two fields (Year of Passing + Percentage).
-function AcademicLevelFields({ title, optional, values, setValues, yearKey, percentageKey }) {
+// Read-only — the student fills all of this in themselves via My Profile
+// (Academic Details); admin can view it here to check placement eligibility
+// at a glance, but can no longer edit it from this page.
+function AcademicLevelDisplay({ title, optional, yearOfPassing, percentage }) {
+  const hasData = yearOfPassing != null || percentage != null
   return (
     <div>
-      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">
+      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">
         {title}{optional && <span className="font-normal text-gray-400"> (optional)</span>}
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={ACADEMIC_LABEL_CLS}>Year of Passing</label>
-          <input type="number" step="1" min="1950" max="2100" value={values[yearKey]}
-            onChange={e => setValues(f => ({ ...f, [yearKey]: e.target.value }))}
-            className={ACADEMIC_INPUT_CLS} />
-        </div>
-        <div>
-          <label className={ACADEMIC_LABEL_CLS}>Percentage</label>
-          <input type="number" step="0.1" min="0" max="100" value={values[percentageKey]}
-            onChange={e => setValues(f => ({ ...f, [percentageKey]: e.target.value }))}
-            className={ACADEMIC_INPUT_CLS} />
-        </div>
-      </div>
+      {hasData ? (
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          {percentage != null ? `${percentage}%` : '—'}
+          <span className="text-gray-400"> · Passed {yearOfPassing ?? '—'}</span>
+        </p>
+      ) : (
+        <p className="text-sm text-gray-400">Not provided</p>
+      )}
     </div>
   )
 }
 
-// UG and PG share the same five fields (Degree/Course, Department, Year of Passing,
-// CGPA/Percentage with a type toggle, and Backlogs).
-function DegreeLevelFields({ title, optional, values, setValues, prefix }) {
-  const degreeKey = `${prefix}Degree`
-  const departmentKey = `${prefix}Department`
-  const yearKey = `${prefix}YearOfPassing`
-  const scoreTypeKey = `${prefix}ScoreType`
-  const scoreKey = `${prefix}Score`
-  const backlogsKey = `${prefix}Backlogs`
-
+function DegreeLevelDisplay({ title, optional, degree, department, yearOfPassing, scoreType, score, backlogs }) {
+  const hasData = degree || department || yearOfPassing != null || score != null
   return (
     <div>
-      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">
+      <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">
         {title}{optional && <span className="font-normal text-gray-400"> (optional)</span>}
       </p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className={ACADEMIC_LABEL_CLS}>Degree / Course</label>
-          <input type="text" value={values[degreeKey]}
-            onChange={e => setValues(f => ({ ...f, [degreeKey]: e.target.value }))}
-            placeholder="e.g. B.Tech"
-            className={ACADEMIC_INPUT_CLS} />
+      {hasData ? (
+        <div className="text-sm text-gray-700 dark:text-gray-300 space-y-0.5">
+          <p>{degree || '—'}{department ? ` · ${department}` : ''}</p>
+          <p className="text-gray-400">
+            {score != null ? `${score}${scoreType === 'CGPA' ? ' CGPA' : '%'}` : 'Score not provided'}
+            {yearOfPassing ? ` · Passed ${yearOfPassing}` : ''}
+            {backlogs != null ? ` · ${backlogs} backlog${backlogs === 1 ? '' : 's'}` : ''}
+          </p>
         </div>
-        <div>
-          <label className={ACADEMIC_LABEL_CLS}>Department</label>
-          <input type="text" value={values[departmentKey]}
-            onChange={e => setValues(f => ({ ...f, [departmentKey]: e.target.value }))}
-            placeholder="e.g. Computer Science"
-            className={ACADEMIC_INPUT_CLS} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className={ACADEMIC_LABEL_CLS}>Year of Passing</label>
-          <input type="number" step="1" min="1950" max="2100" value={values[yearKey]}
-            onChange={e => setValues(f => ({ ...f, [yearKey]: e.target.value }))}
-            className={ACADEMIC_INPUT_CLS} />
-        </div>
-        <div>
-          <label className={ACADEMIC_LABEL_CLS}>Backlogs</label>
-          <input type="number" step="1" min="0" value={values[backlogsKey]}
-            onChange={e => setValues(f => ({ ...f, [backlogsKey]: e.target.value }))}
-            className={ACADEMIC_INPUT_CLS} />
-        </div>
-      </div>
-      <div>
-        <label className={ACADEMIC_LABEL_CLS}>CGPA / Percentage</label>
-        <div className="flex gap-2">
-          <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-0.5 flex-shrink-0">
-            {['CGPA', 'PERCENTAGE'].map(type => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setValues(f => ({ ...f, [scoreTypeKey]: type }))}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                  values[scoreTypeKey] === type ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-              >
-                {type === 'CGPA' ? 'CGPA' : 'Percentage'}
-              </button>
-            ))}
-          </div>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            max={values[scoreTypeKey] === 'CGPA' ? 10 : 100}
-            value={values[scoreKey]}
-            onChange={e => setValues(f => ({ ...f, [scoreKey]: e.target.value }))}
-            placeholder={values[scoreTypeKey] === 'CGPA' ? 'e.g. 8.5' : 'e.g. 82.5'}
-            className={`flex-1 min-w-0 ${ACADEMIC_INPUT_CLS}`}
-          />
-        </div>
-      </div>
+      ) : (
+        <p className="text-sm text-gray-400">Not provided</p>
+      )}
     </div>
   )
 }
@@ -135,9 +66,8 @@ export default function StudentDetailPage() {
   const router = useRouter()
   const [student, setStudent] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [academicForm, setAcademicForm] = useState(EMPTY_ACADEMIC_FORM)
+  const [academicDetails, setAcademicDetails] = useState(null)
   const [loadingAcademics, setLoadingAcademics] = useState(true)
-  const [savingAcademics, setSavingAcademics] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -150,45 +80,22 @@ export default function StudentDetailPage() {
   const loadAcademics = () => {
     setLoadingAcademics(true)
     academicDetailsService.get(id)
-      .then(r => {
-        const d = r.data
-        setAcademicForm({
-          tenthYearOfPassing: d.tenthYearOfPassing ?? '',
-          tenthPercentage: d.tenthPercentage ?? '',
-          twelfthYearOfPassing: d.twelfthYearOfPassing ?? '',
-          twelfthPercentage: d.twelfthPercentage ?? '',
-          diplomaYearOfPassing: d.diplomaYearOfPassing ?? '',
-          diplomaPercentage: d.diplomaPercentage ?? '',
-          ugDegree: d.ugDegree ?? '',
-          ugDepartment: d.ugDepartment ?? '',
-          ugYearOfPassing: d.ugYearOfPassing ?? '',
-          ugScoreType: d.ugScoreType ?? 'CGPA',
-          ugScore: d.ugScore ?? '',
-          ugBacklogs: d.ugBacklogs ?? '',
-          pgDegree: d.pgDegree ?? '',
-          pgDepartment: d.pgDepartment ?? '',
-          pgYearOfPassing: d.pgYearOfPassing ?? '',
-          pgScoreType: d.pgScoreType ?? 'CGPA',
-          pgScore: d.pgScore ?? '',
-          pgBacklogs: d.pgBacklogs ?? '',
-        })
-      })
+      .then(r => setAcademicDetails(r.data))
       .catch(err => toast.error(err.message || 'Failed to load academic details'))
       .finally(() => setLoadingAcademics(false))
   }
 
   useEffect(() => { load(); loadAcademics() }, [id])
 
+  // Admin no longer manages address/qualification/linkedinUrl/githubUrl/college
+  // here - those are self-managed by the student via My Profile - so this
+  // payload only ever touches what's still admin-owned (name, phone,
+  // placement status, batch, course).
   const buildUpdatePayload = (overrides) => ({
     name: student.name,
     phone: student.phone,
-    address: student.address,
-    qualification: student.qualification,
-    linkedinUrl: student.linkedinUrl,
-    githubUrl: student.githubUrl,
     placementStatus: student.placementStatus,
     batchId: student.batch?.id || null,
-    collegeId: student.college?.id || null,
     courseId: student.course?.id || null,
     ...overrides,
   })
@@ -199,38 +106,6 @@ export default function StudentDetailPage() {
       toast.success('Placement status updated')
       load()
     } catch (err) { toast.error(err.message || 'Failed to update') }
-  }
-
-  const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
-
-  const handleAcademicsSave = async (e) => {
-    e.preventDefault()
-    setSavingAcademics(true)
-    try {
-      await academicDetailsService.update(id, {
-        tenthYearOfPassing: num(academicForm.tenthYearOfPassing),
-        tenthPercentage: num(academicForm.tenthPercentage),
-        twelfthYearOfPassing: num(academicForm.twelfthYearOfPassing),
-        twelfthPercentage: num(academicForm.twelfthPercentage),
-        diplomaYearOfPassing: num(academicForm.diplomaYearOfPassing),
-        diplomaPercentage: num(academicForm.diplomaPercentage),
-        ugDegree: academicForm.ugDegree || null,
-        ugDepartment: academicForm.ugDepartment || null,
-        ugYearOfPassing: num(academicForm.ugYearOfPassing),
-        ugScoreType: academicForm.ugScoreType,
-        ugScore: num(academicForm.ugScore),
-        ugBacklogs: num(academicForm.ugBacklogs),
-        pgDegree: academicForm.pgDegree || null,
-        pgDepartment: academicForm.pgDepartment || null,
-        pgYearOfPassing: num(academicForm.pgYearOfPassing),
-        pgScoreType: academicForm.pgScoreType,
-        pgScore: num(academicForm.pgScore),
-        pgBacklogs: num(academicForm.pgBacklogs),
-      })
-      toast.success('Academic details updated')
-      loadAcademics()
-    } catch (err) { toast.error(err.message || 'Failed to update') }
-    finally { setSavingAcademics(false) }
   }
 
   if (loading) return (
@@ -275,6 +150,7 @@ export default function StudentDetailPage() {
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="glass-card p-6 space-y-4">
           <h3 className="font-display font-bold text-gray-800 dark:text-white">Personal Info</h3>
+          <p className="text-xs text-gray-400 -mt-3">As entered by the student in their own My Profile.</p>
           {[
             { icon: User,    label: 'Name',          value: student.name },
             { icon: Mail,    label: 'Email',         value: student.email },
@@ -325,52 +201,50 @@ export default function StudentDetailPage() {
             ))}
           </div>
           <div className="glass-card p-6">
-            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1">Academic Details</h3>
-            <p className="text-xs text-gray-400 mb-4">Used to automatically check eligibility for placement opportunities.</p>
+            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1 flex items-center gap-2">
+              <GraduationCap size={16} className="text-purple-600" /> Academic Details
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">As entered by the student in My Profile. Used to automatically check eligibility for placement opportunities.</p>
             {loadingAcademics ? (
               <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
             ) : (
-              <form onSubmit={handleAcademicsSave} className="space-y-5">
-                <AcademicLevelFields
+              <div className="space-y-4">
+                <AcademicLevelDisplay
                   title="10th / SSLC"
-                  values={academicForm}
-                  setValues={setAcademicForm}
-                  yearKey="tenthYearOfPassing"
-                  percentageKey="tenthPercentage"
+                  yearOfPassing={academicDetails?.tenthYearOfPassing}
+                  percentage={academicDetails?.tenthPercentage}
                 />
-                <AcademicLevelFields
+                <AcademicLevelDisplay
                   title="12th / HSC"
-                  values={academicForm}
-                  setValues={setAcademicForm}
-                  yearKey="twelfthYearOfPassing"
-                  percentageKey="twelfthPercentage"
+                  yearOfPassing={academicDetails?.twelfthYearOfPassing}
+                  percentage={academicDetails?.twelfthPercentage}
                 />
-                <AcademicLevelFields
+                <AcademicLevelDisplay
                   title="Diploma"
                   optional
-                  values={academicForm}
-                  setValues={setAcademicForm}
-                  yearKey="diplomaYearOfPassing"
-                  percentageKey="diplomaPercentage"
+                  yearOfPassing={academicDetails?.diplomaYearOfPassing}
+                  percentage={academicDetails?.diplomaPercentage}
                 />
-                <DegreeLevelFields
+                <DegreeLevelDisplay
                   title="UG / Degree"
-                  values={academicForm}
-                  setValues={setAcademicForm}
-                  prefix="ug"
+                  degree={academicDetails?.ugDegree}
+                  department={academicDetails?.ugDepartment}
+                  yearOfPassing={academicDetails?.ugYearOfPassing}
+                  scoreType={academicDetails?.ugScoreType}
+                  score={academicDetails?.ugScore}
+                  backlogs={academicDetails?.ugBacklogs}
                 />
-                <DegreeLevelFields
+                <DegreeLevelDisplay
                   title="PG / Master's"
                   optional
-                  values={academicForm}
-                  setValues={setAcademicForm}
-                  prefix="pg"
+                  degree={academicDetails?.pgDegree}
+                  department={academicDetails?.pgDepartment}
+                  yearOfPassing={academicDetails?.pgYearOfPassing}
+                  scoreType={academicDetails?.pgScoreType}
+                  score={academicDetails?.pgScore}
+                  backlogs={academicDetails?.pgBacklogs}
                 />
-                <button type="submit" disabled={savingAcademics}
-                  className="w-full py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-                  {savingAcademics ? 'Saving...' : 'Save Academic Details'}
-                </button>
-              </form>
+              </div>
             )}
           </div>
           <div className="glass-card p-5">

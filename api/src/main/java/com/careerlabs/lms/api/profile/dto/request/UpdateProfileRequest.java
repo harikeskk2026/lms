@@ -1,5 +1,7 @@
 package com.careerlabs.lms.api.profile.dto.request;
 
+import com.careerlabs.lms.api.auth.validation.annotation.ValidPhoneNumber;
+import com.careerlabs.lms.api.auth.validation.annotation.ValidUrl;
 import com.careerlabs.lms.api.profile.validation.ProfileValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -17,12 +19,15 @@ public class UpdateProfileRequest {
     @Size(min = 2, max = 150, message = ProfileValidationMessages.NAME_SIZE)
     private String name;
 
+    @ValidPhoneNumber
     private String phone;
 
     // STUDENT-only fields - ignored server-side for non-student accounts.
     private String address;
     private String qualification;
+    @ValidUrl
     private String linkedinUrl;
+    @ValidUrl
     private String githubUrl;
 
     // ADMIN/TRAINER/SUPERADMIN-only fields - ignored server-side for students.

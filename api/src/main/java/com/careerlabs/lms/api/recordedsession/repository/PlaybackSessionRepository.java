@@ -36,4 +36,6 @@ public interface PlaybackSessionRepository extends JpaRepository<PlaybackSession
 
     @Query("SELECT COUNT(DISTINCT p.studentId) FROM PlaybackSession p WHERE p.recordedSession.id = :recordedSessionId")
     long countDistinctStudentsByRecordedSessionId(@Param("recordedSessionId") Long recordedSessionId);
+
+    void deleteAllByStudentId(Long studentId);
 }

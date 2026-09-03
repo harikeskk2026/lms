@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -26,7 +26,6 @@ const navItems = [
   { href: '/admin/placement',     icon: Briefcase,       label: 'Placement' },
   { href: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
   { href: '/admin/reports',       icon: BarChart2,       label: 'Reports' },
-  { href: '/admin/profile',       icon: UserCircle,      label: 'My Profile' },
 ]
 
 const PAGE_TITLES = {
@@ -150,6 +149,16 @@ function Sidebar({ open, onClose, badges }) {
 function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
   const pathname = usePathname()
   const pageTitle = Object.entries(PAGE_TITLES).find(([k]) => pathname === k || pathname.startsWith(k + '/'))?.[1] || 'Admin'
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   return (
     <header className="h-16 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm border-b border-purple-100 dark:border-purple-900/30 flex items-center justify-between px-6 sticky top-0 z-10">
@@ -183,15 +192,33 @@ function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
           pollInterval={30000}
         />
 
-        {/* Avatar */}
-        <div className="flex items-center gap-2 pl-2 border-l border-purple-100 dark:border-purple-900/30">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-bold text-sm">
-            {user?.name?.[0]?.toUpperCase() || 'A'}
-          </div>
-          <div className="hidden sm:block">
-            <p className="text-sm font-semibold text-gray-800 dark:text-white leading-tight">{user?.name}</p>
-            <p className="text-[11px] text-purple-500">{user?.role}</p>
-          </div>
+        {/* Avatar / Profile menu */}
+        <div ref={profileRef} className="relative pl-2 border-l border-purple-100 dark:border-purple-900/30">
+          <button
+            onClick={() => setProfileOpen(p => !p)}
+            className="flex items-center gap-2"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-bold text-sm">
+              {user?.name?.[0]?.toUpperCase() || 'A'}
+            </div>
+            <div className="hidden sm:block text-left">
+              <p className="text-sm font-semibold text-gray-800 dark:text-white leading-tight">{user?.name}</p>
+              <p className="text-[11px] text-purple-500">{user?.role}</p>
+            </div>
+          </button>
+
+          {profileOpen && (
+            <div className="absolute right-0 top-11 w-48 rounded-2xl shadow-2xl border border-purple-100 dark:border-purple-900/30 bg-white dark:bg-gray-900 z-50 overflow-hidden">
+              <Link
+                href="/admin/profile"
+                onClick={() => setProfileOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+              >
+                <UserCircle size={16} className="text-purple-600" />
+                My Profile
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </header>

@@ -1,33 +1,32 @@
 package com.careerlabs.lms.api.student.dto.request;
 
+import com.careerlabs.lms.api.auth.validation.annotation.ValidPhoneNumber;
 import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.validation.StudentValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+/**
+ * Admin-side student update - deliberately does NOT include address,
+ * qualification, linkedinUrl, githubUrl, or collegeId. Those are now managed
+ * exclusively by the student themselves via {@code PUT /api/profile} (My
+ * Profile), so this request must never overwrite them - see
+ * StudentServiceImpl.applyRequest().
+ */
 public class StudentUpdateRequest {
 
     @NotBlank(message = StudentValidationMessages.NAME_REQUIRED)
     @Size(min = 2, max = 150, message = StudentValidationMessages.NAME_SIZE)
     private String name;
 
+    @ValidPhoneNumber
     private String phone;
-
-    private String address;
-
-    private String qualification;
-
-    private String linkedinUrl;
-
-    private String githubUrl;
 
     @NotNull(message = StudentValidationMessages.PLACEMENT_STATUS_REQUIRED)
     private PlacementStatus placementStatus;
 
     private Long batchId;
-
-    private Long collegeId;
 
     private Long courseId;
 
@@ -47,38 +46,6 @@ public class StudentUpdateRequest {
         this.phone = phone;
     }
 
-    public String getAddress() {
-        return address;
-    }
-
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public String getQualification() {
-        return qualification;
-    }
-
-    public void setQualification(String qualification) {
-        this.qualification = qualification;
-    }
-
-    public String getLinkedinUrl() {
-        return linkedinUrl;
-    }
-
-    public void setLinkedinUrl(String linkedinUrl) {
-        this.linkedinUrl = linkedinUrl;
-    }
-
-    public String getGithubUrl() {
-        return githubUrl;
-    }
-
-    public void setGithubUrl(String githubUrl) {
-        this.githubUrl = githubUrl;
-    }
-
     public PlacementStatus getPlacementStatus() {
         return placementStatus;
     }
@@ -93,14 +60,6 @@ public class StudentUpdateRequest {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
-    }
-
-    public Long getCollegeId() {
-        return collegeId;
-    }
-
-    public void setCollegeId(Long collegeId) {
-        this.collegeId = collegeId;
     }
 
     public Long getCourseId() {

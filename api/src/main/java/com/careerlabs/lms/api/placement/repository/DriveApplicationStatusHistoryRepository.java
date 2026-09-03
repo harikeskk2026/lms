@@ -8,4 +8,6 @@ import java.util.List;
 public interface DriveApplicationStatusHistoryRepository extends JpaRepository<DriveApplicationStatusHistory, Long> {
 
     List<DriveApplicationStatusHistory> findByApplication_IdOrderByChangedAtDesc(Long applicationId);
+
+    void deleteAllByApplication_Student_Id(Long studentId);
 }

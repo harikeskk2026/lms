@@ -33,7 +33,7 @@ const ACTIVITY_ICONS = {
 const QUICK_ACTIONS = [
   { label: 'Add Student',           icon: UserPlus,      href: '/admin/students',       color: 'from-purple-600 to-violet-600' },
   { label: 'Create Course',         icon: BookOpen,       href: '/admin/course-catalog', color: 'from-blue-600 to-indigo-600' },
-  { label: 'Create Batch',          icon: Layers,         href: '/admin/batch-catalog',  color: 'from-indigo-600 to-purple-600' },
+  { label: 'Create Batch',          icon: Layers,         href: '/admin/batches',        color: 'from-indigo-600 to-purple-600' },
   { label: 'Create Assignment',     icon: ClipboardList,  href: '/admin/assignments',    color: 'from-violet-600 to-purple-700' },
   { label: 'Create Quiz',           icon: Brain,          href: '/admin/quizzes',        color: 'from-purple-600 to-fuchsia-600' },
   { label: 'Create Placement Drive',icon: Briefcase,      href: '/admin/placement',      color: 'from-emerald-600 to-green-600' },

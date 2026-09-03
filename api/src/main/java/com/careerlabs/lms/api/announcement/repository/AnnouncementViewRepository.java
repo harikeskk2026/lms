@@ -8,4 +8,6 @@ public interface AnnouncementViewRepository extends JpaRepository<AnnouncementVi
     boolean existsByAnnouncementIdAndStudentId(Long announcementId, Long studentId);
 
     long countByAnnouncementId(Long announcementId);
+
+    void deleteAllByStudentId(Long studentId);
 }

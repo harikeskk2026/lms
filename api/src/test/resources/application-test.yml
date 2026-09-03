@@ -15,5 +15,3 @@ app:
     allowed-origins: http://localhost:3000
   seed:
     enabled: false
-    admin-email: admin@careerlabs.com
-    admin-password: ChangeMe123!

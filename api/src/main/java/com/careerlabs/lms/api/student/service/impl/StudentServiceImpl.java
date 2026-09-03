@@ -1,15 +1,31 @@
 package com.careerlabs.lms.api.student.service.impl;
 
+import com.careerlabs.lms.api.academic.repository.AcademicDetailsRepository;
+import com.careerlabs.lms.api.announcement.entity.AnnouncementComment;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementAcknowledgmentRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementCommentRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementViewRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceAlertRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceCorrectionRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceGoalRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
-import com.careerlabs.lms.api.college.entity.College;
-import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.notification.repository.NotificationRepository;
+import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
+import com.careerlabs.lms.api.placement.repository.DriveApplicationStatusHistoryRepository;
+import com.careerlabs.lms.api.placement.repository.ResumeDataRepository;
+import com.careerlabs.lms.api.quiz.repository.QuestionAttemptRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
+import com.careerlabs.lms.api.quiz.repository.StudentAchievementRepository;
+import com.careerlabs.lms.api.quiz.repository.StudentGameStatsRepository;
+import com.careerlabs.lms.api.recordedsession.repository.PlaybackSessionRepository;
 import com.careerlabs.lms.api.student.dto.request.StudentCreateRequest;
 import com.careerlabs.lms.api.student.dto.request.StudentUpdateRequest;
 import com.careerlabs.lms.api.student.dto.response.StudentCountResponse;
@@ -19,6 +35,7 @@ import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.student.service.StudentService;
+import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
 import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
@@ -43,22 +60,75 @@ public class StudentServiceImpl implements StudentService {
     private final StudentRepository studentRepository;
     private final UserRepository userRepository;
     private final BatchRepository batchRepository;
-    private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // Delete-cascade dependencies only - see delete(Long) for why each is here.
+    private final AttendanceCorrectionRepository attendanceCorrectionRepository;
+    private final AttendanceRepository attendanceRepository;
+    private final AttendanceAlertRepository attendanceAlertRepository;
+    private final AttendanceGoalRepository attendanceGoalRepository;
+    private final AssignmentSubmissionRepository assignmentSubmissionRepository;
+    private final AnnouncementViewRepository announcementViewRepository;
+    private final AnnouncementAcknowledgmentRepository announcementAcknowledgmentRepository;
+    private final AnnouncementCommentRepository announcementCommentRepository;
+    private final DriveApplicationStatusHistoryRepository driveApplicationStatusHistoryRepository;
+    private final DriveApplicationRepository driveApplicationRepository;
+    private final ResumeDataRepository resumeDataRepository;
+    private final AcademicDetailsRepository academicDetailsRepository;
+    private final QuestionAttemptRepository questionAttemptRepository;
+    private final QuizAttemptRepository quizAttemptRepository;
+    private final StudentGameStatsRepository studentGameStatsRepository;
+    private final StudentAchievementRepository studentAchievementRepository;
+    private final PlaybackSessionRepository playbackSessionRepository;
+    private final NotificationRepository notificationRepository;
+
     public StudentServiceImpl(StudentRepository studentRepository, UserRepository userRepository,
-                               BatchRepository batchRepository, CollegeRepository collegeRepository,
-                               CourseRepository courseRepository,
-                               EnrollmentRepository enrollmentRepository, PasswordEncoder passwordEncoder) {
+                               BatchRepository batchRepository, CourseRepository courseRepository,
+                               EnrollmentRepository enrollmentRepository, PasswordEncoder passwordEncoder,
+                               AttendanceCorrectionRepository attendanceCorrectionRepository,
+                               AttendanceRepository attendanceRepository,
+                               AttendanceAlertRepository attendanceAlertRepository,
+                               AttendanceGoalRepository attendanceGoalRepository,
+                               AssignmentSubmissionRepository assignmentSubmissionRepository,
+                               AnnouncementViewRepository announcementViewRepository,
+                               AnnouncementAcknowledgmentRepository announcementAcknowledgmentRepository,
+                               AnnouncementCommentRepository announcementCommentRepository,
+                               DriveApplicationStatusHistoryRepository driveApplicationStatusHistoryRepository,
+                               DriveApplicationRepository driveApplicationRepository,
+                               ResumeDataRepository resumeDataRepository,
+                               AcademicDetailsRepository academicDetailsRepository,
+                               QuestionAttemptRepository questionAttemptRepository,
+                               QuizAttemptRepository quizAttemptRepository,
+                               StudentGameStatsRepository studentGameStatsRepository,
+                               StudentAchievementRepository studentAchievementRepository,
+                               PlaybackSessionRepository playbackSessionRepository,
+                               NotificationRepository notificationRepository) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
         this.batchRepository = batchRepository;
-        this.collegeRepository = collegeRepository;
         this.courseRepository = courseRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.passwordEncoder = passwordEncoder;
+        this.attendanceCorrectionRepository = attendanceCorrectionRepository;
+        this.attendanceRepository = attendanceRepository;
+        this.attendanceAlertRepository = attendanceAlertRepository;
+        this.attendanceGoalRepository = attendanceGoalRepository;
+        this.assignmentSubmissionRepository = assignmentSubmissionRepository;
+        this.announcementViewRepository = announcementViewRepository;
+        this.announcementAcknowledgmentRepository = announcementAcknowledgmentRepository;
+        this.announcementCommentRepository = announcementCommentRepository;
+        this.driveApplicationStatusHistoryRepository = driveApplicationStatusHistoryRepository;
+        this.driveApplicationRepository = driveApplicationRepository;
+        this.resumeDataRepository = resumeDataRepository;
+        this.academicDetailsRepository = academicDetailsRepository;
+        this.questionAttemptRepository = questionAttemptRepository;
+        this.quizAttemptRepository = quizAttemptRepository;
+        this.studentGameStatsRepository = studentGameStatsRepository;
+        this.studentAchievementRepository = studentAchievementRepository;
+        this.playbackSessionRepository = playbackSessionRepository;
+        this.notificationRepository = notificationRepository;
     }
 
     @Override
@@ -112,9 +182,6 @@ public class StudentServiceImpl implements StudentService {
         student.setPhone(request.getPhone());
         student.setEnrollmentNo(generateEnrollmentNo(user.getId()));
         assignBatch(student, request.getBatchId());
-        if (request.getCollegeId() != null) {
-            student.setCollege(findCollegeOrThrow(request.getCollegeId()));
-        }
         if (request.getCourseId() != null) {
             student.setCourse(findCourseOrThrow(request.getCourseId()));
         }
@@ -158,6 +225,79 @@ public class StudentServiceImpl implements StudentService {
         return StudentResponse.from(student);
     }
 
+    /**
+     * Permanently removes a student's account and everything scoped to it.
+     * There's no soft-delete/archive table in this codebase (see
+     * {@code toggleStatus} for deactivation, which is reversible) - this is a
+     * real, irreversible delete, so every table with a foreign key to Student
+     * or to this account's User row has to be cleared first, in dependency
+     * order, or the final delete throws a constraint violation.
+     *
+     * <p>Two id spaces are in play: most tables key off {@code Student.id},
+     * but the quiz/gamification and recorded-session subsystems store a plain
+     * {@code student_id} column that actually holds {@code User.id} (see
+     * {@code QuizAttempt.studentId}, {@code PlaybackSession.studentId}) -
+     * mixing these up would silently delete nothing. {@code RecordedSessionAuditLog}
+     * is deliberately left untouched: it's an intentionally-permanent
+     * leak/dispute-investigation trail, not user data.
+     */
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        Student student = findOrThrow(id);
+        Long studentId = student.getId();
+        Long userId = student.getUser().getId();
+
+        // Attendance - corrections reference a specific Attendance row, so they
+        // must be removed before the Attendance rows themselves.
+        attendanceCorrectionRepository.deleteAllByStudentId(studentId);
+        attendanceRepository.deleteAllByStudentId(studentId);
+        attendanceAlertRepository.deleteAllByStudentId(studentId);
+        attendanceGoalRepository.deleteByStudentId(studentId);
+
+        // Assignments
+        assignmentSubmissionRepository.deleteAllByStudentId(studentId);
+
+        // Announcements: detach any replies authored by other users before
+        // removing this student's own comments, so a reply never gets silently
+        // destroyed or blocked by the parent_comment_id constraint.
+        announcementViewRepository.deleteAllByStudentId(studentId);
+        announcementAcknowledgmentRepository.deleteAllByStudentId(studentId);
+        List<AnnouncementComment> ownComments = announcementCommentRepository.findByUser_Id(userId);
+        if (!ownComments.isEmpty()) {
+            List<Long> ownCommentIds = ownComments.stream().map(AnnouncementComment::getId).toList();
+            announcementCommentRepository.clearParentCommentIn(ownCommentIds);
+        }
+        announcementCommentRepository.deleteAllByUser_Id(userId);
+
+        // Placement - status history references the application, so it must go
+        // before the DriveApplication rows themselves.
+        driveApplicationStatusHistoryRepository.deleteAllByApplication_Student_Id(studentId);
+        driveApplicationRepository.deleteAllByStudent_Id(studentId);
+        resumeDataRepository.deleteByStudent_Id(studentId);
+
+        // Academics / course enrollment
+        academicDetailsRepository.deleteByStudentId(studentId);
+        enrollmentRepository.deleteAllByStudentId(studentId);
+
+        // Quiz / gamification - keyed by User.id, not Student.id. Question
+        // attempts reference the QuizAttempt, so they go first.
+        questionAttemptRepository.deleteAllByAttempt_StudentId(userId);
+        quizAttemptRepository.deleteAllByStudentId(userId);
+        studentGameStatsRepository.deleteByStudentId(userId);
+        studentAchievementRepository.deleteAllByStudentId(userId);
+
+        // Recorded sessions - also keyed by User.id.
+        playbackSessionRepository.deleteAllByStudentId(userId);
+
+        // Notifications - keyed by User.id.
+        notificationRepository.deleteAllByUser_Id(userId);
+
+        // Finally, the account itself.
+        studentRepository.delete(student);
+        userRepository.delete(student.getUser());
+    }
+
     private Student findOrThrow(Long id) {
         return studentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + id));
@@ -185,11 +325,6 @@ public class StudentServiceImpl implements StudentService {
         student.setBatch(batch);
     }
 
-    private College findCollegeOrThrow(Long collegeId) {
-        return collegeRepository.findById(collegeId)
-                .orElseThrow(() -> new ResourceNotFoundException("College not found: " + collegeId));
-    }
-
     private Course findCourseOrThrow(Long courseId) {
         return courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
@@ -198,13 +333,8 @@ public class StudentServiceImpl implements StudentService {
     private void applyRequest(Student student, StudentUpdateRequest request) {
         student.getUser().setName(request.getName());
         student.setPhone(request.getPhone());
-        student.setAddress(request.getAddress());
-        student.setQualification(request.getQualification());
-        student.setLinkedinUrl(request.getLinkedinUrl());
-        student.setGithubUrl(request.getGithubUrl());
         student.setPlacementStatus(request.getPlacementStatus());
         assignBatch(student, request.getBatchId());
-        student.setCollege(request.getCollegeId() != null ? findCollegeOrThrow(request.getCollegeId()) : null);
         student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);
     }
 

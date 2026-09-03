@@ -27,4 +27,6 @@ public interface DriveApplicationRepository extends JpaRepository<DriveApplicati
 
     @Query("SELECT COUNT(DISTINCT a.student.id) FROM DriveApplication a")
     long countDistinctStudents();
+
+    void deleteAllByStudent_Id(Long studentId);
 }

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import api from '@/lib/api'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
+import { isValidPassword, PASSWORD_ERROR_MESSAGE, isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 
 const STEPS = [
   { id: 1, label: 'Email',    icon: Mail },
@@ -47,8 +48,8 @@ export default function ForgotPasswordPage() {
   async function handleSendOtp(e) {
     e.preventDefault()
     setEmailErr('')
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailErr('Please enter a valid email address')
+    if (!isValidEmail(email)) {
+      setEmailErr(EMAIL_ERROR_MESSAGE)
       return
     }
     setEmailLoading(true)
@@ -131,12 +132,8 @@ export default function ForgotPasswordPage() {
   async function handleResetPassword(e) {
     e.preventDefault()
     setPwdErr('')
-    if (newPassword.length < 8) {
-      setPwdErr('Password must be at least 8 characters')
-      return
-    }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
-      setPwdErr('Password must have uppercase, lowercase, and number')
+    if (!isValidPassword(newPassword)) {
+      setPwdErr(PASSWORD_ERROR_MESSAGE)
       return
     }
     if (newPassword !== confirmPwd) {
