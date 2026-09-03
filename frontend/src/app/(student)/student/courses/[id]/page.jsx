@@ -246,7 +246,7 @@ export default function CourseDetailPage({ params }) {
                       'bg-yellow-100 text-yellow-800'
                     }`}>{c.status}</span>
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{format(new Date(c.date), 'EEE, MMM d yyyy')}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{format(new Date(c.date), 'EEE, MMM d yyyy, hh:mm a')}</p>
                   {c.topics?.length > 0 && (
                     <div className="flex gap-1 flex-wrap mt-1.5">
                       {c.topics.slice(0, 3).map(t => (

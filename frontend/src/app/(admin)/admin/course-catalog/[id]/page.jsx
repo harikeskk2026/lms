@@ -684,6 +684,10 @@ function BatchesTab({ courseId, courseTitle }) {
   const [form, setForm] = useState({ name: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30, trainerId: '' })
   const [saving, setSaving] = useState(false)
 
+  // Clean Time Pickers
+  const [startTime, setStartTime] = useState('09:00')
+  const [endTime, setEndTime] = useState('12:00')
+
   const load = useCallback(() => {
     setLoading(true)
     batchService.list()
@@ -697,9 +701,11 @@ function BatchesTab({ courseId, courseTitle }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
+    const formattedTiming = startTime && endTime ? `${formatTime12h(startTime)} - ${formatTime12h(endTime)}` : ''
     try {
       await batchService.create({
         ...form,
+        timing: formattedTiming,
         courseId: Number(courseId),
         trainerId: form.trainerId ? Number(form.trainerId) : null,
         maxStudents: Number(form.maxStudents),
@@ -730,8 +736,27 @@ function BatchesTab({ courseId, courseTitle }) {
             className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           <input required type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
             className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          <input value={form.timing} onChange={e => setForm(f => ({ ...f, timing: e.target.value }))} placeholder="Timing"
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+
+          {/* Clean Start Time & End Time */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
+            <input
+              type="time"
+              value={endTime}
+              onChange={e => setEndTime(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
           <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
             className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
             <option value="ONLINE">ONLINE</option><option value="OFFLINE">OFFLINE</option><option value="HYBRID">HYBRID</option>

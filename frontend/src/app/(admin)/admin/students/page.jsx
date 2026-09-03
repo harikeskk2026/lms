@@ -113,7 +113,7 @@ export default function StudentsPage() {
       phone: student.phone || '',
       password: '',
       batchId: student.batch?.id ? String(student.batch.id) : '',
-      courseId: student.course?.id ? String(student.course.id) : '',
+      courseId: student.course?.id ? String(student.course.id) : student.batch?.course?.id ? String(student.batch.course.id) : '',
       placementStatus: student.placementStatus || 'SEEKING',
     })
     setPanelOpen(true)
@@ -128,6 +128,10 @@ export default function StudentsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!form.courseId) {
+      toast.error('Please select a course')
+      return
+    }
     if (!editStudent && !isValidEmail(form.email)) {
       toast.error(EMAIL_ERROR_MESSAGE)
       return
@@ -466,7 +470,7 @@ export default function StudentsPage() {
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
                 <SearchableSelect
                   options={courseOptions}
                   value={form.courseId}

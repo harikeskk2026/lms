@@ -348,7 +348,7 @@ export default function BatchDetailPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-purple-50/50 border-b border-purple-100">
-                      {['Date', 'Title', 'Status', 'Topics', 'Recording', 'Attendance'].map(h => (
+                      {['Date & Time', 'Title', 'Status', 'Topics', 'Recording', 'Attendance'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -359,7 +359,7 @@ export default function BatchDetailPage() {
                     ) : (
                       classes.map(c => (
                         <tr key={c.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
-                          <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{format(new Date(c.date), 'dd MMM yyyy')}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap font-medium">{format(new Date(c.date), 'dd MMM yyyy, hh:mm a')}</td>
                           <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{c.title}</td>
                           <td className="px-4 py-3">
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : c.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -504,7 +504,7 @@ export default function BatchDetailPage() {
                 <button key={c.id} onClick={() => { setTab('Schedule'); loadAttSheet(c.id) }}
                   className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-purple-50 transition-colors text-left">
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{c.title}</span>
-                  <span className="text-xs text-gray-400">{format(new Date(c.date), 'dd MMM yyyy')}</span>
+                  <span className="text-xs text-gray-400 font-medium">{format(new Date(c.date), 'dd MMM yyyy, hh:mm a')}</span>
                 </button>
               ))}
             </div>

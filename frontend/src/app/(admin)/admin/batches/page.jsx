@@ -15,6 +15,18 @@ const BATCH_GRADIENTS = [
   'from-indigo-500 to-purple-600', 'from-violet-500 to-purple-700',
 ]
 
+function formatTime12h(time24) {
+  if (!time24) return ''
+  const [hStr, mStr] = time24.split(':')
+  let h = parseInt(hStr, 10)
+  if (isNaN(h)) return time24
+  const m = mStr || '00'
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  const hFormatted = String(h).padStart(2, '0')
+  return `${hFormatted}:${m} ${ampm}`
+}
+
 export default function BatchesPage() {
   const router = useRouter()
   const [batches, setBatches] = useState([])
@@ -23,6 +35,10 @@ export default function BatchesPage() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', courseId: '', trainerId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
+
+  // Clean Time Pickers
+  const [startTime, setStartTime] = useState('09:00')
+  const [endTime, setEndTime] = useState('12:00')
 
   const load = () => {
     setLoading(true)
@@ -37,9 +53,11 @@ export default function BatchesPage() {
   const handleCreate = async (e) => {
     e.preventDefault()
     setSaving(true)
+    const formattedTiming = startTime && endTime ? `${formatTime12h(startTime)} - ${formatTime12h(endTime)}` : ''
     try {
       await batchService.create({
         ...form,
+        timing: formattedTiming,
         courseId: Number(form.courseId),
         trainerId: form.trainerId ? Number(form.trainerId) : null,
         maxStudents: Number(form.maxStudents),
@@ -137,17 +155,40 @@ export default function BatchesPage() {
       {/* Create Batch Panel */}
       <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Create Batch" subtitle="Set up a new training batch">
         <form onSubmit={handleCreate} className="space-y-4">
-          {[
-            { label: 'Batch Name *', key: 'name', type: 'text', placeholder: 'Python Batch Jan 2026' },
-            { label: 'Timing', key: 'timing', type: 'text', placeholder: '9AM – 12PM' },
-          ].map(({ label, key, type, placeholder }) => (
-            <div key={key}>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-              <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder}
+          {/* Batch Name */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch Name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Python Batch Jan 2026"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              required
+            />
+          </div>
+
+          {/* Clean Start & End Time Fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                required={key === 'name'} />
+              />
             </div>
-          ))}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
             <select value={form.courseId} onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))} required
