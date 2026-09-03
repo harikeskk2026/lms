@@ -50,26 +50,51 @@ export default function PlacementPage() {
   const loadData = () => {
     setLoading(true)
     Promise.allSettled([
-      adminApi.getPlacement(),
+      adminApi.getStudents(),
       adminApi.getMockInterviews(),
       adminApi.getInterviewQuestions({ category: iqCategory === 'All' ? '' : iqCategory, difficulty: iqDiff, search: iqSearch }),
       adminApi.getDrives(),
-    ]).then(([p, m, iq, d]) => {
-      if (p.status === 'fulfilled') setOverview(p.value.data.data)
-      else toast.error('Failed to load student placement overview')
+    ]).then(([stu, m, iq, d]) => {
+      if (stu.status === 'fulfilled') {
+        const studentList = stu.value.data.data?.items || stu.value.data.data || []
+        const statusCounts = {
+          SEEKING: studentList.filter(s => s.placementStatus === 'SEEKING').length,
+          INTERVIEWING: studentList.filter(s => s.placementStatus === 'INTERVIEWING').length,
+          PLACED: studentList.filter(s => s.placementStatus === 'PLACED').length,
+          NOT_SEEKING: studentList.filter(s => s.placementStatus === 'NOT_SEEKING').length,
+        }
+        const total = studentList.length
+        const placed = statusCounts.PLACED
+        const conversionRate = total > 0 ? Math.round((placed / total) * 100) : 0
+
+        setOverview({
+          statusCounts,
+          conversionRate,
+          students: studentList.map(s => ({
+            ...s,
+            placementStatus: s.placementStatus || 'SEEKING',
+            mockCount: 0,
+            avgMockRating: 0
+          }))
+        })
+      }
 
       if (m.status === 'fulfilled') setMocks(m.value.data.data || [])
-      else toast.error('Failed to load mock interviews')
+      else setMocks([])
 
       if (iq.status === 'fulfilled') setIqList(iq.value.data.data?.items || [])
-      else toast.error('Failed to load interview questions')
 
       if (d.status === 'fulfilled') setDrives(d.value.data.data || [])
-      else toast.error('Failed to load company drives')
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadData() }, [iqCategory, iqDiff, iqSearch])
+  useEffect(() => { loadData() }, [])
+
+  useEffect(() => {
+    adminApi.getInterviewQuestions({ category: iqCategory === 'All' ? '' : iqCategory, difficulty: iqDiff, search: iqSearch })
+      .then(res => setIqList(res.data.data?.items || res.data.data || []))
+      .catch(() => {})
+  }, [iqCategory, iqDiff, iqSearch])
 
   const handlePlacementStatus = async (studentId, status) => {
     try {
