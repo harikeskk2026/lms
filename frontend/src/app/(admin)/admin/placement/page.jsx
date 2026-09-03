@@ -50,31 +50,37 @@ export default function PlacementPage() {
   const loadData = () => {
     setLoading(true)
     Promise.allSettled([
-      adminApi.getStudents(),
+      adminApi.getPlacement().catch(() => adminApi.getStudents()),
       adminApi.getMockInterviews(),
       adminApi.getInterviewQuestions({ category: iqCategory === 'All' ? '' : iqCategory, difficulty: iqDiff, search: iqSearch }),
       adminApi.getDrives(),
-    ]).then(([stu, m, iq, d]) => {
-      if (stu.status === 'fulfilled') {
-        const studentList = stu.value.data.data?.items || stu.value.data.data || []
-        const statusCounts = {
-          SEEKING: studentList.filter(s => s.placementStatus === 'SEEKING').length,
+    ]).then(([p, m, iq, d]) => {
+      if (p.status === 'fulfilled') {
+        const rawData = p.value.data?.data || p.value.data
+        const studentList = rawData?.students || rawData?.items || (Array.isArray(rawData) ? rawData : [])
+
+        const statusCounts = rawData?.statusCounts || {
+          SEEKING: studentList.filter(s => (s.placementStatus || 'SEEKING') === 'SEEKING').length,
           INTERVIEWING: studentList.filter(s => s.placementStatus === 'INTERVIEWING').length,
           PLACED: studentList.filter(s => s.placementStatus === 'PLACED').length,
           NOT_SEEKING: studentList.filter(s => s.placementStatus === 'NOT_SEEKING').length,
         }
         const total = studentList.length
-        const placed = statusCounts.PLACED
-        const conversionRate = total > 0 ? Math.round((placed / total) * 100) : 0
+        const placed = statusCounts.PLACED || 0
+        const conversionRate = rawData?.conversionRate ?? (total > 0 ? Math.round((placed / total) * 100) : 0)
 
         setOverview({
           statusCounts,
           conversionRate,
           students: studentList.map(s => ({
-            ...s,
+            id: s.id,
+            name: s.name || s.user?.name || `Student #${s.id}`,
+            email: s.email || s.user?.email || '',
+            phone: s.phone || '',
             placementStatus: s.placementStatus || 'SEEKING',
-            mockCount: 0,
-            avgMockRating: 0
+            mockCount: s.mockCount || 0,
+            avgMockRating: s.avgMockRating || 0,
+            updatedAt: s.updatedAt || ''
           }))
         })
       }
@@ -82,7 +88,7 @@ export default function PlacementPage() {
       if (m.status === 'fulfilled') setMocks(m.value.data.data || [])
       else setMocks([])
 
-      if (iq.status === 'fulfilled') setIqList(iq.value.data.data?.items || [])
+      if (iq.status === 'fulfilled') setIqList(Array.isArray(iq.value.data.data) ? iq.value.data.data : iq.value.data.data?.items || [])
 
       if (d.status === 'fulfilled') setDrives(d.value.data.data || [])
     }).finally(() => setLoading(false))
@@ -93,7 +99,7 @@ export default function PlacementPage() {
   useEffect(() => {
     adminApi.getInterviewQuestions({ category: iqCategory === 'All' ? '' : iqCategory, difficulty: iqDiff, search: iqSearch })
       .then(res => setIqList(res.data.data?.items || res.data.data || []))
-      .catch(() => {})
+      .catch(() => { })
   }, [iqCategory, iqDiff, iqSearch])
 
   const handlePlacementStatus = async (studentId, status) => {
@@ -132,7 +138,12 @@ export default function PlacementPage() {
   const handleSaveIq = async (e) => {
     e.preventDefault(); setSaving(true)
     try {
-      const data = { ...iqForm, tags: iqForm.tags.split(',').map(t => t.trim()).filter(Boolean) }
+      const data = {
+        ...iqForm,
+        questionText: iqForm.questionText || iqForm.question,
+        answerText: iqForm.answerText || iqForm.answer,
+        tags: typeof iqForm.tags === 'string' ? iqForm.tags.split(',').map(t => t.trim()).filter(Boolean) : (iqForm.tags || [])
+      }
       if (editIq) await adminApi.updateInterviewQuestion(editIq, data)
       else await adminApi.createInterviewQuestion(data)
       toast.success(editIq ? 'Updated' : 'Question added')
@@ -210,27 +221,7 @@ export default function PlacementPage() {
         ))}
       </div>
 
-      {/* Funnel */}
-      {total > 0 && (
-        <div className="glass-card p-5">
-          <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-3">Placement Funnel</p>
-          <div className="flex items-end gap-2">
-            {[{ s: 'Total', v: total }, { s: 'Seeking', v: sc.SEEKING || 0 }, { s: 'Interviewing', v: sc.INTERVIEWING || 0 }, { s: 'Placed', v: sc.PLACED || 0 }]
-              .map(({ s, v }, i) => (
-                <div key={s} className="flex-1 flex flex-col items-center gap-1">
-                  <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{v}</p>
-                  <div className="w-full rounded-t-lg" style={{
-                    height: `${Math.max(8, (v / total) * 60)}px`,
-                    background: ['#9ca3af', '#3b82f6', '#f59e0b', '#22c55e'][i],
-                    opacity: 0.85
-                  }} />
-                  <p className="text-[9px] text-gray-400 font-semibold text-center">{s}</p>
-                </div>
-              ))}
-          </div>
-          {total > 0 && <p className="text-xs text-green-600 font-semibold mt-2">Conversion rate: {overview?.conversionRate || 0}%</p>}
-        </div>
-      )}
+
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white/80 dark:bg-gray-900/70 border border-purple-100 rounded-2xl p-1">
@@ -471,11 +462,10 @@ export default function PlacementPage() {
                       </td>
                       <td className="px-4 py-3 text-xs font-semibold text-gray-600">{d._count?.applications || 0}</td>
                       <td className="px-4 py-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          d.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
-                          d.status === 'UPCOMING' ? 'bg-blue-100 text-blue-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>{d.status}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                            d.status === 'UPCOMING' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-500'
+                          }`}>{d.status}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">

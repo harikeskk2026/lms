@@ -22,6 +22,8 @@ public interface DriveApplicationRepository extends JpaRepository<DriveApplicati
 
     long countByDrive_Id(Long driveId);
 
+    long countByStudent_Id(Long studentId);
+
     @Query("SELECT a.drive.id, COUNT(a) FROM DriveApplication a WHERE a.drive.id IN :driveIds GROUP BY a.drive.id")
     List<Object[]> countGroupedByDriveId(@Param("driveIds") List<Long> driveIds);
 

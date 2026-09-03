@@ -22,6 +22,9 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     Optional<Student> findByUserId(Long userId);
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user"})
+    Optional<Student> findWithUserById(Long id);
+
     @Query("SELECT s.placementStatus AS status, COUNT(s) AS count FROM Student s GROUP BY s.placementStatus")
     List<PlacementStatusCount> countGroupedByPlacementStatus();
 

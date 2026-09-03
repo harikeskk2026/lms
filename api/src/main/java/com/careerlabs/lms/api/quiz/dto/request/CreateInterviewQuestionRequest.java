@@ -1,6 +1,9 @@
 package com.careerlabs.lms.api.quiz.dto.request;
 
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -12,9 +15,13 @@ public class CreateInterviewQuestionRequest {
     private String category;
 
     @NotBlank(message = "Question text is required")
+    @JsonAlias({"questionText", "question"})
+    @JsonProperty("questionText")
     private String questionText;
 
     @NotBlank(message = "Answer text is required")
+    @JsonAlias({"answerText", "answer"})
+    @JsonProperty("answerText")
     private String answerText;
 
     @NotNull(message = "Difficulty is required")
@@ -38,12 +45,22 @@ public class CreateInterviewQuestionRequest {
         this.questionText = questionText;
     }
 
+    @JsonSetter("question")
+    public void setQuestion(String question) {
+        this.questionText = question;
+    }
+
     public String getAnswerText() {
         return answerText;
     }
 
     public void setAnswerText(String answerText) {
         this.answerText = answerText;
+    }
+
+    @JsonSetter("answer")
+    public void setAnswer(String answer) {
+        this.answerText = answer;
     }
 
     public QuizDifficulty getDifficulty() {
