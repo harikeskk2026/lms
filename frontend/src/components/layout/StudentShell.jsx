@@ -4,11 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, BookOpen, Compass, Calendar, ClipboardList,
-  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video, UserCircle
+  Brain, Briefcase, Bell, Megaphone, LogOut, LogIn, Menu, X, ChevronRight, Video, UserCircle, Search
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { studentApi } from '@/lib/api'
 import NotificationDropdown from '@/components/ui/NotificationDropdown'
+import HeaderSearch from '@/components/ui/HeaderSearch'
 import clsx from 'clsx'
 
 const navItems = [
@@ -150,6 +151,9 @@ function TopBar({ onMenuClick, user, unreadCount }) {
       <div className="hidden lg:block" />
 
       <div className="flex items-center gap-3">
+        {/* Inline Elongating Search */}
+        <HeaderSearch role={user?.role || 'STUDENT'} />
+
         {/* Dark mode */}
         <button
           onClick={toggleDark}

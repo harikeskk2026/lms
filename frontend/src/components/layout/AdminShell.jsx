@@ -11,13 +11,13 @@ import {
 import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
 import NotificationDropdown from '@/components/ui/NotificationDropdown'
+import HeaderSearch from '@/components/ui/HeaderSearch'
 import clsx from 'clsx'
 
 const navItems = [
   { href: '/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students' },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
-  { href: '/admin/batch-catalog', icon: Layers,          label: 'Batch Catalog' },
   { href: '/admin/course-catalog',icon: BookOpen,        label: 'Course Catalog' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
@@ -32,7 +32,6 @@ const PAGE_TITLES = {
   '/admin/dashboard':     'Dashboard',
   '/admin/students':      'Students',
   '/admin/batches':       'Batches',
-  '/admin/batch-catalog': 'Batch Catalog',
   '/admin/course-catalog':'Course Catalog',
   '/admin/attendance':    'Attendance',
   '/admin/assignments':   'Assignments',
@@ -170,11 +169,8 @@ function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Search */}
-        <div className="hidden md:flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-purple-400">
-          <Search size={14} />
-          <span className="text-xs">Quick search...</span>
-        </div>
+        {/* Inline Elongating Search */}
+        <HeaderSearch role={user?.role || 'ADMIN'} />
 
         {/* Dark toggle */}
         <button
