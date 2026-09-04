@@ -42,6 +42,13 @@ public class SyllabusModule {
     @Column(name = "order_index", nullable = false)
     private int orderIndex;
 
+    @Column(name = "duration_value")
+    private Integer durationValue;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "duration_unit")
+    private DurationUnit durationUnit;
+
     public Long getId() {
         return id;
     }
@@ -84,5 +91,21 @@ public class SyllabusModule {
 
     public void setOrderIndex(int orderIndex) {
         this.orderIndex = orderIndex;
+    }
+
+    public Integer getDurationValue() {
+        return durationValue;
+    }
+
+    public void setDurationValue(Integer durationValue) {
+        this.durationValue = durationValue;
+    }
+
+    public DurationUnit getDurationUnit() {
+        return durationUnit;
+    }
+
+    public void setDurationUnit(DurationUnit durationUnit) {
+        this.durationUnit = durationUnit;
     }
 }

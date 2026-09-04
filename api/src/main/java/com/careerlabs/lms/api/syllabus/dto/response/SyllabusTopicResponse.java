@@ -9,11 +9,12 @@ public record SyllabusTopicResponse(
         String title,
         String description,
         CourseStatus status,
-        int orderIndex
+        int orderIndex,
+        Integer durationHours
 ) {
 
     public static SyllabusTopicResponse from(SyllabusTopic topic) {
         return new SyllabusTopicResponse(topic.getId(), topic.getModule().getId(), topic.getTitle(),
-                topic.getDescription(), topic.getStatus(), topic.getOrderIndex());
+                topic.getDescription(), topic.getStatus(), topic.getOrderIndex(), topic.getDurationHours());
     }
 }

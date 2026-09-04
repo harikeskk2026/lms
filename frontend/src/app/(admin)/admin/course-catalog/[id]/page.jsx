@@ -4,7 +4,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronRight, ChevronUp,
-  Upload, ExternalLink,
+  Upload, ExternalLink, Clock,
 } from 'lucide-react'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
@@ -92,7 +92,29 @@ function OverviewTab({ course }) {
   )
 }
 
-const EMPTY_MODULE_FORM = { title: '', description: '', status: 'PUBLISHED' }
+const EMPTY_MODULE_FORM = { title: '', description: '', status: 'PUBLISHED', durationValue: '', durationUnit: 'WEEKS' }
+const EMPTY_TOPIC_FORM = { title: '', description: '', status: 'PUBLISHED', durationHours: '' }
+const DURATION_UNITS = ['HOURS', 'DAYS', 'WEEKS']
+
+function DurationInput({ value, unit, onValueChange, onUnitChange, small }) {
+  const size = small ? 'py-1.5 text-xs' : 'py-2 text-xs'
+  return (
+    <div className="flex gap-1">
+      <input type="number" min="1" value={value} onChange={e => onValueChange(e.target.value)} placeholder="Duration"
+        className={`w-20 rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`} />
+      <select value={unit} onChange={e => onUnitChange(e.target.value)}
+        className={`rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`}>
+        {DURATION_UNITS.map(u => <option key={u} value={u}>{u.charAt(0) + u.slice(1).toLowerCase()}</option>)}
+      </select>
+    </div>
+  )
+}
+
+function formatDuration(value, unit) {
+  if (!value) return null
+  const label = (unit || 'WEEKS').toLowerCase()
+  return `${value} ${value === 1 ? label.slice(0, -1) : label}`
+}
 
 function StatusBadge({ status }) {
   const isDraft = status === 'DRAFT'
@@ -137,6 +159,8 @@ function SyllabusTab({ courseId }) {
     try {
       await courseContentService.createModule(courseId, {
         title: newModule.title.trim(), description: newModule.description.trim(), status: newModule.status,
+        durationValue: newModule.durationValue ? Number(newModule.durationValue) : null,
+        durationUnit: newModule.durationValue ? newModule.durationUnit : null,
       })
       setNewModule(EMPTY_MODULE_FORM)
       load()
@@ -147,6 +171,8 @@ function SyllabusTab({ courseId }) {
     try {
       await courseContentService.updateModule(editingModule.id, {
         title: editingModule.title, description: editingModule.description, status: editingModule.status,
+        durationValue: editingModule.durationValue ? Number(editingModule.durationValue) : null,
+        durationUnit: editingModule.durationValue ? editingModule.durationUnit : null,
       })
       setEditingModule(null)
       load()
@@ -168,13 +194,14 @@ function SyllabusTab({ courseId }) {
   }
 
   async function addTopic(moduleId) {
-    const topicForm = newTopic[moduleId] || EMPTY_MODULE_FORM
+    const topicForm = newTopic[moduleId] || EMPTY_TOPIC_FORM
     if (!topicForm.title.trim()) return
     try {
       await courseContentService.createTopic(moduleId, {
         title: topicForm.title.trim(), description: (topicForm.description || '').trim(), status: topicForm.status || 'PUBLISHED',
+        durationHours: topicForm.durationHours ? Number(topicForm.durationHours) : null,
       })
-      setNewTopic(prev => ({ ...prev, [moduleId]: EMPTY_MODULE_FORM }))
+      setNewTopic(prev => ({ ...prev, [moduleId]: EMPTY_TOPIC_FORM }))
       load()
     } catch (err) { toast.error(err.message || 'Failed to add topic') }
   }
@@ -183,6 +210,7 @@ function SyllabusTab({ courseId }) {
     try {
       await courseContentService.updateTopic(editingTopic.id, {
         title: editingTopic.title, description: editingTopic.description, status: editingTopic.status,
+        durationHours: editingTopic.durationHours ? Number(editingTopic.durationHours) : null,
       })
       setEditingTopic(null)
       load()
@@ -216,8 +244,13 @@ function SyllabusTab({ courseId }) {
             <Plus size={14} /> Add Module
           </button>
         </div>
-        <input value={newModule.description} onChange={e => setNewModule(f => ({ ...f, description: e.target.value }))} placeholder="Module description (optional)"
-          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+        <div className="flex gap-2">
+          <input value={newModule.description} onChange={e => setNewModule(f => ({ ...f, description: e.target.value }))} placeholder="Module description (optional)"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+          <DurationInput value={newModule.durationValue} unit={newModule.durationUnit}
+            onValueChange={v => setNewModule(f => ({ ...f, durationValue: v }))}
+            onUnitChange={u => setNewModule(f => ({ ...f, durationUnit: u }))} />
+        </div>
       </div>
 
       {modules.length === 0 && <p className="text-sm text-gray-400 text-center py-6">No modules yet. Add one above.</p>}
@@ -237,6 +270,9 @@ function SyllabusTab({ courseId }) {
                 )}
                 {editingModule?.id !== m.id && <StatusBadge status={m.status} />}
                 <span className="text-xs text-gray-400 flex-shrink-0">({(m.topics || []).length} topics)</span>
+                {editingModule?.id !== m.id && formatDuration(m.durationValue, m.durationUnit) && (
+                  <span className="text-xs text-gray-400 flex-shrink-0 flex items-center gap-1"><Clock size={11} /> {formatDuration(m.durationValue, m.durationUnit)}</span>
+                )}
               </button>
               <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 {editingModule?.id === m.id && <StatusSelect small value={editingModule.status} onChange={v => setEditingModule({ ...editingModule, status: v })} />}
@@ -245,16 +281,19 @@ function SyllabusTab({ courseId }) {
                 {editingModule?.id === m.id ? (
                   <button onClick={saveModuleEdit} className="text-xs font-semibold text-purple-600 px-2">Save</button>
                 ) : (
-                  <button onClick={() => setEditingModule({ id: m.id, title: m.title, description: m.description || '', status: m.status || 'PUBLISHED' })} className="w-7 h-7 rounded-lg hover:bg-gray-200 flex items-center justify-center"><Pencil size={12} /></button>
+                  <button onClick={() => setEditingModule({ id: m.id, title: m.title, description: m.description || '', status: m.status || 'PUBLISHED', durationValue: m.durationValue || '', durationUnit: m.durationUnit || 'WEEKS' })} className="w-7 h-7 rounded-lg hover:bg-gray-200 flex items-center justify-center"><Pencil size={12} /></button>
                 )}
                 <button onClick={() => deleteModule(m.id)} className="w-7 h-7 rounded-lg hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={12} /></button>
               </div>
             </div>
             {editingModule?.id === m.id && (
-              <div className="px-4 py-2 bg-purple-50/50 dark:bg-purple-900/10">
+              <div className="px-4 py-2 bg-purple-50/50 dark:bg-purple-900/10 flex gap-2">
                 <input value={editingModule.description} onChange={e => setEditingModule({ ...editingModule, description: e.target.value })}
                   placeholder="Module description" onKeyDown={e => e.key === 'Enter' && saveModuleEdit()}
-                  className="w-full rounded-lg border border-purple-200 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                  className="flex-1 rounded-lg border border-purple-200 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                <DurationInput small value={editingModule.durationValue} unit={editingModule.durationUnit}
+                  onValueChange={v => setEditingModule({ ...editingModule, durationValue: v })}
+                  onUnitChange={u => setEditingModule({ ...editingModule, durationUnit: u })} />
               </div>
             )}
             {m.description && editingModule?.id !== m.id && (
@@ -272,6 +311,9 @@ function SyllabusTab({ courseId }) {
                       ) : (
                         <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 truncate flex items-center gap-1.5">
                           {t.title} <StatusBadge status={t.status} />
+                          {t.durationHours && (
+                            <span className="text-[11px] text-gray-400 flex items-center gap-0.5 flex-shrink-0"><Clock size={10} /> {t.durationHours}h</span>
+                          )}
                         </span>
                       )}
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -281,25 +323,33 @@ function SyllabusTab({ courseId }) {
                         {editingTopic?.id === t.id ? (
                           <button onClick={saveTopicEdit} className="text-xs font-semibold text-purple-600 px-1">Save</button>
                         ) : (
-                          <button onClick={() => setEditingTopic({ id: t.id, title: t.title, description: t.description || '', status: t.status || 'PUBLISHED' })} className="w-6 h-6 rounded hover:bg-gray-100 flex items-center justify-center"><Pencil size={11} /></button>
+                          <button onClick={() => setEditingTopic({ id: t.id, title: t.title, description: t.description || '', status: t.status || 'PUBLISHED', durationHours: t.durationHours || '' })} className="w-6 h-6 rounded hover:bg-gray-100 flex items-center justify-center"><Pencil size={11} /></button>
                         )}
                         <button onClick={() => deleteTopic(t.id)} className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={11} /></button>
                       </div>
                     </div>
                     {editingTopic?.id === t.id ? (
-                      <input value={editingTopic.description} onChange={e => setEditingTopic({ ...editingTopic, description: e.target.value })}
-                        placeholder="Topic description" onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
-                        className="w-full rounded-lg border border-purple-200 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                      <div className="flex gap-2">
+                        <input value={editingTopic.description} onChange={e => setEditingTopic({ ...editingTopic, description: e.target.value })}
+                          placeholder="Topic description" onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
+                          className="flex-1 rounded-lg border border-purple-200 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                        <input type="number" min="1" value={editingTopic.durationHours} onChange={e => setEditingTopic({ ...editingTopic, durationHours: e.target.value })}
+                          placeholder="Hours" onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
+                          className="w-20 rounded-lg border border-purple-200 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                      </div>
                     ) : t.description ? (
                       <p className="text-xs text-gray-400">{t.description}</p>
                     ) : null}
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
-                  <input value={(newTopic[m.id] || EMPTY_MODULE_FORM).title} onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_MODULE_FORM), title: e.target.value } }))}
+                  <input value={(newTopic[m.id] || EMPTY_TOPIC_FORM).title} onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), title: e.target.value } }))}
                     placeholder="New topic title" onKeyDown={e => e.key === 'Enter' && addTopic(m.id)}
                     className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                  <StatusSelect small value={(newTopic[m.id] || EMPTY_MODULE_FORM).status} onChange={v => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_MODULE_FORM), status: v } }))} />
+                  <input type="number" min="1" value={(newTopic[m.id] || EMPTY_TOPIC_FORM).durationHours} onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), durationHours: e.target.value } }))}
+                    placeholder="Hours" onKeyDown={e => e.key === 'Enter' && addTopic(m.id)}
+                    className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
+                  <StatusSelect small value={(newTopic[m.id] || EMPTY_TOPIC_FORM).status} onChange={v => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), status: v } }))} />
                   <button onClick={() => addTopic(m.id)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold flex-shrink-0">Add Topic</button>
                 </div>
               </div>

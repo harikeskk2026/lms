@@ -38,6 +38,9 @@ public class SyllabusTopic {
     @Column(name = "order_index", nullable = false)
     private int orderIndex;
 
+    @Column(name = "duration_hours")
+    private Integer durationHours;
+
     public Long getId() {
         return id;
     }
@@ -80,5 +83,13 @@ public class SyllabusTopic {
 
     public void setOrderIndex(int orderIndex) {
         this.orderIndex = orderIndex;
+    }
+
+    public Integer getDurationHours() {
+        return durationHours;
+    }
+
+    public void setDurationHours(Integer durationHours) {
+        this.durationHours = durationHours;
     }
 }

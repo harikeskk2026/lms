@@ -63,6 +63,7 @@ public class SyllabusServiceImpl implements SyllabusService {
                 .filter(module -> isPublished(module.status()))
                 .map(module -> new SyllabusModuleResponse(module.id(), module.courseId(), module.title(),
                         module.description(), module.status(), module.orderIndex(),
+                        module.durationValue(), module.durationUnit(),
                         module.topics().stream().filter(topic -> isPublished(topic.status())).toList()))
                 .toList();
     }
@@ -81,6 +82,8 @@ public class SyllabusServiceImpl implements SyllabusService {
         module.setTitle(request.getTitle());
         module.setDescription(request.getDescription());
         module.setStatus(request.getStatus());
+        module.setDurationValue(request.getDurationValue());
+        module.setDurationUnit(request.getDurationUnit());
         module.setOrderIndex(moduleRepository.countByCourseId(courseId));
 
         return SyllabusModuleResponse.from(moduleRepository.save(module), List.of());
@@ -93,6 +96,8 @@ public class SyllabusServiceImpl implements SyllabusService {
         module.setTitle(request.getTitle());
         module.setDescription(request.getDescription());
         module.setStatus(request.getStatus());
+        module.setDurationValue(request.getDurationValue());
+        module.setDurationUnit(request.getDurationUnit());
         moduleRepository.save(module);
 
         List<SyllabusTopicResponse> topics = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(id).stream()
@@ -153,6 +158,7 @@ public class SyllabusServiceImpl implements SyllabusService {
         topic.setTitle(request.getTitle());
         topic.setDescription(request.getDescription());
         topic.setStatus(request.getStatus());
+        topic.setDurationHours(request.getDurationHours());
         topic.setOrderIndex(topicRepository.countByModuleId(moduleId));
 
         return SyllabusTopicResponse.from(topicRepository.save(topic));
@@ -165,6 +171,7 @@ public class SyllabusServiceImpl implements SyllabusService {
         topic.setTitle(request.getTitle());
         topic.setDescription(request.getDescription());
         topic.setStatus(request.getStatus());
+        topic.setDurationHours(request.getDurationHours());
         return SyllabusTopicResponse.from(topicRepository.save(topic));
     }
 
