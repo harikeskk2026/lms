@@ -25,18 +25,31 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
         {loading ? (
           <div className="h-24 rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" />
         ) : records.length === 0 ? (
-          <p className="text-sm text-gray-400">No class recorded on this day.</p>
+          <p className="text-sm text-gray-400">No class was scheduled for your batch on this day.</p>
         ) : (
           <div className="space-y-3">
             {records.map(r => (
-              <div key={r.attendanceId} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 space-y-1.5">
-                <p className="font-semibold text-gray-800 dark:text-white">{r.classTitle}</p>
+              <div key={r.attendanceId || r.classId || r.meetingLinkId} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-gray-800 dark:text-white">{r.classTitle}</p>
+                  {r.meetingLinkId && !r.classId && (
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                      Scheduled Class
+                    </span>
+                  )}
+                </div>
                 {r.trainerId && <p className="text-xs text-gray-500">Trainer #{r.trainerId}</p>}
                 <p className="text-xs text-gray-500">{format(new Date(r.date), 'h:mm a, d MMM yyyy')}</p>
                 <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
-                    {r.attendanceStatus}
-                  </span>
+                  {r.attendanceId ? (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                      {r.attendanceStatus}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                      Not Marked
+                    </span>
+                  )}
                   {r.markedAt && (
                     <span className="text-[10px] text-gray-400">Marked {format(new Date(r.markedAt), 'h:mm a')}</span>
                   )}
@@ -55,7 +68,7 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
                 </div>
                 <button onClick={() => onRequestCorrection(r)}
                   className="mt-2 text-xs font-semibold text-purple-600 border border-purple-200 dark:border-purple-800 rounded-xl px-3 py-1.5 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
-                  Request Correction
+                  {r.attendanceId ? 'Request Correction' : 'Report Missing Attendance'}
                 </button>
               </div>
             ))}

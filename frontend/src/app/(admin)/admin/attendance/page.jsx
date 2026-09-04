@@ -1034,6 +1034,8 @@ function CorrectionsTab() {
   const [reviewing, setReviewing]     = useState(null)
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectComment, setRejectComment] = useState('')
+  const [verifyResults, setVerifyResults] = useState({})
+  const [verifying, setVerifying]     = useState(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -1054,6 +1056,18 @@ function CorrectionsTab() {
       setRejectComment('')
       load()
     } catch { toast.error('Failed to review request') } finally { setReviewing(null) }
+  }
+
+  const verify = async (id) => {
+    setVerifying(id)
+    try {
+      const r = await adminApi.verifyCorrection(id)
+      setVerifyResults(prev => ({ ...prev, [id]: r.data.data }))
+    } catch {
+      toast.error('Failed to verify attendance')
+    } finally {
+      setVerifying(null)
+    }
   }
 
   return (
@@ -1086,6 +1100,41 @@ function CorrectionsTab() {
                 {c.comment && <p className="text-xs text-gray-400 mt-0.5">Comment: {c.comment}</p>}
                 {c.documentUrl && (
                   <a href={c.documentUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-600 hover:underline mt-0.5 inline-block">View document</a>
+                )}
+
+                {c.status === 'PENDING' && (
+                  verifyResults[c.id] ? (
+                    <div className={`mt-2 text-xs rounded-xl p-2.5 border max-w-sm ${
+                      verifyResults[c.id].verified
+                        ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                        : 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400'
+                    }`}>
+                      {verifyResults[c.id].verified ? (
+                        <>
+                          <p className="font-semibold flex items-center gap-1"><CheckCircle size={13} /> Joined a scheduled class that day</p>
+                          {verifyResults[c.id].matchedMeetings.filter(m => m.joined).map(m => (
+                            <p key={m.meetingId} className="mt-1 opacity-90">
+                              "{m.title}" ({m.platform}) — joined {format(new Date(m.firstJoinedAt), 'hh:mm a')}
+                              {m.joinCount > 1 ? `, ${m.joinCount}×` : ''}
+                            </p>
+                          ))}
+                        </>
+                      ) : verifyResults[c.id].matchedMeetings.length > 0 ? (
+                        <p className="font-semibold flex items-center gap-1">
+                          <AlertTriangle size={13} /> No join record for {verifyResults[c.id].matchedMeetings.length} scheduled class{verifyResults[c.id].matchedMeetings.length === 1 ? '' : 'es'} that day
+                        </p>
+                      ) : (
+                        <p className="font-semibold flex items-center gap-1">
+                          <AlertTriangle size={13} /> No Scheduled Class found for this batch that day
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <button onClick={() => verify(c.id)} disabled={verifying === c.id}
+                      className="mt-2 text-xs font-semibold text-indigo-600 hover:underline disabled:opacity-50">
+                      {verifying === c.id ? 'Checking...' : 'Verify against Scheduled Class'}
+                    </button>
+                  )
                 )}
               </div>
               {c.status === 'PENDING' ? (

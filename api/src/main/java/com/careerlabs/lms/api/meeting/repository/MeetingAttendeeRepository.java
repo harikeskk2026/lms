@@ -13,4 +13,6 @@ public interface MeetingAttendeeRepository extends JpaRepository<MeetingAttendee
     List<MeetingAttendee> findByMeetingIdOrderByFirstJoinedAtAsc(Long meetingId);
 
     long countByMeetingId(Long meetingId);
+
+    List<MeetingAttendee> findByStudentUserIdAndMeetingIdIn(Long studentUserId, List<Long> meetingIds);
 }

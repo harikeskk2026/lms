@@ -19,6 +19,7 @@ import com.careerlabs.lms.api.attendance.dto.response.AttendanceCorrectionRespon
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceHistoryPageResponse;
 import com.careerlabs.lms.api.attendance.dto.response.AttendancePolicyResponse;
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceRecordResponse;
+import com.careerlabs.lms.api.attendance.dto.response.AttendanceVerificationResponse;
 import com.careerlabs.lms.api.attendance.dto.response.TodayClassResponse;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import com.careerlabs.lms.api.attendance.entity.ClassStatus;
@@ -27,6 +28,7 @@ import com.careerlabs.lms.api.attendance.service.AttendanceAnalyticsService;
 import com.careerlabs.lms.api.attendance.service.AttendanceCorrectionService;
 import com.careerlabs.lms.api.attendance.service.AttendancePolicyService;
 import com.careerlabs.lms.api.attendance.service.AttendanceService;
+import com.careerlabs.lms.api.attendance.service.AttendanceVerificationService;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
@@ -55,16 +57,19 @@ public class AdminAttendanceController {
     private final AttendancePolicyService attendancePolicyService;
     private final AttendanceAnalyticsService attendanceAnalyticsService;
     private final AttendanceCorrectionService attendanceCorrectionService;
+    private final AttendanceVerificationService attendanceVerificationService;
 
     public AdminAttendanceController(
             AttendanceService attendanceService,
             AttendancePolicyService attendancePolicyService,
             AttendanceAnalyticsService attendanceAnalyticsService,
-            AttendanceCorrectionService attendanceCorrectionService) {
+            AttendanceCorrectionService attendanceCorrectionService,
+            AttendanceVerificationService attendanceVerificationService) {
         this.attendanceService = attendanceService;
         this.attendancePolicyService = attendancePolicyService;
         this.attendanceAnalyticsService = attendanceAnalyticsService;
         this.attendanceCorrectionService = attendanceCorrectionService;
+        this.attendanceVerificationService = attendanceVerificationService;
     }
 
     // ─── Daily Classes ────────────────────────────────────────────────────────
@@ -245,6 +250,12 @@ public class AdminAttendanceController {
         AttendanceCorrectionResponse response = attendanceCorrectionService.review(
                 id, principal.id(), request.getDecision(), request.getComment());
         return ResponseEntity.ok(ApiResponse.of("Correction reviewed", response));
+    }
+
+    /** Read-only: cross-checks the requesting student's Scheduled Class join records for that day. */
+    @GetMapping("/attendance/corrections/{id}/verify")
+    public ResponseEntity<ApiResponse<AttendanceVerificationResponse>> verifyCorrection(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.of(attendanceVerificationService.verify(id)));
     }
 
     // ─── Policy ─────────────────────────────────────────────────────────────────

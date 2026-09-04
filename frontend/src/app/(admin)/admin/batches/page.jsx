@@ -95,7 +95,7 @@ export default function BatchesPage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {batches.map((b, i) => {
             const grad = BATCH_GRADIENTS[i % BATCH_GRADIENTS.length]
-            const enrolled = b._count?.enrollments || 0
+            const enrolled = b.studentCount || 0
             const fillPct = Math.round((enrolled / b.maxStudents) * 100)
             const ModeIcon = MODE_ICONS[b.mode] || Clock
             return (

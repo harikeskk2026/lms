@@ -27,6 +27,7 @@ import com.careerlabs.lms.api.attendance.service.AttendanceService;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.notification.entity.Notification;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
@@ -57,6 +58,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class AttendanceServiceImpl implements AttendanceService {
@@ -68,6 +70,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final StudentRepository studentRepository;
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final MeetingLinkRepository meetingLinkRepository;
 
     public AttendanceServiceImpl(
             DailyClassRepository dailyClassRepository,
@@ -76,7 +79,8 @@ public class AttendanceServiceImpl implements AttendanceService {
             BatchRepository batchRepository,
             StudentRepository studentRepository,
             NotificationRepository notificationRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            MeetingLinkRepository meetingLinkRepository) {
         this.dailyClassRepository = dailyClassRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendanceAlertRepository = attendanceAlertRepository;
@@ -84,6 +88,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         this.studentRepository = studentRepository;
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
+        this.meetingLinkRepository = meetingLinkRepository;
     }
 
     @Override
@@ -249,8 +254,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         Student student = resolveStudent(userId);
 
         List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
-
-        return attendances.stream()
+        List<AttendanceCalendarDayResponse> marked = attendances.stream()
                 .filter(a -> a.getDailyClass().getDate().toLocalDate().equals(date))
                 .map(a -> new AttendanceCalendarDayResponse(
                         a.getId(),
@@ -262,8 +266,43 @@ public class AttendanceServiceImpl implements AttendanceService {
                         a.getStatus(),
                         a.getMarkedAt(),
                         a.getDailyClass().getMeetLink(),
-                        a.getDailyClass().getRecordingUrl()))
+                        a.getDailyClass().getRecordingUrl(),
+                        null))
                 .toList();
+
+        // Classes scheduled for the student's batch that day but never marked at all for
+        // this student — attendanceId is null so the frontend can offer "Request
+        // Correction" for a genuinely missing record, not just a wrong one.
+        List<Long> markedClassIds = marked.stream().map(AttendanceCalendarDayResponse::classId).toList();
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1);
+
+        List<AttendanceCalendarDayResponse> unmarked = student.getBatch() == null ? List.of()
+                : dailyClassRepository.findByBatchIdAndDateBetweenOrderByDateAsc(student.getBatch().getId(), dayStart, dayEnd)
+                        .stream()
+                        .filter(c -> !markedClassIds.contains(c.getId()))
+                        .map(c -> new AttendanceCalendarDayResponse(
+                                null, c.getId(), c.getTitle(),
+                                c.getBatch() != null ? c.getBatch().getTrainerId() : null,
+                                c.getDate(), c.getStatus(), null, null,
+                                c.getMeetLink(), c.getRecordingUrl(), null))
+                        .toList();
+
+        // Scheduled Class (Zoom) sessions visible to the student that day, which never
+        // got linked to a DailyClass at all (attendance never knew they happened) —
+        // surfaced separately from the two categories above via meetingLinkId so the
+        // frontend can offer "Report Missing Attendance" even for these.
+        Long batchId = student.getBatch() != null ? student.getBatch().getId() : null;
+        Long courseId = student.getCourse() != null ? student.getCourse().getId() : null;
+        List<AttendanceCalendarDayResponse> scheduledClassOnly = meetingLinkRepository
+                .findVisibleToStudentOnDate(batchId, courseId, dayStart, dayEnd).stream()
+                .filter(m -> m.getDailyClass() == null)
+                .map(m -> new AttendanceCalendarDayResponse(
+                        null, null, m.getTitle(), null, m.getScheduledStart(), null, null, null,
+                        m.getMeetUrl(), null, m.getId()))
+                .toList();
+
+        return Stream.concat(Stream.concat(marked.stream(), unmarked.stream()), scheduledClassOnly.stream()).toList();
     }
 
     @Override

@@ -16,6 +16,7 @@ public record AttendanceCalendarDayResponse(
         AttendStatus attendanceStatus,
         Instant markedAt,
         String meetLink,
-        String recordingUrl
+        String recordingUrl,
+        Long meetingLinkId
 ) {
 }

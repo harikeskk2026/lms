@@ -53,13 +53,13 @@ export default function AttendanceCalendar({ calendarData = [], activeMonth, onD
             <div
               key={key}
               title={info?.classTitle || ''}
-              onClick={() => { if (info && !isFuture && onDayClick) onDayClick(key) }}
+              onClick={() => { if (!isFuture && onDayClick) onDayClick(key) }}
               className={`
                 relative min-h-[40px] rounded-xl flex flex-col items-center justify-center
                 text-xs font-medium transition-all
                 ${isToday ? 'ring-2 ring-brand-500 ring-offset-1' : ''}
                 ${status ? STATUS_STYLE[status] : isFuture ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}
-                ${info && !isFuture ? 'cursor-pointer hover:scale-105' : ''}
+                ${!isFuture ? 'cursor-pointer hover:scale-105' : ''}
               `}
             >
               <span>{format(day, 'd')}</span>

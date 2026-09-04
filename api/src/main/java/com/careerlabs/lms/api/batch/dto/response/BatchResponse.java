@@ -18,10 +18,11 @@ public record BatchResponse(
         int maxStudents,
         boolean isActive,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        int studentCount
 ) {
 
-    public static BatchResponse from(Batch batch) {
+    public static BatchResponse from(Batch batch, int studentCount) {
         return new BatchResponse(
                 batch.getId(),
                 batch.getName(),
@@ -34,7 +35,8 @@ public record BatchResponse(
                 batch.getMaxStudents(),
                 batch.isActive(),
                 batch.getCreatedAt(),
-                batch.getUpdatedAt());
+                batch.getUpdatedAt(),
+                studentCount);
     }
 
     public record CourseSummary(Long id, String title) {

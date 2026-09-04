@@ -24,7 +24,9 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
     setSubmitting(true)
     try {
       await studentApi.requestCorrection({
-        attendanceId: record.attendanceId,
+        attendanceId: record.attendanceId || undefined,
+        dailyClassId: !record.attendanceId && record.classId ? record.classId : undefined,
+        meetingLinkId: !record.attendanceId && !record.classId ? record.meetingLinkId : undefined,
         requestedStatus,
         reason,
         comment: comment || undefined,
@@ -46,7 +48,9 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
       <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
 
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-800 dark:text-white">Request Correction</h3>
+          <h3 className="font-bold text-gray-800 dark:text-white">
+            {record.attendanceId ? 'Request Correction' : 'Report Missing Attendance'}
+          </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
         </div>
 
@@ -57,7 +61,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-1">Current Status</p>
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{record.attendanceStatus}</p>
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{record.attendanceStatus || 'Not Marked'}</p>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Expected Status</label>

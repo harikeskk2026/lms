@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class BatchServiceImpl implements BatchService {
@@ -41,15 +43,22 @@ public class BatchServiceImpl implements BatchService {
     @Override
     @Transactional(readOnly = true)
     public List<BatchResponse> list() {
-        return batchRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(BatchResponse::from)
+        List<Batch> batches = batchRepository.findAllByOrderByCreatedAtDesc();
+        List<Long> batchIds = batches.stream().map(Batch::getId).toList();
+
+        Map<Long, Long> countsByBatchId = studentRepository.findByBatchIdIn(batchIds).stream()
+                .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.counting()));
+
+        return batches.stream()
+                .map(b -> BatchResponse.from(b, countsByBatchId.getOrDefault(b.getId(), 0L).intValue()))
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public BatchResponse get(Long id) {
-        return BatchResponse.from(findOrThrow(id));
+        Batch batch = findOrThrow(id);
+        return BatchResponse.from(batch, (int) studentRepository.countByBatchId(id));
     }
 
     @Override
@@ -58,7 +67,7 @@ public class BatchServiceImpl implements BatchService {
         Batch batch = new Batch();
         applyRequest(batch, request);
 
-        return BatchResponse.from(batchRepository.save(batch));
+        return BatchResponse.from(batchRepository.save(batch), 0);
     }
 
     @Override
@@ -67,7 +76,8 @@ public class BatchServiceImpl implements BatchService {
         Batch batch = findOrThrow(id);
         applyRequest(batch, request);
 
-        return BatchResponse.from(batchRepository.save(batch));
+        Batch saved = batchRepository.save(batch);
+        return BatchResponse.from(saved, (int) studentRepository.countByBatchId(id));
     }
 
     @Override
@@ -76,7 +86,8 @@ public class BatchServiceImpl implements BatchService {
         Batch batch = findOrThrow(id);
         batch.setActive(!batch.isActive());
 
-        return BatchResponse.from(batchRepository.save(batch));
+        Batch saved = batchRepository.save(batch);
+        return BatchResponse.from(saved, (int) studentRepository.countByBatchId(id));
     }
 
     @Override

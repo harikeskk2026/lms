@@ -2,16 +2,23 @@ package com.careerlabs.lms.api.attendance.service.impl;
 
 import com.careerlabs.lms.api.attendance.dto.request.AttendanceCorrectionRequest;
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceCorrectionResponse;
+import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import com.careerlabs.lms.api.attendance.entity.Attendance;
 import com.careerlabs.lms.api.attendance.entity.AttendanceCorrection;
 import com.careerlabs.lms.api.attendance.entity.CorrectionStatus;
+import com.careerlabs.lms.api.attendance.entity.DailyClass;
+import com.careerlabs.lms.api.attendance.entity.ClassStatus;
 import com.careerlabs.lms.api.attendance.repository.AttendanceCorrectionRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
+import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.attendance.service.AttendanceCorrectionService;
+import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.meeting.entity.MeetingLink;
+import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -29,6 +36,8 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
 
     private final AttendanceCorrectionRepository attendanceCorrectionRepository;
     private final AttendanceRepository attendanceRepository;
+    private final DailyClassRepository dailyClassRepository;
+    private final MeetingLinkRepository meetingLinkRepository;
     private final StudentRepository studentRepository;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
@@ -36,11 +45,15 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
     public AttendanceCorrectionServiceImpl(
             AttendanceCorrectionRepository attendanceCorrectionRepository,
             AttendanceRepository attendanceRepository,
+            DailyClassRepository dailyClassRepository,
+            MeetingLinkRepository meetingLinkRepository,
             StudentRepository studentRepository,
             NotificationService notificationService,
             UserRepository userRepository) {
         this.attendanceCorrectionRepository = attendanceCorrectionRepository;
         this.attendanceRepository = attendanceRepository;
+        this.dailyClassRepository = dailyClassRepository;
+        this.meetingLinkRepository = meetingLinkRepository;
         this.studentRepository = studentRepository;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
@@ -51,11 +64,27 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
     public AttendanceCorrectionResponse create(Long userId, AttendanceCorrectionRequest request) {
         Student student = resolveStudent(userId);
 
-        Attendance attendance = attendanceRepository.findById(request.getAttendanceId())
-                .orElseThrow(() -> new ResourceNotFoundException("Attendance record not found with id: " + request.getAttendanceId()));
+        Attendance attendance;
+        if (request.getAttendanceId() != null) {
+            attendance = attendanceRepository.findById(request.getAttendanceId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Attendance record not found with id: " + request.getAttendanceId()));
 
-        if (!attendance.getStudent().getId().equals(student.getId())) {
-            throw new ForbiddenException("This attendance record does not belong to you");
+            if (!attendance.getStudent().getId().equals(student.getId())) {
+                throw new ForbiddenException("This attendance record does not belong to you");
+            }
+        } else if (request.getDailyClassId() != null) {
+            DailyClass dailyClass = dailyClassRepository.findById(request.getDailyClassId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Class not found with id: " + request.getDailyClassId()));
+
+            if (student.getBatch() == null || !student.getBatch().getId().equals(dailyClass.getBatch().getId())) {
+                throw new ForbiddenException("This class does not belong to your batch");
+            }
+            attendance = resolveOrCreateAttendance(student, dailyClass);
+        } else if (request.getMeetingLinkId() != null) {
+            DailyClass dailyClass = resolveOrCreateDailyClassForMeeting(student, request.getMeetingLinkId());
+            attendance = resolveOrCreateAttendance(student, dailyClass);
+        } else {
+            throw new BadRequestException("One of attendanceId, dailyClassId or meetingLinkId is required");
         }
 
         attendanceCorrectionRepository.findFirstByAttendanceIdAndStatus(attendance.getId(), CorrectionStatus.PENDING)
@@ -73,6 +102,72 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
 
         AttendanceCorrection saved = attendanceCorrectionRepository.save(correction);
         return AttendanceCorrectionResponse.from(saved);
+    }
+
+    /**
+     * A student is disputing a class that was never marked for them at all — there's no
+     * Attendance row to reference yet. Reuse one if it already exists (e.g. a second
+     * request after a rejected one), otherwise create it defaulting to ABSENT, which is
+     * exactly what "never marked" already means everywhere else in this module. Approving
+     * the resulting correction then works through the existing review() flow unchanged.
+     */
+    private Attendance resolveOrCreateAttendance(Student student, DailyClass dailyClass) {
+        return attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), dailyClass.getId())
+                .orElseGet(() -> {
+                    Attendance attendance = new Attendance();
+                    attendance.setStudent(student);
+                    attendance.setDailyClass(dailyClass);
+                    attendance.setStatus(AttendStatus.ABSENT);
+                    return attendanceRepository.save(attendance);
+                });
+    }
+
+    /**
+     * A Scheduled Class (Zoom) session that attendance never knew about — no DailyClass
+     * exists for it yet. Create one, on the student's own batch (Scheduled Classes can be
+     * batch-less/course-wide/global, but attendance is always tracked per-batch), and link
+     * it back to the MeetingLink so this only ever happens once per session — after which
+     * {@link com.careerlabs.lms.api.attendance.service.AttendanceVerificationService} will
+     * naturally find this exact meeting when an admin verifies the resulting request.
+     */
+    private DailyClass resolveOrCreateDailyClassForMeeting(Student student, Long meetingLinkId) {
+        MeetingLink meeting = meetingLinkRepository.findById(meetingLinkId)
+                .orElseThrow(() -> new ResourceNotFoundException("Scheduled class not found with id: " + meetingLinkId));
+
+        if (meeting.getDailyClass() != null) {
+            return meeting.getDailyClass();
+        }
+
+        Long studentBatchId = student.getBatch() != null ? student.getBatch().getId() : null;
+        Long studentCourseId = student.getCourse() != null ? student.getCourse().getId() : null;
+        Long meetingBatchId = meeting.getBatch() != null ? meeting.getBatch().getId() : null;
+        Long meetingCourseId = meeting.getCourse() != null ? meeting.getCourse().getId() : null;
+        boolean visible = (meetingBatchId != null && meetingBatchId.equals(studentBatchId))
+                || (meetingBatchId == null && meetingCourseId != null && meetingCourseId.equals(studentCourseId))
+                || (meetingBatchId == null && meetingCourseId == null);
+        if (!visible) {
+            throw new ForbiddenException("This scheduled class does not apply to you");
+        }
+
+        Batch batch = meeting.getBatch() != null ? meeting.getBatch() : student.getBatch();
+        if (batch == null) {
+            throw new BadRequestException(
+                    "This scheduled class isn't tied to a specific batch, and you're not assigned to one either — "
+                            + "ask an admin to either assign you to a batch, or edit the scheduled class to target a specific batch.");
+        }
+
+        DailyClass dailyClass = new DailyClass();
+        dailyClass.setBatch(batch);
+        dailyClass.setDate(meeting.getScheduledStart());
+        dailyClass.setTitle(meeting.getTitle());
+        dailyClass.setMeetLink(meeting.getMeetUrl());
+        dailyClass.setStatus(ClassStatus.COMPLETED);
+        dailyClass = dailyClassRepository.save(dailyClass);
+
+        meeting.setDailyClass(dailyClass);
+        meetingLinkRepository.save(meeting);
+
+        return dailyClass;
     }
 
     @Override

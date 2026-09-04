@@ -7,8 +7,17 @@ import jakarta.validation.constraints.NotNull;
 
 public class AttendanceCorrectionRequest {
 
-    @NotNull(message = AttendanceValidationMessages.ATTENDANCE_ID_REQUIRED)
+    // Exactly one of these three must be set: attendanceId when disputing an existing
+    // (wrong) record, dailyClassId when a scheduled DailyClass was never marked for this
+    // student, meetingLinkId when only a Scheduled Class (Zoom) session exists with no
+    // DailyClass at all yet. AttendanceCorrectionServiceImpl.create() validates that and
+    // lazily creates whatever's missing (DailyClass and/or an ABSENT-by-default
+    // Attendance row) before filing the request.
     private Long attendanceId;
+
+    private Long dailyClassId;
+
+    private Long meetingLinkId;
 
     @NotNull(message = AttendanceValidationMessages.REQUESTED_STATUS_REQUIRED)
     private AttendStatus requestedStatus;
@@ -26,6 +35,22 @@ public class AttendanceCorrectionRequest {
 
     public void setAttendanceId(Long attendanceId) {
         this.attendanceId = attendanceId;
+    }
+
+    public Long getDailyClassId() {
+        return dailyClassId;
+    }
+
+    public void setDailyClassId(Long dailyClassId) {
+        this.dailyClassId = dailyClassId;
+    }
+
+    public Long getMeetingLinkId() {
+        return meetingLinkId;
+    }
+
+    public void setMeetingLinkId(Long meetingLinkId) {
+        this.meetingLinkId = meetingLinkId;
     }
 
     public AttendStatus getRequestedStatus() {
