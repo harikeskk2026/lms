@@ -388,7 +388,7 @@ export default function BulkQuestionForm({ topics = [], onSaved, onCancel }) {
           <button
             type="submit"
             disabled={saving}
-            className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold shadow-md hover:from-purple-700 disabled:opacity-60"
+            className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-60"
           >
             {saving ? 'Saving Questions...' : `Save All ${questions.length} Questions`}
           </button>

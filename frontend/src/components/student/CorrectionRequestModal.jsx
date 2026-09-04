@@ -86,7 +86,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
         </div>
 
         <button onClick={submit} disabled={submitting}
-          className="mt-4 w-full bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
+          className="mt-4 w-full bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
           {submitting ? 'Submitting...' : 'Submit Request'}
         </button>
       </div>

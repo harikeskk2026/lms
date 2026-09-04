@@ -38,7 +38,7 @@ export default function CourseManagePage({ params }) {
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       <Link href="/admin/course-catalog" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-purple-600 transition-colors">
-        <ArrowLeft size={14} /> Back to Course Catalog
+        <ArrowLeft size={14} /> Back to Courses
       </Link>
 
       <div className="glass-card p-5">

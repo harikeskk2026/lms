@@ -344,7 +344,7 @@ Explanation: <optional>`}
               Cancel
             </button>
             <button type="button" onClick={handleImportAll} disabled={importing}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold shadow-md hover:from-purple-700 disabled:opacity-50 flex items-center gap-1.5">
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 flex items-center gap-1.5">
               {importing ? 'Importing...' : `Import All ${extracted.length} Questions →`}
             </button>
           </div>

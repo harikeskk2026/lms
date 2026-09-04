@@ -747,7 +747,7 @@ export default function ReportsPage() {
                         downloadCSV(r.data || [], file)
                       } catch { toast.error('Export failed') }
                     }}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 transition-all">
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
                     <Download size={15} /> Download CSV
                   </button>
                 </div>

@@ -25,7 +25,7 @@ const QUICK_ACTIONS = [
   { label: 'Add Student',      icon: UserPlus,  href: '/admin/students',       grad: 'from-purple-600 to-violet-600' },
   { label: 'Add Trainer',      icon: Users,     href: '/admin/profile',        grad: 'from-violet-600 to-indigo-600' },
   { label: 'Create Batch',     icon: Layers,    href: '/admin/batches',        grad: 'from-indigo-600 to-purple-600' },
-  { label: 'Course Catalog',   icon: BookOpen,  href: '/admin/course-catalog', grad: 'from-purple-700 to-fuchsia-600' },
+  { label: 'Courses',          icon: BookOpen,  href: '/admin/course-catalog', grad: 'from-purple-700 to-fuchsia-600' },
   { label: 'Placement Drives', icon: Briefcase, href: '/admin/placement',      grad: 'from-purple-600 to-violet-700' },
   { label: 'System Reports',   icon: FileText,  href: '/admin/reports',        grad: 'from-violet-700 to-purple-800' },
 ]

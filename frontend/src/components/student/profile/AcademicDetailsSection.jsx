@@ -393,7 +393,7 @@ export default function AcademicDetailsSection({ onSaved }) {
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 transition-all shadow-sm disabled:opacity-60"
+          className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-60"
         >
           {saving ? 'Saving...' : 'Save Academic Details'}
         </button>

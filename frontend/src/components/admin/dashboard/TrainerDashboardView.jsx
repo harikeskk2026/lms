@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -176,7 +176,7 @@ export default function TrainerDashboardView() {
           <div className="p-8 text-center bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
             <Clock size={28} className="text-purple-300 dark:text-purple-700 mx-auto mb-2" />
             <p className="text-sm font-semibold text-purple-800 dark:text-purple-200">No sessions scheduled for today</p>
-            <p className="text-xs text-purple-500/80 dark:text-purple-400 mt-1">Check back later or review your batch schedule in Course Catalog.</p>
+            <p className="text-xs text-purple-500/80 dark:text-purple-400 mt-1">Check back later or review your batch schedule in Courses.</p>
           </div>
         ) : (
           <div className="space-y-3">

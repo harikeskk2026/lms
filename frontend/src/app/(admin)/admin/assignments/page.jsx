@@ -183,7 +183,7 @@ export default function AssignmentsPage() {
           <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
         </div>
         <button onClick={openCreate}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 transition-all">
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
           <Plus size={16} /> Create Assignment
         </button>
       </div>
@@ -443,7 +443,7 @@ export default function AssignmentsPage() {
               Save as Draft
             </button>
             <button type="button" disabled={saving} onClick={() => handleSubmit('PUBLISHED')}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 transition-all disabled:opacity-60">
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
               {saving ? 'Saving...' : 'Publish'}
             </button>
           </div>

@@ -115,12 +115,12 @@ export default function CourseCatalogPage() {
     <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Course Catalog</h1>
+          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Courses</h1>
           <p className="text-sm text-gray-500 mt-0.5">Core course records, served by the Java API.</p>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700"
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700"
         >
           <Plus size={16} /> Add Course
         </button>
@@ -147,7 +147,7 @@ export default function CourseCatalogPage() {
                 <span className="flex items-center gap-1"><BarChart2 size={11} /> {c.slug}</span>
               </div>
               <Link href={`/admin/course-catalog/${c.id}`}
-                className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 transition-colors">
+                className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors">
                 <FolderOpen size={12} /> Manage Content
               </Link>
               <button onClick={() => togglePublish(c)} disabled={statusUpdatingId === c.id}

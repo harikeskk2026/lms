@@ -208,7 +208,7 @@ export default function QuestionBankPanel({ onChange }) {
           </button>
           <button
             onClick={() => setBulkPanelOpen(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 shadow-sm"
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-sm"
           >
             <Plus size={16} /> Add Question
           </button>

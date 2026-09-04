@@ -103,7 +103,7 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
 
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={loading || !file} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
+          <button onClick={handleSubmit} disabled={loading || !file} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
             {loading ? 'Submitting…' : 'Submit'}
           </button>
         </div>

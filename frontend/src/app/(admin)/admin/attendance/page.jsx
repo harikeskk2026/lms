@@ -330,7 +330,7 @@ function MarkAttendanceTab() {
           </div>
         </div>
         <button onClick={loadSheet} disabled={!selectedClass || loading}
-          className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 disabled:opacity-50 transition-all">
+          className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all">
           <CheckSquare size={16} />
           {loading ? 'Loading...' : 'Load Attendance Sheet'}
         </button>
@@ -533,7 +533,7 @@ function MarkAttendanceTab() {
                   Save Draft
                 </button>
                 <button onClick={() => saveAttendance(true)} disabled={saving}
-                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
+                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
                   <Save size={16} />
                   {saving ? 'Saving...' : 'Submit'}
                 </button>
@@ -851,7 +851,7 @@ function AlertsTab() {
             <span className="text-sm text-gray-500">%</span>
           </div>
           <button onClick={generate} disabled={generating}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
             <RefreshCw size={14} className={generating ? 'animate-spin' : ''} />
             {generating ? 'Generating...' : 'Generate Alerts'}
           </button>

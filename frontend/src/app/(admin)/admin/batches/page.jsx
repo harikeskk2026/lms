@@ -77,7 +77,7 @@ export default function BatchesPage() {
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Batches</h1>
         <button onClick={() => setPanelOpen(true)}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 transition-all">
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
           <Plus size={16} /> Create Batch
         </button>
       </div>
@@ -227,7 +227,7 @@ export default function BatchesPage() {
             <button type="button" onClick={() => setPanelOpen(false)}
               className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
             <button type="submit" disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 disabled:opacity-60 transition-all">
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
               {saving ? 'Creating...' : 'Create Batch'}
             </button>
           </div>

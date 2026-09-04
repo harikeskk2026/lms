@@ -61,7 +61,7 @@ export default function ChangePasswordForm() {
       </div>
       <div className="flex justify-end pt-2">
         <button type="submit" disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 transition-all shadow-sm disabled:opacity-60">
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-60">
           <Lock size={12} /> {saving ? 'Updating...' : 'Change Password'}
         </button>
       </div>

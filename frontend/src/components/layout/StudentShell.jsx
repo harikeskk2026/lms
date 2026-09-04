@@ -15,7 +15,7 @@ import clsx from 'clsx'
 const navItems = [
   { href: '/student/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/student/my-courses',    icon: BookOpen,        label: 'My Courses' },
-  { href: '/student/course-catalog', icon: Compass,        label: 'Course Catalog' },
+  { href: '/student/course-catalog', icon: Compass,        label: 'Courses' },
   { href: '/student/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/student/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/student/assignments',   icon: ClipboardList,   label: 'Assignments', badge: 'assignments' },
