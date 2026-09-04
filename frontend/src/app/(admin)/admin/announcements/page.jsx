@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 
 import {
   Pin, Trash2, Pencil, Plus, Send, Copy, ArrowLeft,
-  BarChart3, History, MessageSquare, Sparkles, CalendarDays, Check, X as XIcon,
+  BarChart3, History, MessageSquare, CalendarDays, Check, X as XIcon,
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -48,16 +48,12 @@ export default function AnnouncementsPage() {
   const [batches, setBatches] = useState([])
   const [colleges, setColleges] = useState([])
   const [courses, setCourses] = useState([])
-  const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [view, setView] = useState('list') // 'list' | 'calendar'
-  const [templatesOpen, setTemplatesOpen] = useState(false)
-  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
-  const [suggestions, setSuggestions] = useState([])
   const [detailsFor, setDetailsFor] = useState(null) // { id, tab: 'analytics'|'history'|'comments' }
   const [activeSection, setActiveSection] = useState('PUBLISHED')
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null)
@@ -67,13 +63,8 @@ export default function AnnouncementsPage() {
     adminApi.getAnnouncements().then(r => setAnnouncements(r.data.data || [])).catch(() => toast.error('Failed to load announcements')).finally(() => setLoading(false))
   }
 
-  const loadTemplates = () => {
-    adminApi.getAnnouncementTemplates().then(r => setTemplates(r.data.data || [])).catch(() => {})
-  }
-
   useEffect(() => {
     load()
-    loadTemplates()
     adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
     collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
@@ -167,34 +158,6 @@ export default function AnnouncementsPage() {
     setFormOpen(true)
   }
 
-  const useTemplate = async (template) => {
-    try {
-      const batchName = batches.find(b => String(b.id) === String(form.batchId))?.name || ''
-      const r = await adminApi.applyAnnouncementTemplate(template.id, { batchName })
-      const resolved = r.data.data
-      setForm(f => ({
-        ...f,
-        title: resolved.title, body: resolved.body,
-        category: resolved.category, priority: resolved.priority,
-        requiresAcknowledgment: resolved.requiresAcknowledgment,
-      }))
-      setTemplatesOpen(false)
-      setFormOpen(true)
-      toast.success(`Applied "${template.name}"`)
-    } catch (err) { toast.error(err?.message || 'Failed to apply template') }
-  }
-
-  const useSuggestion = (s) => {
-    setForm(f => ({ ...emptyForm, title: s.title, body: s.body, category: s.category, batchId: s.batchId || '' }))
-    setSuggestionsOpen(false)
-    setFormOpen(true)
-  }
-
-  const openSuggestions = () => {
-    adminApi.getAnnouncementSuggestions().then(r => setSuggestions(r.data.data || [])).catch(() => setSuggestions([]))
-    setSuggestionsOpen(true)
-  }
-
   const sortPinnedFirst = (list) => [...list].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0))
   const sections = [
     { key: 'PUBLISHED', label: 'Published', color: 'text-emerald-600', items: sortPinnedFirst(announcements.filter(a => a.status === 'PUBLISHED')), emptyText: 'No published announcements yet.' },
@@ -216,14 +179,6 @@ export default function AnnouncementsPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
         <div className="flex items-center gap-2">
-          <button onClick={openSuggestions}
-            className="flex items-center gap-1.5 border border-purple-200 text-purple-600 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-purple-50">
-            <Sparkles size={14} /> Suggestions
-          </button>
-          <button onClick={() => setTemplatesOpen(true)}
-            className="flex items-center gap-1.5 border border-gray-200 text-gray-600 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-gray-50">
-            Templates
-          </button>
           <button onClick={() => setView(v => v === 'list' ? 'calendar' : 'list')}
             className="flex items-center gap-1.5 border border-gray-200 text-gray-600 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-gray-50">
             <CalendarDays size={14} /> {view === 'list' ? 'Calendar' : 'List'}
@@ -268,31 +223,6 @@ export default function AnnouncementsPage() {
         </>
       )}
 
-      {templatesOpen && (
-        <TemplatesModal templates={templates} onClose={() => setTemplatesOpen(false)} onUse={useTemplate} onChanged={loadTemplates} />
-      )}
-
-      {suggestionsOpen && (
-        <Modal title="Suggested Announcements" onClose={() => setSuggestionsOpen(false)}>
-          {suggestions.length === 0 ? (
-            <p className="text-sm text-gray-400 py-6 text-center">No suggestions right now — nothing looks like it needs a nudge.</p>
-          ) : (
-            <div className="space-y-3">
-              {suggestions.map((s, i) => (
-                <div key={i} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-                  <p className="font-semibold text-gray-800 dark:text-white">{s.title}</p>
-                  <p className="text-sm text-gray-500 mt-1">{s.body}</p>
-                  <p className="text-xs text-purple-500 mt-2">{s.reason}</p>
-                  <button onClick={() => useSuggestion(s)}
-                    className="mt-3 text-xs font-semibold bg-purple-600 text-white rounded-lg px-3 py-1.5">
-                    Create Announcement
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
-      )}
 
       {detailsFor && (
         <DetailsModal announcementId={detailsFor.id} initialTab={detailsFor.tab} onClose={() => setDetailsFor(null)} />
@@ -648,64 +578,6 @@ function Modal({ title, onClose, children }) {
 }
 
 
-function TemplatesModal({ templates, onClose, onUse, onChanged }) {
-  const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: '', category: 'GENERAL', titleTemplate: '', contentTemplate: '', priority: 'NORMAL', requiresAcknowledgment: false })
-
-  const create = async () => {
-    try {
-      await adminApi.createAnnouncementTemplate(form)
-      toast.success('Template created')
-      setCreating(false)
-      setForm({ name: '', category: 'GENERAL', titleTemplate: '', contentTemplate: '', priority: 'NORMAL', requiresAcknowledgment: false })
-      onChanged()
-    } catch (err) { toast.error(err?.message || 'Failed to create template') }
-  }
-
-  const remove = async (id) => {
-    if (!confirm('Delete this template?')) return
-    try { await adminApi.deleteAnnouncementTemplate(id); onChanged() } catch { toast.error('Failed') }
-  }
-
-  return (
-    <Modal title="Announcement Templates" onClose={onClose}>
-      <div className="space-y-3 mb-4">
-        {templates.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No templates yet.</p>}
-        {templates.map(t => (
-          <div key={t.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-semibold text-sm text-gray-800 dark:text-white truncate">{t.name}</p>
-              <p className="text-xs text-gray-400 truncate">{t.titleTemplate}</p>
-            </div>
-            <div className="flex gap-1 flex-shrink-0">
-              <button onClick={() => onUse(t)} className="text-xs font-semibold bg-purple-600 text-white rounded-lg px-2 py-1">Use</button>
-              <button onClick={() => remove(t.id)} className="text-xs font-semibold bg-red-50 text-red-500 rounded-lg px-2 py-1">Delete</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {creating ? (
-        <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-4">
-          <input placeholder="Template name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm" />
-          <input placeholder="Title template, e.g. Attendance Warning - {{batchName}}" value={form.titleTemplate} onChange={e => setForm(f => ({ ...f, titleTemplate: e.target.value }))}
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm" />
-          <textarea placeholder="Content template, e.g. Your attendance is {{attendancePercentage}}%..." rows={3} value={form.contentTemplate} onChange={e => setForm(f => ({ ...f, contentTemplate: e.target.value }))}
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm resize-none" />
-          <div className="flex gap-2">
-            <button onClick={() => setCreating(false)} className="flex-1 py-2 rounded-lg border border-gray-200 text-sm">Cancel</button>
-            <button onClick={create} className="flex-1 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold">Save Template</button>
-          </div>
-        </div>
-      ) : (
-        <button onClick={() => setCreating(true)} className="w-full py-2 rounded-lg border border-dashed border-purple-300 text-purple-600 text-sm font-semibold">
-          + New Template
-        </button>
-      )}
-    </Modal>
-  )
-}
 
 function DetailsModal({ announcementId, initialTab, onClose }) {
   const [tab, setTab] = useState(initialTab)

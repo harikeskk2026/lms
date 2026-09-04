@@ -15,6 +15,7 @@ const ADMIN_PAGES = [
   { label: 'Students List', href: '/admin/students', icon: Users, category: 'Page' },
   { label: 'Batches List', href: '/admin/batches', icon: Layers, category: 'Page' },
   { label: 'Courses', href: '/admin/course-catalog', icon: BookOpen, category: 'Page' },
+  { label: 'Scheduled Class', href: '/admin/meeting-links', icon: Video, category: 'Page' },
   { label: 'Attendance', href: '/admin/attendance', icon: Calendar, category: 'Page' },
   { label: 'Recorded Sessions', href: '/admin/recorded-sessions', icon: Video, category: 'Page' },
   { label: 'Assignments', href: '/admin/assignments', icon: ClipboardList, category: 'Page' },

@@ -129,6 +129,9 @@ public class SecurityConfig {
                         // Attendance endpoints
                         .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/attendance/**", "/api/student/classes/**").hasRole("STUDENT")
+                        // Meeting link endpoints
+                        .requestMatchers("/api/admin/meetings/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers("/api/student/meetings/**").hasRole("STUDENT")
                         // Placement endpoints
                         .requestMatchers("/api/student/placement/**", "/api/student/skills/**",
                                 "/api/student/resume/**", "/api/student/resume-file",

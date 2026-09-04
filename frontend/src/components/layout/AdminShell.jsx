@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, UserCheck, BookOpen, ClipboardList,
   BarChart2, LogOut, LogIn, Menu, X, ChevronRight,
   Layers, Calendar, Brain, Briefcase, Megaphone, Search,
-  Moon, Sun, Video, UserCircle
+  Moon, Sun, Video, UserCircle, Link2
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi, resolveFileUrl } from '@/lib/api'
@@ -20,6 +20,7 @@ const navItems = [
   { href: '/admin/trainers',      icon: UserCheck,       label: 'Trainers',     roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
   { href: '/admin/course-catalog',icon: BookOpen,        label: 'Courses' },
+  { href: '/admin/meeting-links', icon: Link2,           label: 'Scheduled Class' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
   { href: '/admin/assignments',   icon: ClipboardList,   label: 'Assignments',  badge: 'assignments' },
@@ -35,6 +36,7 @@ const PAGE_TITLES = {
   '/admin/trainers':      'Trainers',
   '/admin/batches':       'Batches',
   '/admin/course-catalog':'Courses',
+  '/admin/meeting-links': 'Scheduled Class',
   '/admin/attendance':    'Attendance',
   '/admin/assignments':   'Assignments',
   '/admin/quizzes':       'Quizzes',
