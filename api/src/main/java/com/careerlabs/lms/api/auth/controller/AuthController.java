@@ -57,14 +57,5 @@ public class AuthController {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.of("Password reset successfully", null));
     }
-
-    @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout() {
-        return ResponseEntity.ok(ApiResponse.of("Logged out successfully", null));
-    }
-
-    @PostMapping("/logout-all")
-    public ResponseEntity<ApiResponse<Void>> logoutAll() {
-        return ResponseEntity.ok(ApiResponse.of("Logged out from all devices", null));
-    }
 }
+

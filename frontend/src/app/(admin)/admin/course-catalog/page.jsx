@@ -2,11 +2,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import { courseSchema } from '@/validations/courseValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
@@ -18,7 +16,7 @@ const LEVEL_COLORS = {
 }
 
 const STATUS_COLORS = {
-  DRAFT: 'bg-amber-100 text-amber-800 border border-amber-300',
+  DRAFT: 'bg-gray-100 text-gray-600',
   PUBLISHED: 'bg-emerald-100 text-emerald-700',
   ARCHIVED: 'bg-orange-100 text-orange-700',
 }
@@ -26,22 +24,12 @@ const STATUS_COLORS = {
 const EMPTY_FORM = { title: '', description: '', duration: '', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
 
 export default function CourseCatalogPage() {
-  const router = useRouter()
-  const { user } = useAuth()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('ALL')
-  const [searchQuery, setSearchQuery] = useState('')
-
-  useEffect(() => {
-    if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
-      router.replace('/admin/dashboard')
-    }
-  }, [user, router])
 
   const {
     register,
@@ -123,27 +111,6 @@ export default function CourseCatalogPage() {
     }
   }
 
-  const counts = {
-    ALL: courses.length,
-    DRAFT: courses.filter(c => c.status === 'DRAFT').length,
-    PUBLISHED: courses.filter(c => c.status === 'PUBLISHED').length,
-    ARCHIVED: courses.filter(c => c.status === 'ARCHIVED').length,
-  }
-
-  const filteredCourses = courses.filter(c => {
-    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter
-    const q = searchQuery.trim().toLowerCase()
-    const matchesSearch = !q ||
-      (c.title && c.title.toLowerCase().includes(q)) ||
-      (c.slug && c.slug.toLowerCase().includes(q)) ||
-      (c.description && c.description.toLowerCase().includes(q))
-    return matchesStatus && matchesSearch
-  })
-
-  if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
-    return null
-  }
-
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -159,65 +126,15 @@ export default function CourseCatalogPage() {
         </button>
       </div>
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {[
-            { id: 'ALL', label: 'All', count: counts.ALL },
-            { id: 'DRAFT', label: 'Drafts', count: counts.DRAFT },
-            { id: 'PUBLISHED', label: 'Published', count: counts.PUBLISHED },
-            { id: 'ARCHIVED', label: 'Archived', count: counts.ARCHIVED },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap ${
-                statusFilter === tab.id
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                statusFilter === tab.id ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-              }`}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search courses..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-      </div>
-
       {loading ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[...Array(3)].map((_, i) => <div key={i} className="h-40 glass-card animate-pulse" />)}
         </div>
       ) : courses.length === 0 ? (
         <div className="glass-card p-16 text-center text-gray-400">No courses yet.</div>
-      ) : filteredCourses.length === 0 ? (
-        <div className="glass-card p-12 text-center text-gray-400 space-y-2">
-          <p className="text-sm">No courses matching your filter.</p>
-          <button
-            onClick={() => { setStatusFilter('ALL'); setSearchQuery('') }}
-            className="text-xs text-purple-600 font-semibold hover:underline"
-          >
-            Reset Filters
-          </button>
-        </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredCourses.map(c => (
+          {courses.map(c => (
             <div key={c.id} className="glass-card p-5 flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-display font-bold text-base leading-tight text-gray-900 dark:text-white">{c.title}</h3>
@@ -234,11 +151,7 @@ export default function CourseCatalogPage() {
                 <FolderOpen size={12} /> Manage Content
               </Link>
               <button onClick={() => togglePublish(c)} disabled={statusUpdatingId === c.id}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-60 ${
-                  c.status === 'PUBLISHED'
-                    ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`}>
+                className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
                 {c.status === 'PUBLISHED' ? <><EyeOff size={12} /> Move to Draft</> : <><Eye size={12} /> Publish</>}
               </button>
               <div className="flex gap-2 pt-1">

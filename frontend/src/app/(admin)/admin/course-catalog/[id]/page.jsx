@@ -1,13 +1,11 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronRight, ChevronUp,
   Upload, ExternalLink, Clock,
 } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import batchService from '@/services/batchService'
@@ -21,18 +19,10 @@ const EMPTY_SESSION = {
 }
 
 export default function CourseManagePage({ params }) {
-  const router = useRouter()
-  const { user } = useAuth()
   const { id: courseId } = params
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
-
-  useEffect(() => {
-    if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
-      router.replace('/admin/dashboard')
-    }
-  }, [user, router])
 
   const loadCourse = useCallback(() => {
     courseService.get(courseId)
@@ -42,8 +32,6 @@ export default function CourseManagePage({ params }) {
   }, [courseId])
 
   useEffect(() => { loadCourse() }, [loadCourse])
-
-  if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') return null
 
   if (loading) return <div className="max-w-7xl mx-auto"><div className="h-40 glass-card animate-pulse" /></div>
   if (!course) return <div className="max-w-7xl mx-auto glass-card p-16 text-center text-gray-400">Course not found</div>
