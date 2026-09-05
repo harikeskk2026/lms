@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.course.service.impl;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.dto.request.CourseRequest;
 import com.careerlabs.lms.api.course.dto.response.CourseResponse;
@@ -75,6 +76,9 @@ public class CourseServiceImpl implements CourseService {
     @Override
     @Transactional
     public CourseResponse create(CourseRequest request) {
+        if (request.getStatus() == CourseStatus.ARCHIVED) {
+            throw new BadRequestException("Courses cannot be created directly as ARCHIVED. Archive is available after the course is created.");
+        }
         Course course = new Course();
         applyRequest(course, request);
         course.setSlug(slugGenerator.generateUnique(request.getTitle()));

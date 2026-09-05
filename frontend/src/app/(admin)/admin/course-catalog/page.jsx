@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search, Archive } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
@@ -32,6 +32,7 @@ export default function CourseCatalogPage() {
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [editingCourseStatus, setEditingCourseStatus] = useState(null)
   const [saving, setSaving] = useState(false)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -62,12 +63,14 @@ export default function CourseCatalogPage() {
 
   function openCreate() {
     setEditingId(null)
+    setEditingCourseStatus(null)
     reset(EMPTY_FORM)
     setPanelOpen(true)
   }
 
   function openEdit(course) {
     setEditingId(course.id)
+    setEditingCourseStatus(course.status)
     reset({
       title: course.title,
       description: course.description,
@@ -98,12 +101,16 @@ export default function CourseCatalogPage() {
     }
   }
 
-  async function togglePublish(course) {
-    const nextStatus = course.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED'
+  async function handleStatusChange(course, nextStatus) {
     setStatusUpdatingId(course.id)
     try {
       await courseService.updateStatus(course.id, nextStatus)
-      toast.success(nextStatus === 'PUBLISHED' ? 'Course published' : 'Course moved to draft')
+      const labels = {
+        PUBLISHED: 'Course published',
+        DRAFT: 'Course moved to draft',
+        ARCHIVED: 'Course archived',
+      }
+      toast.success(labels[nextStatus] || 'Status updated')
       load()
     } catch (err) {
       toast.error(err.message || 'Failed to update status')
@@ -233,14 +240,44 @@ export default function CourseCatalogPage() {
                 className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors">
                 <FolderOpen size={12} /> Manage Content
               </Link>
-              <button onClick={() => togglePublish(c)} disabled={statusUpdatingId === c.id}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-60 ${
-                  c.status === 'PUBLISHED'
-                    ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`}>
-                {c.status === 'PUBLISHED' ? <><EyeOff size={12} /> Move to Draft</> : <><Eye size={12} /> Publish</>}
-              </button>
+              <div className="flex gap-2">
+                {c.status === 'PUBLISHED' && (
+                  <>
+                    <button onClick={() => handleStatusChange(c, 'DRAFT')} disabled={statusUpdatingId === c.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-60">
+                      <EyeOff size={12} /> Draft
+                    </button>
+                    <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-60">
+                      <Archive size={12} /> Archive
+                    </button>
+                  </>
+                )}
+                {c.status === 'DRAFT' && (
+                  <>
+                    <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
+                      <Eye size={12} /> Publish
+                    </button>
+                    <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-60">
+                      <Archive size={12} /> Archive
+                    </button>
+                  </>
+                )}
+                {c.status === 'ARCHIVED' && (
+                  <>
+                    <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
+                      <Eye size={12} /> Publish
+                    </button>
+                    <button onClick={() => handleStatusChange(c, 'DRAFT')} disabled={statusUpdatingId === c.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-60">
+                      <EyeOff size={12} /> Move to Draft
+                    </button>
+                  </>
+                )}
+              </div>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => openEdit(c)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-purple-50 text-purple-600 text-xs font-semibold hover:bg-purple-100 transition-colors">
@@ -296,7 +333,7 @@ export default function CourseCatalogPage() {
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
               <option value="DRAFT">DRAFT</option>
               <option value="PUBLISHED">PUBLISHED</option>
-              <option value="ARCHIVED">ARCHIVED</option>
+              {editingId && <option value="ARCHIVED">ARCHIVED</option>}
             </select>
             {errors.status && <span className="text-xs text-red-500 mt-1 block">{errors.status.message}</span>}
           </div>
