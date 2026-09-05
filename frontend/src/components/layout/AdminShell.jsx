@@ -19,7 +19,7 @@ const navItems = [
   { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students', roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/trainers',      icon: UserCheck,       label: 'Trainers',     roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
-  { href: '/admin/course-catalog',icon: BookOpen,        label: 'Courses' },
+  { href: '/admin/course-catalog',icon: BookOpen,        label: 'Courses',      roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/meeting-links', icon: Link2,           label: 'Scheduled Class' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },

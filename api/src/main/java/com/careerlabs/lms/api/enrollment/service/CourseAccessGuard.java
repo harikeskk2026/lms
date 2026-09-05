@@ -26,7 +26,14 @@ public class CourseAccessGuard {
     }
 
     public boolean isAdmin(JwtUserPrincipal principal) {
-        return principal != null && "ADMIN".equals(principal.role());
+        if (principal == null || principal.role() == null) {
+            return false;
+        }
+        String role = principal.role().toUpperCase();
+        if (role.startsWith("ROLE_")) {
+            role = role.substring(5);
+        }
+        return "ADMIN".equals(role) || "SUPERADMIN".equals(role); 
     }
 
     public boolean isEnrolled(JwtUserPrincipal principal, Long courseId) {
