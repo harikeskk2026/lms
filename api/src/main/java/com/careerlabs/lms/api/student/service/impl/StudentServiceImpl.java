@@ -11,9 +11,11 @@ import com.careerlabs.lms.api.attendance.repository.AttendanceGoalRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
@@ -183,7 +185,11 @@ public class StudentServiceImpl implements StudentService {
         student.setEnrollmentNo(generateEnrollmentNo(user.getId()));
         assignBatch(student, request.getBatchId());
         if (request.getCourseId() != null) {
-            student.setCourse(findCourseOrThrow(request.getCourseId()));
+            Course course = findCourseOrThrow(request.getCourseId());
+            if (course.getStatus() != CourseStatus.PUBLISHED) {
+                throw new BadRequestException("Cannot enroll student in course '" + course.getTitle() + "' because it is not PUBLISHED (current status: " + course.getStatus() + ")");
+            }
+            student.setCourse(course);
         }
 
         student = studentRepository.save(student);
@@ -335,7 +341,16 @@ public class StudentServiceImpl implements StudentService {
         student.setPhone(request.getPhone());
         student.setPlacementStatus(request.getPlacementStatus());
         assignBatch(student, request.getBatchId());
-        student.setCourse(request.getCourseId() != null ? findCourseOrThrow(request.getCourseId()) : null);
+        if (request.getCourseId() != null) {
+            Course course = findCourseOrThrow(request.getCourseId());
+            if (course.getStatus() != CourseStatus.PUBLISHED &&
+                    (student.getCourse() == null || !student.getCourse().getId().equals(course.getId()))) {
+                throw new BadRequestException("Cannot enroll student in course '" + course.getTitle() + "' because it is not PUBLISHED (current status: " + course.getStatus() + ")");
+            }
+            student.setCourse(course);
+        } else {
+            student.setCourse(null);
+        }
     }
 
     /**

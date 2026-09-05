@@ -216,7 +216,10 @@ export default function StudentsPage() {
     ? batches.filter(b => String(b.course?.id) === String(form.courseId))
     : []
   const batchOptions = toOptions(batchesForCourse, b => b.name)
-  const courseOptions = toOptions(courses, c => c.title)
+  // Only published courses should be available for student enrollment.
+  // In edit mode, preserve the currently assigned course if it happens to be non-published so existing data remains visible.
+  const publishedCourses = courses.filter(c => c.status === 'PUBLISHED' || (editStudent && String(c.id) === String(form.courseId)))
+  const courseOptions = toOptions(publishedCourses, c => c.title + (c.status && c.status !== 'PUBLISHED' ? ` (${c.status})` : ''))
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -477,7 +480,7 @@ export default function StudentsPage() {
                   onChange={handleCourseChange}
                   placeholder="Select course"
                   searchPlaceholder="Search course..."
-                  emptyLabel="No courses created yet"
+                  emptyLabel="No published courses available"
                 />
               </div>
               <div>

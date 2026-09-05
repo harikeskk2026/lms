@@ -11,7 +11,7 @@ import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import batchService from '@/services/batchService'
-import { resolveFileUrl } from '@/lib/api'
+import { resolveFileUrl, adminApi } from '@/lib/api'
 
 const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
@@ -27,6 +27,22 @@ export default function CourseManagePage({ params }) {
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
+  const [trainers, setTrainers] = useState([])
+  const [loadingTrainers, setLoadingTrainers] = useState(false)
+
+  useEffect(() => {
+    setLoadingTrainers(true)
+    adminApi.getTrainers({ limit: 200, status: 'active' })
+      .then(res => {
+        const list = res.data?.data?.trainers || []
+        list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        setTrainers(list)
+      })
+      .catch(err => {
+        console.error('Failed to load trainers:', err)
+      })
+      .finally(() => setLoadingTrainers(false))
+  }, [])
 
   useEffect(() => {
     if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
@@ -76,9 +92,9 @@ export default function CourseManagePage({ params }) {
 
       {tab === 'Overview' && <OverviewTab course={course} />}
       {tab === 'Syllabus' && <SyllabusTab courseId={courseId} />}
-      {tab === 'Sessions' && <SessionsTab courseId={courseId} />}
+      {tab === 'Sessions' && <SessionsTab courseId={courseId} trainers={trainers} loadingTrainers={loadingTrainers} />}
       {tab === 'Materials' && <MaterialsTab courseId={courseId} />}
-      {tab === 'Batches' && <BatchesTab courseId={courseId} courseTitle={course.title} />}
+      {tab === 'Batches' && <BatchesTab courseId={courseId} courseTitle={course.title} trainers={trainers} loadingTrainers={loadingTrainers} />}
     </div>
   )
 }
@@ -139,6 +155,20 @@ function formatTime12h(time24) {
   h = h % 12 || 12
   const hFormatted = String(h).padStart(2, '0')
   return `${hFormatted}:${m} ${ampm}`
+}
+
+function formatTimeForInput(val) {
+  if (!val) return ''
+  return String(val).slice(0, 5)
+}
+
+function calculateDuration(start, end) {
+  if (!start || !end) return ''
+  const [startH, startM] = start.split(':').map(Number)
+  const [endH, endM] = end.split(':').map(Number)
+  if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) return ''
+  const diff = (endH * 60 + endM) - (startH * 60 + startM)
+  return diff > 0 ? String(diff) : ''
 }
 
 function StatusBadge({ status }) {
@@ -386,7 +416,7 @@ function SyllabusTab({ courseId }) {
   )
 }
 
-function SessionsTab({ courseId }) {
+function SessionsTab({ courseId, trainers = [], loadingTrainers = false }) {
   const [modules, setModules] = useState([])
   const [moduleId, setModuleId] = useState('')
   const [topicId, setTopicId] = useState('')
@@ -395,6 +425,7 @@ function SessionsTab({ courseId }) {
   const [form, setForm] = useState(EMPTY_SESSION)
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
+  const isTimeInvalid = Boolean(form.startTime && form.endTime && form.endTime <= form.startTime)
 
   useEffect(() => {
     courseContentService.getModules(courseId).then(r => setModules(r.data || [])).catch(() => toast.error('Failed to load syllabus'))
@@ -419,13 +450,18 @@ function SessionsTab({ courseId }) {
     e.preventDefault()
     if (!topicId) { toast.error('Select a topic first'); return }
     if (form.startTime && form.endTime && form.endTime <= form.startTime) {
-      toast.error('End time must be after start time')
+      toast.error('End time must be greater than start time')
       return
+    }
+    const computedDuration = form.durationMinutes || calculateDuration(form.startTime, form.endTime)
+    const payload = {
+      ...form,
+      durationMinutes: computedDuration ? Number(computedDuration) : ''
     }
     setSaving(true)
     try {
-      if (editingId) await courseContentService.updateSession(editingId, form)
-      else await courseContentService.createSession(topicId, form)
+      if (editingId) await courseContentService.updateSession(editingId, payload)
+      else await courseContentService.createSession(topicId, payload)
       toast.success(editingId ? 'Session updated' : 'Session added')
       resetForm()
       loadSessions()
@@ -434,10 +470,13 @@ function SessionsTab({ courseId }) {
 
   function openEdit(s) {
     setEditingId(s.id)
+    const startTime = formatTimeForInput(s.startTime)
+    const endTime = formatTimeForInput(s.endTime)
+    const autoDur = calculateDuration(startTime, endTime)
     setForm({
       title: s.title, description: s.description || '', trainerName: s.trainerName || '',
-      sessionDate: s.sessionDate || '', startTime: s.startTime || '', endTime: s.endTime || '',
-      durationMinutes: s.durationMinutes || '', type: s.type || 'LIVE',
+      sessionDate: s.sessionDate || '', startTime, endTime,
+      durationMinutes: s.durationMinutes ? String(s.durationMinutes) : (autoDur || ''), type: s.type || 'LIVE',
       meetingUrl: s.meetingUrl || '', recordingUrl: s.recordingUrl || '', status: s.status || 'PUBLISHED',
     })
   }
@@ -482,8 +521,33 @@ function SessionsTab({ courseId }) {
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description" rows={2}
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-              <input value={form.trainerName} onChange={e => setForm(f => ({ ...f, trainerName: e.target.value }))} placeholder="Trainer name"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <div>
+                <label className="block text-[10px] text-gray-400 mb-1">Trainer (optional)</label>
+                <select
+                  value={form.trainerName}
+                  onChange={e => setForm(f => ({ ...f, trainerName: e.target.value }))}
+                  disabled={loadingTrainers}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60 text-gray-800 dark:text-gray-100"
+                >
+                  <option value="">{loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}</option>
+                  {form.trainerName && !trainers.some(t => t.name === form.trainerName) && (
+                    <option value={form.trainerName}>{form.trainerName} (current)</option>
+                  )}
+                  {trainers.map(t => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}{t.designation ? ` · ${t.designation}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {!loadingTrainers && trainers.length === 0 && !form.trainerName && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    No active trainers found.{' '}
+                    <Link href="/admin/trainers" className="text-purple-600 hover:underline">
+                      Manage trainers
+                    </Link>
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <input type="date" value={form.sessionDate} onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
                   className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
@@ -493,22 +557,73 @@ function SessionsTab({ courseId }) {
                   <option value="RECORDED">Recorded</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">Start Time</label>
-                  <input type="time" value={form.startTime} max={form.endTime || undefined}
-                    onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-1">Start Time</label>
+                    <input type="time" value={form.startTime} max={form.endTime || undefined}
+                      onChange={e => {
+                        const newStart = e.target.value
+                        const autoDur = calculateDuration(newStart, form.endTime)
+                        setForm(f => ({
+                          ...f,
+                          startTime: newStart,
+                          durationMinutes: autoDur
+                        }))
+                      }}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
+                        isTimeInvalid
+                          ? 'border-red-300 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
+                          : 'border-gray-200 bg-gray-50 focus:ring-2 focus:ring-purple-500'
+                      }`} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-1">End Time</label>
+                    <input type="time" value={form.endTime} min={form.startTime || undefined}
+                      onChange={e => {
+                        const newEnd = e.target.value
+                        const autoDur = calculateDuration(form.startTime, newEnd)
+                        setForm(f => ({
+                          ...f,
+                          endTime: newEnd,
+                          durationMinutes: autoDur
+                        }))
+                      }}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
+                        isTimeInvalid
+                          ? 'border-red-300 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
+                          : 'border-gray-200 bg-gray-50 focus:ring-2 focus:ring-purple-500'
+                      }`} />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">End Time</label>
-                  <input type="time" value={form.endTime} min={form.startTime || undefined}
-                    onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-                </div>
+                {isTimeInvalid && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1">
+                    End time must be greater than start time.
+                  </p>
+                )}
               </div>
-              <input type="number" min="0" value={form.durationMinutes} onChange={e => setForm(f => ({ ...f, durationMinutes: e.target.value }))} placeholder="Duration (minutes)"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] text-gray-400">Duration (minutes)</label>
+                  {isTimeInvalid ? (
+                    <span className="text-[10px] text-red-500 font-medium">End time must be greater</span>
+                  ) : form.durationMinutes ? (
+                    <span className="text-[10px] text-purple-600 font-medium">Auto-calculated</span>
+                  ) : null}
+                </div>
+                <input
+                  type="number"
+                  readOnly
+                  tabIndex={-1}
+                  value={form.durationMinutes}
+                  placeholder={isTimeInvalid ? 'Invalid: End time must be greater' : 'Calculated from start and end time'}
+                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none cursor-not-allowed select-none transition-colors ${
+                    isTimeInvalid
+                      ? 'border-red-200 bg-red-50/30 text-red-400 placeholder-red-400'
+                      : 'border-gray-200 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                  }`}
+                />
+              </div>
               <input value={form.meetingUrl} onChange={e => setForm(f => ({ ...f, meetingUrl: e.target.value }))} placeholder="Meeting URL"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               <input value={form.recordingUrl} onChange={e => setForm(f => ({ ...f, recordingUrl: e.target.value }))} placeholder="Recording URL"
@@ -519,7 +634,7 @@ function SessionsTab({ courseId }) {
               </div>
               <div className="flex gap-2">
                 {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}
-                <button type="submit" disabled={saving} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+                <button type="submit" disabled={saving || isTimeInvalid} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
                   {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Session'}
                 </button>
               </div>
@@ -758,7 +873,7 @@ function MaterialsTab({ courseId }) {
   )
 }
 
-function BatchesTab({ courseId, courseTitle }) {
+function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = false }) {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -811,8 +926,19 @@ function BatchesTab({ courseId, courseTitle }) {
         <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
           <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Batch name *"
             className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          <input value={form.trainerId} onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))} placeholder="Trainer ID (optional)"
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+          <select
+            value={form.trainerId}
+            onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
+            disabled={loadingTrainers}
+            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60 text-gray-800 dark:text-gray-100"
+          >
+            <option value="">{loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}</option>
+            {trainers.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name}{t.designation ? ` · ${t.designation}` : ''}
+              </option>
+            ))}
+          </select>
           <input required type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
             className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           <input required type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
