@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.session.service.impl;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
@@ -115,6 +116,11 @@ public class SessionServiceImpl implements SessionService {
     }
 
     private void applyRequest(Session session, SessionRequest request) {
+        if (request.getStartTime() != null && request.getEndTime() != null
+                && !request.getEndTime().isAfter(request.getStartTime())) {
+            throw new BadRequestException("End time must be after start time");
+        }
+
         session.setTitle(request.getTitle());
         session.setDescription(request.getDescription());
         session.setTrainerName(request.getTrainerName());

@@ -9,6 +9,7 @@ import {
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import batchService from '@/services/batchService'
+import { resolveFileUrl } from '@/lib/api'
 
 const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
@@ -114,6 +115,18 @@ function formatDuration(value, unit) {
   if (!value) return null
   const label = (unit || 'WEEKS').toLowerCase()
   return `${value} ${value === 1 ? label.slice(0, -1) : label}`
+}
+
+function formatTime12h(time24) {
+  if (!time24) return ''
+  const [hStr, mStr] = time24.split(':')
+  let h = parseInt(hStr, 10)
+  if (isNaN(h)) return time24
+  const m = mStr || '00'
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  const hFormatted = String(h).padStart(2, '0')
+  return `${hFormatted}:${m} ${ampm}`
 }
 
 function StatusBadge({ status }) {
@@ -393,6 +406,10 @@ function SessionsTab({ courseId }) {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!topicId) { toast.error('Select a topic first'); return }
+    if (form.startTime && form.endTime && form.endTime <= form.startTime) {
+      toast.error('End time must be after start time')
+      return
+    }
     setSaving(true)
     try {
       if (editingId) await courseContentService.updateSession(editingId, form)
@@ -467,12 +484,14 @@ function SessionsTab({ courseId }) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[10px] text-gray-400 mb-1">Start Time</label>
-                  <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
+                  <input type="time" value={form.startTime} max={form.endTime || undefined}
+                    onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
                 </div>
                 <div>
                   <label className="block text-[10px] text-gray-400 mb-1">End Time</label>
-                  <input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+                  <input type="time" value={form.endTime} min={form.startTime || undefined}
+                    onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
                 </div>
               </div>
@@ -710,7 +729,7 @@ function MaterialsTab({ courseId }) {
                       {m.description && <p className="text-xs text-gray-400 truncate">{m.description}</p>}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <a href={m.url} target="_blank" rel="noopener noreferrer" className="w-7 h-7 rounded-lg hover:bg-purple-100 text-purple-600 flex items-center justify-center"><ExternalLink size={12} /></a>
+                      <a href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer" className="w-7 h-7 rounded-lg hover:bg-purple-100 text-purple-600 flex items-center justify-center"><ExternalLink size={12} /></a>
                       <button onClick={() => moveMaterial(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={12} /></button>
                       <button onClick={() => moveMaterial(i, 1)} disabled={i === materials.length - 1} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={12} /></button>
                       <button onClick={() => openEdit(m)} className="w-7 h-7 rounded-lg hover:bg-purple-100 text-purple-600 flex items-center justify-center"><Pencil size={12} /></button>

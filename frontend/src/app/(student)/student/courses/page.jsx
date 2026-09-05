@@ -105,7 +105,7 @@ export default function CoursesPage() {
                 </div>
 
                 <Link
-                  href={`/student/courses/${c.courseId}`}
+                  href={`/student/my-courses/${c.courseId}`}
                   className="btn-primary w-full text-center text-sm py-2.5"
                 >
                   Continue Learning →

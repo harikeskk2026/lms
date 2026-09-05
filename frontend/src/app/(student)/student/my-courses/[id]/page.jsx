@@ -6,6 +6,7 @@ import {
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import SkeletonCard from '@/components/student/SkeletonCard'
+import { resolveFileUrl } from '@/lib/api'
 
 const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials']
 const MATERIAL_ICONS = { PDF: '📄', DOCUMENT: '📃', PRESENTATION: '🖥️', VIDEO: '🎬', LINK: '🔗', OTHER: '📁' }
@@ -221,7 +222,7 @@ export default function MyCourseDetailPage({ params }) {
                       <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm truncate">{m.title}</p>
                       <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px]">{m.type}</span>
                     </div>
-                    <a href={m.url} target="_blank" rel="noopener noreferrer"
+                    <a href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
                        className="flex items-center gap-1 chip bg-brand-100 text-brand-700 hover:bg-brand-200 transition-colors text-xs px-2.5 py-1.5">
                       <Download size={12} /> Get
                     </a>

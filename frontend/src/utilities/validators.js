@@ -3,12 +3,16 @@
 // (api/.../auth/validation/{PhoneNumberFormatValidator,PasswordStrengthValidator}.java)
 // so both layers reject the same input for the same reason.
 
-// Accepts any domain (gmail.com, yahoo.com, outlook.com, company domains, ...)
-// as long as the shape is username@domain.extension with no spaces - mirrors
-// the backend's ValidEmailFormat (EmailFormatValidator.java): rejects
-// leading/trailing whitespace and consecutive dots that a bare regex allows.
-export const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
-export const EMAIL_ERROR_MESSAGE = 'Please enter a valid email address (e.g. name@example.com)'
+// Accepts any real-looking domain (gmail.com, yahoo.com, outlook.com, company
+// domains, ...) as long as the shape is username@domain.extension with no
+// spaces - mirrors the backend's ValidEmailFormat (EmailFormatValidator.java):
+// rejects leading/trailing whitespace and consecutive dots that a bare regex
+// allows, and rejects domains that are nothing but digits and dots (e.g.
+// "123.com") - syntactically legal DNS but always a fake/placeholder address
+// in practice - while still allowing real domains that merely contain digits
+// (e.g. "mail1.com", "web3.io").
+export const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@(?!\d+(?:\.\d+)*\.[A-Za-z]{2,}$)[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+export const EMAIL_ERROR_MESSAGE = 'Please enter a valid email address with a real domain (e.g. name@gmail.com)'
 
 export function isValidEmail(email) {
   if (!email) return false

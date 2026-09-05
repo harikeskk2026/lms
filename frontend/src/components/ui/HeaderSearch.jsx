@@ -77,7 +77,7 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
   const allFlattenedResults = [
     ...results.pages.map(p => ({ ...p, type: 'Page' })),
     ...results.students.map(s => ({ ...s, type: 'Student', label: s.name, href: `/admin/students/${s.id}`, icon: Users, sub: s.email })),
-    ...results.courses.map(c => ({ ...c, type: 'Course', label: c.title, href: isDarkRoleAdmin ? `/admin/course-catalog` : `/student/courses/${c.id}`, icon: BookOpen, sub: c.level })),
+    ...results.courses.map(c => ({ ...c, type: 'Course', label: c.title, href: isDarkRoleAdmin ? `/admin/course-catalog` : `/student/my-courses/${c.id}`, icon: BookOpen, sub: c.level })),
     ...results.batches.map(b => ({ ...b, type: 'Batch', label: b.name, href: isDarkRoleAdmin ? `/admin/batches/${b.id}` : `/student/courses`, icon: Layers, sub: b.course?.title })),
     ...results.assignments.map(a => ({ ...a, type: 'Assignment', label: a.title, href: isDarkRoleAdmin ? `/admin/assignments` : `/student/assignments`, icon: ClipboardList, sub: a.batchName })),
   ]
