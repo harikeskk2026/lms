@@ -41,7 +41,7 @@ public class CourseAccessGuard {
             return false;
         }
         return studentRepository.findByUserId(principal.id())
-                .map(student -> enrollmentRepository.existsByStudentIdAndCourseId(student.getId(), courseId))
+                .map(student -> enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), courseId))
                 .orElse(false);
     }
 

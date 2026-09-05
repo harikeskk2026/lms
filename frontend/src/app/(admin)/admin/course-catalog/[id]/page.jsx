@@ -11,9 +11,10 @@ import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import batchService from '@/services/batchService'
+import EnrolledStudentsTab from '@/components/admin/course/EnrolledStudentsTab'
 import { resolveFileUrl, adminApi } from '@/lib/api'
 
-const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches']
+const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches', 'Enrolled Students']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
 const EMPTY_SESSION = {
   title: '', description: '', trainerName: '', sessionDate: '', startTime: '', endTime: '',
@@ -95,6 +96,9 @@ export default function CourseManagePage({ params }) {
       {tab === 'Sessions' && <SessionsTab courseId={courseId} trainers={trainers} loadingTrainers={loadingTrainers} />}
       {tab === 'Materials' && <MaterialsTab courseId={courseId} />}
       {tab === 'Batches' && <BatchesTab courseId={courseId} courseTitle={course.title} trainers={trainers} loadingTrainers={loadingTrainers} />}
+      {tab === 'Enrolled Students' && (
+        <EnrolledStudentsTab courseId={courseId} courseTitle={course.title} courseStatus={course.status} />
+      )}
     </div>
   )
 }

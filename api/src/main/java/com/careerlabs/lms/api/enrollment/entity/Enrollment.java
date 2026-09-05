@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.enrollment.entity;
 
+import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.student.entity.Student;
 import jakarta.persistence.Column;
@@ -35,6 +36,13 @@ public class Enrollment {
     @Column(name = "enrolled_at", nullable = false, updatable = false)
     private Instant enrolledAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
+    private Batch batch;
+
+    @Column(name = "is_active", nullable = false, columnDefinition = "boolean default true")
+    private boolean active = true;
+
     @PrePersist
     void onCreate() {
         enrolledAt = Instant.now();
@@ -60,7 +68,27 @@ public class Enrollment {
         this.course = course;
     }
 
+    public Batch getBatch() {
+        return batch;
+    }
+
+    public void setBatch(Batch batch) {
+        this.batch = batch;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
     public Instant getEnrolledAt() {
         return enrolledAt;
+    }
+
+    public void setEnrolledAt(Instant enrolledAt) {
+        this.enrolledAt = enrolledAt;
     }
 }

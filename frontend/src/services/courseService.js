@@ -16,6 +16,12 @@ const courseService = {
   enroll: (id) => apiCall({ method: 'POST', url: `/courses/${id}/enroll` }),
 
   mine: () => apiCall({ method: 'GET', url: '/courses/mine' }),
+
+  getEnrollments: (courseId, params) => apiCall({ method: 'GET', url: `/courses/${courseId}/enrollments`, params }),
+
+  enrollStudent: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enrollments`, data }),
+
+  unenrollStudent: (courseId, enrollmentId) => apiCall({ method: 'DELETE', url: `/courses/${courseId}/enrollments/${enrollmentId}` }),
 }
 
 export default courseService
