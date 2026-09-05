@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import {
   CheckSquare, Save, BarChart2, Bell, Users, BookOpen,
   ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
-  Download, RefreshCw, ChevronDown, Calendar, ClipboardList,
+  FileDown, RefreshCw, ChevronDown, Calendar, ClipboardList,
   Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -1232,7 +1232,7 @@ export default function AttendancePage() {
           </div>
           <button onClick={exportCSV}
             className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-4 py-2 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
-            <Download size={14} /> Export CSV
+            <FileDown size={14} /> Export CSV
           </button>
         </div>
 

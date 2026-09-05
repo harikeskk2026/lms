@@ -14,6 +14,19 @@ const studentService = {
   toggleStatus: (id) => apiCall({ method: 'PATCH', url: `/students/${id}/status` }),
 
   remove: (id) => apiCall({ method: 'DELETE', url: `/students/${id}` }),
+
+  bulkImport: ({ file, enrollImportedStudents, defaultCourseId, defaultBatchId }) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('enrollImportedStudents', enrollImportedStudents ? 'true' : 'false')
+    if (defaultCourseId) formData.append('defaultCourseId', defaultCourseId)
+    if (defaultBatchId) formData.append('defaultBatchId', defaultBatchId)
+    return apiCall({
+      method: 'POST',
+      url: '/students/bulk-import',
+      data: formData,
+    })
+  },
 }
 
 export default studentService

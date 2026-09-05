@@ -12,5 +12,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
 
     Optional<Course> findBySlug(String slug);
 
+    Optional<Course> findByTitleIgnoreCase(String title);
+
     List<Course> findAllByOrderByCreatedAtDesc();
 }

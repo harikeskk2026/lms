@@ -3,12 +3,14 @@ package com.careerlabs.lms.api.student.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.student.dto.request.StudentCreateRequest;
 import com.careerlabs.lms.api.student.dto.request.StudentUpdateRequest;
+import com.careerlabs.lms.api.student.dto.response.StudentBulkImportResponse;
 import com.careerlabs.lms.api.student.dto.response.StudentCountResponse;
 import com.careerlabs.lms.api.student.dto.response.StudentPageResponse;
 import com.careerlabs.lms.api.student.dto.response.StudentResponse;
 import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.service.StudentService;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/students")
@@ -76,5 +79,15 @@ public class StudentController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         studentService.delete(id);
         return ResponseEntity.ok(ApiResponse.of("Student deleted", null));
+    }
+
+    @PostMapping(value = "/bulk-import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<StudentBulkImportResponse>> bulkImport(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "enrollImportedStudents", defaultValue = "false") boolean enrollImportedStudents,
+            @RequestParam(value = "defaultCourseId", required = false) Long defaultCourseId,
+            @RequestParam(value = "defaultBatchId", required = false) Long defaultBatchId) {
+        StudentBulkImportResponse response = studentService.bulkImport(file, enrollImportedStudents, defaultCourseId, defaultBatchId);
+        return ResponseEntity.ok(ApiResponse.of("Bulk import completed", response));
     }
 }

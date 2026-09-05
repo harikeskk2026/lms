@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, Download, RefreshCw } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
@@ -9,6 +9,7 @@ import courseService from '@/services/courseService'
 import { isValidPhone, PHONE_ERROR_MESSAGE, isValidPassword, PASSWORD_ERROR_MESSAGE, isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
+import BulkImportModal from '@/components/admin/BulkImportModal'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 text-blue-700',
@@ -61,9 +62,11 @@ export default function StudentsPage() {
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
   const [panelOpen, setPanelOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const searchTimer = useRef(null)
 
   const load = useCallback(() => {
@@ -194,19 +197,56 @@ export default function StudentsPage() {
     }
   }
 
-  const downloadCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Status']
-    const rows = students.map(s => [
-      s.name, s.email, s.phone || '',
-      s.enrollmentNo || '',
-      s.college?.name || '',
-      s.course?.title || '',
-      s.batch?.name || '',
-      s.placementStatus || '',
-      s.active ? 'Active' : 'Inactive',
-    ])
-    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'students.csv'; a.click()
+  const downloadCSV = async () => {
+    try {
+      setExporting(true)
+      const exportLimit = Math.max(total || 0, 10000)
+      const res = await studentService.list({
+        search: search || undefined,
+        batchId: batchFilter || undefined,
+        status: statusFilter || undefined,
+        placementStatus: placementFilter || undefined,
+        page: 1,
+        limit: exportLimit,
+      })
+      const allStudents = res.data?.students || []
+      if (allStudents.length === 0) {
+        toast.error('No students found to export')
+        return
+      }
+
+      const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Status']
+      const rows = allStudents.map(s => [
+        s.name || '',
+        s.email || '',
+        s.phone || '',
+        s.enrollmentNo || '',
+        s.college?.name || '',
+        s.course?.title || '',
+        s.batch?.name || '',
+        s.placementStatus || '',
+        s.active ? 'Active' : 'Inactive',
+      ])
+
+      const csvContent = '\uFEFF' + [headers, ...rows]
+        .map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `students_export_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success(`Exported all ${allStudents.length} student records`)
+    } catch (err) {
+      toast.error('Failed to export students: ' + (err.message || 'Unknown error'))
+    } finally {
+      setExporting(false)
+    }
   }
 
   // Batches are scoped to whichever course is selected - a batch always
@@ -272,8 +312,19 @@ export default function StudentsPage() {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
-        <button onClick={downloadCSV} className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl px-3 py-2 text-sm hover:bg-gray-200 transition-colors">
-          <Download size={15} /> Export
+        <button
+          onClick={() => setImportModalOpen(true)}
+          className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl px-3 py-2 text-sm font-semibold transition-colors border border-purple-200 dark:border-purple-800/40"
+        >
+          <FileUp size={15} /> Import
+        </button>
+        <button
+          onClick={downloadCSV}
+          disabled={exporting}
+          className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+        >
+          {exporting ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+          {exporting ? 'Exporting...' : 'Export'}
         </button>
         <button onClick={load} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
           <RefreshCw size={15} />
@@ -526,6 +577,17 @@ export default function StudentsPage() {
           </div>
         </form>
       </SlidePanel>
+
+      {/* Bulk Import Students Modal */}
+      {importModalOpen && (
+        <BulkImportModal
+          open={importModalOpen}
+          onClose={() => setImportModalOpen(false)}
+          courses={courses}
+          batches={batches}
+          onSuccess={load}
+        />
+      )}
     </div>
   )
 }

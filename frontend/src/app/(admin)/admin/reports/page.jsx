@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Download, BarChart2, FileText, Users, Eye, X } from 'lucide-react'
+import { FileDown, BarChart2, FileText, Users, Eye, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import reportService from '@/services/reportService'
 import batchService from '@/services/batchService'
@@ -314,7 +314,7 @@ export default function ReportsPage() {
             {attReport.length > 0 && (
               <button onClick={() => downloadCSV(attReport, 'attendance-report.csv')}
                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200">
-                <Download size={14} /> Export CSV
+                <FileDown size={14} /> Export CSV
               </button>
             )}
           </div>
@@ -412,7 +412,7 @@ export default function ReportsPage() {
             {perfReport.length > 0 && (
               <button onClick={() => downloadCSV(perfReport, 'performance-report.csv')}
                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200">
-                <Download size={14} /> Export CSV
+                <FileDown size={14} /> Export CSV
               </button>
             )}
           </div>

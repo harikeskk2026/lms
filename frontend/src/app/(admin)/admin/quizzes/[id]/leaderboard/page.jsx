@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, Trophy, Download } from 'lucide-react'
+import { ChevronLeft, Trophy, FileDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import toast from 'react-hot-toast'
@@ -100,7 +100,7 @@ export default function AdminLeaderboardPage() {
             onClick={() => exportCSV(leaderboard, quizTitle)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            <Download size={14} /> Export CSV
+            <FileDown size={14} /> Export CSV
           </button>
         )}
       </div>
