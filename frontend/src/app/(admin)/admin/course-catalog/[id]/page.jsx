@@ -16,6 +16,13 @@ import { resolveFileUrl, adminApi } from '@/lib/api'
 
 const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches', 'Enrolled Students']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
+const ALLOWED_EXTENSIONS_BY_TYPE = {
+  PDF: ['pdf'],
+  DOCUMENT: ['doc', 'docx', 'txt', 'rtf', 'odt'],
+  PRESENTATION: ['ppt', 'pptx'],
+  VIDEO: ['mp4', 'mov', 'webm', 'mkv', 'avi'],
+  OTHER: ['csv', 'xls', 'xlsx', 'txt', 'zip', 'rar', '7z', 'tar', 'gz', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'mp4', 'mov', 'webm'],
+}
 const EMPTY_SESSION = {
   title: '', description: '', trainerName: '', sessionDate: '', startTime: '', endTime: '',
   durationMinutes: '', type: 'LIVE', meetingUrl: '', recordingUrl: '', status: 'PUBLISHED',
@@ -194,45 +201,110 @@ function StatusSelect({ value, onChange, small }) {
   )
 }
 
+function SyllabusMaterialBadge({ material }) {
+  const href = resolveFileUrl(material.url)
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border border-purple-100 dark:border-purple-900/40 bg-purple-50/70 dark:bg-purple-950/20 text-xs">
+      <span className="text-sm flex-shrink-0">
+        {material.type === 'PDF' ? '📄' : material.type === 'VIDEO' ? '🎬' : material.type === 'PRESENTATION' ? '🖥️' : material.type === 'LINK' ? '🔗' : '📁'}
+      </span>
+      <span className="font-medium text-gray-700 dark:text-gray-200 truncate max-w-[180px]" title={material.title}>
+        {material.title}
+      </span>
+      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 uppercase">
+        {material.type}
+      </span>
+      {material.visibility && material.visibility !== 'PUBLISHED' && (
+        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-700">
+          {material.visibility}
+        </span>
+      )}
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-800 ml-0.5">
+        <ExternalLink size={11} />
+      </a>
+    </div>
+  )
+}
+
 function SyllabusTab({ courseId }) {
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
+  const [showAddModule, setShowAddModule] = useState(false)
   const [newModule, setNewModule] = useState(EMPTY_MODULE_FORM)
-  const [newTopic, setNewTopic] = useState({})
+
+  // Module edit state
   const [editingModule, setEditingModule] = useState(null)
+
+  // Topic add/edit state
+  const [showAddTopic, setShowAddTopic] = useState({})
+  const [newTopic, setNewTopic] = useState({})
   const [editingTopic, setEditingTopic] = useState(null)
 
-  const load = useCallback(() => {
+  const load = useCallback((isInitial = false) => {
     setLoading(true)
     courseContentService.getModules(courseId)
-      .then(r => setModules(r.data || []))
+      .then(r => {
+        const data = r.data || []
+        setModules(data)
+        setExpanded(prev => {
+          if (isInitial || Object.keys(prev).length === 0) {
+            const initialExpanded = {}
+            data.forEach(m => { initialExpanded[m.id] = true })
+            return initialExpanded
+          }
+          return prev
+        })
+      })
       .catch(() => toast.error('Failed to load syllabus'))
       .finally(() => setLoading(false))
   }, [courseId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(true) }, [load])
 
+  // --- Module Actions ---
   async function addModule() {
     if (!newModule.title.trim()) return
     try {
       await courseContentService.createModule(courseId, {
-        title: newModule.title.trim(), description: newModule.description.trim(), status: newModule.status,
+        title: newModule.title.trim(),
+        description: (newModule.description || '').trim(),
+        status: newModule.status || 'PUBLISHED',
         durationValue: newModule.durationValue ? Number(newModule.durationValue) : null,
         durationUnit: newModule.durationValue ? newModule.durationUnit : null,
       })
+      toast.success('Module created')
       setNewModule(EMPTY_MODULE_FORM)
+      setShowAddModule(false)
       load()
     } catch (err) { toast.error(err.message || 'Failed to add module') }
   }
 
+  function openEditModule(m) {
+    setEditingModule({
+      id: m.id,
+      title: m.title || '',
+      description: m.description || '',
+      status: m.status || 'PUBLISHED',
+      durationValue: m.durationValue ? String(m.durationValue) : '',
+      durationUnit: m.durationUnit || 'WEEKS',
+    })
+  }
+
   async function saveModuleEdit() {
+    if (!editingModule || !editingModule.title.trim()) {
+      toast.error('Module title is required')
+      return
+    }
     try {
       await courseContentService.updateModule(editingModule.id, {
-        title: editingModule.title, description: editingModule.description, status: editingModule.status,
+        title: editingModule.title.trim(),
+        description: (editingModule.description || '').trim(),
+        status: editingModule.status || 'PUBLISHED',
         durationValue: editingModule.durationValue ? Number(editingModule.durationValue) : null,
         durationUnit: editingModule.durationValue ? editingModule.durationUnit : null,
       })
+      toast.success('Module updated')
       setEditingModule(null)
       load()
     } catch (err) { toast.error(err.message || 'Failed to update module') }
@@ -240,7 +312,11 @@ function SyllabusTab({ courseId }) {
 
   async function deleteModule(id) {
     if (!confirm('Delete this module and all its topics?')) return
-    try { await courseContentService.deleteModule(id); load() } catch (err) { toast.error(err.message || 'Failed to delete module') }
+    try {
+      await courseContentService.deleteModule(id)
+      toast.success('Module deleted')
+      load()
+    } catch (err) { toast.error(err.message || 'Failed to delete module') }
   }
 
   async function moveModule(index, direction) {
@@ -249,28 +325,57 @@ function SyllabusTab({ courseId }) {
     if (target < 0 || target >= newOrder.length) return
     ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
     setModules(newOrder)
-    try { await courseContentService.reorderModules(courseId, newOrder.map(m => m.id)) } catch { toast.error('Failed to reorder'); load() }
+    try {
+      await courseContentService.reorderModules(courseId, newOrder.map(m => m.id))
+      load()
+    } catch { toast.error('Failed to reorder'); load() }
   }
 
+  // --- Topic Actions ---
   async function addTopic(moduleId) {
     const topicForm = newTopic[moduleId] || EMPTY_TOPIC_FORM
-    if (!topicForm.title.trim()) return
+    if (!topicForm.title?.trim()) {
+      toast.error('Topic title is required')
+      return
+    }
     try {
       await courseContentService.createTopic(moduleId, {
-        title: topicForm.title.trim(), description: (topicForm.description || '').trim(), status: topicForm.status || 'PUBLISHED',
+        title: topicForm.title.trim(),
+        description: (topicForm.description || '').trim(),
+        status: topicForm.status || 'PUBLISHED',
         durationHours: topicForm.durationHours ? Number(topicForm.durationHours) : null,
       })
+      toast.success('Topic added')
       setNewTopic(prev => ({ ...prev, [moduleId]: EMPTY_TOPIC_FORM }))
+      setShowAddTopic(prev => ({ ...prev, [moduleId]: false }))
       load()
     } catch (err) { toast.error(err.message || 'Failed to add topic') }
   }
 
+  function openEditTopic(t) {
+    setEditingTopic({
+      id: t.id,
+      moduleId: t.moduleId,
+      title: t.title || '',
+      description: t.description || '',
+      status: t.status || 'PUBLISHED',
+      durationHours: t.durationHours ? String(t.durationHours) : '',
+    })
+  }
+
   async function saveTopicEdit() {
+    if (!editingTopic || !editingTopic.title.trim()) {
+      toast.error('Topic title is required')
+      return
+    }
     try {
       await courseContentService.updateTopic(editingTopic.id, {
-        title: editingTopic.title, description: editingTopic.description, status: editingTopic.status,
+        title: editingTopic.title.trim(),
+        description: (editingTopic.description || '').trim(),
+        status: editingTopic.status || 'PUBLISHED',
         durationHours: editingTopic.durationHours ? Number(editingTopic.durationHours) : null,
       })
+      toast.success('Topic updated')
       setEditingTopic(null)
       load()
     } catch (err) { toast.error(err.message || 'Failed to update topic') }
@@ -278,7 +383,11 @@ function SyllabusTab({ courseId }) {
 
   async function deleteTopic(id) {
     if (!confirm('Delete this topic?')) return
-    try { await courseContentService.deleteTopic(id); load() } catch (err) { toast.error(err.message || 'Failed to delete topic') }
+    try {
+      await courseContentService.deleteTopic(id)
+      toast.success('Topic deleted')
+      load()
+    } catch (err) { toast.error(err.message || 'Failed to delete topic') }
   }
 
   async function moveTopic(moduleId, topics, index, direction) {
@@ -286,135 +395,455 @@ function SyllabusTab({ courseId }) {
     const target = index + direction
     if (target < 0 || target >= newOrder.length) return
     ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
-    setModules(prev => prev.map(m => m.id === moduleId ? { ...m, topics: newOrder } : m))
-    try { await courseContentService.reorderTopics(moduleId, newOrder.map(t => t.id)) } catch { toast.error('Failed to reorder'); load() }
+    try {
+      await courseContentService.reorderTopics(moduleId, newOrder.map(t => t.id))
+      load()
+    } catch { toast.error('Failed to reorder'); load() }
   }
 
   if (loading) return <div className="glass-card p-8 animate-pulse h-40" />
 
   return (
     <div className="glass-card p-5 space-y-4">
-      <div className="space-y-2 p-3 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-        <div className="flex gap-2">
-          <input value={newModule.title} onChange={e => setNewModule(f => ({ ...f, title: e.target.value }))} placeholder="New module title"
-            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          <StatusSelect value={newModule.status} onChange={v => setNewModule(f => ({ ...f, status: v }))} />
-          <button onClick={addModule} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold flex items-center gap-1 flex-shrink-0">
-            <Plus size={14} /> Add Module
-          </button>
+      {/* Header bar */}
+      <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Syllabus</h2>
+          <p className="text-xs text-gray-500">
+            {modules.length} {modules.length === 1 ? 'module' : 'modules'}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <input value={newModule.description} onChange={e => setNewModule(f => ({ ...f, description: e.target.value }))} placeholder="Module description (optional)"
-            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-          <DurationInput value={newModule.durationValue} unit={newModule.durationUnit}
-            onValueChange={v => setNewModule(f => ({ ...f, durationValue: v }))}
-            onUnitChange={u => setNewModule(f => ({ ...f, durationUnit: u }))} />
+        <div className="flex items-center gap-2">
+          {modules.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const allExpanded = modules.every(m => expanded[m.id])
+                const next = {}
+                modules.forEach(m => { next[m.id] = !allExpanded })
+                setExpanded(next)
+              }}
+              className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300 transition-colors"
+            >
+              {modules.every(m => expanded[m.id]) ? 'Collapse All' : 'Expand All'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowAddModule(s => !s)}
+            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            {showAddModule ? 'Cancel' : <><Plus size={14} /> Add Module</>}
+          </button>
         </div>
       </div>
 
-      {modules.length === 0 && <p className="text-sm text-gray-400 text-center py-6">No modules yet. Add one above.</p>}
+      {/* Add Module Form (Revealed upon clicking + Add Module) */}
+      {showAddModule && (
+        <div className="p-4 rounded-xl border border-purple-200 dark:border-purple-800/40 bg-purple-50/50 dark:bg-purple-950/20 space-y-3">
+          <p className="text-xs font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider">New Module</p>
+          <div className="grid sm:grid-cols-3 gap-2">
+            <input
+              value={newModule.title}
+              onChange={e => setNewModule(f => ({ ...f, title: e.target.value }))}
+              placeholder="New module title *"
+              className="sm:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <StatusSelect value={newModule.status} onChange={v => setNewModule(f => ({ ...f, status: v }))} />
+          </div>
+          <div className="grid sm:grid-cols-3 gap-2">
+            <input
+              value={newModule.description}
+              onChange={e => setNewModule(f => ({ ...f, description: e.target.value }))}
+              placeholder="Module description (optional)"
+              className="sm:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <DurationInput
+              value={newModule.durationValue}
+              unit={newModule.durationUnit}
+              onValueChange={v => setNewModule(f => ({ ...f, durationValue: v }))}
+              onUnitChange={u => setNewModule(f => ({ ...f, durationUnit: u }))}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => { setShowAddModule(false); setNewModule(EMPTY_MODULE_FORM) }}
+              className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={addModule}
+              disabled={!newModule.title.trim()}
+              className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1"
+            >
+              <Plus size={14} /> Create Module
+            </button>
+          </div>
+        </div>
+      )}
 
-      <div className="space-y-2">
-        {modules.map((m, i) => (
-          <div key={m.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 gap-2">
-              <button onClick={() => setExpanded(prev => ({ ...prev, [m.id]: !prev[m.id] }))} className="flex items-center gap-2 flex-1 text-left min-w-0">
-                {expanded[m.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                {editingModule?.id === m.id ? (
-                  <input autoFocus value={editingModule.title} onChange={e => setEditingModule({ ...editingModule, title: e.target.value })}
-                    onClick={e => e.stopPropagation()} onKeyDown={e => e.key === 'Enter' && saveModuleEdit()}
-                    className="rounded-lg border border-purple-300 px-2 py-1 text-sm" />
-                ) : (
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{m.title}</span>
-                )}
-                {editingModule?.id !== m.id && <StatusBadge status={m.status} />}
-                <span className="text-xs text-gray-400 flex-shrink-0">({(m.topics || []).length} topics)</span>
-                {editingModule?.id !== m.id && formatDuration(m.durationValue, m.durationUnit) && (
-                  <span className="text-xs text-gray-400 flex-shrink-0 flex items-center gap-1"><Clock size={11} /> {formatDuration(m.durationValue, m.durationUnit)}</span>
-                )}
-              </button>
-              <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                {editingModule?.id === m.id && <StatusSelect small value={editingModule.status} onChange={v => setEditingModule({ ...editingModule, status: v })} />}
-                <button onClick={() => moveModule(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={13} /></button>
-                <button onClick={() => moveModule(i, 1)} disabled={i === modules.length - 1} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={13} /></button>
-                {editingModule?.id === m.id ? (
-                  <button onClick={saveModuleEdit} className="text-xs font-semibold text-purple-600 px-2">Save</button>
-                ) : (
-                  <button onClick={() => setEditingModule({ id: m.id, title: m.title, description: m.description || '', status: m.status || 'PUBLISHED', durationValue: m.durationValue || '', durationUnit: m.durationUnit || 'WEEKS' })} className="w-7 h-7 rounded-lg hover:bg-gray-200 flex items-center justify-center"><Pencil size={12} /></button>
-                )}
-                <button onClick={() => deleteModule(m.id)} className="w-7 h-7 rounded-lg hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={12} /></button>
-              </div>
-            </div>
-            {editingModule?.id === m.id && (
-              <div className="px-4 py-2 bg-purple-50/50 dark:bg-purple-900/10 flex gap-2">
-                <input value={editingModule.description} onChange={e => setEditingModule({ ...editingModule, description: e.target.value })}
-                  placeholder="Module description" onKeyDown={e => e.key === 'Enter' && saveModuleEdit()}
-                  className="flex-1 rounded-lg border border-purple-200 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                <DurationInput small value={editingModule.durationValue} unit={editingModule.durationUnit}
-                  onValueChange={v => setEditingModule({ ...editingModule, durationValue: v })}
-                  onUnitChange={u => setEditingModule({ ...editingModule, durationUnit: u })} />
-              </div>
-            )}
-            {m.description && editingModule?.id !== m.id && (
-              <p className="px-4 py-1.5 text-xs text-gray-500 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">{m.description}</p>
-            )}
-            {expanded[m.id] && (
-              <div className="p-3 space-y-2 bg-white dark:bg-gray-900">
-                {(m.topics || []).map((t, ti) => (
-                  <div key={t.id} className="pl-4 border-l-2 border-purple-100 dark:border-purple-900/30 py-1.5 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      {editingTopic?.id === t.id ? (
-                        <input autoFocus value={editingTopic.title} onChange={e => setEditingTopic({ ...editingTopic, title: e.target.value })}
-                          onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
-                          className="flex-1 rounded-lg border border-purple-300 px-2 py-1 text-xs" />
-                      ) : (
-                        <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 truncate flex items-center gap-1.5">
-                          {t.title} <StatusBadge status={t.status} />
-                          {t.durationHours && (
-                            <span className="text-[11px] text-gray-400 flex items-center gap-0.5 flex-shrink-0"><Clock size={10} /> {t.durationHours}h</span>
-                          )}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {editingTopic?.id === t.id && <StatusSelect small value={editingTopic.status} onChange={v => setEditingTopic({ ...editingTopic, status: v })} />}
-                        <button onClick={() => moveTopic(m.id, m.topics, ti, -1)} disabled={ti === 0} className="w-6 h-6 rounded hover:bg-gray-100 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={11} /></button>
-                        <button onClick={() => moveTopic(m.id, m.topics, ti, 1)} disabled={ti === m.topics.length - 1} className="w-6 h-6 rounded hover:bg-gray-100 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={11} /></button>
-                        {editingTopic?.id === t.id ? (
-                          <button onClick={saveTopicEdit} className="text-xs font-semibold text-purple-600 px-1">Save</button>
-                        ) : (
-                          <button onClick={() => setEditingTopic({ id: t.id, title: t.title, description: t.description || '', status: t.status || 'PUBLISHED', durationHours: t.durationHours || '' })} className="w-6 h-6 rounded hover:bg-gray-100 flex items-center justify-center"><Pencil size={11} /></button>
-                        )}
-                        <button onClick={() => deleteTopic(t.id)} className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={11} /></button>
+      {/* Empty State */}
+      {modules.length === 0 && !showAddModule && (
+        <div className="text-center py-12 px-4 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50/50 dark:bg-gray-800/20">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">No modules in syllabus yet</p>
+          <p className="text-xs text-gray-400 mb-4">Start by adding the first module to build your course syllabus.</p>
+          <button
+            type="button"
+            onClick={() => setShowAddModule(true)}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus size={14} /> Add First Module
+          </button>
+        </div>
+      )}
+
+      {/* Modules List */}
+      <div className="space-y-3">
+        {modules.map((m, i) => {
+          const isModuleEditing = editingModule?.id === m.id
+          const hasModuleMaterials = m.materials && m.materials.length > 0
+          const topics = m.topics || []
+
+          return (
+            <div key={m.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
+              {/* Module Header or Edit Form */}
+              {isModuleEditing ? (
+                <div className="p-4 bg-purple-50/50 dark:bg-purple-950/20 space-y-3 border-b border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider">
+                      Edit Module {i + 1}
+                    </span>
+                    <StatusSelect small value={editingModule.status} onChange={v => setEditingModule(f => ({ ...f, status: v }))} />
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] text-gray-400 mb-1">Module Title *</label>
+                      <input
+                        value={editingModule.title}
+                        onChange={e => setEditingModule(f => ({ ...f, title: e.target.value }))}
+                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1">Duration</label>
+                      <DurationInput
+                        small
+                        value={editingModule.durationValue}
+                        unit={editingModule.durationUnit}
+                        onValueChange={v => setEditingModule(f => ({ ...f, durationValue: v }))}
+                        onUnitChange={u => setEditingModule(f => ({ ...f, durationUnit: u }))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-1">Description (optional)</label>
+                    <textarea
+                      rows={2}
+                      value={editingModule.description}
+                      onChange={e => setEditingModule(f => ({ ...f, description: e.target.value }))}
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingModule(null)}
+                      className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveModuleEdit}
+                      disabled={!editingModule.title.trim()}
+                      className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-800 gap-2">
+                  <button
+                    onClick={() => setExpanded(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                    className="flex items-center gap-2.5 flex-1 text-left min-w-0"
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <span className="text-gray-400 flex-shrink-0">
+                      {expanded[m.id] ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                      {m.title}
+                    </span>
+                    <StatusBadge status={m.status} />
+                    <span className="text-xs text-gray-400 flex-shrink-0">
+                      ({topics.length} {topics.length === 1 ? 'topic' : 'topics'})
+                    </span>
+                    {formatDuration(m.durationValue, m.durationUnit) && (
+                      <span className="text-xs text-gray-400 flex-shrink-0 flex items-center gap-1">
+                        <Clock size={11} /> {formatDuration(m.durationValue, m.durationUnit)}
+                      </span>
+                    )}
+                    {hasModuleMaterials && (
+                      <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium flex-shrink-0">
+                        📁 {m.materials.length} mat{m.materials.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </button>
+
+                  <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => moveModule(i, -1)}
+                      disabled={i === 0}
+                      title="Move Up"
+                      className="w-7 h-7 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+                    >
+                      <ChevronUp size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveModule(i, 1)}
+                      disabled={i === modules.length - 1}
+                      title="Move Down"
+                      className="w-7 h-7 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+                    >
+                      <ChevronDown size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditModule(m)}
+                      className="px-2.5 py-1 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center gap-1 transition-colors"
+                    >
+                      <Pencil size={12} /> Edit Module
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteModule(m.id)}
+                      title="Delete Module"
+                      className="w-7 h-7 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 flex items-center justify-center transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Module Description & Materials */}
+              {m.description && !isModuleEditing && (
+                <p className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+                  {m.description}
+                </p>
+              )}
+
+              {hasModuleMaterials && !isModuleEditing && (
+                <div className="px-4 py-2 bg-purple-50/30 dark:bg-purple-950/10 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Module Materials:</span>
+                  {m.materials.map(mat => (
+                    <SyllabusMaterialBadge key={mat.id} material={mat} />
+                  ))}
+                </div>
+              )}
+
+              {/* Module Expanded Content: Topics & Sessions */}
+              {expanded[m.id] && (
+                <div className="p-4 space-y-3 bg-gray-50/30 dark:bg-gray-900/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Topics ({topics.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTopic(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                      className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 flex items-center gap-1"
+                    >
+                      <Plus size={12} /> {showAddTopic[m.id] ? 'Cancel' : 'Add Topic'}
+                    </button>
+                  </div>
+
+                  {/* Add Topic Form */}
+                  {showAddTopic[m.id] && (
+                    <div className="p-3 rounded-xl border border-purple-200 dark:border-purple-800/40 bg-white dark:bg-gray-900 space-y-2">
+                      <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 uppercase">New Topic</p>
+                      <div className="flex gap-2">
+                        <input
+                          value={(newTopic[m.id] || EMPTY_TOPIC_FORM).title}
+                          onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), title: e.target.value } }))}
+                          placeholder="New topic title *"
+                          className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={(newTopic[m.id] || EMPTY_TOPIC_FORM).durationHours}
+                          onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), durationHours: e.target.value } }))}
+                          placeholder="Hours"
+                          className="w-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <StatusSelect
+                          small
+                          value={(newTopic[m.id] || EMPTY_TOPIC_FORM).status}
+                          onChange={v => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), status: v } }))}
+                        />
+                      </div>
+                      <input
+                        value={(newTopic[m.id] || EMPTY_TOPIC_FORM).description}
+                        onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), description: e.target.value } }))}
+                        placeholder="Topic description (optional)"
+                        className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddTopic(prev => ({ ...prev, [m.id]: false }))}
+                          className="px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addTopic(m.id)}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold"
+                        >
+                          Add Topic
+                        </button>
                       </div>
                     </div>
-                    {editingTopic?.id === t.id ? (
-                      <div className="flex gap-2">
-                        <input value={editingTopic.description} onChange={e => setEditingTopic({ ...editingTopic, description: e.target.value })}
-                          placeholder="Topic description" onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
-                          className="flex-1 rounded-lg border border-purple-200 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                        <input type="number" min="1" value={editingTopic.durationHours} onChange={e => setEditingTopic({ ...editingTopic, durationHours: e.target.value })}
-                          placeholder="Hours" onKeyDown={e => e.key === 'Enter' && saveTopicEdit()}
-                          className="w-20 rounded-lg border border-purple-200 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                      </div>
-                    ) : t.description ? (
-                      <p className="text-xs text-gray-400">{t.description}</p>
-                    ) : null}
-                  </div>
-                ))}
-                <div className="flex gap-2 pt-1">
-                  <input value={(newTopic[m.id] || EMPTY_TOPIC_FORM).title} onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), title: e.target.value } }))}
-                    placeholder="New topic title" onKeyDown={e => e.key === 'Enter' && addTopic(m.id)}
-                    className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                  <input type="number" min="1" value={(newTopic[m.id] || EMPTY_TOPIC_FORM).durationHours} onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), durationHours: e.target.value } }))}
-                    placeholder="Hours" onKeyDown={e => e.key === 'Enter' && addTopic(m.id)}
-                    className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                  <StatusSelect small value={(newTopic[m.id] || EMPTY_TOPIC_FORM).status} onChange={v => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), status: v } }))} />
-                  <button onClick={() => addTopic(m.id)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold flex-shrink-0">Add Topic</button>
+                  )}
+
+                  {/* Topics Listing */}
+                  {topics.length === 0 && !showAddTopic[m.id] ? (
+                    <p className="text-xs text-gray-400 py-2 italic">No topics in this module yet.</p>
+                  ) : (
+                    topics.map((t, ti) => {
+                      const isTopicEditing = editingTopic?.id === t.id
+                      const hasTopicMaterials = t.materials && t.materials.length > 0
+
+                      return (
+                        <div key={t.id} className="p-3 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-white dark:bg-gray-900 space-y-2.5">
+                          {/* Topic Item or Edit Form */}
+                          {isTopicEditing ? (
+                            <div className="p-3 rounded-lg bg-purple-50/50 dark:bg-purple-950/20 space-y-2 border border-purple-200 dark:border-purple-800">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 uppercase">Edit Topic</span>
+                                <StatusSelect small value={editingTopic.status} onChange={v => setEditingTopic(f => ({ ...f, status: v }))} />
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  value={editingTopic.title}
+                                  onChange={e => setEditingTopic(f => ({ ...f, title: e.target.value }))}
+                                  placeholder="Topic title *"
+                                  className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={editingTopic.durationHours}
+                                  onChange={e => setEditingTopic(f => ({ ...f, durationHours: e.target.value }))}
+                                  placeholder="Hours"
+                                  className="w-20 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                              </div>
+                              <input
+                                value={editingTopic.description}
+                                onChange={e => setEditingTopic(f => ({ ...f, description: e.target.value }))}
+                                placeholder="Topic description (optional)"
+                                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                              />
+                              <div className="flex justify-end gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTopic(null)}
+                                  className="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium hover:bg-gray-100"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={saveTopicEdit}
+                                  className="px-3 py-1 bg-purple-600 text-white rounded-lg text-xs font-semibold"
+                                >
+                                  Save Topic
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
+                                  {t.title}
+                                </span>
+                                <StatusBadge status={t.status} />
+                                {t.durationHours && (
+                                  <span className="text-[11px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
+                                    <Clock size={10} /> {t.durationHours}h
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => moveTopic(m.id, topics, ti, -1)}
+                                  disabled={ti === 0}
+                                  title="Move Up"
+                                  className="w-6 h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 flex items-center justify-center"
+                                >
+                                  <ChevronUp size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveTopic(m.id, topics, ti, 1)}
+                                  disabled={ti === topics.length - 1}
+                                  title="Move Down"
+                                  className="w-6 h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 flex items-center justify-center"
+                                >
+                                  <ChevronDown size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditTopic(t)}
+                                  className="px-2 py-0.5 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium flex items-center gap-1"
+                                >
+                                  <Pencil size={11} /> Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteTopic(t.id)}
+                                  title="Delete Topic"
+                                  className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {t.description && !isTopicEditing && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 pl-1">{t.description}</p>
+                          )}
+
+                          {/* Topic Materials */}
+                          {hasTopicMaterials && (
+                            <div className="flex flex-wrap items-center gap-1.5 pl-1 pt-1">
+                              {t.materials.map(mat => (
+                                <SyllabusMaterialBadge key={mat.id} material={mat} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -754,9 +1183,21 @@ function MaterialsTab({ courseId }) {
   async function handleUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const allowed = form.type && ALLOWED_EXTENSIONS_BY_TYPE[form.type]
+      ? ALLOWED_EXTENSIONS_BY_TYPE[form.type]
+      : Object.values(ALLOWED_EXTENSIONS_BY_TYPE).flat()
+
+    if (ext && !allowed.includes(ext)) {
+      toast.error(`File type not allowed: .${ext}`)
+      e.target.value = ''
+      return
+    }
+
     setUploading(true)
     try {
-      const res = await courseContentService.uploadMaterial(file)
+      const res = await courseContentService.uploadMaterial(file, form.type)
       setForm(f => ({ ...f, url: res.data.url, title: f.title || res.data.originalName }))
       toast.success('File uploaded')
     } catch (err) { toast.error(err.message || 'Upload failed') } finally { setUploading(false); e.target.value = '' }
@@ -832,7 +1273,13 @@ function MaterialsTab({ courseId }) {
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               <label className="flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
                 <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload file instead'}
-                <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
+                <input
+                  type="file"
+                  className="hidden"
+                  accept={ALLOWED_EXTENSIONS_BY_TYPE[form.type] ? ALLOWED_EXTENSIONS_BY_TYPE[form.type].map(ext => `.${ext}`).join(',') : undefined}
+                  onChange={handleUpload}
+                  disabled={uploading}
+                />
               </label>
               <div className="flex gap-2">
                 {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}

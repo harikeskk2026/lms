@@ -11,6 +11,8 @@ import com.careerlabs.lms.api.material.entity.MaterialType;
 import com.careerlabs.lms.api.material.entity.MaterialVisibility;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
+import com.careerlabs.lms.api.session.entity.Session;
+import com.careerlabs.lms.api.session.entity.SessionType;
 import com.careerlabs.lms.api.session.repository.SessionRepository;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusModuleResponse;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusTopicResponse;
@@ -86,11 +88,12 @@ class SyllabusContextualMaterialTest {
         topic.setOrderIndex(0);
     }
 
-    private Material createMaterial(Long id, Long mId, Long tId, String title, MaterialVisibility visibility) {
+    private Material createMaterial(Long id, Long mId, Long tId, Long sId, String title, MaterialVisibility visibility) {
         Material m = new Material();
         setId(m, id);
         m.setModuleId(mId);
         m.setTopicId(tId);
+        m.setSessionId(sId);
         m.setTitle(title);
         m.setType(MaterialType.PDF);
         m.setUrl("/files/" + title + ".pdf");
@@ -99,24 +102,44 @@ class SyllabusContextualMaterialTest {
         return m;
     }
 
+    private Session createSession(Long id, SyllabusTopic topic, String title, CourseStatus status) {
+        Session s = new Session();
+        setId(s, id);
+        s.setTopic(topic);
+        s.setTitle(title);
+        s.setStatus(status);
+        s.setType(SessionType.RECORDED);
+        s.setOrderIndex(0);
+        return s;
+    }
+
     @Test
-    @DisplayName("Syllabus: Contextual materials attached to module and topic with visibility filtering")
+    @DisplayName("Syllabus: Contextual materials attached to module, topic, and session with visibility filtering")
     void testSyllabusContextualMaterialsWithVisibility() {
         when(courseRepository.findById(100L)).thenReturn(Optional.of(course));
         when(moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(100L)).thenReturn(List.of(module));
         when(topicRepository.findAllByModuleIdInOrderByOrderIndexAsc(List.of(10L))).thenReturn(List.of(topic));
 
-        Material mPublished = createMaterial(1L, 10L, null, "Module Published Mat", MaterialVisibility.PUBLISHED);
-        Material mDraft = createMaterial(2L, 10L, null, "Module Draft Mat", MaterialVisibility.DRAFT);
-        Material tPublished = createMaterial(3L, null, 20L, "Topic Published Mat", MaterialVisibility.PUBLISHED);
-        Material tArchived = createMaterial(4L, null, 20L, "Topic Archived Mat", MaterialVisibility.ARCHIVED);
+        Session sPublished = createSession(30L, topic, "Session Published", CourseStatus.PUBLISHED);
+        Session sDraft = createSession(31L, topic, "Session Draft", CourseStatus.DRAFT);
+        when(sessionRepository.findAllByTopicIdInOrderByOrderIndexAsc(List.of(20L)))
+                .thenReturn(List.of(sPublished, sDraft));
+
+        Material mPublished = createMaterial(1L, 10L, null, null, "Module Published Mat", MaterialVisibility.PUBLISHED);
+        Material mDraft = createMaterial(2L, 10L, null, null, "Module Draft Mat", MaterialVisibility.DRAFT);
+        Material tPublished = createMaterial(3L, null, 20L, null, "Topic Published Mat", MaterialVisibility.PUBLISHED);
+        Material tArchived = createMaterial(4L, null, 20L, null, "Topic Archived Mat", MaterialVisibility.ARCHIVED);
+        Material sPublishedMat = createMaterial(5L, null, null, 30L, "Session Published Mat", MaterialVisibility.PUBLISHED);
+        Material sDraftMat = createMaterial(6L, null, null, 30L, "Session Draft Mat", MaterialVisibility.DRAFT);
 
         when(materialRepository.findAllByModuleIdInOrderByOrderIndexAsc(List.of(10L)))
                 .thenReturn(List.of(mPublished, mDraft));
         when(materialRepository.findAllByTopicIdInOrderByOrderIndexAsc(List.of(20L)))
                 .thenReturn(List.of(tPublished, tArchived));
+        when(materialRepository.findAllBySessionIdInOrderByOrderIndexAsc(List.of(30L, 31L)))
+                .thenReturn(List.of(sPublishedMat, sDraftMat));
 
-        // When accessed by Student: only PUBLISHED materials are returned
+        // When accessed by Student: only PUBLISHED materials and PUBLISHED sessions are returned
         when(accessGuard.isAdmin(studentPrincipal)).thenReturn(false);
         List<SyllabusModuleResponse> studentModules = syllabusService.listTree(100L, studentPrincipal);
         assertEquals(1, studentModules.size());
@@ -129,13 +152,20 @@ class SyllabusContextualMaterialTest {
         assertEquals(1, st.materials().size());
         assertEquals("Topic Published Mat", st.materials().get(0).title());
 
-        // When accessed by Admin: all materials (including DRAFT and ARCHIVED) are returned
+        assertEquals(1, st.sessions().size());
+        assertEquals("Session Published", st.sessions().get(0).title());
+        assertEquals(1, st.sessions().get(0).materials().size());
+        assertEquals("Session Published Mat", st.sessions().get(0).materials().get(0).title());
+
+        // When accessed by Admin: all materials (including DRAFT and ARCHIVED) and all sessions are returned
         when(accessGuard.isAdmin(adminPrincipal)).thenReturn(true);
         List<SyllabusModuleResponse> adminModules = syllabusService.listTree(100L, adminPrincipal);
         assertEquals(1, adminModules.size());
         SyllabusModuleResponse am = adminModules.get(0);
         assertEquals(2, am.materials().size());
         assertEquals(2, am.topics().get(0).materials().size());
+        assertEquals(2, am.topics().get(0).sessions().size());
+        assertEquals(2, am.topics().get(0).sessions().get(0).materials().size());
     }
 
     @Test

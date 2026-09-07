@@ -24,4 +24,6 @@ public interface MaterialService {
     List<MaterialResponse> reorder(ReorderRequest request);
 
     UploadResponse upload(MultipartFile file);
+
+    UploadResponse upload(MultipartFile file, String type);
 }

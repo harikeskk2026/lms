@@ -7,6 +7,7 @@ import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
+import com.careerlabs.lms.api.session.dto.response.SessionResponse;
 import com.careerlabs.lms.api.session.entity.Session;
 import com.careerlabs.lms.api.session.repository.SessionRepository;
 import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
@@ -60,7 +61,7 @@ public class SyllabusServiceImpl implements SyllabusService {
         return accessGuard.isAdmin(principal) ? modules : filterPublished(modules);
     }
 
-    /** Non-admins only ever see PUBLISHED modules, and only PUBLISHED topics and materials within them. */
+    /** Non-admins only ever see PUBLISHED modules, and only PUBLISHED topics, sessions and materials within them. */
     private List<SyllabusModuleResponse> filterPublished(List<SyllabusModuleResponse> modules) {
         return modules.stream()
                 .filter(module -> isPublished(module.status()))
@@ -74,7 +75,18 @@ public class SyllabusServiceImpl implements SyllabusService {
                                         topic.id(), topic.moduleId(), topic.title(),
                                         topic.description(), topic.status(), topic.orderIndex(),
                                         topic.durationHours(),
-                                        topic.materials().stream().filter(this::isMaterialPublished).toList()
+                                        topic.materials().stream().filter(this::isMaterialPublished).toList(),
+                                        topic.sessions().stream()
+                                                .filter(session -> isPublished(session.status()))
+                                                .map(session -> new SessionResponse(
+                                                        session.id(), session.topicId(), session.moduleId(),
+                                                        session.title(), session.description(), session.trainerName(),
+                                                        session.sessionDate(), session.startTime(), session.endTime(),
+                                                        session.durationMinutes(), session.type(), session.meetingUrl(),
+                                                        session.recordingUrl(), session.status(), session.orderIndex(),
+                                                        session.materials().stream().filter(this::isMaterialPublished).toList()
+                                                ))
+                                                .toList()
                                 ))
                                 .toList(),
                         module.materials().stream().filter(this::isMaterialPublished).toList()
@@ -236,6 +248,9 @@ public class SyllabusServiceImpl implements SyllabusService {
         List<SyllabusTopic> allTopics = moduleIds.isEmpty() ? List.of() : topicRepository.findAllByModuleIdInOrderByOrderIndexAsc(moduleIds);
         List<Long> topicIds = allTopics.stream().map(SyllabusTopic::getId).toList();
 
+        List<Session> allSessions = topicIds.isEmpty() ? List.of() : sessionRepository.findAllByTopicIdInOrderByOrderIndexAsc(topicIds);
+        List<Long> sessionIds = allSessions.stream().map(Session::getId).toList();
+
         Map<Long, List<MaterialResponse>> materialsByModule = new HashMap<>();
         if (!moduleIds.isEmpty()) {
             materialRepository.findAllByModuleIdInOrderByOrderIndexAsc(moduleIds).forEach(m ->
@@ -250,10 +265,25 @@ public class SyllabusServiceImpl implements SyllabusService {
                             .add(MaterialResponse.from(m)));
         }
 
+        Map<Long, List<MaterialResponse>> materialsBySession = new HashMap<>();
+        if (!sessionIds.isEmpty()) {
+            materialRepository.findAllBySessionIdInOrderByOrderIndexAsc(sessionIds).forEach(m ->
+                    materialsBySession.computeIfAbsent(m.getSessionId(), k -> new ArrayList<>())
+                            .add(MaterialResponse.from(m)));
+        }
+
+        Map<Long, List<SessionResponse>> sessionsByTopic = new HashMap<>();
+        allSessions.forEach(session ->
+                sessionsByTopic.computeIfAbsent(session.getTopic().getId(), k -> new ArrayList<>())
+                        .add(SessionResponse.from(session, materialsBySession.getOrDefault(session.getId(), List.of()))));
+
         Map<Long, List<SyllabusTopicResponse>> topicsByModule = new HashMap<>();
         allTopics.forEach(topic ->
                 topicsByModule.computeIfAbsent(topic.getModule().getId(), k -> new ArrayList<>())
-                        .add(SyllabusTopicResponse.from(topic, materialsByTopic.getOrDefault(topic.getId(), List.of()))));
+                        .add(SyllabusTopicResponse.from(
+                                topic,
+                                materialsByTopic.getOrDefault(topic.getId(), List.of()),
+                                sessionsByTopic.getOrDefault(topic.getId(), List.of()))));
 
         return modules.stream()
                 .map(module -> SyllabusModuleResponse.from(

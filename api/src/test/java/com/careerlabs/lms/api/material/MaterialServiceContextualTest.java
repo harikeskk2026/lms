@@ -246,4 +246,63 @@ class MaterialServiceContextualTest {
         assertEquals(1, resSes.size());
         assertEquals("Session Mat", resSes.get(0).title());
     }
+
+    @Test
+    @DisplayName("Upload with type OTHER accepts CSV and passes allowed extensions containing csv")
+    void uploadCsvWithOtherType_isAccepted() {
+        org.springframework.web.multipart.MultipartFile file = mock(org.springframework.web.multipart.MultipartFile.class);
+        when(fileStorageService.store(eq(file), eq("materials"), anySet()))
+                .thenReturn(new com.careerlabs.lms.api.common.storage.StoredFile("/uploads/materials/test.csv", "test.csv"));
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<String>> captor = org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+
+        com.careerlabs.lms.api.material.dto.response.UploadResponse response = materialService.upload(file, "OTHER");
+
+        assertNotNull(response);
+        assertEquals("/uploads/materials/test.csv", response.url());
+        assertEquals("test.csv", response.originalName());
+
+        verify(fileStorageService).store(eq(file), eq("materials"), captor.capture());
+        java.util.Set<String> allowed = captor.getValue();
+        assertTrue(allowed.contains("csv"), "OTHER allowed extensions must contain csv");
+    }
+
+    @Test
+    @DisplayName("Upload without type accepts CSV in global allowed extensions")
+    void uploadCsvWithoutType_isAccepted() {
+        org.springframework.web.multipart.MultipartFile file = mock(org.springframework.web.multipart.MultipartFile.class);
+        when(fileStorageService.store(eq(file), eq("materials"), anySet()))
+                .thenReturn(new com.careerlabs.lms.api.common.storage.StoredFile("/uploads/materials/data.csv", "data.csv"));
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<String>> captor = org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+
+        com.careerlabs.lms.api.material.dto.response.UploadResponse response = materialService.upload(file);
+
+        assertNotNull(response);
+        assertEquals("/uploads/materials/data.csv", response.url());
+
+        verify(fileStorageService).store(eq(file), eq("materials"), captor.capture());
+        java.util.Set<String> allowed = captor.getValue();
+        assertTrue(allowed.contains("csv"), "Default allowed extensions must contain csv");
+    }
+
+    @Test
+    @DisplayName("Upload with type PDF does not include csv in allowed extensions")
+    void uploadWithPdfType_restrictsToPdf() {
+        org.springframework.web.multipart.MultipartFile file = mock(org.springframework.web.multipart.MultipartFile.class);
+        when(fileStorageService.store(eq(file), eq("materials"), anySet()))
+                .thenReturn(new com.careerlabs.lms.api.common.storage.StoredFile("/uploads/materials/doc.pdf", "doc.pdf"));
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<String>> captor = org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+
+        materialService.upload(file, "PDF");
+
+        verify(fileStorageService).store(eq(file), eq("materials"), captor.capture());
+        java.util.Set<String> allowed = captor.getValue();
+        assertTrue(allowed.contains("pdf"));
+        assertFalse(allowed.contains("csv"), "PDF allowed extensions must not contain csv");
+    }
 }

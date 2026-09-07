@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   Play, Download, ChevronDown, ExternalLink,
 } from 'lucide-react'
@@ -141,32 +141,53 @@ export default function MyCourseDetailPage({ params }) {
   const [materials, setMaterials] = useState(null)
   const [typeFilter, setTypeFilter] = useState('ALL')
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     courseService.get(id)
       .then(r => setCourse(r.data))
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
 
-    // Preload syllabus tree with contextual module & topic materials
+    // Preload syllabus tree with contextual module, topic, and session materials
     courseContentService.getModules(id)
       .then(r => setSyllabus(r.data || []))
       .catch(() => setSyllabus([]))
 
-    // Preload all course materials via single aggregation endpoint
+    // Preload all course materials via aggregation endpoint
     courseContentService.getAllCourseMaterials(id)
       .then(r => setMaterials(r.data || []))
       .catch(() => setMaterials([]))
   }, [id])
 
   useEffect(() => {
-    if (tab === 'Sessions' && !sessions && syllabus) {
-      const topics = syllabus.flatMap(m => (m.topics || []).map(t => ({ ...t, moduleTitle: m.title })))
-      Promise.all(
-        topics.map(t => courseContentService.getSessions(t.id).then(res => (res.data || []).map(s => ({ ...s, topicTitle: t.title }))).catch(() => []))
-      ).then(results => setSessions(results.flat()))
-      .catch(() => setSessions([]))
+    loadData()
+  }, [loadData])
+
+  // Re-fetch fresh data when switching to Syllabus, Sessions, or Materials tabs to prevent stale UI
+  useEffect(() => {
+    if (tab === 'Syllabus' || tab === 'Materials' || tab === 'Sessions') {
+      courseContentService.getModules(id).then(r => setSyllabus(r.data || [])).catch(() => { })
+      courseContentService.getAllCourseMaterials(id).then(r => setMaterials(r.data || [])).catch(() => { })
     }
-  }, [tab, id, sessions, syllabus])
+  }, [tab, id])
+
+  useEffect(() => {
+    if (tab === 'Sessions' && syllabus) {
+      const extracted = syllabus.flatMap(m =>
+        (m.topics || []).flatMap(t =>
+          (t.sessions || []).map(s => ({ ...s, topicTitle: t.title }))
+        )
+      )
+      if (extracted.length > 0) {
+        setSessions(extracted)
+      } else {
+        const topics = syllabus.flatMap(m => (m.topics || []).map(t => ({ ...t, moduleTitle: m.title })))
+        Promise.all(
+          topics.map(t => courseContentService.getSessions(t.id).then(res => (res.data || []).map(s => ({ ...s, topicTitle: t.title }))).catch(() => []))
+        ).then(results => setSessions(results.flat()))
+          .catch(() => setSessions([]))
+      }
+    }
+  }, [tab, id, syllabus])
 
   if (loading) return <div className="page-wrapper"><SkeletonCard lines={6} /></div>
   if (notFound || !course) {
@@ -179,6 +200,7 @@ export default function MyCourseDetailPage({ params }) {
     )
   }
 
+  const courseMaterials = (materials || []).filter(m => !m.moduleId && !m.topicId && !m.sessionId)
   const matTypes = materials ? [...new Set(materials.map(m => m.type))] : []
   const filteredMats = materials ? (typeFilter === 'ALL' ? materials : materials.filter(m => m.type === typeFilter)) : []
 
@@ -204,9 +226,8 @@ export default function MyCourseDetailPage({ params }) {
       <div className="flex gap-1 overflow-x-auto pb-1">
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
-              tab === t ? 'bg-brand-600 text-white' : 'text-gray-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
-            }`}>
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${tab === t ? 'bg-brand-600 text-white' : 'text-gray-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+              }`}>
             {t}
           </button>
         ))}
@@ -234,116 +255,137 @@ export default function MyCourseDetailPage({ params }) {
 
         {tab === 'Syllabus' && (
           !syllabus ? <SkeletonCard lines={4} /> :
-          syllabus.length === 0 ? <p className="text-sm text-gray-400 text-center py-8">Syllabus coming soon.</p> :
-          <div>
-            {syllabus.map(mod => <ModuleAccordion key={mod.id} mod={mod} />)}
-          </div>
+            (syllabus.length === 0 && courseMaterials.length === 0) ? (
+              <p className="text-sm text-gray-400 text-center py-8">Syllabus coming soon.</p>
+            ) : (
+              <div className="space-y-4">
+                {courseMaterials.length > 0 && (
+                  <div className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 bg-purple-50/40 dark:bg-purple-900/10 mb-4">
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <span className="text-base">🎓</span>
+                      <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-100">Course Materials</h3>
+                      <span className="text-xs text-gray-400 font-normal">({courseMaterials.length})</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {courseMaterials.map(m => (
+                        <MaterialItem key={m.id} material={m} compact />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {syllabus.map(mod => <ModuleAccordion key={mod.id} mod={mod} />)}
+              </div>
+            )
         )}
 
         {tab === 'Sessions' && (
           !sessions ? <SkeletonCard lines={4} /> :
-          sessions.length === 0 ? <p className="text-sm text-gray-400 text-center py-8">No sessions scheduled yet.</p> :
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sessions.map(s => {
-              const hasSessionMaterials = s.materials && s.materials.length > 0
-              return (
-                <div key={s.id} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 bg-white/40 dark:bg-purple-950/10 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-[10px] text-gray-400">{s.topicTitle}</p>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">{s.type || 'LIVE'}</span>
-                    </div>
-                    <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-1">{s.title}</p>
-                    <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
-                      <span>{s.trainerName || '—'}</span>
-                      <span>{s.sessionDate || ''} {s.startTime || ''}{s.endTime ? `–${s.endTime}` : ''}</span>
-                    </div>
-
-                    {hasSessionMaterials && (
-                      <div className="mt-3 pt-2.5 border-t border-purple-100 dark:border-purple-900/30">
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                          Session Materials ({s.materials.length})
-                        </p>
-                        <div className="space-y-1.5">
-                          {s.materials.map(m => (
-                            <MaterialItem key={m.id} material={m} compact />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2 mt-3 pt-2 border-t border-purple-50 dark:border-purple-900/20">
-                    {s.meetingUrl && (
-                      <a href={s.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn-primary flex-1 text-center text-xs py-2 flex items-center justify-center gap-1">
-                        <Play size={12} /> Join
-                      </a>
-                    )}
-                    {s.recordingUrl && (
-                      <a href={s.recordingUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center gap-1">
-                        <ExternalLink size={12} /> Recording
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {tab === 'Materials' && (
-          !materials ? <SkeletonCard lines={4} /> :
-          <div>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {['ALL', ...matTypes].map(t => (
-                <button key={t} onClick={() => setTypeFilter(t)}
-                  className={`chip text-xs px-3 py-1 cursor-pointer ${typeFilter === t ? 'bg-brand-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                  {t}
-                </button>
-              ))}
-            </div>
-            {filteredMats.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No materials yet.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {filteredMats.map(m => {
-                  const levelLabel = m.sessionId ? 'Session' : m.topicId ? 'Topic' : m.moduleId ? 'Module' : 'Course'
-                  const levelColor = m.sessionId
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                    : m.topicId
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                    : m.moduleId
-                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
-
-                  const action = getMaterialAction(m.type)
-
+            sessions.length === 0 ? <p className="text-sm text-gray-400 text-center py-8">No sessions scheduled yet.</p> :
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sessions.map(s => {
+                  const hasSessionMaterials = s.materials && s.materials.length > 0
                   return (
-                    <div key={m.id} className="flex items-center gap-3 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/30 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors bg-white/60 dark:bg-purple-950/20">
-                      <span className="text-2xl flex-shrink-0">{MATERIAL_ICONS[m.type] || '📁'}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className={`chip text-[9px] font-bold px-1.5 py-0.5 rounded ${levelColor}`}>
-                            {levelLabel}
-                          </span>
-                          <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] uppercase font-semibold">
-                            {m.type}
-                          </span>
+                    <div key={s.id} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 bg-white/40 dark:bg-purple-950/10 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[10px] text-gray-400">{s.topicTitle}</p>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">{s.type || 'LIVE'}</span>
                         </div>
-                        <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm truncate" title={m.title}>{m.title}</p>
-                        {m.description && <p className="text-xs text-gray-400 truncate mt-0.5">{m.description}</p>}
+                        <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-1">{s.title}</p>
+                        <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+                          <span>{s.trainerName || '—'}</span>
+                          <span>{s.sessionDate || ''} {s.startTime || ''}{s.endTime ? `–${s.endTime}` : ''}</span>
+                        </div>
+
+                        {s.description && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{s.description}</p>
+                        )}
+
+                        {hasSessionMaterials && (
+                          <div className="mt-3 pt-2.5 border-t border-purple-100 dark:border-purple-900/30">
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                              Session Materials ({s.materials.length})
+                            </p>
+                            <div className="space-y-1.5">
+                              {s.materials.map(m => (
+                                <MaterialItem key={m.id} material={m} compact />
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <a href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
-                         className="flex items-center gap-1 chip bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 transition-colors text-xs px-2.5 py-1.5 font-semibold flex-shrink-0">
-                        {action.icon}
-                        <span>{action.label}</span>
-                      </a>
+
+                      <div className="flex gap-2 mt-3 pt-2 border-t border-purple-50 dark:border-purple-900/20">
+                        {s.meetingUrl && (
+                          <a href={s.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn-primary flex-1 text-center text-xs py-2 flex items-center justify-center gap-1">
+                            <Play size={12} /> Join
+                          </a>
+                        )}
+                        {s.recordingUrl && (
+                          <a href={s.recordingUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center gap-1">
+                            <ExternalLink size={12} /> Recording
+                          </a>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
               </div>
-            )}
-          </div>
+        )}
+
+        {tab === 'Materials' && (
+          !materials ? <SkeletonCard lines={4} /> :
+            <div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {['ALL', ...matTypes].map(t => (
+                  <button key={t} onClick={() => setTypeFilter(t)}
+                    className={`chip text-xs px-3 py-1 cursor-pointer ${typeFilter === t ? 'bg-brand-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {filteredMats.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">No materials yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredMats.map(m => {
+                    const levelLabel = m.sessionId ? 'Session' : m.topicId ? 'Topic' : m.moduleId ? 'Module' : 'Course'
+                    const levelColor = m.sessionId
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                      : m.topicId
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : m.moduleId
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                          : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+
+                    const action = getMaterialAction(m.type)
+
+                    return (
+                      <div key={m.id} className="flex items-center gap-3 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/30 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors bg-white/60 dark:bg-purple-950/20">
+                        <span className="text-2xl flex-shrink-0">{MATERIAL_ICONS[m.type] || '📁'}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className={`chip text-[9px] font-bold px-1.5 py-0.5 rounded ${levelColor}`}>
+                              {levelLabel}
+                            </span>
+                            <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] uppercase font-semibold">
+                              {m.type}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm truncate" title={m.title}>{m.title}</p>
+                          {m.description && <p className="text-xs text-gray-400 truncate mt-0.5">{m.description}</p>}
+                        </div>
+                        <a href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 chip bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 transition-colors text-xs px-2.5 py-1.5 font-semibold flex-shrink-0">
+                          {action.icon}
+                          <span>{action.label}</span>
+                        </a>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
         )}
       </div>
     </div>

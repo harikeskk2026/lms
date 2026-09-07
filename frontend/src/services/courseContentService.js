@@ -31,9 +31,10 @@ const courseContentService = {
   updateMaterial: (id, data) => apiCall({ method: 'PUT', url: `/materials/${id}`, data }),
   deleteMaterial: (id) => apiCall({ method: 'DELETE', url: `/materials/${id}` }),
   reorderMaterials: (orderedIds) => apiCall({ method: 'PUT', url: '/materials/reorder', data: { orderedIds } }),
-  uploadMaterial: (file) => {
+  uploadMaterial: (file, type) => {
     const formData = new FormData()
     formData.append('file', file)
+    if (type) formData.append('type', type)
     return apiCall({
       method: 'POST',
       url: '/materials/upload',

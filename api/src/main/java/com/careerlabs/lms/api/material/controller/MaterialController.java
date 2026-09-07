@@ -77,7 +77,9 @@ public class MaterialController {
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<UploadResponse>> upload(@RequestPart("file") MultipartFile file) {
-        return ResponseEntity.ok(ApiResponse.of(materialService.upload(file)));
+    public ResponseEntity<ApiResponse<UploadResponse>> upload(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "type", required = false) String type) {
+        return ResponseEntity.ok(ApiResponse.of(materialService.upload(file, type)));
     }
 }

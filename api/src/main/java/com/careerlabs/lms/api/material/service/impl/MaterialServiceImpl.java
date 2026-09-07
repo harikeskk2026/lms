@@ -12,6 +12,7 @@ import com.careerlabs.lms.api.material.dto.request.MaterialRequest;
 import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
 import com.careerlabs.lms.api.material.dto.response.UploadResponse;
 import com.careerlabs.lms.api.material.entity.Material;
+import com.careerlabs.lms.api.material.entity.MaterialType;
 import com.careerlabs.lms.api.material.entity.MaterialVisibility;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.material.service.MaterialService;
@@ -40,8 +41,18 @@ import java.util.stream.Stream;
 @Service
 public class MaterialServiceImpl implements MaterialService {
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "pdf", "doc", "docx", "ppt", "pptx", "mp4", "mov", "webm");
+    public static final Set<String> PDF_EXTENSIONS = Set.of("pdf");
+    public static final Set<String> DOCUMENT_EXTENSIONS = Set.of("doc", "docx", "txt", "rtf", "odt");
+    public static final Set<String> PRESENTATION_EXTENSIONS = Set.of("ppt", "pptx");
+    public static final Set<String> VIDEO_EXTENSIONS = Set.of("mp4", "mov", "webm", "mkv", "avi");
+    public static final Set<String> OTHER_EXTENSIONS = Set.of(
+            "csv", "xls", "xlsx", "txt", "zip", "rar", "7z", "tar", "gz",
+            "pdf", "doc", "docx", "ppt", "pptx", "mp4", "mov", "webm"
+    );
+
+    public static final Set<String> ALL_ALLOWED_EXTENSIONS = Stream.of(
+            PDF_EXTENSIONS, DOCUMENT_EXTENSIONS, PRESENTATION_EXTENSIONS, VIDEO_EXTENSIONS, OTHER_EXTENSIONS
+    ).flatMap(Set::stream).collect(Collectors.toUnmodifiableSet());
 
     private final MaterialRepository materialRepository;
     private final CourseRepository courseRepository;
@@ -261,8 +272,33 @@ public class MaterialServiceImpl implements MaterialService {
 
     @Override
     public UploadResponse upload(MultipartFile file) {
-        StoredFile stored = fileStorageService.store(file, "materials", ALLOWED_EXTENSIONS);
+        return upload(file, null);
+    }
+
+    @Override
+    public UploadResponse upload(MultipartFile file, String type) {
+        Set<String> allowed = getAllowedExtensionsForType(type);
+        StoredFile stored = fileStorageService.store(file, "materials", allowed);
         return new UploadResponse(stored.url(), stored.originalName());
+    }
+
+    private Set<String> getAllowedExtensionsForType(String type) {
+        if (type == null || type.isBlank()) {
+            return ALL_ALLOWED_EXTENSIONS;
+        }
+        try {
+            MaterialType materialType = MaterialType.valueOf(type.trim().toUpperCase());
+            return switch (materialType) {
+                case PDF -> PDF_EXTENSIONS;
+                case DOCUMENT -> DOCUMENT_EXTENSIONS;
+                case PRESENTATION -> PRESENTATION_EXTENSIONS;
+                case VIDEO -> VIDEO_EXTENSIONS;
+                case OTHER -> OTHER_EXTENSIONS;
+                default -> ALL_ALLOWED_EXTENSIONS;
+            };
+        } catch (IllegalArgumentException e) {
+            return ALL_ALLOWED_EXTENSIONS;
+        }
     }
 
     private void applyRequest(Material material, MaterialRequest request) {
