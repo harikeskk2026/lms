@@ -18,5 +18,9 @@ public interface AuthService {
     void verifyOtp(VerifyOtpRequest request);
 
     void resetPassword(ResetPasswordRequest request);
+
+    void logout(Long userId, String token);
+
+    void logoutAll(Long userId);
 }
 

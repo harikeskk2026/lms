@@ -39,9 +39,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public static final String JWT_ERROR_CODE_ATTRIBUTE = "jwt.error.code";
 
     private final JwtService jwtService;
+    private final TokenRevocationService tokenRevocationService;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, TokenRevocationService tokenRevocationService) {
         this.jwtService = jwtService;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @Override
@@ -54,8 +56,39 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(BEARER_PREFIX.length());
             try {
                 Claims claims = jwtService.parseClaims(token);
+                Long userId = Long.valueOf(claims.getSubject());
+
+                // 1. Check if this specific token was revoked (Sign Out)
+                String jti = jwtService.extractJti(claims, token);
+                if (tokenRevocationService.isTokenRevoked(jti)) {
+                    log.debug("Rejecting revoked JWT with jti {} for user {}", jti, userId);
+                    SecurityContextHolder.clearContext();
+                    request.setAttribute(JWT_ERROR_CODE_ATTRIBUTE, "TOKEN_REVOKED");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                // 2. Check if user is active and tokenVersion matches (Sign Out All Devices & Account Active status)
+                Integer tokenVersion = jwtService.extractTokenVersion(claims);
+                TokenRevocationService.TokenValidationResult validationResult =
+                        tokenRevocationService.validateUserToken(userId, tokenVersion);
+
+                if (validationResult == TokenRevocationService.TokenValidationResult.USER_INACTIVE) {
+                    log.debug("Rejecting JWT for disabled user {}", userId);
+                    SecurityContextHolder.clearContext();
+                    request.setAttribute(JWT_ERROR_CODE_ATTRIBUTE, "ACCOUNT_DISABLED");
+                    filterChain.doFilter(request, response);
+                    return;
+                } else if (validationResult != TokenRevocationService.TokenValidationResult.VALID) {
+                    log.debug("Rejecting JWT with superseded version {} for user {}: {}", tokenVersion, userId, validationResult);
+                    SecurityContextHolder.clearContext();
+                    request.setAttribute(JWT_ERROR_CODE_ATTRIBUTE, "SESSION_EXPIRED");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
                 JwtUserPrincipal principal = new JwtUserPrincipal(
-                        Long.valueOf(claims.getSubject()),
+                        userId,
                         claims.get("email", String.class),
                         claims.get("role", String.class));
 

@@ -5,6 +5,8 @@ import authService from '@/services/authService'
 import tokenStorage from '@/utilities/tokenStorage'
 import { useRouter } from 'next/navigation'
 
+import toast from 'react-hot-toast'
+
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -54,18 +56,30 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     loggingOutRef.current = true
-    try { await api.post('/auth/logout') } catch {}
-    tokenStorage.clear()
-    setUser(null)
-    router.push('/login')
+    try {
+      await api.post('/auth/logout')
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      tokenStorage.clear()
+      setUser(null)
+      router.push('/login')
+    }
   }, [router])
 
   const logoutAll = useCallback(async () => {
     loggingOutRef.current = true
-    try { await api.post('/auth/logout-all') } catch {}
-    tokenStorage.clear()
-    setUser(null)
-    router.push('/login')
+    try {
+      await api.post('/auth/logout-all')
+      toast.success('Signed out from all devices successfully')
+    } catch (err) {
+      console.error('Logout all error:', err)
+      toast.error(err?.response?.data?.message || 'Failed to sign out all devices from server')
+    } finally {
+      tokenStorage.clear()
+      setUser(null)
+      router.push('/login')
+    }
   }, [router])
 
   return (

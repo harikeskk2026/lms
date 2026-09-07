@@ -29,9 +29,18 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
     public void commence(HttpServletRequest request, HttpServletResponse response,
                           AuthenticationException authException) throws IOException {
         String code = (String) request.getAttribute(JwtAuthenticationFilter.JWT_ERROR_CODE_ATTRIBUTE);
-        String message = "TOKEN_EXPIRED".equals(code)
-                ? "Your session has expired. Please log in again."
-                : "Authentication is required to access this resource";
+        String message;
+        if ("TOKEN_EXPIRED".equals(code)) {
+            message = "Your session has expired. Please log in again.";
+        } else if ("TOKEN_REVOKED".equals(code)) {
+            message = "This session has been signed out. Please log in again.";
+        } else if ("SESSION_EXPIRED".equals(code)) {
+            message = "Your session has been terminated on all devices. Please log in again.";
+        } else if ("ACCOUNT_DISABLED".equals(code)) {
+            message = "This account has been disabled.";
+        } else {
+            message = "Authentication is required to access this resource";
+        }
 
         ApiErrorResponse body = new ApiErrorResponse(
                 message,

@@ -16,6 +16,7 @@ import com.careerlabs.lms.api.common.exception.InvalidCredentialsException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.mail.EmailService;
 import com.careerlabs.lms.api.security.JwtService;
+import io.jsonwebtoken.Claims;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
@@ -37,6 +38,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final EmailService emailService;
+    private final com.careerlabs.lms.api.security.TokenRevocationService tokenRevocationService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthServiceImpl(UserRepository userRepository,
@@ -44,13 +46,15 @@ public class AuthServiceImpl implements AuthService {
                            PasswordResetOtpRepository otpRepository,
                            PasswordEncoder passwordEncoder,
                            JwtService jwtService,
-                           EmailService emailService) {
+                           EmailService emailService,
+                           com.careerlabs.lms.api.security.TokenRevocationService tokenRevocationService) {
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
         this.otpRepository = otpRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.emailService = emailService;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @Override
@@ -70,7 +74,7 @@ public class AuthServiceImpl implements AuthService {
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
 
-        String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getRole().name());
+        String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getTokenVersion());
 
         return LoginResponse.of(token, jwtService.getExpirationSeconds(), UserResponse.from(user));
     }
@@ -176,6 +180,30 @@ public class AuthServiceImpl implements AuthService {
 
         resetOtp.setUsed(true);
         otpRepository.save(resetOtp);
+    }
+
+    @Override
+    @Transactional
+    public void logout(Long userId, String token) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+        try {
+            Claims claims = jwtService.parseClaims(token);
+            String jti = jwtService.extractJti(claims, token);
+            Instant expiresAt = claims.getExpiration() != null
+                    ? claims.getExpiration().toInstant()
+                    : Instant.now().plusSeconds(jwtService.getExpirationSeconds());
+            tokenRevocationService.revokeToken(jti, userId, expiresAt);
+        } catch (Exception ex) {
+            tokenRevocationService.revokeToken(token, userId, Instant.now().plusSeconds(jwtService.getExpirationSeconds()));
+        }
+    }
+
+    @Override
+    @Transactional
+    public void logoutAll(Long userId) {
+        tokenRevocationService.revokeAllUserTokens(userId);
     }
 }
 

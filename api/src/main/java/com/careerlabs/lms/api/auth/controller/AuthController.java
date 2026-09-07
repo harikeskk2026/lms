@@ -57,5 +57,25 @@ public class AuthController {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.of("Password reset successfully", null));
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            jakarta.servlet.http.HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        String token = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        }
+        authService.logout(principal.id(), token);
+        return ResponseEntity.ok(ApiResponse.of("Logged out successfully", null));
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<ApiResponse<Void>> logoutAll(
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        authService.logoutAll(principal.id());
+        return ResponseEntity.ok(ApiResponse.of("Logged out from all devices successfully", null));
+    }
 }
 

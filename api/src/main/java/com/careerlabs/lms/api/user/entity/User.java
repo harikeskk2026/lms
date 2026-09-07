@@ -45,6 +45,9 @@ public class User {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "token_version", nullable = false, columnDefinition = "integer default 1")
+    private int tokenVersion = 1;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -119,6 +122,14 @@ public class User {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public void setTokenVersion(int tokenVersion) {
+        this.tokenVersion = tokenVersion;
     }
 
     public Instant getLastLoginAt() {
