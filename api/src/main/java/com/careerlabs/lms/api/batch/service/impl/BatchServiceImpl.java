@@ -7,6 +7,7 @@ import com.careerlabs.lms.api.batch.dto.response.BatchResponse;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.batch.service.BatchService;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
@@ -14,6 +15,7 @@ import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -187,6 +189,25 @@ public class BatchServiceImpl implements BatchService {
     private void validateTrainerAvailability(Long currentBatchId, Long trainerId, LocalDate startDate, LocalDate endDate, String timing) {
         if (trainerId == null) {
             return;
+        }
+
+        User trainer = userRepository.findById(trainerId)
+                .filter(u -> u.getRole() == Role.TRAINER)
+                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found with ID: " + trainerId));
+
+        boolean isExistingAssignment = false;
+        if (currentBatchId != null) {
+            Batch currentBatch = batchRepository.findById(currentBatchId).orElse(null);
+            if (currentBatch != null && Objects.equals(currentBatch.getTrainerId(), trainerId)) {
+                isExistingAssignment = true;
+            }
+        }
+
+        if (!trainer.isActive() && !isExistingAssignment) {
+            throw new BadRequestException(String.format(
+                    "Cannot assign trainer '%s': trainer account is inactive.",
+                    trainer.getName()
+            ));
         }
 
         List<Batch> existingBatches = batchRepository.findByTrainerIdAndActiveTrue(trainerId);

@@ -53,7 +53,7 @@ export default function BatchesPage() {
   useEffect(() => {
     load()
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
-    adminApi.getTrainers({ limit: 100 })
+    adminApi.getTrainers({ limit: 100, status: 'active' })
       .then(r => setTrainers(r.data?.data?.trainers || []))
       .catch(() => {})
   }, [])
@@ -229,7 +229,7 @@ export default function BatchesPage() {
               <select value={form.trainerId} onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
                 <option value="">Select trainer (optional)</option>
-                {trainers.map(t => (
+                {trainers.filter(t => t.active !== false).map(t => (
                   <option key={t.id} value={t.id}>
                     {t.name}{t.designation ? ` (${t.designation})` : ''}
                   </option>

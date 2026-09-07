@@ -107,7 +107,7 @@ export default function BatchDetailPage() {
   useEffect(() => {
     load()
     if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
-      adminApi.getTrainers({ limit: 100 })
+      adminApi.getTrainers({ limit: 100, status: 'active' })
         .then(r => setTrainers(r.data?.data?.trainers || []))
         .catch(() => {})
     }
@@ -270,12 +270,12 @@ export default function BatchDetailPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 whitespace-nowrap">Assign:</span>
                   <select
-                    value={batch.trainer?.id || batch.trainerId || ''}
+                    value={trainers.some(t => t.id === (batch.trainer?.id || batch.trainerId)) ? (batch.trainer?.id || batch.trainerId) : ''}
                     onChange={e => handleAssignTrainer(e.target.value)}
                     className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                   >
                     <option value="">-- No Trainer Assigned --</option>
-                    {trainers.map(t => (
+                    {trainers.filter(t => t.active !== false).map(t => (
                       <option key={t.id} value={t.id}>
                         {t.name}{t.designation ? ` · ${t.designation}` : ''}
                       </option>
