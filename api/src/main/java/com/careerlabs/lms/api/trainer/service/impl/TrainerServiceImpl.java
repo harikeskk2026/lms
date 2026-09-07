@@ -1,5 +1,7 @@
 package com.careerlabs.lms.api.trainer.service.impl;
 
+import com.careerlabs.lms.api.batch.entity.Batch;
+import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.trainer.dto.request.TrainerCreateRequest;
@@ -22,16 +24,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class TrainerServiceImpl implements TrainerService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final BatchRepository batchRepository;
 
-    public TrainerServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public TrainerServiceImpl(UserRepository userRepository,
+                              PasswordEncoder passwordEncoder,
+                              BatchRepository batchRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.batchRepository = batchRepository;
     }
 
     @Override
@@ -60,8 +68,16 @@ public class TrainerServiceImpl implements TrainerService {
         };
 
         Page<User> userPage = userRepository.findAll(spec, pageable);
-        List<TrainerResponse> trainerResponses = userPage.getContent().stream()
-                .map(TrainerResponse::from)
+        List<User> users = userPage.getContent();
+        List<Long> trainerIds = users.stream().map(User::getId).toList();
+
+        Map<Long, List<Batch>> batchesByTrainerId = trainerIds.isEmpty() ? Map.of() :
+                batchRepository.findByTrainerIdInOrderByCreatedAtDesc(trainerIds).stream()
+                        .filter(b -> b.getTrainerId() != null)
+                        .collect(Collectors.groupingBy(Batch::getTrainerId));
+
+        List<TrainerResponse> trainerResponses = users.stream()
+                .map(u -> TrainerResponse.from(u, batchesByTrainerId.getOrDefault(u.getId(), List.of())))
                 .toList();
 
         return new TrainerPageResponse(
@@ -78,7 +94,8 @@ public class TrainerServiceImpl implements TrainerService {
         User user = userRepository.findById(id)
                 .filter(u -> u.getRole() == Role.TRAINER)
                 .orElseThrow(() -> new ResourceNotFoundException("Trainer not found with ID: " + id));
-        return TrainerResponse.from(user);
+        List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(id);
+        return TrainerResponse.from(user, batches);
     }
 
     @Override
@@ -99,7 +116,7 @@ public class TrainerServiceImpl implements TrainerService {
         user.setDepartment(request.getDepartment());
 
         User saved = userRepository.save(user);
-        return TrainerResponse.from(saved);
+        return TrainerResponse.from(saved, List.of());
     }
 
     @Override
@@ -121,7 +138,8 @@ public class TrainerServiceImpl implements TrainerService {
         user.setDepartment(request.getDepartment());
 
         User saved = userRepository.save(user);
-        return TrainerResponse.from(saved);
+        List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(id);
+        return TrainerResponse.from(saved, batches);
     }
 
     @Override
@@ -133,7 +151,8 @@ public class TrainerServiceImpl implements TrainerService {
 
         user.setActive(!user.isActive());
         User saved = userRepository.save(user);
-        return TrainerResponse.from(saved);
+        List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(id);
+        return TrainerResponse.from(saved, batches);
     }
 
     @Override
@@ -142,6 +161,11 @@ public class TrainerServiceImpl implements TrainerService {
         User user = userRepository.findById(id)
                 .filter(u -> u.getRole() == Role.TRAINER)
                 .orElseThrow(() -> new ResourceNotFoundException("Trainer not found with ID: " + id));
+
+        List<Batch> batches = batchRepository.findByTrainerId(id);
+        if (!batches.isEmpty()) {
+            throw new ConflictException("Cannot delete trainer: they are currently assigned to " + batches.size() + " batch(es). Please reassign or unassign the batches first.");
+        }
 
         userRepository.delete(user);
     }

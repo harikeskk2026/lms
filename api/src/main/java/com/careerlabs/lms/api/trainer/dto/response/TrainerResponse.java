@@ -1,8 +1,11 @@
 package com.careerlabs.lms.api.trainer.dto.response;
 
+import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.user.entity.User;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TrainerResponse {
 
@@ -16,11 +19,38 @@ public class TrainerResponse {
     private boolean active;
     private Instant createdAt;
     private Instant lastLoginAt;
+    private List<BatchSummary> batches = new ArrayList<>();
+
+    public record BatchSummary(
+            Long id,
+            String name,
+            String courseTitle,
+            String timing,
+            String mode,
+            boolean active
+    ) {
+        public static BatchSummary from(Batch batch) {
+            String courseTitle = (batch.getCourse() != null) ? batch.getCourse().getTitle() : null;
+            String modeStr = (batch.getMode() != null) ? batch.getMode().name() : null;
+            return new BatchSummary(
+                    batch.getId(),
+                    batch.getName(),
+                    courseTitle,
+                    batch.getTiming(),
+                    modeStr,
+                    batch.isActive()
+            );
+        }
+    }
 
     public TrainerResponse() {
     }
 
     public static TrainerResponse from(User user) {
+        return from(user, List.of());
+    }
+
+    public static TrainerResponse from(User user, List<Batch> batches) {
         TrainerResponse response = new TrainerResponse();
         response.id = user.getId();
         response.name = user.getName();
@@ -32,6 +62,9 @@ public class TrainerResponse {
         response.active = user.isActive();
         response.createdAt = user.getCreatedAt();
         response.lastLoginAt = user.getLastLoginAt();
+        if (batches != null && !batches.isEmpty()) {
+            response.batches = batches.stream().map(BatchSummary::from).toList();
+        }
         return response;
     }
 
@@ -73,5 +106,13 @@ public class TrainerResponse {
 
     public Instant getLastLoginAt() {
         return lastLoginAt;
+    }
+
+    public List<BatchSummary> getBatches() {
+        return batches;
+    }
+
+    public void setBatches(List<BatchSummary> batches) {
+        this.batches = batches;
     }
 }

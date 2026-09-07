@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
@@ -313,6 +314,7 @@ export default function TrainersPage() {
                   <th className="py-3.5 px-6">Trainer</th>
                   <th className="py-3.5 px-4">Contact</th>
                   <th className="py-3.5 px-4">Department & Designation</th>
+                  <th className="py-3.5 px-4">Assigned Batches</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
@@ -348,6 +350,26 @@ export default function TrainersPage() {
                         <p className="text-xs font-semibold text-slate-800">{trainer.designation || 'Trainer'}</p>
                         <p className="text-[11px] text-slate-400">{trainer.department || 'Academics'}</p>
                       </div>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      {trainer.batches && trainer.batches.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-w-xs">
+                          {trainer.batches.map(b => (
+                            <Link
+                              key={b.id}
+                              href={`/admin/batches/${b.id}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 hover:shadow-sm border border-purple-200/70 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 transition-all"
+                              title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || 'No time set'}`}
+                            >
+                              <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
+                              <span className="truncate max-w-[130px]">{b.name}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No batches assigned</span>
+                      )}
                     </td>
 
                     <td className="py-4 px-4">
@@ -594,6 +616,31 @@ export default function TrainersPage() {
                   className="input-field text-sm"
                 />
               </div>
+
+              {editingTrainer?.batches && editingTrainer.batches.length > 0 && (
+                <div className="p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-xl border border-purple-100 dark:border-purple-800/40 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-purple-900 dark:text-purple-200">
+                      Assigned Batches ({editingTrainer.batches.length})
+                    </p>
+                    <span className="text-[10px] text-purple-600 dark:text-purple-400">Click to view</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {editingTrainer.batches.map(b => (
+                      <Link
+                        key={b.id}
+                        href={`/admin/batches/${b.id}`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 border border-purple-200 hover:border-purple-400 shadow-2xs transition-all"
+                        title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || ''}`}
+                      >
+                        <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
+                        <span className="truncate max-w-[140px]">{b.name}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
