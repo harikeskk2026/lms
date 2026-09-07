@@ -19,7 +19,7 @@ const PLACEMENT_COLORS = {
 }
 
 const EMPTY_FORM = {
-  name: '', email: '', phone: '', password: '', batchId: '',
+  name: '', email: '', phone: '', collegeName: '', password: '', batchId: '',
   courseId: '', placementStatus: 'SEEKING',
 }
 
@@ -92,7 +92,6 @@ export default function StudentsPage() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    // Batches are filtered down to the selected course below.
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
   }, [])
@@ -114,6 +113,7 @@ export default function StudentsPage() {
       name: student.name,
       email: student.email,
       phone: student.phone || '',
+      collegeName: student.college?.name || '',
       password: '',
       batchId: student.batch?.id ? String(student.batch.id) : '',
       courseId: student.course?.id ? String(student.course.id) : student.batch?.course?.id ? String(student.batch.course.id) : '',
@@ -155,6 +155,7 @@ export default function StudentsPage() {
         await studentService.update(editStudent.id, {
           name: form.name,
           phone: form.phone,
+          collegeName: form.collegeName,
           placementStatus: form.placementStatus,
           batchId, courseId,
         })
@@ -164,6 +165,7 @@ export default function StudentsPage() {
           name: form.name,
           email: form.email,
           phone: form.phone,
+          collegeName: form.collegeName,
           password: form.password,
           batchId, courseId,
         })
@@ -267,7 +269,10 @@ export default function StudentsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Students</h1>
-          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
+          <span className="inline-flex items-center gap-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-3 py-1.5 rounded-full">
+            <span className="text-purple-400 font-medium">Total</span>
+            <span className="text-purple-700 dark:text-purple-200">{total}</span>
+          </span>
         </div>
         <button
           onClick={openCreate}
@@ -342,14 +347,14 @@ export default function StudentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['#', 'Student', 'Enrollment', 'College / Course', 'Batch', 'Placement', 'Status', 'Actions'].map(h => (
+                  {['SNO', 'Student', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {students.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
                 ) : (
                   students.map((s, i) => (
                     <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
@@ -369,12 +374,10 @@ export default function StudentsPage() {
                         <span className="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{s.enrollmentNo || '—'}</span>
                       </td>
                       <td className="px-4 py-3">
-                        {s.college || s.course ? (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{s.college?.name || '—'}</p>
-                            <p className="text-[10px] text-gray-400">{s.course?.title || ''}</p>
-                          </div>
-                        ) : <span className="text-gray-400 text-xs">—</span>}
+                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{s.college?.name || '—'}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-gray-500">{s.course?.title || '—'}</p>
                       </td>
                       <td className="px-4 py-3">
                         {s.batch ? (
@@ -489,6 +492,16 @@ export default function StudentsPage() {
               value={form.phone}
               onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
               placeholder="9876543210"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
+            <input
+              type="text"
+              value={form.collegeName}
+              onChange={e => setForm(f => ({ ...f, collegeName: e.target.value }))}
+              placeholder="e.g. Anna University"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>

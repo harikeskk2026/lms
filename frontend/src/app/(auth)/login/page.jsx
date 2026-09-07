@@ -3,12 +3,12 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Mail, Lock, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
+import { Eye, EyeOff, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { loginSchema } from '@/validations/loginValidation'
-import clsx from 'clsx'
+
 
 const stats = [
   { icon: GraduationCap, label: 'Students Enrolled', value: '2,400+' },
@@ -42,7 +42,7 @@ export default function LoginPage() {
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting }
-  } = useForm({ resolver: zodResolver(loginSchema) })
+  } = useForm({ resolver: zodResolver(loginSchema), mode: 'onSubmit', reValidateMode: 'onSubmit', shouldFocusError: false })
 
   async function onSubmit(data) {
     try {
@@ -141,17 +141,14 @@ export default function LoginPage() {
               {/* Email */}
               <div className="form-group">
                 <label className="form-label" htmlFor="email">Email address</label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  <input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@example.com"
-                    {...register('email')}
-                    className={clsx('input-field pl-10', errors.email && 'error')}
-                  />
-                </div>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="Enter your email address"
+                  {...register('email')}
+                  className="input-field"
+                />
                 {errors.email && <span className="form-error">{errors.email.message}</span>}
               </div>
 
@@ -159,14 +156,13 @@ export default function LoginPage() {
               <div className="form-group">
                 <label className="form-label" htmlFor="password">Password</label>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     placeholder="Enter your password"
                     {...register('password')}
-                    className={clsx('input-field pl-10 pr-10', errors.password && 'error')}
+                    className="input-field pr-10"
                   />
                   <button
                     type="button"

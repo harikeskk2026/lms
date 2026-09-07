@@ -9,6 +9,8 @@ public interface CollegeRepository extends JpaRepository<College, Long> {
 
     boolean existsByNameIgnoreCase(String name);
 
+    java.util.Optional<College> findByNameIgnoreCase(String name);
+
     List<College> findByNameContainingIgnoreCaseOrderByNameAsc(String search);
 
     List<College> findAllByOrderByNameAsc();

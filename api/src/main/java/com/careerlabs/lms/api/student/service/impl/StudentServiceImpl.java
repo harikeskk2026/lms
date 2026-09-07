@@ -14,6 +14,8 @@ import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.college.entity.College;
+import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
@@ -76,6 +78,7 @@ public class StudentServiceImpl implements StudentService {
     private final UserRepository userRepository;
     private final BatchRepository batchRepository;
     private final CourseRepository courseRepository;
+    private final CollegeRepository collegeRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -102,6 +105,7 @@ public class StudentServiceImpl implements StudentService {
 
     public StudentServiceImpl(StudentRepository studentRepository, UserRepository userRepository,
                                BatchRepository batchRepository, CourseRepository courseRepository,
+                               CollegeRepository collegeRepository,
                                EnrollmentRepository enrollmentRepository, PasswordEncoder passwordEncoder,
                                AttendanceCorrectionRepository attendanceCorrectionRepository,
                                AttendanceRepository attendanceRepository,
@@ -126,6 +130,7 @@ public class StudentServiceImpl implements StudentService {
         this.userRepository = userRepository;
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
+        this.collegeRepository = collegeRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.attendanceCorrectionRepository = attendanceCorrectionRepository;
@@ -350,6 +355,15 @@ public class StudentServiceImpl implements StudentService {
     private Course findCourseOrThrow(Long courseId) {
         return courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
+    }
+
+    private College findOrCreateCollege(String name) {
+        return collegeRepository.findByNameIgnoreCase(name.trim())
+                .orElseGet(() -> {
+                    College c = new College();
+                    c.setName(name.trim());
+                    return collegeRepository.save(c);
+                });
     }
 
     private void applyRequest(Student student, StudentUpdateRequest request) {
