@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.material.controller;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.material.dto.request.MaterialRequest;
 import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
@@ -41,7 +42,14 @@ public class MaterialController {
             @RequestParam(required = false) Long moduleId,
             @RequestParam(required = false) Long topicId,
             @RequestParam(required = false) Long sessionId,
+            @RequestParam(required = false, defaultValue = "false") boolean all,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        if (all) {
+            if (courseId == null) {
+                throw new BadRequestException("courseId is required when all=true");
+            }
+            return ResponseEntity.ok(ApiResponse.of(materialService.listAllForCourse(courseId, principal)));
+        }
         return ResponseEntity.ok(ApiResponse.of(materialService.list(courseId, moduleId, topicId, sessionId, principal)));
     }
 

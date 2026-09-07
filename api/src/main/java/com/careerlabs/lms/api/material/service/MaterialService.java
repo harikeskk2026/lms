@@ -13,6 +13,8 @@ public interface MaterialService {
 
     List<MaterialResponse> list(Long courseId, Long moduleId, Long topicId, Long sessionId, JwtUserPrincipal principal);
 
+    List<MaterialResponse> listAllForCourse(Long courseId, JwtUserPrincipal principal);
+
     MaterialResponse create(MaterialRequest request);
 
     MaterialResponse update(Long id, MaterialRequest request);

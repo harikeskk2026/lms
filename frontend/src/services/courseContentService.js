@@ -26,6 +26,7 @@ const courseContentService = {
 
   // Materials
   getMaterials: (params) => apiCall({ method: 'GET', url: '/materials', params }),
+  getAllCourseMaterials: (courseId) => apiCall({ method: 'GET', url: '/materials', params: { courseId, all: true } }),
   createMaterial: (data) => apiCall({ method: 'POST', url: '/materials', data }),
   updateMaterial: (id, data) => apiCall({ method: 'PUT', url: `/materials/${id}`, data }),
   deleteMaterial: (id) => apiCall({ method: 'DELETE', url: `/materials/${id}` }),

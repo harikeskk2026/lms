@@ -4,6 +4,9 @@ import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
+import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
+import com.careerlabs.lms.api.material.entity.Material;
+import com.careerlabs.lms.api.material.entity.MaterialVisibility;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
@@ -17,6 +20,7 @@ import com.careerlabs.lms.api.syllabus.repository.SyllabusTopicRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,11 +51,29 @@ public class SessionServiceImpl implements SessionService {
         if (!accessGuard.isAdmin(principal)) {
             sessions = sessions.stream().filter(this::isPublished).toList();
         }
-        return sessions.stream().map(SessionResponse::from).toList();
+
+        List<Long> sessionIds = sessions.stream().map(Session::getId).toList();
+        Map<Long, List<MaterialResponse>> materialsBySession = new HashMap<>();
+        if (!sessionIds.isEmpty()) {
+            materialRepository.findAllBySessionIdInOrderByOrderIndexAsc(sessionIds).forEach(m -> {
+                if (accessGuard.isAdmin(principal) || isMaterialPublished(m)) {
+                    materialsBySession.computeIfAbsent(m.getSessionId(), k -> new ArrayList<>())
+                            .add(MaterialResponse.from(m));
+                }
+            });
+        }
+
+        return sessions.stream()
+                .map(session -> SessionResponse.from(session, materialsBySession.getOrDefault(session.getId(), List.of())))
+                .toList();
     }
 
     private boolean isPublished(Session session) {
         return session.getStatus() == null || session.getStatus() == CourseStatus.PUBLISHED;
+    }
+
+    private boolean isMaterialPublished(Material material) {
+        return material.getVisibility() == null || material.getVisibility() == MaterialVisibility.PUBLISHED;
     }
 
     @Override

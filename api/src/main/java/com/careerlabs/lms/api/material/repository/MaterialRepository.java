@@ -11,9 +11,15 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     List<Material> findAllByModuleIdOrderByOrderIndexAsc(Long moduleId);
 
+    List<Material> findAllByModuleIdInOrderByOrderIndexAsc(java.util.Collection<Long> moduleIds);
+
     List<Material> findAllByTopicIdOrderByOrderIndexAsc(Long topicId);
 
+    List<Material> findAllByTopicIdInOrderByOrderIndexAsc(java.util.Collection<Long> topicIds);
+
     List<Material> findAllBySessionIdOrderByOrderIndexAsc(Long sessionId);
+
+    List<Material> findAllBySessionIdInOrderByOrderIndexAsc(java.util.Collection<Long> sessionIds);
 
     int countByCourseIdAndModuleIdIsNullAndTopicIdIsNullAndSessionIdIsNull(Long courseId);
 

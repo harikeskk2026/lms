@@ -1,7 +1,7 @@
 package com.careerlabs.lms.api.material.dto.request;
 
-import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.material.entity.MaterialType;
+import com.careerlabs.lms.api.material.entity.MaterialVisibility;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -18,7 +18,7 @@ public class MaterialRequest {
 
     private String description;
 
-    private CourseStatus visibility = CourseStatus.PUBLISHED;
+    private MaterialVisibility visibility = MaterialVisibility.PUBLISHED;
 
     private Long courseId;
 
@@ -60,11 +60,11 @@ public class MaterialRequest {
         this.description = description;
     }
 
-    public CourseStatus getVisibility() {
+    public MaterialVisibility getVisibility() {
         return visibility;
     }
 
-    public void setVisibility(CourseStatus visibility) {
+    public void setVisibility(MaterialVisibility visibility) {
         this.visibility = visibility;
     }
 

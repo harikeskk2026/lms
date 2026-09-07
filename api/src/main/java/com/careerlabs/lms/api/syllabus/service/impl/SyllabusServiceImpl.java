@@ -19,9 +19,12 @@ import com.careerlabs.lms.api.syllabus.entity.SyllabusTopic;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusTopicRepository;
 import com.careerlabs.lms.api.syllabus.service.SyllabusService;
+import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
+import com.careerlabs.lms.api.material.entity.MaterialVisibility;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,19 +60,34 @@ public class SyllabusServiceImpl implements SyllabusService {
         return accessGuard.isAdmin(principal) ? modules : filterPublished(modules);
     }
 
-    /** Non-admins only ever see PUBLISHED modules, and only PUBLISHED topics within them. */
+    /** Non-admins only ever see PUBLISHED modules, and only PUBLISHED topics and materials within them. */
     private List<SyllabusModuleResponse> filterPublished(List<SyllabusModuleResponse> modules) {
         return modules.stream()
                 .filter(module -> isPublished(module.status()))
-                .map(module -> new SyllabusModuleResponse(module.id(), module.courseId(), module.title(),
+                .map(module -> new SyllabusModuleResponse(
+                        module.id(), module.courseId(), module.title(),
                         module.description(), module.status(), module.orderIndex(),
                         module.durationValue(), module.durationUnit(),
-                        module.topics().stream().filter(topic -> isPublished(topic.status())).toList()))
+                        module.topics().stream()
+                                .filter(topic -> isPublished(topic.status()))
+                                .map(topic -> new SyllabusTopicResponse(
+                                        topic.id(), topic.moduleId(), topic.title(),
+                                        topic.description(), topic.status(), topic.orderIndex(),
+                                        topic.durationHours(),
+                                        topic.materials().stream().filter(this::isMaterialPublished).toList()
+                                ))
+                                .toList(),
+                        module.materials().stream().filter(this::isMaterialPublished).toList()
+                ))
                 .toList();
     }
 
     private boolean isPublished(CourseStatus status) {
         return status == null || status == CourseStatus.PUBLISHED;
+    }
+
+    private boolean isMaterialPublished(MaterialResponse material) {
+        return material.visibility() == null || material.visibility() == MaterialVisibility.PUBLISHED;
     }
 
     @Override
@@ -214,14 +232,34 @@ public class SyllabusServiceImpl implements SyllabusService {
     private List<SyllabusModuleResponse> reloadTree(Long courseId) {
         List<SyllabusModule> modules = moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(courseId);
         List<Long> moduleIds = modules.stream().map(SyllabusModule::getId).toList();
-        Map<Long, List<SyllabusTopicResponse>> topicsByModule = new HashMap<>();
+
+        List<SyllabusTopic> allTopics = moduleIds.isEmpty() ? List.of() : topicRepository.findAllByModuleIdInOrderByOrderIndexAsc(moduleIds);
+        List<Long> topicIds = allTopics.stream().map(SyllabusTopic::getId).toList();
+
+        Map<Long, List<MaterialResponse>> materialsByModule = new HashMap<>();
         if (!moduleIds.isEmpty()) {
-            topicRepository.findAllByModuleIdInOrderByOrderIndexAsc(moduleIds).forEach(topic ->
-                    topicsByModule.computeIfAbsent(topic.getModule().getId(), k -> new java.util.ArrayList<>())
-                            .add(SyllabusTopicResponse.from(topic)));
+            materialRepository.findAllByModuleIdInOrderByOrderIndexAsc(moduleIds).forEach(m ->
+                    materialsByModule.computeIfAbsent(m.getModuleId(), k -> new ArrayList<>())
+                            .add(MaterialResponse.from(m)));
         }
+
+        Map<Long, List<MaterialResponse>> materialsByTopic = new HashMap<>();
+        if (!topicIds.isEmpty()) {
+            materialRepository.findAllByTopicIdInOrderByOrderIndexAsc(topicIds).forEach(m ->
+                    materialsByTopic.computeIfAbsent(m.getTopicId(), k -> new ArrayList<>())
+                            .add(MaterialResponse.from(m)));
+        }
+
+        Map<Long, List<SyllabusTopicResponse>> topicsByModule = new HashMap<>();
+        allTopics.forEach(topic ->
+                topicsByModule.computeIfAbsent(topic.getModule().getId(), k -> new ArrayList<>())
+                        .add(SyllabusTopicResponse.from(topic, materialsByTopic.getOrDefault(topic.getId(), List.of()))));
+
         return modules.stream()
-                .map(module -> SyllabusModuleResponse.from(module, topicsByModule.getOrDefault(module.getId(), List.of())))
+                .map(module -> SyllabusModuleResponse.from(
+                        module,
+                        topicsByModule.getOrDefault(module.getId(), List.of()),
+                        materialsByModule.getOrDefault(module.getId(), List.of())))
                 .toList();
     }
 
