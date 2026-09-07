@@ -174,6 +174,10 @@ public class BatchServiceImpl implements BatchService {
     }
 
     private void applyRequest(Batch batch, BatchRequest request) {
+        if (request.getStartDate() != null && request.getEndDate() != null && request.getEndDate().isBefore(request.getStartDate())) {
+            throw new BadRequestException("End date cannot be before start date");
+        }
+
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + request.getCourseId()));
 

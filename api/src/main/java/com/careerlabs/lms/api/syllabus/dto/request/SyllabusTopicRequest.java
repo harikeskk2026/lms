@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 public class SyllabusTopicRequest {
 
     @NotBlank(message = SyllabusValidationMessages.TITLE_REQUIRED)
-    @Size(min = 2, max = 200, message = SyllabusValidationMessages.TITLE_SIZE)
+    @Size(min = 1, max = 200, message = SyllabusValidationMessages.TITLE_SIZE)
     private String title;
 
     private String description;

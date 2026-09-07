@@ -12,7 +12,7 @@
 // in practice - while still allowing real domains that merely contain digits
 // (e.g. "mail1.com", "web3.io").
 export const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@(?!\d+(?:\.\d+)*\.[A-Za-z]{2,}$)[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
-export const EMAIL_ERROR_MESSAGE = 'Please enter a valid email address with a real domain (e.g. name@gmail.com)'
+export const EMAIL_ERROR_MESSAGE = 'Please enter a valid email address'
 
 export function isValidEmail(email) {
   if (!email) return false

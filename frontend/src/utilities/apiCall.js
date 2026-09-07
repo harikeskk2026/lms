@@ -26,7 +26,8 @@ export default async function apiCall({ method = 'GET', url, data, params, heade
     const response = await api.request({ method, url, data, params, headers, onUploadProgress, timeout })
     return response.data
   } catch (error) {
-    const message = error.response?.data?.message || error.message || 'Request failed'
+    const firstFieldError = error.response?.data?.errors?.[0]?.message
+    const message = firstFieldError || error.response?.data?.message || error.message || 'Request failed'
     const apiError = new Error(message)
     apiError.status = error.response?.status
     apiError.code = error.response?.data?.code

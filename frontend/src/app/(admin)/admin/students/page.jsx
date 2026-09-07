@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
@@ -104,9 +104,12 @@ export default function StudentsPage() {
     searchTimer.current = setTimeout(() => { setSearch(v); setPage(1) }, 300)
   }
 
+  const [emailError, setEmailError] = useState('')
+
   const openCreate = () => {
     setEditStudent(null)
     setForm(EMPTY_FORM)
+    setEmailError('')
     setPanelOpen(true)
   }
 
@@ -122,6 +125,7 @@ export default function StudentsPage() {
       courseId: student.course?.id ? String(student.course.id) : student.batch?.course?.id ? String(student.batch.course.id) : '',
       placementStatus: student.placementStatus || 'SEEKING',
     })
+    setEmailError('')
     setPanelOpen(true)
   }
 
@@ -134,13 +138,23 @@ export default function StudentsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setEmailError('')
     if (!form.courseId) {
       toast.error('Please select a course')
       return
     }
-    if (!editStudent && !isValidEmail(form.email)) {
-      toast.error(EMAIL_ERROR_MESSAGE)
-      return
+    if (!editStudent) {
+      if (!form.email || !form.email.trim()) {
+        const msg = 'Email is required'
+        setEmailError(msg)
+        toast.error(msg)
+        return
+      }
+      if (!isValidEmail(form.email.trim())) {
+        setEmailError(EMAIL_ERROR_MESSAGE)
+        toast.error(EMAIL_ERROR_MESSAGE)
+        return
+      }
     }
     if (form.phone && !isValidPhone(form.phone)) {
       toast.error(PHONE_ERROR_MESSAGE)
@@ -364,7 +378,11 @@ export default function StudentsPage() {
                   <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
                 ) : (
                   students.map((s, i) => (
-                    <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
+                    <tr
+                      key={s.id}
+                      onClick={() => router.push(`/admin/students/${s.id}`)}
+                      className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/30 dark:hover:bg-purple-900/20 cursor-pointer transition-colors"
+                    >
                       <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * 20 + i + 1}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -401,7 +419,7 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => handleToggleStatus(s.id, s.active)}
+                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(s.id, s.active); }}
                           title={s.active ? 'Click to disable login access' : 'Click to enable login access'}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.active ? 'bg-purple-500' : 'bg-gray-200 dark:bg-gray-700'}`}
                         >
@@ -410,15 +428,11 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => router.push(`/admin/students/${s.id}`)}
-                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="View">
-                            <Eye size={14} />
-                          </button>
-                          <button onClick={() => openEdit(s)}
+                          <button onClick={(e) => { e.stopPropagation(); openEdit(s); }}
                             className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => setDeletingStudent(s)}
+                          <button onClick={(e) => { e.stopPropagation(); setDeletingStudent(s); }}
                             className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
@@ -466,7 +480,7 @@ export default function StudentsPage() {
         title={editStudent ? 'Edit Student' : 'Add Student'}
         subtitle={editStudent ? 'Update student profile' : 'Create a new student account'}
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
             <input
@@ -484,11 +498,25 @@ export default function StudentsPage() {
               <input
                 type="email"
                 value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                onChange={e => {
+                  const val = e.target.value
+                  setForm(f => ({ ...f, email: val }))
+                  if (emailError && isValidEmail(val.trim())) setEmailError('')
+                }}
                 placeholder="ravi@example.com"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                  emailError
+                    ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
                 required
               />
+              {emailError && (
+                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {emailError}
+                </p>
+              )}
             </div>
           )}
           <div>

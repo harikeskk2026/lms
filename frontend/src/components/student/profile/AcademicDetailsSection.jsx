@@ -72,6 +72,7 @@ function AccordionCard({ title, optional, isExpanded, onToggle, summaryText, isF
 
 export default function AcademicDetailsSection({ onSaved }) {
   const [form, setForm] = useState(EMPTY_FORM)
+  const [initialForm, setInitialForm] = useState(EMPTY_FORM)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [expanded, setExpanded] = useState({ tenth: false, twelfth: false, diploma: false, ug: true, pg: false })
@@ -83,7 +84,7 @@ export default function AcademicDetailsSection({ onSaved }) {
     academicDetailsService.getMine()
       .then(r => {
         const d = r.data
-        setForm({
+        const loadedForm = {
           tenthYearOfPassing: d.tenthYearOfPassing ?? '',
           tenthPercentage: d.tenthPercentage ?? '',
           twelfthYearOfPassing: d.twelfthYearOfPassing ?? '',
@@ -102,7 +103,9 @@ export default function AcademicDetailsSection({ onSaved }) {
           pgScoreType: d.pgScoreType ?? 'CGPA',
           pgScore: d.pgScore ?? '',
           pgBacklogs: d.pgBacklogs ?? '',
-        })
+        }
+        setForm(loadedForm)
+        setInitialForm(loadedForm)
 
         if (!d.tenthPercentage) setExpanded(prev => ({ ...prev, tenth: true }))
         else if (!d.twelfthPercentage) setExpanded(prev => ({ ...prev, twelfth: true }))
@@ -116,6 +119,10 @@ export default function AcademicDetailsSection({ onSaved }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    if (initialForm && JSON.stringify(form) === JSON.stringify(initialForm)) {
+      toast.error('No changes to save')
+      return
+    }
     setSaving(true)
     try {
       await academicDetailsService.updateMine({

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
+import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import clsx from 'clsx'
 
 const EMPTY_FORM = {
@@ -121,7 +122,7 @@ export default function TrainersPage() {
     const errs = {}
     if (!form.name.trim()) errs.name = 'Name is required'
     if (!form.email.trim()) errs.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = 'Invalid email format'
+    else if (!isValidEmail(form.email.trim())) errs.email = EMAIL_ERROR_MESSAGE
 
     if (!isEdit) {
       if (!form.password) errs.password = 'Password is required'
@@ -467,7 +468,7 @@ export default function TrainersPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateTrainer} className="space-y-4">
+            <form onSubmit={handleCreateTrainer} noValidate className="space-y-4">
               <div>
                 <label className="form-label">Full Name *</label>
                 <input

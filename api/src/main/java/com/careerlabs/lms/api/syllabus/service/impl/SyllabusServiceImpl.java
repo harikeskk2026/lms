@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.syllabus.service.impl;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
@@ -15,6 +16,7 @@ import com.careerlabs.lms.api.syllabus.dto.request.SyllabusModuleRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusTopicRequest;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusModuleResponse;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusTopicResponse;
+import com.careerlabs.lms.api.syllabus.entity.DurationUnit;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusTopic;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
@@ -119,10 +121,47 @@ public class SyllabusServiceImpl implements SyllabusService {
         return SyllabusModuleResponse.from(moduleRepository.save(module), List.of());
     }
 
+    private double getModuleDurationInHours(SyllabusModule module) {
+        if (module.getDurationValue() == null || module.getDurationValue() <= 0) {
+            return 0.0;
+        }
+        DurationUnit unit = module.getDurationUnit() != null ? module.getDurationUnit() : DurationUnit.WEEKS;
+        switch (unit) {
+            case HOURS:
+                return module.getDurationValue();
+            case DAYS:
+                return module.getDurationValue() * 24.0;
+            case WEEKS:
+                return module.getDurationValue() * 7.0 * 24.0;
+            default:
+                return module.getDurationValue();
+        }
+    }
+
+    private double calculateModuleHours(Integer value, DurationUnit unit) {
+        if (value == null || value <= 0) return 0.0;
+        DurationUnit u = unit != null ? unit : DurationUnit.WEEKS;
+        switch (u) {
+            case HOURS: return value;
+            case DAYS: return value * 24.0;
+            case WEEKS: return value * 7.0 * 24.0;
+            default: return value;
+        }
+    }
+
     @Override
     @Transactional
     public SyllabusModuleResponse updateModule(Long id, SyllabusModuleRequest request) {
         SyllabusModule module = findModuleOrThrow(id);
+        if (request.getDurationValue() != null && request.getDurationValue() > 0) {
+            double newModuleHours = calculateModuleHours(request.getDurationValue(), request.getDurationUnit());
+            double existingTopicsHours = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(id).stream()
+                    .mapToDouble(t -> t.getDurationHours() != null ? t.getDurationHours() : 0.0)
+                    .sum();
+            if (existingTopicsHours > newModuleHours) {
+                throw new BadRequestException("Module duration cannot be less than total topic duration (" + existingTopicsHours + " hours)");
+            }
+        }
         module.setTitle(request.getTitle());
         module.setDescription(request.getDescription());
         module.setStatus(request.getStatus());
@@ -182,6 +221,18 @@ public class SyllabusServiceImpl implements SyllabusService {
     @Transactional
     public SyllabusTopicResponse createTopic(Long moduleId, SyllabusTopicRequest request) {
         SyllabusModule module = findModuleOrThrow(moduleId);
+        if (request.getDurationHours() != null && request.getDurationHours() > 0) {
+            double moduleHours = getModuleDurationInHours(module);
+            if (moduleHours <= 0) {
+                throw new BadRequestException("Please set the module duration before adding topic duration");
+            }
+            double existingTopicHours = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(moduleId).stream()
+                    .mapToDouble(t -> t.getDurationHours() != null ? t.getDurationHours() : 0.0)
+                    .sum();
+            if (existingTopicHours + request.getDurationHours() > moduleHours) {
+                throw new BadRequestException("Topic duration (" + (existingTopicHours + request.getDurationHours()) + "h) cannot exceed module duration (" + moduleHours + "h)");
+            }
+        }
 
         SyllabusTopic topic = new SyllabusTopic();
         topic.setModule(module);
@@ -198,6 +249,20 @@ public class SyllabusServiceImpl implements SyllabusService {
     @Transactional
     public SyllabusTopicResponse updateTopic(Long id, SyllabusTopicRequest request) {
         SyllabusTopic topic = findTopicOrThrow(id);
+        if (request.getDurationHours() != null && request.getDurationHours() > 0) {
+            SyllabusModule module = topic.getModule();
+            double moduleHours = getModuleDurationInHours(module);
+            if (moduleHours <= 0) {
+                throw new BadRequestException("Please set the module duration before setting topic duration");
+            }
+            double otherTopicsHours = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(module.getId()).stream()
+                    .filter(t -> !t.getId().equals(id))
+                    .mapToDouble(t -> t.getDurationHours() != null ? t.getDurationHours() : 0.0)
+                    .sum();
+            if (otherTopicsHours + request.getDurationHours() > moduleHours) {
+                throw new BadRequestException("Topic duration (" + (otherTopicsHours + request.getDurationHours()) + "h) cannot exceed module duration (" + moduleHours + "h)");
+            }
+        }
         topic.setTitle(request.getTitle());
         topic.setDescription(request.getDescription());
         topic.setStatus(request.getStatus());

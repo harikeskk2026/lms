@@ -136,11 +136,12 @@ const EMPTY_MODULE_FORM = { title: '', description: '', status: 'PUBLISHED', dur
 const EMPTY_TOPIC_FORM = { title: '', description: '', status: 'PUBLISHED', durationHours: '' }
 const DURATION_UNITS = ['HOURS', 'DAYS', 'WEEKS']
 
-function DurationInput({ value, unit, onValueChange, onUnitChange, small }) {
+function DurationInput({ value, unit, onValueChange, onUnitChange, small, onKeyDown }) {
   const size = small ? 'py-1.5 text-xs' : 'py-2 text-xs'
   return (
     <div className="flex gap-1">
       <input type="number" min="1" value={value} onChange={e => onValueChange(e.target.value)} placeholder="Duration"
+        onKeyDown={onKeyDown}
         className={`w-20 rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`} />
       <select value={unit} onChange={e => onUnitChange(e.target.value)}
         className={`rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`}>
@@ -262,12 +263,26 @@ function SyllabusTab({ courseId }) {
 
   useEffect(() => { load(true) }, [load])
 
+  function getModuleHours(durationValue, durationUnit) {
+    if (!durationValue || isNaN(Number(durationValue)) || Number(durationValue) <= 0) return 0
+    const val = Number(durationValue)
+    const u = (durationUnit || 'WEEKS').toUpperCase()
+    if (u === 'HOURS') return val
+    if (u === 'DAYS') return val * 24
+    if (u === 'WEEKS') return val * 7 * 24
+    return val
+  }
+
   // --- Module Actions ---
   async function addModule() {
-    if (!newModule.title.trim()) return
+    const title = (newModule.title || '').trim()
+    if (!title) {
+      toast.error('Module title is required')
+      return
+    }
     try {
       await courseContentService.createModule(courseId, {
-        title: newModule.title.trim(),
+        title,
         description: (newModule.description || '').trim(),
         status: newModule.status || 'PUBLISHED',
         durationValue: newModule.durationValue ? Number(newModule.durationValue) : null,
@@ -292,13 +307,24 @@ function SyllabusTab({ courseId }) {
   }
 
   async function saveModuleEdit() {
-    if (!editingModule || !editingModule.title.trim()) {
+    if (!editingModule) return
+    const title = (editingModule.title || '').trim()
+    if (!title) {
       toast.error('Module title is required')
       return
     }
+    if (editingModule.durationValue) {
+      const newModuleHours = getModuleHours(editingModule.durationValue, editingModule.durationUnit)
+      const existingModule = modules.find(m => m.id === editingModule.id)
+      const totalTopicsHours = (existingModule?.topics || []).reduce((sum, t) => sum + (t.durationHours || 0), 0)
+      if (totalTopicsHours > 0 && newModuleHours < totalTopicsHours) {
+        toast.error(`Module duration (${newModuleHours}h) cannot be less than total topic duration (${totalTopicsHours}h)`)
+        return
+      }
+    }
     try {
       await courseContentService.updateModule(editingModule.id, {
-        title: editingModule.title.trim(),
+        title,
         description: (editingModule.description || '').trim(),
         status: editingModule.status || 'PUBLISHED',
         durationValue: editingModule.durationValue ? Number(editingModule.durationValue) : null,
@@ -311,36 +337,53 @@ function SyllabusTab({ courseId }) {
   }
 
   async function deleteModule(id) {
-    if (!confirm('Delete this module and all its topics?')) return
+    if (!confirm('Delete module and all its topics?')) return
     try {
       await courseContentService.deleteModule(id)
       toast.success('Module deleted')
       load()
-    } catch (err) { toast.error(err.message || 'Failed to delete module') }
+    } catch { toast.error('Failed to delete module') }
   }
 
-  async function moveModule(index, direction) {
-    const newOrder = [...modules]
-    const target = index + direction
-    if (target < 0 || target >= newOrder.length) return
-    ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
-    setModules(newOrder)
+  async function moveModule(idx, direction) {
+    const targetIdx = idx + direction
+    if (targetIdx < 0 || targetIdx >= modules.length) return
+    const reordered = [...modules]
+    const [moved] = reordered.splice(idx, 1)
+    reordered.splice(targetIdx, 0, moved)
+    setModules(reordered)
     try {
-      await courseContentService.reorderModules(courseId, newOrder.map(m => m.id))
-      load()
+      await courseContentService.reorderModules(courseId, reordered.map(m => m.id))
     } catch { toast.error('Failed to reorder'); load() }
   }
 
   // --- Topic Actions ---
   async function addTopic(moduleId) {
     const topicForm = newTopic[moduleId] || EMPTY_TOPIC_FORM
-    if (!topicForm.title?.trim()) {
+    const title = (topicForm.title || '').trim()
+    if (!title) {
       toast.error('Topic title is required')
       return
     }
+
+    const topicHours = topicForm.durationHours ? Number(topicForm.durationHours) : 0
+    if (topicHours > 0) {
+      const module = modules.find(m => m.id === moduleId)
+      const moduleHours = getModuleHours(module?.durationValue, module?.durationUnit)
+      if (!moduleHours) {
+        toast.error('Please set the module duration before adding topic duration')
+        return
+      }
+      const existingTopicHours = (module?.topics || []).reduce((sum, t) => sum + (t.durationHours || 0), 0)
+      if (existingTopicHours + topicHours > moduleHours) {
+        toast.error(`Topic duration (${existingTopicHours + topicHours}h) cannot exceed module duration (${moduleHours}h)`)
+        return
+      }
+    }
+
     try {
       await courseContentService.createTopic(moduleId, {
-        title: topicForm.title.trim(),
+        title,
         description: (topicForm.description || '').trim(),
         status: topicForm.status || 'PUBLISHED',
         durationHours: topicForm.durationHours ? Number(topicForm.durationHours) : null,
@@ -355,7 +398,6 @@ function SyllabusTab({ courseId }) {
   function openEditTopic(t) {
     setEditingTopic({
       id: t.id,
-      moduleId: t.moduleId,
       title: t.title || '',
       description: t.description || '',
       status: t.status || 'PUBLISHED',
@@ -364,13 +406,32 @@ function SyllabusTab({ courseId }) {
   }
 
   async function saveTopicEdit() {
-    if (!editingTopic || !editingTopic.title.trim()) {
+    if (!editingTopic) return
+    const title = (editingTopic.title || '').trim()
+    if (!title) {
       toast.error('Topic title is required')
       return
     }
+    const topicHours = editingTopic.durationHours ? Number(editingTopic.durationHours) : 0
+    if (topicHours > 0) {
+      const module = modules.find(m => (m.topics || []).some(t => t.id === editingTopic.id))
+      const moduleHours = getModuleHours(module?.durationValue, module?.durationUnit)
+      if (!moduleHours) {
+        toast.error('Please set the module duration before setting topic duration')
+        return
+      }
+      const otherTopicsHours = (module?.topics || [])
+        .filter(t => t.id !== editingTopic.id)
+        .reduce((sum, t) => sum + (t.durationHours || 0), 0)
+      if (otherTopicsHours + topicHours > moduleHours) {
+        toast.error(`Topic duration (${otherTopicsHours + topicHours}h) cannot exceed module duration (${moduleHours}h)`)
+        return
+      }
+    }
+
     try {
       await courseContentService.updateTopic(editingTopic.id, {
-        title: editingTopic.title.trim(),
+        title,
         description: (editingTopic.description || '').trim(),
         status: editingTopic.status || 'PUBLISHED',
         durationHours: editingTopic.durationHours ? Number(editingTopic.durationHours) : null,
@@ -382,22 +443,24 @@ function SyllabusTab({ courseId }) {
   }
 
   async function deleteTopic(id) {
-    if (!confirm('Delete this topic?')) return
+    if (!confirm('Delete topic?')) return
     try {
       await courseContentService.deleteTopic(id)
       toast.success('Topic deleted')
       load()
-    } catch (err) { toast.error(err.message || 'Failed to delete topic') }
+    } catch { toast.error('Failed to delete topic') }
   }
 
-  async function moveTopic(moduleId, topics, index, direction) {
-    const newOrder = [...topics]
-    const target = index + direction
-    if (target < 0 || target >= newOrder.length) return
-    ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
+  async function moveTopic(moduleId, currentTopics, idx, direction) {
+    const targetIdx = idx + direction
+    if (targetIdx < 0 || targetIdx >= currentTopics.length) return
+    const reordered = [...currentTopics]
+    const [moved] = reordered.splice(idx, 1)
+    reordered.splice(targetIdx, 0, moved)
+
+    setModules(prev => prev.map(m => m.id === moduleId ? { ...m, topics: reordered } : m))
     try {
-      await courseContentService.reorderTopics(moduleId, newOrder.map(t => t.id))
-      load()
+      await courseContentService.reorderTopics(moduleId, reordered.map(t => t.id))
     } catch { toast.error('Failed to reorder'); load() }
   }
 
@@ -446,6 +509,7 @@ function SyllabusTab({ courseId }) {
             <input
               value={newModule.title}
               onChange={e => setNewModule(f => ({ ...f, title: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && addModule()}
               placeholder="New module title *"
               className="sm:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
             />
@@ -455,6 +519,7 @@ function SyllabusTab({ courseId }) {
             <input
               value={newModule.description}
               onChange={e => setNewModule(f => ({ ...f, description: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && addModule()}
               placeholder="Module description (optional)"
               className="sm:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500"
             />
@@ -463,6 +528,7 @@ function SyllabusTab({ courseId }) {
               unit={newModule.durationUnit}
               onValueChange={v => setNewModule(f => ({ ...f, durationValue: v }))}
               onUnitChange={u => setNewModule(f => ({ ...f, durationUnit: u }))}
+              onKeyDown={e => e.key === 'Enter' && addModule()}
             />
           </div>
           <div className="flex justify-end gap-2 pt-1">

@@ -38,7 +38,8 @@ public class GlobalExceptionHandler {
         List<FieldErrorDetail> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(fe -> new FieldErrorDetail(fe.getField(), fe.getDefaultMessage()))
                 .toList();
-        return buildResponse(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), errors);
+        String mainMessage = errors.isEmpty() ? "Validation failed" : errors.get(0).message();
+        return buildResponse(HttpStatus.BAD_REQUEST, mainMessage, request.getRequestURI(), errors);
     }
 
     @ExceptionHandler(Exception.class)

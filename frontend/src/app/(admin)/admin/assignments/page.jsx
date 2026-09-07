@@ -139,6 +139,10 @@ export default function AssignmentsPage() {
       toast.error('Please fill in all required fields')
       return
     }
+    if (form.startDate && form.dueDate && new Date(form.dueDate) < new Date(form.startDate)) {
+      toast.error('Due date (end date) must be after start date')
+      return
+    }
     setSaving(true)
     try {
       const payload = buildPayload(status)
@@ -184,8 +188,25 @@ export default function AssignmentsPage() {
     }
   }
 
+  const handleCourseChange = (selectedCourseId) => {
+    setForm(f => {
+      const isBatchValid = selectedCourseId && f.batchId
+        ? batches.some(b => String(b.id) === String(f.batchId) && (b.course?.id ? String(b.course.id) === String(selectedCourseId) : String(b.courseId || '') === String(selectedCourseId)))
+        : false
+
+      return {
+        ...f,
+        courseId: selectedCourseId,
+        batchId: isBatchValid ? f.batchId : '',
+      }
+    })
+  }
+
   const courseOptions = toOptions(courses, c => c.title)
-  const batchOptions = toOptions(batches, b => b.name)
+  const filteredBatches = form.courseId
+    ? batches.filter(b => (b.course?.id ? String(b.course.id) === String(form.courseId) : String(b.courseId || '') === String(form.courseId)))
+    : batches
+  const batchOptions = toOptions(filteredBatches, b => b.name)
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -377,7 +398,7 @@ export default function AssignmentsPage() {
             <SearchableSelect
               options={courseOptions}
               value={form.courseId}
-              onChange={(v) => setForm(f => ({ ...f, courseId: v }))}
+              onChange={handleCourseChange}
               placeholder="Select course"
               searchPlaceholder="Search course..."
             />
@@ -407,6 +428,7 @@ export default function AssignmentsPage() {
               <input
                 type="date"
                 value={form.dueDate}
+                min={form.startDate || undefined}
                 onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
               />

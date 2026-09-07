@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight, UserCheck, Pencil } from 'lucide-react'
+import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight, UserCheck, Pencil, Search } from 'lucide-react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameDay, isSameMonth, isToday, addMonths, subMonths,
@@ -51,6 +51,18 @@ export default function BatchDetailPage() {
   const [editPanel, setEditPanel] = useState(false)
   const [courses, setCourses] = useState([])
   const [editForm, setEditForm] = useState({ name: '', courseId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
+  const [hasSearched, setHasSearched] = useState(false)
+  const [studentRosterQuery, setStudentRosterQuery] = useState('')
+
+  const filteredRoster = roster.filter(s => {
+    if (!studentRosterQuery.trim()) return true
+    const q = studentRosterQuery.toLowerCase().trim()
+    return (
+      s.name?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.enrollmentNo?.toLowerCase().includes(q)
+    )
+  })
 
   const handleAssignTrainer = async (newTrainerId) => {
     const errMsg = validateBatchDates(batch.startDate, batch.endDate, batch.course?.duration)
@@ -171,14 +183,37 @@ export default function BatchDetailPage() {
   }, [id, user?.role])
 
   const searchStudentsToAdd = async (e) => {
-    e.preventDefault()
+    if (e?.preventDefault) e.preventDefault()
     setAddStudentSearching(true)
     try {
-      const r = await studentService.list({ search: addStudentQuery, limit: 20 })
+      const searchStr = addStudentQuery?.trim()
+      const r = await studentService.list({ search: searchStr || undefined, limit: 100 })
       const rosterIds = new Set(roster.map(s => s.id))
-      setAddStudentResults((r.data?.students || []).filter(s => !rosterIds.has(s.id)))
-    } catch { toast.error('Search failed') } finally { setAddStudentSearching(false) }
+      const rawStudents = r.data?.students || r.students || (Array.isArray(r.data) ? r.data : [])
+      setAddStudentResults(rawStudents.filter(s => !rosterIds.has(s.id)))
+      setHasSearched(true)
+    } catch {
+      toast.error('Search failed')
+    } finally {
+      setAddStudentSearching(false)
+    }
   }
+
+  useEffect(() => {
+    if (addStudentPanel) {
+      setAddStudentQuery('')
+      setHasSearched(false)
+      setAddStudentSearching(true)
+      studentService.list({ limit: 50 })
+        .then(r => {
+          const rosterIds = new Set(roster.map(s => s.id))
+          const rawStudents = r.data?.students || r.students || (Array.isArray(r.data) ? r.data : [])
+          setAddStudentResults(rawStudents.filter(s => !rosterIds.has(s.id)))
+        })
+        .catch(() => {})
+        .finally(() => setAddStudentSearching(false))
+    }
+  }, [addStudentPanel, roster])
 
   const handleAddStudent = async (studentId) => {
     try {
@@ -366,36 +401,64 @@ export default function BatchDetailPage() {
 
       {/* Students Tab */}
       {tab === 'Students' && (
-        <div className="space-y-4">          {isAdmin && (
-            <div className="flex justify-end">
-              {enrolled >= batch.maxStudents ? (
-                <span className="text-xs font-semibold px-4 py-2 rounded-xl bg-orange-50 text-orange-600">Batch full ({enrolled}/{batch.maxStudents})</span>
-              ) : (
-                <button onClick={() => { setAddStudentPanel(true); setAddStudentQuery(''); setAddStudentResults([]) }}
-                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
-                  <UserPlus size={14} /> Add Student
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={studentRosterQuery}
+                onChange={e => setStudentRosterQuery(e.target.value)}
+                placeholder="Search enrolled students..."
+                className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm"
+              />
+              {studentRosterQuery && (
+                <button
+                  onClick={() => setStudentRosterQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  ✕
                 </button>
               )}
             </div>
-          )}
+            {isAdmin && (
+              <div>
+                {enrolled >= batch.maxStudents ? (
+                  <span className="text-xs font-semibold px-4 py-2 rounded-xl bg-orange-50 text-orange-600">Batch full ({enrolled}/{batch.maxStudents})</span>
+                ) : (
+                  <button onClick={() => { setAddStudentPanel(true); setAddStudentQuery(''); setAddStudentResults([]) }}
+                    className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20 active:scale-95">
+                    <UserPlus size={14} /> Add Student
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <div className="glass-card overflow-hidden">
-            <div className="px-5 py-4 border-b border-purple-100 flex items-center justify-between">
-              <p className="font-semibold text-gray-700 dark:text-gray-300">{enrolled} Students</p>
+            <div className="px-5 py-4 border-b border-purple-100 dark:border-gray-800 flex items-center justify-between">
+              <p className="font-semibold text-gray-700 dark:text-gray-300">
+                {filteredRoster.length} {filteredRoster.length === 1 ? 'Student' : 'Students'}
+                {studentRosterQuery.trim() && ` (filtered from ${roster.length})`}
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-purple-50/50 border-b border-purple-100">
+                  <tr className="bg-purple-50/50 dark:bg-gray-800/50 border-b border-purple-100 dark:border-gray-800">
                     {['Student', 'Enrollment', 'Attendance', 'Avg Quiz', 'Placement', ...(isAdmin ? ['Action'] : [])].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {roster.length === 0 ? (
-                    <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-gray-400">No students enrolled</td></tr>
+                  {filteredRoster.length === 0 ? (
+                    <tr>
+                      <td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-gray-400">
+                        {studentRosterQuery.trim() ? `No students found matching "${studentRosterQuery}"` : 'No students enrolled'}
+                      </td>
+                    </tr>
                   ) : (
-                    roster.map(s => (
+                    filteredRoster.map(s => (
                       <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -447,26 +510,41 @@ export default function BatchDetailPage() {
 
           <SlidePanel open={addStudentPanel} onClose={() => setAddStudentPanel(false)} title="Add Student to Batch">
             <form onSubmit={searchStudentsToAdd} className="flex gap-2 mb-4">
-              <input value={addStudentQuery} onChange={e => setAddStudentQuery(e.target.value)} placeholder="Search by name, email, or enrollment no."
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <button type="submit" disabled={addStudentSearching}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+              <input
+                value={addStudentQuery}
+                onChange={e => setAddStudentQuery(e.target.value)}
+                placeholder="Search by name, email, or enrollment no."
+                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
+              />
+              <button
+                type="submit"
+                disabled={addStudentSearching}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all"
+              >
                 {addStudentSearching ? 'Searching...' : 'Search'}
               </button>
             </form>
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {addStudentResults.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">Search for a student to add to this batch.</p>
+              {addStudentSearching ? (
+                <div className="py-8 text-center text-sm text-gray-400">Searching students...</div>
+              ) : addStudentResults.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">
+                  {hasSearched && addStudentQuery.trim()
+                    ? `No students found matching "${addStudentQuery}".`
+                    : 'No available students to add.'}
+                </p>
               ) : (
                 addStudentResults.map(s => (
-                  <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-50">
+                  <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800">
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">{s.name}</p>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{s.name}</p>
                       <p className="text-xs text-gray-400">{s.email} · {s.enrollmentNo}</p>
                       {s.batch && <p className="text-[10px] text-orange-500 mt-0.5">Currently in {s.batch.name}</p>}
                     </div>
-                    <button onClick={() => handleAddStudent(s.id)}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100">
+                    <button
+                      onClick={() => handleAddStudent(s.id)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                    >
                       Add
                     </button>
                   </div>

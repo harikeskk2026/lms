@@ -24,6 +24,8 @@ export default function AdminProfilePage() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(null)
+  const [initialForm, setInitialForm] = useState(null)
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   const load = () => {
@@ -31,12 +33,15 @@ export default function AdminProfilePage() {
     profileService.get()
       .then(r => {
         setProfile(r.data)
-        setForm({
+        const loadedForm = {
           name: r.data.name || '',
           phone: r.data.phone || '',
           designation: r.data.admin?.designation || '',
           department: r.data.admin?.department || '',
-        })
+        }
+        setForm(loadedForm)
+        setInitialForm(loadedForm)
+        setErrors({})
       })
       .catch(err => toast.error(err.message || 'Failed to load profile'))
       .finally(() => setLoading(false))
@@ -56,14 +61,36 @@ export default function AdminProfilePage() {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    const errs = {}
+    if (!form.name || !form.name.trim()) {
+      errs.name = 'Full Name is required'
+    }
     if (form.phone && !isValidPhone(form.phone)) {
-      toast.error(PHONE_ERROR_MESSAGE)
+      errs.phone = PHONE_ERROR_MESSAGE
+    }
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs)
+      toast.error('Please fill in all required fields correctly')
+      return
+    }
+    setErrors({})
+    if (initialForm && JSON.stringify(form) === JSON.stringify(initialForm)) {
+      toast.error('No changes to save')
       return
     }
     setSaving(true)
     try {
       const res = await profileService.update(form)
       setProfile(res.data)
+      const updatedForm = {
+        name: res.data.name || '',
+        phone: res.data.phone || '',
+        designation: res.data.admin?.designation || '',
+        department: res.data.admin?.department || '',
+      }
+      setForm(updatedForm)
+      setInitialForm(updatedForm)
+      setErrors({})
       // Keep the sidebar/topbar (both read the name from AuthContext, not this
       // page's own state) and the cached session in sync immediately, instead
       // of waiting for the next background /auth/me revalidation.
@@ -123,12 +150,21 @@ export default function AdminProfilePage() {
         {/* Personal + Professional Information */}
         <div className="glass-card p-6 space-y-4">
           <h3 className="font-display font-bold text-gray-800 dark:text-white">Personal & Professional Information</h3>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleSave} noValidate className="space-y-4">
             <div>
-              <label className={LABEL_CLS}>Full Name</label>
+              <label className={LABEL_CLS}>Full Name *</label>
               <input type="text" required value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className={INPUT_CLS} />
+                onChange={e => {
+                  setForm(f => ({ ...f, name: e.target.value }))
+                  if (errors.name && e.target.value.trim()) setErrors(err => ({ ...err, name: undefined }))
+                }}
+                className={`${INPUT_CLS} ${errors.name ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
+              {errors.name && (
+                <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {errors.name}
+                </p>
+              )}
             </div>
             <div className="flex items-start gap-3">
               <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-5">
@@ -142,9 +178,19 @@ export default function AdminProfilePage() {
             <div>
               <label className={LABEL_CLS}><Phone size={10} className="inline mr-1" />Phone</label>
               <input type="tel" inputMode="numeric" maxLength={10} value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  setForm(f => ({ ...f, phone: val }))
+                  if (errors.phone && isValidPhone(val)) setErrors(err => ({ ...err, phone: undefined }))
+                }}
                 placeholder="9876543210"
-                className={INPUT_CLS} />
+                className={`${INPUT_CLS} ${errors.phone ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
+              {errors.phone && (
+                <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {errors.phone}
+                </p>
+              )}
             </div>
             <div>
               <label className={LABEL_CLS}><Briefcase size={10} className="inline mr-1" />Designation</label>

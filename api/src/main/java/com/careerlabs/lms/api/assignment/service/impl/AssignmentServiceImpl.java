@@ -11,6 +11,7 @@ import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
 import com.careerlabs.lms.api.assignment.service.AssignmentService;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.storage.FileStorageService;
 import com.careerlabs.lms.api.common.storage.StoredFile;
@@ -213,6 +214,10 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     private void applyRequest(Assignment assignment, AssignmentRequest request) {
+        if (request.getStartDate() != null && request.getDueDate() != null && request.getDueDate().isBefore(request.getStartDate())) {
+            throw new BadRequestException("Due date (end date) must be after start date");
+        }
+
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + request.getCourseId()));
         Batch batch = batchRepository.findById(request.getBatchId())

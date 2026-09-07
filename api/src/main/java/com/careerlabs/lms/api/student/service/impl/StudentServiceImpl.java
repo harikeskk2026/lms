@@ -416,10 +416,11 @@ public class StudentServiceImpl implements StudentService {
             List<Predicate> predicates = new ArrayList<>();
 
             if (search != null && !search.isBlank()) {
-                String pattern = "%" + search.toLowerCase(Locale.ROOT) + "%";
+                String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
                 predicates.add(cb.or(
                         cb.like(cb.lower(root.get("user").get("name")), pattern),
-                        cb.like(cb.lower(root.get("user").get("email")), pattern)));
+                        cb.like(cb.lower(root.get("user").get("email")), pattern),
+                        cb.like(cb.lower(root.get("enrollmentNo")), pattern)));
             }
             if (batchId != null) {
                 predicates.add(cb.equal(root.get("batch").get("id"), batchId));

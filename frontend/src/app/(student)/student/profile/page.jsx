@@ -20,6 +20,8 @@ export default function StudentProfilePage() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(null)
+  const [initialForm, setInitialForm] = useState(null)
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   const load = () => {
@@ -27,14 +29,17 @@ export default function StudentProfilePage() {
     profileService.get()
       .then(r => {
         setProfile(r.data)
-        setForm({
+        const loadedForm = {
           name: r.data.name || '',
           phone: r.data.phone || '',
           address: r.data.student?.address || '',
           qualification: r.data.student?.qualification || '',
           linkedinUrl: r.data.student?.linkedinUrl || '',
           githubUrl: r.data.student?.githubUrl || '',
-        })
+        }
+        setForm(loadedForm)
+        setInitialForm(loadedForm)
+        setErrors({})
       })
       .catch(err => toast.error(err.message || 'Failed to load profile'))
       .finally(() => setLoading(false))
@@ -54,22 +59,45 @@ export default function StudentProfilePage() {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    const errs = {}
+    if (!form.name || !form.name.trim()) {
+      errs.name = 'Full Name is required'
+    }
     if (form.phone && !isValidPhone(form.phone)) {
-      toast.error(PHONE_ERROR_MESSAGE)
-      return
+      errs.phone = PHONE_ERROR_MESSAGE
     }
     if (form.linkedinUrl && !isValidUrl(form.linkedinUrl)) {
-      toast.error(LINKEDIN_URL_ERROR_MESSAGE)
-      return
+      errs.linkedinUrl = LINKEDIN_URL_ERROR_MESSAGE
     }
     if (form.githubUrl && !isValidUrl(form.githubUrl)) {
-      toast.error(GITHUB_URL_ERROR_MESSAGE)
+      errs.githubUrl = GITHUB_URL_ERROR_MESSAGE
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs)
+      toast.error('Please fill in all required fields correctly')
+      return
+    }
+    setErrors({})
+    if (initialForm && JSON.stringify(form) === JSON.stringify(initialForm)) {
+      toast.error('No changes to save')
       return
     }
     setSaving(true)
     try {
       const res = await profileService.update(form)
       setProfile(res.data)
+      const updatedForm = {
+        name: res.data.name || '',
+        phone: res.data.phone || '',
+        address: res.data.student?.address || '',
+        qualification: res.data.student?.qualification || '',
+        linkedinUrl: res.data.student?.linkedinUrl || '',
+        githubUrl: res.data.student?.githubUrl || '',
+      }
+      setForm(updatedForm)
+      setInitialForm(updatedForm)
+      setErrors({})
       // Keep the sidebar/topbar (both read the name from AuthContext, not this
       // page's own state) and the cached session in sync immediately, instead
       // of waiting for the next background /auth/me revalidation.
@@ -145,20 +173,39 @@ export default function StudentProfilePage() {
       {/* Section 1: Personal Information */}
       <div className="glass-card p-6 space-y-4">
         <h3 className="font-display font-bold text-gray-800 dark:text-white">Personal Information</h3>
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} noValidate className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Full Name</label>
+              <label className={LABEL_CLS}>Full Name *</label>
               <input type="text" required value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className={INPUT_CLS} />
+                onChange={e => {
+                  setForm(f => ({ ...f, name: e.target.value }))
+                  if (errors.name && e.target.value.trim()) setErrors(err => ({ ...err, name: undefined }))
+                }}
+                className={`${INPUT_CLS} ${errors.name ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
+              {errors.name && (
+                <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {errors.name}
+                </p>
+              )}
             </div>
             <div>
               <label className={LABEL_CLS}><Phone size={10} className="inline mr-1" />Phone</label>
               <input type="tel" inputMode="numeric" maxLength={10} value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  setForm(f => ({ ...f, phone: val }))
+                  if (errors.phone && isValidPhone(val)) setErrors(err => ({ ...err, phone: undefined }))
+                }}
                 placeholder="e.g. 9876543210"
-                className={INPUT_CLS} />
+                className={`${INPUT_CLS} ${errors.phone ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
+              {errors.phone && (
+                <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {errors.phone}
+                </p>
+              )}
             </div>
           </div>
 
@@ -189,16 +236,34 @@ export default function StudentProfilePage() {
             <div>
               <label className={LABEL_CLS}><Linkedin size={10} className="inline mr-1" />LinkedIn URL</label>
               <input type="url" value={form.linkedinUrl}
-                onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))}
+                onChange={e => {
+                  setForm(f => ({ ...f, linkedinUrl: e.target.value }))
+                  if (errors.linkedinUrl && isValidUrl(e.target.value)) setErrors(err => ({ ...err, linkedinUrl: undefined }))
+                }}
                 placeholder="https://linkedin.com/in/yourname"
-                className={INPUT_CLS} />
+                className={`${INPUT_CLS} ${errors.linkedinUrl ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
+              {errors.linkedinUrl && (
+                <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {errors.linkedinUrl}
+                </p>
+              )}
             </div>
             <div>
               <label className={LABEL_CLS}><Github size={10} className="inline mr-1" />GitHub URL</label>
               <input type="url" value={form.githubUrl}
-                onChange={e => setForm(f => ({ ...f, githubUrl: e.target.value }))}
+                onChange={e => {
+                  setForm(f => ({ ...f, githubUrl: e.target.value }))
+                  if (errors.githubUrl && isValidUrl(e.target.value)) setErrors(err => ({ ...err, githubUrl: undefined }))
+                }}
                 placeholder="https://github.com/yourname"
-                className={INPUT_CLS} />
+                className={`${INPUT_CLS} ${errors.githubUrl ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
+              {errors.githubUrl && (
+                <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {errors.githubUrl}
+                </p>
+              )}
             </div>
           </div>
 
