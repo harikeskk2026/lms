@@ -77,6 +77,9 @@ export default function TrainersPage() {
 
   useEffect(() => {
     fetchTrainers()
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('action') === 'add') {
+      handleOpenAdd()
+    }
   }, [fetchTrainers])
 
   // Open Create Modal

@@ -28,10 +28,13 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
-  const fetch = useCallback(() => {
-    setLoading(true)
-    studentApi.getDashboard()
-      .then(r => setData(r.data.data))
+  const fetch = useCallback((silent = false) => {
+    if (!silent) setLoading(true)
+    return studentApi.getDashboard()
+      .then(r => {
+        const d = r.data?.data || r.data
+        if (d) setData({ ...d })
+      })
       .catch(e => setError(e?.response?.data?.message || 'Failed to load dashboard'))
       .finally(() => setLoading(false))
   }, [])

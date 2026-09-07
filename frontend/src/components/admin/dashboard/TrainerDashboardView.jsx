@@ -9,6 +9,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import { SkeletonStat, ErrorCard } from '@/components/student/SkeletonCard'
+import toast from 'react-hot-toast'
 
 const QUICK_ACTIONS = [
   { label: 'Mark Attendance',   icon: Calendar,      href: '/admin/attendance',     grad: 'from-purple-600 to-violet-600'  },
@@ -68,14 +69,16 @@ export default function TrainerDashboardView() {
     return () => clearInterval(id)
   }, [])
 
-  const load = useCallback((silent = false) => {
+  const load = useCallback((silent = false, isManual = false) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     setError(null)
     adminApi.getTrainerDashboard()
       .then(r => {
-        setStats(r.data.data)
+        const data = r.data?.data || r.data
+        if (data) setStats({ ...data })
         setLastUpdated(new Date())
+        if (isManual) toast.success('Dashboard refreshed')
       })
       .catch(e => setError(e?.response?.data?.message || 'Failed to load Trainer dashboard'))
       .finally(() => { setLoading(false); setRefreshing(false) })
@@ -114,7 +117,7 @@ export default function TrainerDashboardView() {
               <div className="w-7 h-7 rounded-lg bg-purple-300/20 flex items-center justify-center ring-1 ring-purple-300/30">
                 <Award size={14} className="text-purple-200" />
               </div>
-              <p className="text-purple-200 text-xs font-bold tracking-widest uppercase">Trainer · Teaching Console</p>
+              <p className="text-purple-200 text-xs font-bold tracking-widest uppercase">Trainer</p>
             </div>
             <h1 className="font-display text-2xl font-extrabold mb-1">My Teaching Dashboard</h1>
             <p className="text-purple-200 text-sm">
@@ -122,21 +125,6 @@ export default function TrainerDashboardView() {
               {' · '}
               <span className="font-mono font-bold">{clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
             </p>
-          </div>
-          {/* Refresh control */}
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              onClick={() => load(true)}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-lg ring-1 ring-white/20 transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
-            </button>
-            {lastUpdated && (
-              <p className="text-[11px] text-purple-300">
-                Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-              </p>
-            )}
           </div>
         </div>
       </div>

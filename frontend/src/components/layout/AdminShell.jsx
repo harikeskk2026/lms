@@ -77,7 +77,9 @@ function Sidebar({ open, onClose, badges }) {
             <div className="font-display text-xl font-extrabold text-white">
               Career<span style={{ color: '#ffd668' }}>Labs</span>
             </div>
-            <div className="text-purple-300 text-[10px] font-semibold uppercase tracking-wider mt-0.5">Admin Panel</div>
+            <div className="text-purple-300 text-[10px] font-semibold uppercase tracking-wider mt-0.5">
+              {user?.role ? `${user.role === 'SUPERADMIN' ? 'Super Admin' : user.role.replace(/_/g, ' ')} Panel` : 'Admin Panel'}
+            </div>
           </div>
           <button onClick={onClose} className="text-white/60 hover:text-white lg:hidden">
             <X size={20} />
@@ -108,7 +110,7 @@ function Sidebar({ open, onClose, badges }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin">
-          <p className="text-purple-400 text-[10px] font-bold uppercase tracking-wider px-3 mb-2">Navigation</p>
+          <p className="text-purple-400 text-[10px] font-bold uppercase tracking-wider px-3 mb-2">Explore</p>
           {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ href, icon: Icon, label, badge }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
             const count  = badge ? (badges[badge] || 0) : 0

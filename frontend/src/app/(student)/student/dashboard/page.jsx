@@ -6,8 +6,9 @@ import { format, formatDistanceToNow, isToday } from 'date-fns'
 import {
   Calendar, ClipboardList, Brain, BookOpen, Play,
   FileText, Download, Star, ChevronRight, Flame,
-  ExternalLink, Bell, Trophy, Award, Zap
+  ExternalLink, Bell, Trophy, Award, Zap, RefreshCw
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useDashboard, useNotifications } from '@/hooks/useStudentDashboard'
 import { resolveFileUrl } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -74,8 +75,25 @@ export default function StudentDashboardPage() {
   const { data: notifications } = useNotifications()
   const [materials, setMaterials] = useState([])
   const [sessions,  setSessions]  = useState([])
+  const [refreshing, setRefreshing] = useState(false)
 
   const primaryCourseId = data?.continueLearning?.[0]?.courseId
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await refetch(true)
+      if (primaryCourseId) {
+        studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
+        studentApi.getSessions(primaryCourseId).then(r => setSessions(r.data.data || [])).catch(() => {})
+      }
+      toast.success('Dashboard updated')
+    } catch (err) {
+      toast.error('Failed to update dashboard')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     if (primaryCourseId) {
@@ -124,12 +142,14 @@ export default function StudentDashboardPage() {
 
       {/* ── ROW 1: Greeting + Stat Cards ─────────────────────────── */}
       <div className="animate-fadeInUp">
-        <h1 className="font-display text-2xl font-extrabold text-gray-800 dark:text-white mb-0.5">
-          Good morning, {user?.name ? user.name.split(' ')[0] : 'there'} 👋
-        </h1>
-        <p className="text-sm text-gray-500 mb-5">
-          Enrolled in {overview.myCourses} course{overview.myCourses === 1 ? '' : 's'} · {overview.pendingAssignments} pending assignment{overview.pendingAssignments === 1 ? '' : 's'}
-        </p>
+        <div>
+          <h1 className="font-display text-2xl font-extrabold text-gray-800 dark:text-white mb-0.5">
+            Good morning, {user?.name ? user.name.split(' ')[0] : 'there'} 👋
+          </h1>
+          <p className="text-sm text-gray-500 mb-5">
+            Enrolled in {overview.myCourses} course{overview.myCourses === 1 ? '' : 's'} · {overview.pendingAssignments} pending assignment{overview.pendingAssignments === 1 ? '' : 's'}
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeInUp delay-100">

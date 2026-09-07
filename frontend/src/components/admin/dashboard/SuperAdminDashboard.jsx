@@ -3,12 +3,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
-  GraduationCap, UserCheck, Users, BookOpen, Layers, Briefcase, Building,
+  GraduationCap, UserCheck, Users, BookOpen, Layers, Briefcase,
   UserPlus, FileText, Globe, Activity, Zap, Crown, RefreshCw
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import { SkeletonStat, ErrorCard } from '@/components/student/SkeletonCard'
+
+import toast from 'react-hot-toast'
 
 const PerformanceTrendChart = dynamic(
   () => import('@/components/admin/dashboard/PerformanceCharts').then(m => m.PerformanceTrendChart),
@@ -23,7 +25,7 @@ const ATTENDANCE_COLORS = { healthy: '#22c55e', atRisk: '#f59e0b', critical: '#e
 
 const QUICK_ACTIONS = [
   { label: 'Add Student',      icon: UserPlus,  href: '/admin/students',       grad: 'from-purple-600 to-violet-600' },
-  { label: 'Add Trainer',      icon: Users,     href: '/admin/profile',        grad: 'from-violet-600 to-indigo-600' },
+  { label: 'Add Trainer',      icon: Users,     href: '/admin/trainers?action=add',        grad: 'from-violet-600 to-indigo-600' },
   { label: 'Create Batch',     icon: Layers,    href: '/admin/batches',        grad: 'from-indigo-600 to-purple-600' },
   { label: 'Courses',          icon: BookOpen,  href: '/admin/course-catalog', grad: 'from-purple-700 to-fuchsia-600' },
   { label: 'Placement Drives', icon: Briefcase, href: '/admin/placement',      grad: 'from-purple-600 to-violet-700' },
@@ -77,14 +79,16 @@ export default function SuperAdminDashboard() {
     return () => clearInterval(id)
   }, [])
 
-  const load = useCallback((silent = false) => {
+  const load = useCallback((silent = false, isManual = false) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     setError(null)
     adminApi.getSuperAdminDashboard()
       .then(r => {
-        setStats(r.data.data)
+        const data = r.data?.data || r.data
+        if (data) setStats({ ...data })
         setLastUpdated(new Date())
+        if (isManual) toast.success('Dashboard refreshed')
       })
       .catch(e => setError(e?.response?.data?.message || 'Failed to load SuperAdmin dashboard'))
       .finally(() => { setLoading(false); setRefreshing(false) })
@@ -125,7 +129,7 @@ export default function SuperAdminDashboard() {
               <div className="w-7 h-7 rounded-lg bg-amber-400/20 flex items-center justify-center ring-1 ring-amber-400/40">
                 <Crown size={14} className="text-amber-300" />
               </div>
-              <p className="text-amber-300/90 text-xs font-bold tracking-widest uppercase">Super Admin · Command Center</p>
+              <p className="text-amber-300/90 text-xs font-bold tracking-widest uppercase">Super Admin</p>
             </div>
             <h1 className="font-display text-2xl font-extrabold text-white mb-1">System-Wide Overview</h1>
             <p className="text-purple-200 text-sm">
@@ -133,21 +137,6 @@ export default function SuperAdminDashboard() {
               {' · '}
               <span className="font-mono font-bold text-amber-300">{clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
             </p>
-          </div>
-          {/* Refresh control */}
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              onClick={() => load(true)}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 text-xs font-semibold px-3 py-1.5 rounded-lg ring-1 ring-amber-400/40 transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
-            </button>
-            {lastUpdated && (
-              <p className="text-[11px] text-purple-300/80">
-                Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-              </p>
-            )}
           </div>
         </div>
       </div>
@@ -158,8 +147,8 @@ export default function SuperAdminDashboard() {
           <div className="w-1 h-5 rounded-full bg-gradient-to-b from-purple-500 to-violet-600" />
           <h3 className="font-display font-bold text-gray-800 dark:text-white text-sm uppercase tracking-wider">Platform Overview</h3>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          {loading ? [...Array(8)].map((_, i) => <SkeletonStat key={i} />) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+          {loading ? [...Array(7)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <StatCard title="Total Students"  value={stats?.overview?.totalStudents  ?? 0} icon={GraduationCap} accent="purple" />
               <StatCard title="Active Students" value={stats?.overview?.activeStudents  ?? 0} icon={UserCheck}    accent="green"  />
@@ -168,7 +157,6 @@ export default function SuperAdminDashboard() {
               <StatCard title="Total Batches"   value={stats?.overview?.totalBatches   ?? 0} icon={Layers}       accent="slate"  />
               <StatCard title="Active Batches"  value={stats?.overview?.activeBatches  ?? 0} icon={Layers}       accent="amber"  />
               <StatCard title="Total Courses"   value={stats?.overview?.totalCourses   ?? 0} icon={BookOpen}     accent="gold"   />
-              <StatCard title="Colleges"         value={stats?.overview?.totalColleges  ?? 0} icon={Building}     accent="blue"   />
             </>
           )}
         </div>

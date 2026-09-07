@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -31,7 +31,7 @@ const ACTIVITY_ICONS = {
 
 const QUICK_ACTIONS = [
   { label: 'Add Student',             icon: UserPlus,      href: '/admin/students',       color: 'from-purple-600 to-violet-600' },
-  { label: 'Add Trainer',             icon: Users,         href: '/admin/profile',        color: 'from-violet-600 to-indigo-600' },
+  { label: 'Add Trainer',             icon: Users,         href: '/admin/trainers?action=add',        color: 'from-violet-600 to-indigo-600' },
   { label: 'Create Batch',            icon: Layers,        href: '/admin/batches',        color: 'from-indigo-600 to-purple-600' },
   { label: 'Create Course',           icon: BookOpen,      href: '/admin/course-catalog', color: 'from-purple-700 to-fuchsia-600' },
   { label: 'Manage Attendance',       icon: Calendar,      href: '/admin/attendance',     color: 'from-fuchsia-600 to-purple-700' },
@@ -52,12 +52,12 @@ function SectionHeader({ label }) {
 
 export default function AdminDashboardView() {
   const router = useRouter()
-  const [stats, setStats]           = useState(null)
-  const [loading, setLoading]       = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [error, setError]           = useState(null)
+  const [stats, setStats]             = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [refreshing, setRefreshing]   = useState(false)
+  const [error, setError]             = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
-  const [clock, setClock]           = useState(new Date())
+  const [clock, setClock]             = useState(new Date())
 
   // Live clock — tick every second
   useEffect(() => {
@@ -65,14 +65,16 @@ export default function AdminDashboardView() {
     return () => clearInterval(id)
   }, [])
 
-  const load = useCallback((silent = false) => {
+  const load = useCallback((silent = false, isManual = false) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     setError(null)
     adminApi.getDashboard()
       .then(r => {
-        setStats(r.data.data)
+        const data = r.data?.data || r.data
+        if (data) setStats({ ...data })
         setLastUpdated(new Date())
+        if (isManual) toast.success('Dashboard refreshed')
       })
       .catch(e => setError(e?.response?.data?.message || 'Failed to load dashboard'))
       .finally(() => { setLoading(false); setRefreshing(false) })
@@ -117,7 +119,7 @@ export default function AdminDashboardView() {
               <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center ring-1 ring-white/20">
                 <Shield size={14} className="text-purple-100" />
               </div>
-              <p className="text-purple-200 text-xs font-bold tracking-widest uppercase">Admin · Operations Hub</p>
+              <p className="text-purple-200 text-xs font-bold tracking-widest uppercase">Admin</p>
             </div>
             <h1 className="font-display text-2xl font-extrabold mb-1">Operational Overview</h1>
             <p className="text-purple-200 text-sm">
@@ -125,21 +127,6 @@ export default function AdminDashboardView() {
               {' · '}
               <span className="font-mono font-bold">{clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
             </p>
-          </div>
-          {/* Refresh control */}
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              onClick={() => load(true)}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-lg ring-1 ring-white/20 transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
-            </button>
-            {lastUpdated && (
-              <p className="text-[11px] text-purple-300">
-                Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-              </p>
-            )}
           </div>
         </div>
       </div>

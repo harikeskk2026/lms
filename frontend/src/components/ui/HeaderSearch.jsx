@@ -227,10 +227,6 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
           >
             <X size={13} />
           </button>
-        ) : !isFocused ? (
-          <kbd className="hidden sm:inline-block text-[9px] bg-purple-200/60 dark:bg-purple-800/60 px-1.5 py-0.5 rounded font-mono font-bold text-purple-700 dark:text-purple-200 shrink-0">
-            ⌘K
-          </kbd>
         ) : null}
       </div>
 
