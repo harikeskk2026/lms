@@ -4,8 +4,10 @@ import com.careerlabs.lms.api.batch.dto.request.BatchRequest;
 import com.careerlabs.lms.api.batch.dto.response.BatchResponse;
 import com.careerlabs.lms.api.batch.service.BatchService;
 import com.careerlabs.lms.api.common.response.ApiResponse;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,13 +31,14 @@ public class BatchController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<BatchResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(batchService.list()));
+    public ResponseEntity<ApiResponse<List<BatchResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(batchService.list(principal)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<BatchResponse>> get(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.of(batchService.get(id)));
+    public ResponseEntity<ApiResponse<BatchResponse>> get(@PathVariable Long id,
+                                                           @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(batchService.get(id, principal)));
     }
 
     @PostMapping

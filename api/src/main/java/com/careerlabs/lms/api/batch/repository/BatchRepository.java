@@ -15,6 +15,8 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
 
     List<Batch> findByTrainerId(Long trainerId);
 
+    List<Batch> findByTrainerIdOrderByCreatedAtDesc(Long trainerId);
+
     @EntityGraph(attributePaths = {"course"})
     List<Batch> findByNameIgnoreCase(String name);
 

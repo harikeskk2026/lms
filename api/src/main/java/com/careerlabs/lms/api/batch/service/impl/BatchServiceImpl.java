@@ -8,15 +8,22 @@ import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.batch.service.BatchService;
 import com.careerlabs.lms.api.common.exception.ConflictException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.user.entity.User;
+import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,38 +34,82 @@ public class BatchServiceImpl implements BatchService {
     private final StudentRepository studentRepository;
     private final AssignmentRepository assignmentRepository;
     private final DailyClassRepository dailyClassRepository;
+    private final UserRepository userRepository;
 
     public BatchServiceImpl(BatchRepository batchRepository,
                              CourseRepository courseRepository,
                              StudentRepository studentRepository,
                              AssignmentRepository assignmentRepository,
-                             DailyClassRepository dailyClassRepository) {
+                             DailyClassRepository dailyClassRepository,
+                             UserRepository userRepository) {
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.studentRepository = studentRepository;
         this.assignmentRepository = assignmentRepository;
         this.dailyClassRepository = dailyClassRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<BatchResponse> list() {
-        List<Batch> batches = batchRepository.findAllByOrderByCreatedAtDesc();
+        return list(null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BatchResponse> list(JwtUserPrincipal principal) {
+        List<Batch> batches;
+        if (principal != null && "TRAINER".equalsIgnoreCase(principal.role())) {
+            batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(principal.id());
+        } else {
+            batches = batchRepository.findAllByOrderByCreatedAtDesc();
+        }
+
         List<Long> batchIds = batches.stream().map(Batch::getId).toList();
 
-        Map<Long, Long> countsByBatchId = studentRepository.findByBatchIdIn(batchIds).stream()
+        Map<Long, Long> countsByBatchId = batchIds.isEmpty() ? Map.of() : studentRepository.findByBatchIdIn(batchIds).stream()
                 .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.counting()));
 
+        Set<Long> trainerIds = batches.stream()
+                .map(Batch::getTrainerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, User> trainersById = trainerIds.isEmpty() ? Map.of() : userRepository.findAllById(trainerIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
         return batches.stream()
-                .map(b -> BatchResponse.from(b, countsByBatchId.getOrDefault(b.getId(), 0L).intValue()))
+                .map(b -> {
+                    User tr = b.getTrainerId() != null ? trainersById.get(b.getTrainerId()) : null;
+                    BatchResponse.TrainerSummary trainerSummary = tr != null
+                            ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail())
+                            : null;
+                    return BatchResponse.from(b, countsByBatchId.getOrDefault(b.getId(), 0L).intValue(), trainerSummary);
+                })
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public BatchResponse get(Long id) {
+        return get(id, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BatchResponse get(Long id, JwtUserPrincipal principal) {
         Batch batch = findOrThrow(id);
-        return BatchResponse.from(batch, (int) studentRepository.countByBatchId(id));
+        if (principal != null && "TRAINER".equalsIgnoreCase(principal.role())) {
+            if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
+                throw new ForbiddenException("You are not assigned to this batch");
+            }
+        }
+        User tr = batch.getTrainerId() != null ? userRepository.findById(batch.getTrainerId()).orElse(null) : null;
+        BatchResponse.TrainerSummary trainerSummary = tr != null
+                ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail())
+                : null;
+        return BatchResponse.from(batch, (int) studentRepository.countByBatchId(id), trainerSummary);
     }
 
     @Override

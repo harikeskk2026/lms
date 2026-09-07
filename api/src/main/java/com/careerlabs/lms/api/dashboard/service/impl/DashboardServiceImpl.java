@@ -233,21 +233,21 @@ public class DashboardServiceImpl implements DashboardService {
     @Transactional(readOnly = true)
     public TrainerDashboardResponse getTrainerDashboard(Long userId) {
         List<Batch> myBatchEntities = userId != null ? batchRepository.findByTrainerId(userId) : java.util.Collections.emptyList();
-        if (myBatchEntities.isEmpty()) {
-            myBatchEntities = batchRepository.findAll();
-        }
 
         // Real student count: students in trainer's batches only
         List<Long> batchIds = myBatchEntities.stream().map(Batch::getId).toList();
         long myStudentsCount = batchIds.isEmpty()
-                ? studentRepository.count()
+                ? 0L
                 : studentRepository.findByBatchIdIn(batchIds).size();
 
         long myBatchesCount = myBatchEntities.size();
 
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = LocalDate.now().atTime(23, 59, 59);
-        List<DailyClass> todayClasses = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
+        List<DailyClass> allClasses = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
+        List<DailyClass> todayClasses = batchIds.isEmpty()
+                ? java.util.Collections.emptyList()
+                : allClasses.stream().filter(c -> c.getBatch() != null && batchIds.contains(c.getBatch().getId())).toList();
         long todaySessionsCount = todayClasses.size();
 
         List<TrainerDashboardResponse.TodayScheduleItem> todaySchedule = todayClasses.stream()

@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameDay, isSameMonth, isToday, addMonths, subMonths,
 } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
 import studentService from '@/services/studentService'
 import reportService from '@/services/reportService'
@@ -24,9 +25,11 @@ const PLACEMENT_COLORS = {
 export default function BatchDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const [batch, setBatch] = useState(null)
   const [classes, setClasses] = useState([])
   const [roster, setRoster] = useState([])
+  const [trainers, setTrainers] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
   const [scheduleView, setScheduleView] = useState('list')
@@ -43,34 +46,72 @@ export default function BatchDetailPage() {
   const [addStudentResults, setAddStudentResults] = useState([])
   const [addStudentSearching, setAddStudentSearching] = useState(false)
 
-  const load = () => {
-    setLoading(true)
-    Promise.all([
-      adminApi.getBatchDetail(id),
-      adminApi.getClasses({ batchId: id }),
-      studentService.list({ batchId: id, limit: 500 }),
-      reportService.getPerformance({ batchId: id }),
-    ])
-      .then(([batchRes, classesRes, studentsRes, perfRes]) => {
-        setBatch(batchRes.data.data)
-        setClasses(classesRes.data.data || [])
-        const students = studentsRes.data?.students || []
-        const perfById = Object.fromEntries((perfRes.data?.students || []).map(p => [p.studentId, p]))
-        setRoster(students.map(s => ({
-          id: s.id,
-          name: s.name,
-          email: s.email,
-          enrollmentNo: s.enrollmentNo,
-          placementStatus: s.placementStatus,
-          attendancePct: perfById[s.id]?.attendancePct,
-          avgQuizScore: perfById[s.id]?.avgQuizScore,
-        })))
+  const handleAssignTrainer = async (newTrainerId) => {
+    try {
+      await adminApi.updateBatch(id, {
+        name: batch.name,
+        courseId: batch.course?.id,
+        trainerId: newTrainerId ? Number(newTrainerId) : null,
+        startDate: batch.startDate,
+        endDate: batch.endDate,
+        timing: batch.timing,
+        mode: batch.mode,
+        maxStudents: batch.maxStudents,
       })
-      .catch(() => toast.error('Failed to load batch'))
-      .finally(() => setLoading(false))
+      toast.success(newTrainerId ? 'Trainer assigned to batch' : 'Trainer unassigned from batch')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update trainer')
+    }
   }
 
-  useEffect(() => { load() }, [id])
+  const isAdmin = ['SUPERADMIN', 'ADMIN'].includes(user?.role)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const batchRes = await adminApi.getBatchDetail(id)
+      setBatch(batchRes.data.data)
+
+      const [classesRes, studentsRes, perfRes] = await Promise.allSettled([
+        adminApi.getClasses({ batchId: id }),
+        studentService.list({ batchId: id, limit: 500 }),
+        reportService.getPerformance({ batchId: id }),
+      ])
+
+      if (classesRes.status === 'fulfilled') {
+        setClasses(classesRes.value.data?.data || [])
+      }
+      const students = studentsRes.status === 'fulfilled' ? (studentsRes.value.data?.students || []) : []
+      const perfById = perfRes.status === 'fulfilled' ? Object.fromEntries((perfRes.value.data?.students || []).map(p => [p.studentId, p])) : {}
+
+      setRoster(students.map(s => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        enrollmentNo: s.enrollmentNo,
+        placementStatus: s.placementStatus,
+        attendancePct: perfById[s.id]?.attendancePct,
+        avgQuizScore: perfById[s.id]?.avgQuizScore,
+      })))
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load batch')
+      if (err.response?.status === 403) {
+        router.replace('/admin/batches')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+      adminApi.getTrainers({ limit: 100 })
+        .then(r => setTrainers(r.data?.data?.trainers || []))
+        .catch(() => {})
+    }
+  }, [id, user?.role])
 
   const searchStudentsToAdd = async (e) => {
     e.preventDefault()
@@ -167,10 +208,16 @@ export default function BatchDetailPage() {
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">{batch.name}</h1>
           <p className="text-sm text-gray-500">{batch.course?.title} · {batch.mode}</p>
         </div>
-        <button onClick={handleToggleStatus}
-          className={`ml-auto text-xs font-bold px-3 py-1 rounded-full transition-colors ${batch.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-          {batch.isActive ? 'Active' : 'Ended'}
-        </button>
+        {isAdmin ? (
+          <button onClick={handleToggleStatus}
+            className={`ml-auto text-xs font-bold px-3 py-1 rounded-full transition-colors ${batch.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            {batch.isActive ? 'Active' : 'Ended'}
+          </button>
+        ) : (
+          <span className={`ml-auto text-xs font-bold px-3 py-1 rounded-full ${batch.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+            {batch.isActive ? 'Active' : 'Ended'}
+          </span>
+        )}
       </div>
 
       {/* Tabs */}
@@ -199,6 +246,46 @@ export default function BatchDetailPage() {
               </div>
             ))}
           </div>
+          {/* Assigned Trainer Card */}
+          <div className="glass-card p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-300 font-bold">
+                  <UserCheck size={22} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Lead Trainer</p>
+                  {batch.trainer ? (
+                    <div>
+                      <p className="font-bold text-gray-900 dark:text-white text-base">{batch.trainer.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{batch.trainer.email}</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 font-medium italic">No trainer assigned to this batch yet</p>
+                  )}
+                </div>
+              </div>
+
+              {['SUPERADMIN', 'ADMIN'].includes(user?.role) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Assign:</span>
+                  <select
+                    value={batch.trainer?.id || batch.trainerId || ''}
+                    onChange={e => handleAssignTrainer(e.target.value)}
+                    className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">-- No Trainer Assigned --</option>
+                    {trainers.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}{t.designation ? ` · ${t.designation}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="glass-card p-5">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Batch Timeline</p>
             <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
@@ -216,17 +303,18 @@ export default function BatchDetailPage() {
 
       {/* Students Tab */}
       {tab === 'Students' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            {enrolled >= batch.maxStudents ? (
-              <span className="text-xs font-semibold px-4 py-2 rounded-xl bg-orange-50 text-orange-600">Batch full ({enrolled}/{batch.maxStudents})</span>
-            ) : (
-              <button onClick={() => { setAddStudentPanel(true); setAddStudentQuery(''); setAddStudentResults([]) }}
-                className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
-                <UserPlus size={14} /> Add Student
-              </button>
-            )}
-          </div>
+        <div className="space-y-4">          {isAdmin && (
+            <div className="flex justify-end">
+              {enrolled >= batch.maxStudents ? (
+                <span className="text-xs font-semibold px-4 py-2 rounded-xl bg-orange-50 text-orange-600">Batch full ({enrolled}/{batch.maxStudents})</span>
+              ) : (
+                <button onClick={() => { setAddStudentPanel(true); setAddStudentQuery(''); setAddStudentResults([]) }}
+                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
+                  <UserPlus size={14} /> Add Student
+                </button>
+              )}
+            </div>
+          )}
           <div className="glass-card overflow-hidden">
             <div className="px-5 py-4 border-b border-purple-100 flex items-center justify-between">
               <p className="font-semibold text-gray-700 dark:text-gray-300">{enrolled} Students</p>
@@ -235,14 +323,14 @@ export default function BatchDetailPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 border-b border-purple-100">
-                    {['Student', 'Enrollment', 'Attendance', 'Avg Quiz', 'Placement', 'Action'].map(h => (
+                    {['Student', 'Enrollment', 'Attendance', 'Avg Quiz', 'Placement', ...(isAdmin ? ['Action'] : [])].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {roster.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No students enrolled</td></tr>
+                    <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-gray-400">No students enrolled</td></tr>
                   ) : (
                     roster.map(s => (
                       <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
@@ -278,12 +366,14 @@ export default function BatchDetailPage() {
                             {s.placementStatus?.replace('_', ' ') || '—'}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => handleRemoveStudent(s.id)}
-                            className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors">
-                            <Trash2 size={13} />
-                          </button>
-                        </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3">
+                            <button onClick={() => handleRemoveStudent(s.id)}
+                              className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

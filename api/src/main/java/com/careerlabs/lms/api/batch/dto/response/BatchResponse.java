@@ -11,6 +11,7 @@ public record BatchResponse(
         String name,
         CourseSummary course,
         Long trainerId,
+        TrainerSummary trainer,
         LocalDate startDate,
         LocalDate endDate,
         String timing,
@@ -23,11 +24,16 @@ public record BatchResponse(
 ) {
 
     public static BatchResponse from(Batch batch, int studentCount) {
+        return from(batch, studentCount, null);
+    }
+
+    public static BatchResponse from(Batch batch, int studentCount, TrainerSummary trainer) {
         return new BatchResponse(
                 batch.getId(),
                 batch.getName(),
                 new CourseSummary(batch.getCourse().getId(), batch.getCourse().getTitle()),
                 batch.getTrainerId(),
+                trainer,
                 batch.getStartDate(),
                 batch.getEndDate(),
                 batch.getTiming(),
@@ -40,5 +46,8 @@ public record BatchResponse(
     }
 
     public record CourseSummary(Long id, String title) {
+    }
+
+    public record TrainerSummary(Long id, String name, String email) {
     }
 }

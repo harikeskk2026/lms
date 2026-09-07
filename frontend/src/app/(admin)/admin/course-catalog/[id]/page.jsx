@@ -878,6 +878,8 @@ function MaterialsTab({ courseId }) {
 }
 
 function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = false }) {
+  const { user } = useAuth()
+  const canCreateBatch = ['SUPERADMIN', 'ADMIN'].includes(user?.role)
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -891,15 +893,25 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
   const load = useCallback(() => {
     setLoading(true)
     batchService.list()
-      .then(r => setBatches((r.data || []).filter(b => String(b.course?.id) === String(courseId))))
+      .then(r => {
+        let list = (r.data || []).filter(b => String(b.course?.id) === String(courseId))
+        if (user?.role === 'TRAINER' && user?.id) {
+          list = list.filter(b => b.trainerId === user.id || b.trainer?.id === user.id)
+        }
+        setBatches(list)
+      })
       .catch(() => toast.error('Failed to load batches'))
       .finally(() => setLoading(false))
-  }, [courseId])
+  }, [courseId, user?.role, user?.id])
 
   useEffect(() => { load() }, [load])
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!canCreateBatch) {
+      toast.error('Only Super Admins and Admins can create batches')
+      return
+    }
     setSaving(true)
     const formattedTiming = startTime && endTime ? `${formatTime12h(startTime)} - ${formatTime12h(endTime)}` : ''
     try {
@@ -921,12 +933,14 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
     <div className="glass-card p-5 space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">Batches running for <span className="font-semibold text-gray-700 dark:text-gray-200">{courseTitle}</span></p>
-        <button onClick={() => setShowForm(s => !s)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-semibold">
-          <Plus size={13} /> {showForm ? 'Cancel' : 'New Batch'}
-        </button>
+        {canCreateBatch && (
+          <button onClick={() => setShowForm(s => !s)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-semibold">
+            <Plus size={13} /> {showForm ? 'Cancel' : 'New Batch'}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {canCreateBatch && showForm && (
         <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
           <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Batch name *"
             className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />

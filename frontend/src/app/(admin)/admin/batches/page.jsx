@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import { Plus, Users, Calendar, Clock, Monitor, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/context/AuthContext'
+import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
@@ -29,8 +31,11 @@ function formatTime12h(time24) {
 
 export default function BatchesPage() {
   const router = useRouter()
+  const { user } = useAuth()
+  const canCreateBatch = ['SUPERADMIN', 'ADMIN'].includes(user?.role)
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
+  const [trainers, setTrainers] = useState([])
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -48,10 +53,17 @@ export default function BatchesPage() {
   useEffect(() => {
     load()
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
+    adminApi.getTrainers({ limit: 100 })
+      .then(r => setTrainers(r.data?.data?.trainers || []))
+      .catch(() => {})
   }, [])
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (!canCreateBatch) {
+      toast.error('Only Super Admins and Admins can create batches')
+      return
+    }
     setSaving(true)
     const formattedTiming = startTime && endTime ? `${formatTime12h(startTime)} - ${formatTime12h(endTime)}` : ''
     try {
@@ -71,15 +83,27 @@ export default function BatchesPage() {
     } finally { setSaving(false) }
   }
 
+  const isTrainer = user?.role === 'TRAINER'
+  const displayedBatches = isTrainer && user?.id
+    ? batches.filter(b => b.trainerId === user.id || b.trainer?.id === user.id)
+    : batches
+
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Batches</h1>
-        <button onClick={() => setPanelOpen(true)}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
-          <Plus size={16} /> Create Batch
-        </button>
+        <div>
+          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Batches</h1>
+          {isTrainer && (
+            <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">Showing batches assigned to you</p>
+          )}
+        </div>
+        {canCreateBatch && (
+          <button onClick={() => setPanelOpen(true)}
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
+            <Plus size={16} /> Create Batch
+          </button>
+        )}
       </div>
 
       {/* Grid */}
@@ -87,13 +111,15 @@ export default function BatchesPage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[...Array(6)].map((_, i) => <div key={i} className="h-52 glass-card animate-pulse" />)}
         </div>
-      ) : batches.length === 0 ? (
+      ) : displayedBatches.length === 0 ? (
         <div className="glass-card p-16 text-center">
-          <p className="text-gray-400">No batches yet. Create your first batch.</p>
+          <p className="text-gray-400">
+            {isTrainer ? 'No batches assigned to you yet.' : canCreateBatch ? 'No batches yet. Create your first batch.' : 'No batches available.'}
+          </p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {batches.map((b, i) => {
+          {displayedBatches.map((b, i) => {
             const grad = BATCH_GRADIENTS[i % BATCH_GRADIENTS.length]
             const enrolled = b.studentCount || 0
             const fillPct = Math.round((enrolled / b.maxStudents) * 100)
@@ -153,86 +179,100 @@ export default function BatchesPage() {
       )}
 
       {/* Create Batch Panel */}
-      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Create Batch" subtitle="Set up a new training batch">
-        <form onSubmit={handleCreate} className="space-y-4">
-          {/* Batch Name */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch Name *</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Python Batch Jan 2026"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              required
-            />
-          </div>
+      {canCreateBatch && (
+        <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Create Batch" subtitle="Set up a new training batch">
+          <form onSubmit={handleCreate} className="space-y-4">
+            {/* Batch Name */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch Name *</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Python Batch Jan 2026"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                required
+              />
+            </div>
 
-          {/* Clean Start & End Time Fields */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
+            {/* Clean Start & End Time Fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={e => setStartTime(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={e => setEndTime(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={e => setEndTime(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-            <select value={form.courseId} onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))} required
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">Select course</option>
-              {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
-              <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} required
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
-              <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode</label>
-              <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
+              <select value={form.courseId} onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))} required
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option>ONLINE</option><option>OFFLINE</option><option>HYBRID</option>
+                <option value="">Select course</option>
+                {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Students</label>
-              <input type="number" min="1" max="100" value={form.maxStudents} onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
+              <select value={form.trainerId} onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="">Select trainer (optional)</option>
+                {trainers.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.designation ? ` (${t.designation})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
-              {saving ? 'Creating...' : 'Create Batch'}
-            </button>
-          </div>
-        </form>
-      </SlidePanel>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
+                <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} required
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
+                <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode</label>
+                <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  <option>ONLINE</option><option>OFFLINE</option><option>HYBRID</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Students</label>
+                <input type="number" min="1" max="100" value={form.maxStudents} onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setPanelOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
+                {saving ? 'Creating...' : 'Create Batch'}
+              </button>
+            </div>
+          </form>
+        </SlidePanel>
+      )}
     </div>
   )
 }
