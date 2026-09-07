@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Search,
   Plus,
@@ -22,6 +23,10 @@ import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 
 export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatus }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   const [enrollments, setEnrollments] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -516,8 +521,8 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
       )}
 
       {/* Enroll Student Modal */}
-      {enrollModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+      {enrollModalOpen && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -615,12 +620,13 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Unenroll Confirmation Modal */}
-      {unenrollModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+      {unenrollModalData && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-800 p-6 space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle size={24} />
@@ -655,7 +661,8 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

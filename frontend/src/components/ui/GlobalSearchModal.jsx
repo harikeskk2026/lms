@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   Search, X, LayoutDashboard, Users, BookOpen, Layers, Calendar,
@@ -171,10 +172,15 @@ export default function GlobalSearchModal({ open, onClose, role = 'STUDENT' }) {
     }
   }
 
-  if (!open) return null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+  if (!open || !mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/60 backdrop-blur-md animate-fadeIn">
       {/* Backdrop click */}
       <div className="absolute inset-0" onClick={onClose} />
 
@@ -294,6 +300,7 @@ export default function GlobalSearchModal({ open, onClose, role = 'STUDENT' }) {
           <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-[9px] font-mono text-gray-700 dark:text-gray-300">ESC</kbd> Close</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

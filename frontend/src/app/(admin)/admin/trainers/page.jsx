@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -54,6 +55,11 @@ export default function TrainersPage() {
   const [editingTrainer, setEditingTrainer] = useState(null)
   const [deletingTrainer, setDeletingTrainer] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const fetchTrainers = useCallback(async () => {
     setLoading(true)
@@ -84,7 +90,7 @@ export default function TrainersPage() {
 
   // Open Create Modal
   function handleOpenAdd() {
-    setForm({ ...EMPTY_FORM, password: genPassword() })
+    setForm({ ...EMPTY_FORM, password: '' })
     setFormErr({})
     setShowAddModal(true)
   }
@@ -121,6 +127,10 @@ export default function TrainersPage() {
       if (!form.password) errs.password = 'Password is required'
       else if (form.password.length < 6) errs.password = 'Min 6 characters'
     }
+
+    if (form.phone && form.phone.trim() && form.phone.trim().length !== 10) {
+      errs.phone = 'Phone number must be exactly 10 digits'
+    }
     setFormErr(errs)
     return Object.keys(errs).length === 0
   }
@@ -135,9 +145,9 @@ export default function TrainersPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         password: form.password,
-        phone: form.phone.trim() || undefined,
-        designation: form.designation.trim() || undefined,
-        department: form.department.trim() || undefined,
+        phone: form.phone.trim() || null,
+        designation: form.designation.trim() || null,
+        department: form.department.trim() || null,
       })
       toast.success('Trainer created successfully!')
       setShowAddModal(false)
@@ -158,9 +168,9 @@ export default function TrainersPage() {
       await adminApi.updateTrainer(editingTrainer.id, {
         name: form.name.trim(),
         email: form.email.trim(),
-        phone: form.phone.trim() || undefined,
-        designation: form.designation.trim() || undefined,
-        department: form.department.trim() || undefined,
+        phone: form.phone.trim() || null,
+        designation: form.designation.trim() || null,
+        department: form.department.trim() || null,
       })
       toast.success('Trainer updated successfully!')
       setShowEditModal(false)
@@ -349,10 +359,18 @@ export default function TrainersPage() {
                     </td>
 
                     <td className="py-4 px-4">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-800">{trainer.designation || 'Trainer'}</p>
-                        <p className="text-[11px] text-slate-400">{trainer.department || 'Academics'}</p>
-                      </div>
+                      {trainer.designation || trainer.department ? (
+                        <div>
+                          {trainer.designation && (
+                            <p className="text-xs font-semibold text-slate-800">{trainer.designation}</p>
+                          )}
+                          {trainer.department && (
+                            <p className="text-[11px] text-slate-400">{trainer.department}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">—</span>
+                      )}
                     </td>
 
                     <td className="py-4 px-4">
@@ -439,12 +457,12 @@ export default function TrainersPage() {
       </div>
 
       {/* Add Trainer Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <h3 className="font-bold text-lg text-slate-900">Add New Trainer</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+      {showAddModal && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Add New Trainer</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
                 <X size={20} />
               </button>
             </div>
@@ -494,6 +512,7 @@ export default function TrainersPage() {
                     type="text"
                     value={form.password}
                     onChange={e => setForm({ ...form, password: e.target.value })}
+                    placeholder="Enter password or click Generate Random"
                     className={clsx('input-field pl-9 text-sm font-mono', formErr.password && 'border-red-500')}
                   />
                 </div>
@@ -504,12 +523,15 @@ export default function TrainersPage() {
                 <div>
                   <label className="form-label">Phone Number</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value })}
-                    placeholder="+91 9876543210"
-                    className="input-field text-sm"
+                    onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    placeholder="9876543210"
+                    className={clsx('input-field text-sm', formErr.phone && 'border-red-500')}
                   />
+                  {formErr.phone && <p className="text-xs text-red-500 mt-1">{formErr.phone}</p>}
                 </div>
                 <div>
                   <label className="form-label">Designation</label>
@@ -534,7 +556,7 @@ export default function TrainersPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -552,16 +574,17 @@ export default function TrainersPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit Trainer Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <h3 className="font-bold text-lg text-slate-900">Edit Trainer Profile</h3>
-              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+      {showEditModal && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Edit Trainer Profile</h3>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
                 <X size={20} />
               </button>
             </div>
@@ -593,11 +616,15 @@ export default function TrainersPage() {
                 <div>
                   <label className="form-label">Phone Number</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value })}
-                    className="input-field text-sm"
+                    onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    placeholder="9876543210"
+                    className={clsx('input-field text-sm', formErr.phone && 'border-red-500')}
                   />
+                  {formErr.phone && <p className="text-xs text-red-500 mt-1">{formErr.phone}</p>}
                 </div>
                 <div>
                   <label className="form-label">Designation</label>
@@ -645,7 +672,7 @@ export default function TrainersPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
@@ -663,20 +690,21 @@ export default function TrainersPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && deletingTrainer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-scaleUp text-center">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 mx-auto flex items-center justify-center">
+      {showDeleteModal && deletingTrainer && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-scaleUp text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/40 text-red-600 mx-auto flex items-center justify-center">
               <Trash2 size={24} />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-slate-900">Delete Trainer Account?</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Are you sure you want to delete <strong className="text-slate-800">{deletingTrainer.name}</strong>? This action cannot be undone.
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Delete Trainer Account?</h3>
+              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+                Are you sure you want to delete <strong className="text-slate-800 dark:text-gray-200">{deletingTrainer.name}</strong>? This action cannot be undone.
               </p>
             </div>
 
@@ -698,7 +726,8 @@ export default function TrainersPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

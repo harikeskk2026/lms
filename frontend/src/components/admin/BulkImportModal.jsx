@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   FileUp,
   FileDown,
@@ -312,6 +313,11 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
     }
   }
 
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const handleReset = () => {
     setFile(null)
     setParsedData(null)
@@ -324,8 +330,10 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
     onClose()
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
+  if (!mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-purple-100 dark:border-purple-900/40 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-purple-50/50 via-white to-violet-50/50 dark:from-purple-950/20 dark:via-gray-900 dark:to-violet-950/20">
@@ -743,6 +751,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
