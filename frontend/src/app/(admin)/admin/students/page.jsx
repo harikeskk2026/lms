@@ -10,6 +10,7 @@ import { isValidPhone, PHONE_ERROR_MESSAGE, isValidPassword, PASSWORD_ERROR_MESS
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import BulkImportModal from '@/components/admin/BulkImportModal'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 text-blue-700',
@@ -67,6 +68,8 @@ export default function StudentsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [deletingStudent, setDeletingStudent] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const searchTimer = useRef(null)
 
   const load = useCallback(() => {
@@ -183,19 +186,23 @@ export default function StudentsPage() {
   const handleToggleStatus = async (id, current) => {
     try {
       await studentService.toggleStatus(id)
-      toast.success(`Student ${current ? 'deactivated' : 'activated'}`)
+      toast.success(`Login access ${current ? 'disabled' : 'enabled'}`)
       load()
-    } catch { toast.error('Failed to update status') }
+    } catch { toast.error('Failed to update login access') }
   }
 
-  const handleDelete = async (student) => {
-    if (!confirm(`Permanently delete "${student.name}"? This removes their account and all associated data (attendance, submissions, quiz attempts, placement activity, etc.) and cannot be undone.`)) return
+  const handleConfirmDelete = async () => {
+    if (!deletingStudent) return
+    setIsDeleting(true)
     try {
-      await studentService.remove(student.id)
+      await studentService.remove(deletingStudent.id)
       toast.success('Student deleted')
+      setDeletingStudent(null)
       load()
     } catch (err) {
       toast.error(err.message || 'Failed to delete student')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -217,7 +224,7 @@ export default function StudentsPage() {
         return
       }
 
-      const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Status']
+      const headers = ['Name', 'Email', 'Phone', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Login Access']
       const rows = allStudents.map(s => [
         s.name || '',
         s.email || '',
@@ -313,7 +320,7 @@ export default function StudentsPage() {
           className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
           value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
         >
-          <option value="">All Status</option>
+          <option value="">All Login Access</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
@@ -347,7 +354,7 @@ export default function StudentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['SNO', 'Student', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Status', 'Actions'].map(h => (
+                  {['SNO', 'Student', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Login Access', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -395,6 +402,7 @@ export default function StudentsPage() {
                       <td className="px-4 py-3">
                         <button
                           onClick={() => handleToggleStatus(s.id, s.active)}
+                          title={s.active ? 'Click to disable login access' : 'Click to enable login access'}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.active ? 'bg-purple-500' : 'bg-gray-200 dark:bg-gray-700'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform`} style={{ transform: s.active ? 'translateX(18px)' : 'translateX(2px)' }} />
@@ -410,7 +418,7 @@ export default function StudentsPage() {
                             className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => handleDelete(s)}
+                          <button onClick={() => setDeletingStudent(s)}
                             className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
@@ -601,6 +609,23 @@ export default function StudentsPage() {
           onSuccess={load}
         />
       )}
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingStudent)}
+        onClose={() => setDeletingStudent(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Student Account?"
+        itemName={deletingStudent?.name}
+        message={
+          deletingStudent ? (
+            <>
+              Permanently delete <strong className="text-slate-800 dark:text-gray-200 font-semibold">{deletingStudent.name}</strong>?
+              This removes their account and all associated data (attendance, submissions, quiz attempts, placement activity) and cannot be undone.
+            </>
+          ) : undefined
+        }
+        loading={isDeleting}
+      />
     </div>
   )
 }

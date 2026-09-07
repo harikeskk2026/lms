@@ -6,6 +6,8 @@ import recordedSessionService from '@/services/recordedSessionService'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const STATUS_STYLES = {
   DRAFT: 'bg-gray-100 text-gray-600',
@@ -44,6 +46,8 @@ export default function RecordedSessionsPage() {
   const [auditLog, setAuditLog] = useState([])
   const [blockedStudents, setBlockedStudents] = useState([])
   const [securityLoading, setSecurityLoading] = useState(false)
+  const [deletingSession, setDeletingSession] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -112,13 +116,19 @@ export default function RecordedSessionsPage() {
     }
   }
 
-  const handleDelete = async (session) => {
-    if (!confirm(`Delete "${session.title}"?`)) return
+  const handleConfirmDelete = async () => {
+    if (!deletingSession) return
+    setIsDeleting(true)
     try {
-      await recordedSessionService.deleteSession(session.id)
+      await recordedSessionService.deleteSession(deletingSession.id)
       toast.success('Session deleted')
+      setDeletingSession(null)
       load()
-    } catch (err) { toast.error(err.message || 'Failed to delete') }
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handlePublish = async (session) => {
@@ -292,7 +302,7 @@ export default function RecordedSessionsPage() {
                         <button onClick={() => handleArchive(s)} className="w-7 h-7 rounded-lg bg-yellow-50 text-yellow-600 hover:bg-yellow-100 flex items-center justify-center" title="Archive">
                           <Archive size={13} />
                         </button>
-                        <button onClick={() => handleDelete(s)} className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center" title="Delete">
+                        <button onClick={() => setDeletingSession(s)} className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center" title="Delete">
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -360,16 +370,20 @@ export default function RecordedSessionsPage() {
             <input value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Available From</label>
-              <input type="datetime-local" value={form.availableFrom} onChange={e => setForm(f => ({ ...f, availableFrom: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <DateTimePicker12h
+                value={form.availableFrom}
+                onChange={val => setForm(f => ({ ...f, availableFrom: val }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Available Until</label>
-              <input type="datetime-local" value={form.availableUntil} onChange={e => setForm(f => ({ ...f, availableUntil: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <DateTimePicker12h
+                value={form.availableUntil}
+                onChange={val => setForm(f => ({ ...f, availableUntil: val }))}
+              />
             </div>
           </div>
           <button onClick={handleSave} disabled={saving || !form.title || !form.courseId}
@@ -525,6 +539,15 @@ export default function RecordedSessionsPage() {
           </div>
         )}
       </SlidePanel>
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingSession)}
+        onClose={() => setDeletingSession(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Recorded Session?"
+        itemName={deletingSession?.title}
+        loading={isDeleting}
+      />
     </div>
   )
 }

@@ -11,6 +11,7 @@ import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import collegeService from '@/services/collegeService'
 import courseService from '@/services/courseService'
+import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL']
@@ -368,8 +369,10 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Schedule for (optional)</label>
-            <input type="datetime-local" value={form.scheduledAt} onChange={set('scheduledAt')}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
+            <DateTimePicker12h
+              value={form.scheduledAt}
+              onChange={val => setForm(f => ({ ...f, scheduledAt: val }))}
+            />
           </div>
         </div>
 

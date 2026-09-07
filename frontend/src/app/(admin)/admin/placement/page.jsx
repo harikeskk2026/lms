@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import SlidePanel from '@/components/admin/SlidePanel'
 import EligibilityCriteriaFields from '@/components/admin/EligibilityCriteriaFields'
+import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 
 const EMPTY_DRIVE_FORM = {
   companyName: '', role: '', packageOffered: '', location: '', driveDate: '', applyDeadline: '',
@@ -511,8 +512,11 @@ export default function PlacementPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Date & Time *</label>
-            <input type="datetime-local" value={mockForm.scheduledAt} onChange={e => setMockForm(f => ({ ...f, scheduledAt: e.target.value }))} required
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <DateTimePicker12h
+              required
+              value={mockForm.scheduledAt}
+              onChange={val => setMockForm(f => ({ ...f, scheduledAt: val }))}
+            />
           </div>
           {[
             { label: 'Interviewer Name', key: 'interviewerName', placeholder: 'Rajesh Kumar' },

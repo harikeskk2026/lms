@@ -8,6 +8,8 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
+import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const PLATFORMS = ['ZOOM', 'CUSTOM']
 const STATUSES = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED']
@@ -45,6 +47,8 @@ export default function AdminMeetingLinksPage() {
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [deletingMeeting, setDeletingMeeting] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [attendeesMeeting, setAttendeesMeeting] = useState(null)
   const [attendees, setAttendees] = useState([])
@@ -146,14 +150,18 @@ export default function AdminMeetingLinksPage() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this meeting link?')) return
+  const handleConfirmDelete = async () => {
+    if (!deletingMeeting) return
+    setIsDeleting(true)
     try {
-      await adminApi.deleteMeeting(id)
+      await adminApi.deleteMeeting(deletingMeeting.id)
       toast.success('Meeting deleted')
+      setDeletingMeeting(null)
       loadData()
     } catch {
       toast.error('Failed to delete meeting')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -428,7 +436,7 @@ export default function AdminMeetingLinksPage() {
                     <button onClick={() => openEdit(m)} className="text-purple-600 hover:text-purple-800">
                       <Edit3 size={13} />
                     </button>
-                    <button onClick={() => handleDelete(m.id)} className="text-red-500 hover:text-red-700">
+                    <button onClick={() => setDeletingMeeting(m)} className="text-red-500 hover:text-red-700">
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -551,29 +559,25 @@ export default function AdminMeetingLinksPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Scheduled Start *
                   </label>
-                  <input
-                    type="datetime-local"
+                  <DateTimePicker12h
                     required
                     value={form.scheduledStart}
-                    onChange={e => setForm(f => ({ ...f, scheduledStart: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                    onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Scheduled End
+                    Scheduled End (Optional)
                   </label>
-                  <input
-                    type="datetime-local"
+                  <DateTimePicker12h
                     value={form.scheduledEnd}
-                    onChange={e => setForm(f => ({ ...f, scheduledEnd: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                    onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
                   />
                 </div>
               </div>
@@ -674,6 +678,15 @@ export default function AdminMeetingLinksPage() {
           </div>
         </div>
       )}
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingMeeting)}
+        onClose={() => setDeletingMeeting(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Scheduled Class?"
+        itemName={deletingMeeting?.title}
+        loading={isDeleting}
+      />
     </div>
   )
 }

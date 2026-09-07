@@ -12,6 +12,7 @@ import { adminApi } from '@/lib/api'
 import studentService from '@/services/studentService'
 import reportService from '@/services/reportService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 
 const TABS = ['Overview', 'Students', 'Schedule', 'Attendance', 'Assignments']
 
@@ -559,8 +560,11 @@ export default function BatchDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Date & Time *</label>
-                <input type="datetime-local" value={classForm.date} onChange={e => setClassForm(f => ({ ...f, date: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
+                <DateTimePicker12h
+                  required
+                  value={classForm.date}
+                  onChange={val => setClassForm(f => ({ ...f, date: val }))}
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Meet Link</label>

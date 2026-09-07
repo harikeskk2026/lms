@@ -9,6 +9,8 @@ import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionBankPanel from '@/components/admin/QuestionBankPanel'
 import QuestionForm from '@/components/admin/QuestionForm'
 import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
+import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const STEP_LABELS = ['Settings', 'Questions', 'Preview']
 
@@ -62,6 +64,7 @@ export default function QuizzesPage() {
   const [activeTab, setActiveTab]   = useState('quizzes')
   const [questionSearch, setQuestionSearch] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
+  const [formErrors, setFormErrors] = useState({})
   const [selectedQuestionIds, setSelectedQuestionIds] = useState([])
   const [quizPage, setQuizPage]     = useState(1)
   const [quizPageSize, setQuizPageSize] = useState(10)
@@ -77,6 +80,8 @@ export default function QuizzesPage() {
   const [selectedCourseIds, setSelectedCourseIds] = useState([])
   const [assigningQuiz, setAssigningQuiz] = useState(null)
   const [quizAssignments, setQuizAssignments] = useState([])
+  const [deletingQuiz, setDeletingQuiz] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const loadBankQuestions = () => {
     quizService.listQuestions({ active: true }).then(r => setBankQuestions(r.data || [])).catch(() => {})
@@ -162,13 +167,19 @@ export default function QuizzesPage() {
     }
   }
 
-  const handleDelete = async (quiz) => {
-    if (!confirm(`Delete "${quiz.title}"?`)) return
+  const handleConfirmDelete = async () => {
+    if (!deletingQuiz) return
+    setIsDeleting(true)
     try {
-      await quizService.removeQuiz(quiz.id)
+      await quizService.removeQuiz(deletingQuiz.id)
       toast.success('Quiz deleted')
+      setDeletingQuiz(null)
       load()
-    } catch (err) { toast.error(err.message || 'Failed to delete quiz') }
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete quiz')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const toggleQuestion = (id) => {
@@ -199,8 +210,46 @@ export default function QuizzesPage() {
     ? bankQuestions.filter(q => q.questionText.toLowerCase().includes(questionSearch.toLowerCase()))
     : bankQuestions
 
+  const validateSettings = () => {
+    const errs = {}
+    if (!form.title || !form.title.trim()) {
+      errs.title = 'Title is required'
+    } else if (form.title.trim().length < 3) {
+      errs.title = 'Title must be at least 3 characters'
+    }
+
+    const durationNum = Number(form.duration)
+    if (form.duration === '' || form.duration === null || form.duration === undefined || isNaN(durationNum) || durationNum < 1) {
+      errs.duration = 'Min 1 minute'
+    } else if (durationNum > 1440) {
+      errs.duration = 'Max 1440 min'
+    }
+
+    const scoreNum = Number(form.passingScore)
+    if (form.passingScore === '' || form.passingScore === null || form.passingScore === undefined || isNaN(scoreNum) || scoreNum < 0 || scoreNum > 100) {
+      errs.passingScore = 'Between 0-100%'
+    }
+
+    const attemptsNum = Number(form.maxAttempts)
+    if (form.maxAttempts === '' || form.maxAttempts === null || form.maxAttempts === undefined || isNaN(attemptsNum) || attemptsNum < 1) {
+      errs.maxAttempts = 'Min 1 attempt'
+    } else if (attemptsNum > 100) {
+      errs.maxAttempts = 'Max 100 attempts'
+    }
+
+    if (form.scheduledStart && form.scheduledEnd) {
+      if (new Date(form.scheduledStart) >= new Date(form.scheduledEnd)) {
+        errs.scheduledEnd = 'End time must be after start time'
+      }
+    }
+
+    setFormErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const openCreate = () => {
     setForm(EMPTY_FORM)
+    setFormErrors({})
     setSelectedQuestionIds([])
     setQuestionMarks({})
     setSelectedBatchIds([])
@@ -220,6 +269,11 @@ export default function QuizzesPage() {
   }
 
   const handleSave = async (publish = false) => {
+    if (!validateSettings()) {
+      setStep(0)
+      toast.error('Please fix errors in quiz settings')
+      return
+    }
     if (selectedQuestionIds.length === 0) {
       toast.error('Select at least one question')
       return
@@ -235,6 +289,9 @@ export default function QuizzesPage() {
     try {
       const payload = {
         ...form,
+        duration: Number(form.duration),
+        passingScore: Number(form.passingScore),
+        maxAttempts: Number(form.maxAttempts),
         courseId: form.courseId || null,
         batchId: form.batchId || null,
         scheduledStart: form.scheduledStart || null,
@@ -508,7 +565,7 @@ export default function QuizzesPage() {
                                     <Send size={13} />
                                   </button>
                                 )}
-                                <button onClick={() => handleDelete(q)} className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
+                                <button onClick={() => setDeletingQuiz(q)} className="w-7 h-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                                   <Trash2 size={13} />
                                 </button>
                               </div>
@@ -589,7 +646,13 @@ export default function QuizzesPage() {
         {/* Steps */}
         <div className="flex mb-6 gap-1">
           {STEP_LABELS.map((l, i) => (
-            <button key={l} onClick={() => setStep(i)}
+            <button key={l} onClick={() => {
+              if (i > 0 && !validateSettings()) {
+                toast.error('Please fix the errors in settings first')
+                return
+              }
+              setStep(i)
+            }}
               className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${step === i ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
               {i + 1}. {l}
             </button>
@@ -601,8 +664,18 @@ export default function QuizzesPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
-              <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Python Fundamentals Quiz"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <input
+                value={form.title}
+                onChange={e => {
+                  setForm(f => ({ ...f, title: e.target.value }))
+                  if (formErrors.title) setFormErrors(prev => ({ ...prev, title: undefined }))
+                }}
+                placeholder="Python Fundamentals Quiz"
+                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${
+                  formErrors.title ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                }`}
+              />
+              {formErrors.title && <p className="text-xs text-red-500 mt-1">{formErrors.title}</p>}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
@@ -660,31 +733,86 @@ export default function QuizzesPage() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Duration (min)</label>
-                <input type="number" min={1} value={form.duration} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Duration (min) *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="30"
+                  value={form.duration}
+                  onKeyDown={e => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
+                  }}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '')
+                    setForm(f => ({ ...f, duration: val }))
+                    if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${
+                    formErrors.duration ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                  }`}
+                />
+                {formErrors.duration && <p className="text-xs text-red-500 mt-1">{formErrors.duration}</p>}
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Passing Score (%)</label>
-                <input type="number" min={0} max={100} value={form.passingScore} onChange={e => setForm(f => ({ ...f, passingScore: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Passing Score (%) *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="50"
+                  value={form.passingScore}
+                  onKeyDown={e => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
+                  }}
+                  onChange={e => {
+                    let val = e.target.value.replace(/\D/g, '')
+                    if (val !== '' && Number(val) > 100) val = '100'
+                    setForm(f => ({ ...f, passingScore: val }))
+                    if (formErrors.passingScore) setFormErrors(prev => ({ ...prev, passingScore: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${
+                    formErrors.passingScore ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                  }`}
+                />
+                {formErrors.passingScore && <p className="text-xs text-red-500 mt-1">{formErrors.passingScore}</p>}
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Max Attempts</label>
-                <input type="number" min={1} value={form.maxAttempts} onChange={e => setForm(f => ({ ...f, maxAttempts: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Max Attempts *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="1"
+                  value={form.maxAttempts}
+                  onKeyDown={e => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
+                  }}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '')
+                    setForm(f => ({ ...f, maxAttempts: val }))
+                    if (formErrors.maxAttempts) setFormErrors(prev => ({ ...prev, maxAttempts: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${
+                    formErrors.maxAttempts ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                  }`}
+                />
+                {formErrors.maxAttempts && <p className="text-xs text-red-500 mt-1">{formErrors.maxAttempts}</p>}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date/Time</label>
-                <input type="datetime-local" value={form.scheduledStart} onChange={e => setForm(f => ({ ...f, scheduledStart: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <DateTimePicker12h
+                  value={form.scheduledStart}
+                  onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">End Date/Time</label>
-                <input type="datetime-local" value={form.scheduledEnd} onChange={e => setForm(f => ({ ...f, scheduledEnd: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <DateTimePicker12h
+                  value={form.scheduledEnd}
+                  onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
+                />
               </div>
             </div>
             <div>
@@ -718,7 +846,13 @@ export default function QuizzesPage() {
                 <span className="text-sm font-semibold text-gray-700">Show explanations after submission</span>
               </label>
             </div>
-            <button onClick={() => setStep(1)} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold">
+            <button onClick={() => {
+              if (!validateSettings()) {
+                toast.error('Please fix errors in settings before proceeding')
+                return
+              }
+              setStep(1)
+            }} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
               Next: Add Questions →
             </button>
           </div>
@@ -1122,6 +1256,15 @@ export default function QuizzesPage() {
           </div>
         )}
       </SlidePanel>
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingQuiz)}
+        onClose={() => setDeletingQuiz(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Quiz?"
+        itemName={deletingQuiz?.title}
+        loading={isDeleting}
+      />
     </div>
   )
 }

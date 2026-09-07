@@ -4,12 +4,13 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search, Archive } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search, Archive, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import { courseSchema } from '@/validations/courseValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const LEVEL_COLORS = {
   BEGINNER: 'bg-green-100 text-green-700',
@@ -37,6 +38,8 @@ export default function CourseCatalogPage() {
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const [deletingCourse, setDeletingCourse] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
@@ -119,14 +122,18 @@ export default function CourseCatalogPage() {
     }
   }
 
-  async function handleDelete(course) {
-    if (!confirm(`Delete "${course.title}"?`)) return
+  async function handleConfirmDelete() {
+    if (!deletingCourse) return
+    setIsDeleting(true)
     try {
-      await courseService.remove(course.id)
+      await courseService.remove(deletingCourse.id)
       toast.success('Course deleted')
+      setDeletingCourse(null)
       load()
     } catch (err) {
       toast.error(err.message || 'Failed to delete course')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -140,11 +147,12 @@ export default function CourseCatalogPage() {
   const filteredCourses = courses.filter(c => {
     const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter
     const q = searchQuery.trim().toLowerCase()
-    const matchesSearch = !q ||
-      (c.title && c.title.toLowerCase().includes(q)) ||
-      (c.slug && c.slug.toLowerCase().includes(q)) ||
-      (c.description && c.description.toLowerCase().includes(q))
-    return matchesStatus && matchesSearch
+    if (!q) return matchesStatus
+
+    const titleMatch = Boolean(c.title && c.title.toLowerCase().includes(q))
+    const slugMatch = Boolean(c.slug && c.slug.toLowerCase().includes(q))
+    const levelMatch = Boolean(c.level && c.level.toLowerCase().includes(q))
+    return matchesStatus && (titleMatch || slugMatch || levelMatch)
   })
 
   if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
@@ -195,14 +203,24 @@ export default function CourseCatalogPage() {
         </div>
 
         <div className="relative flex-1 sm:max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search courses..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+            placeholder="Search courses by title or level..."
+            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
+              title="Clear search"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -283,7 +301,7 @@ export default function CourseCatalogPage() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-purple-50 text-purple-600 text-xs font-semibold hover:bg-purple-100 transition-colors">
                   <Pencil size={12} /> Edit
                 </button>
-                <button onClick={() => handleDelete(c)}
+                <button onClick={() => setDeletingCourse(c)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition-colors">
                   <Trash2 size={12} /> Delete
                 </button>
@@ -356,6 +374,15 @@ export default function CourseCatalogPage() {
           </div>
         </form>
       </SlidePanel>
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingCourse)}
+        onClose={() => setDeletingCourse(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Course?"
+        itemName={deletingCourse?.title}
+        loading={isDeleting}
+      />
     </div>
   )
 }

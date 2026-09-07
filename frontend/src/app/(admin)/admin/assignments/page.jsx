@@ -9,6 +9,7 @@ import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const STATUS_COLORS = {
   DRAFT:     'bg-gray-100 text-gray-600',
@@ -43,6 +44,8 @@ export default function AssignmentsPage() {
   const [editAssignment, setEditAssignment] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [deletingAssignment, setDeletingAssignment] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const searchTimer = useRef(null)
 
@@ -166,10 +169,19 @@ export default function AssignmentsPage() {
     catch (err) { toast.error(err.message || 'Failed to close') }
   }
 
-  const handleDelete = async (assignment) => {
-    if (!confirm(`Delete "${assignment.title}"? This cannot be undone.`)) return
-    try { await assignmentService.remove(assignment.id); toast.success('Assignment deleted'); load() }
-    catch (err) { toast.error(err.message || 'Failed to delete') }
+  const handleConfirmDelete = async () => {
+    if (!deletingAssignment) return
+    setIsDeleting(true)
+    try {
+      await assignmentService.remove(deletingAssignment.id)
+      toast.success('Assignment deleted')
+      setDeletingAssignment(null)
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const courseOptions = toOptions(courses, c => c.title)
@@ -293,7 +305,7 @@ export default function AssignmentsPage() {
                               <Lock size={14} />
                             </button>
                           )}
-                          <button onClick={() => handleDelete(a)}
+                          <button onClick={() => setDeletingAssignment(a)}
                             className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
@@ -449,6 +461,15 @@ export default function AssignmentsPage() {
           </div>
         </div>
       </SlidePanel>
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingAssignment)}
+        onClose={() => setDeletingAssignment(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Assignment?"
+        itemName={deletingAssignment?.title}
+        loading={isDeleting}
+      />
     </div>
   )
 }
