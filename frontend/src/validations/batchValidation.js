@@ -10,4 +10,16 @@ export const batchSchema = z.object({
   timing: z.string().optional().or(z.literal('')),
   mode: z.enum(['ONLINE', 'OFFLINE', 'HYBRID'], { errorMap: () => ({ message: 'Mode is required' }) }),
   maxStudents: z.coerce.number().min(1, 'Max students must be at least 1').max(500, 'Max students must be at most 500'),
+}).superRefine((data, ctx) => {
+  if (data.startDate && data.endDate) {
+    const start = new Date(data.startDate)
+    const end = new Date(data.endDate)
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start > end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Batch start date must be before or equal to end date.',
+        path: ['endDate'],
+      })
+    }
+  }
 })

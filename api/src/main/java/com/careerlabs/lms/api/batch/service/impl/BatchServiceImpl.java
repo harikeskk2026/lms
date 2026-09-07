@@ -13,6 +13,7 @@ import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.course.util.CourseDurationParser;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
@@ -176,6 +177,8 @@ public class BatchServiceImpl implements BatchService {
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + request.getCourseId()));
 
+        validateBatchDates(course, request.getStartDate(), request.getEndDate());
+
         batch.setName(request.getName());
         batch.setCourse(course);
         batch.setTrainerId(request.getTrainerId());
@@ -184,6 +187,21 @@ public class BatchServiceImpl implements BatchService {
         batch.setTiming(request.getTiming());
         batch.setMode(request.getMode());
         batch.setMaxStudents(request.getMaxStudents());
+    }
+
+    private void validateBatchDates(Course course, LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            return;
+        }
+        if (startDate.isAfter(endDate)) {
+            throw new BadRequestException("Batch start date must be before or equal to end date.");
+        }
+        String duration = course.getDuration();
+        LocalDate maxEndDate = CourseDurationParser.calculateMaxEndDate(startDate, duration);
+        if (maxEndDate != null && endDate.isAfter(maxEndDate)) {
+            throw new BadRequestException(
+                    "Batch duration cannot exceed the selected course duration of " + duration + ".");
+        }
     }
 
     private void validateTrainerAvailability(Long currentBatchId, Long trainerId, LocalDate startDate, LocalDate endDate, String timing) {

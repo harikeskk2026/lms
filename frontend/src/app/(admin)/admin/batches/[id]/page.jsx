@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react'
+import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight, UserCheck, Pencil } from 'lucide-react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameDay, isSameMonth, isToday, addMonths, subMonths,
@@ -11,8 +11,10 @@ import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
 import studentService from '@/services/studentService'
 import reportService from '@/services/reportService'
+import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const TABS = ['Overview', 'Students', 'Schedule', 'Attendance', 'Assignments']
 
@@ -46,8 +48,16 @@ export default function BatchDetailPage() {
   const [addStudentQuery, setAddStudentQuery] = useState('')
   const [addStudentResults, setAddStudentResults] = useState([])
   const [addStudentSearching, setAddStudentSearching] = useState(false)
+  const [editPanel, setEditPanel] = useState(false)
+  const [courses, setCourses] = useState([])
+  const [editForm, setEditForm] = useState({ name: '', courseId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
 
   const handleAssignTrainer = async (newTrainerId) => {
+    const errMsg = validateBatchDates(batch.startDate, batch.endDate, batch.course?.duration)
+    if (errMsg) {
+      toast.error(errMsg)
+      return
+    }
     try {
       await adminApi.updateBatch(id, {
         name: batch.name,
@@ -63,6 +73,51 @@ export default function BatchDetailPage() {
       load()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update trainer')
+    }
+  }
+
+  const openEditPanel = () => {
+    if (!batch) return
+    setEditForm({
+      name: batch.name || '',
+      courseId: batch.course?.id ? String(batch.course.id) : '',
+      startDate: batch.startDate ? batch.startDate.substring(0, 10) : '',
+      endDate: batch.endDate ? batch.endDate.substring(0, 10) : '',
+      timing: batch.timing || '',
+      mode: batch.mode || 'ONLINE',
+      maxStudents: batch.maxStudents || 30,
+    })
+    setEditPanel(true)
+  }
+
+  const handleUpdateBatch = async (e) => {
+    e.preventDefault()
+    const selectedCourse = courses.find(c => String(c.id) === String(editForm.courseId)) || batch.course
+    const duration = selectedCourse?.duration
+    const validationError = validateBatchDates(editForm.startDate, editForm.endDate, duration)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+    setSaving(true)
+    try {
+      await adminApi.updateBatch(id, {
+        name: editForm.name,
+        courseId: Number(editForm.courseId),
+        trainerId: batch.trainerId || batch.trainer?.id || null,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate,
+        timing: editForm.timing,
+        mode: editForm.mode,
+        maxStudents: Number(editForm.maxStudents),
+      })
+      toast.success('Batch updated')
+      setEditPanel(false)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to update batch')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -111,6 +166,7 @@ export default function BatchDetailPage() {
       adminApi.getTrainers({ limit: 100, status: 'active' })
         .then(r => setTrainers(r.data?.data?.trainers || []))
         .catch(() => {})
+      courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     }
   }, [id, user?.role])
 
@@ -210,10 +266,16 @@ export default function BatchDetailPage() {
           <p className="text-sm text-gray-500">{batch.course?.title} · {batch.mode}</p>
         </div>
         {isAdmin ? (
-          <button onClick={handleToggleStatus}
-            className={`ml-auto text-xs font-bold px-3 py-1 rounded-full transition-colors ${batch.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            {batch.isActive ? 'Active' : 'Ended'}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={openEditPanel}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors">
+              <Pencil size={12} /> Edit Batch
+            </button>
+            <button onClick={handleToggleStatus}
+              className={`text-xs font-bold px-3 py-1 rounded-full transition-colors ${batch.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              {batch.isActive ? 'Active' : 'Ended'}
+            </button>
+          </div>
         ) : (
           <span className={`ml-auto text-xs font-bold px-3 py-1 rounded-full ${batch.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
             {batch.isActive ? 'Active' : 'Ended'}
@@ -687,6 +749,80 @@ export default function BatchDetailPage() {
             </div>
           </div>
         )}
+      </SlidePanel>
+
+      {/* Edit Batch Panel */}
+      <SlidePanel open={editPanel} onClose={() => setEditPanel(false)} title="Edit Batch" subtitle="Update batch details">
+        {batch && (() => {
+          const selectedForEdit = courses.find(c => String(c.id) === String(editForm.courseId)) || batch.course
+          const editDateError = validateBatchDates(editForm.startDate, editForm.endDate, selectedForEdit?.duration)
+          const editMaxEnd = editForm.startDate && selectedForEdit?.duration ? calculateMaxEndDate(editForm.startDate, selectedForEdit.duration) : null
+          return (
+            <form onSubmit={handleUpdateBatch} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Batch Name *</label>
+                <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Python Batch Jan 2026"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
+                <select value={editForm.courseId} onChange={e => setEditForm(f => ({ ...f, courseId: e.target.value }))} required
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">Select course</option>
+                  {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title} — {c.duration}</option>)}
+                </select>
+                {selectedForEdit && (
+                  <p className="text-xs text-gray-500 mt-1">Course duration: <span className="font-semibold text-purple-600">{selectedForEdit.duration}</span></p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date *</label>
+                  <input type="date" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} required
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">End Date *</label>
+                  <input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} required
+                    className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${editDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
+                </div>
+              </div>
+              {selectedForEdit && editForm.startDate && editMaxEnd && (
+                <p className="text-xs text-gray-500">
+                  Max allowed end date for <span className="font-semibold">{selectedForEdit.duration}</span> from {format(new Date(editForm.startDate), 'dd MMM yyyy')} is <span className="font-semibold text-purple-600">{format(editMaxEnd, 'dd MMM yyyy')}</span>
+                </p>
+              )}
+              {editDateError && (
+                <p className="text-xs text-red-500 font-medium">{editDateError}</p>
+              )}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Timing</label>
+                <input value={editForm.timing} onChange={e => setEditForm(f => ({ ...f, timing: e.target.value }))} placeholder="09:00 AM - 12:00 PM"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Mode</label>
+                  <select value={editForm.mode} onChange={e => setEditForm(f => ({ ...f, mode: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                    <option>ONLINE</option><option>OFFLINE</option><option>HYBRID</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Max Students</label>
+                  <input type="number" min="1" max="500" value={editForm.maxStudents} onChange={e => setEditForm(f => ({ ...f, maxStudents: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          )
+        })()}
       </SlidePanel>
     </div>
   )

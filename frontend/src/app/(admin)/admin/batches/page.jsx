@@ -9,6 +9,7 @@ import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
 const MODE_COLORS = { ONLINE: 'bg-blue-100 text-blue-700', OFFLINE: 'bg-green-100 text-green-700', HYBRID: 'bg-purple-100 text-purple-700' }
@@ -45,6 +46,10 @@ export default function BatchesPage() {
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('12:00')
 
+  const selectedCourse = courses.find(c => String(c.id) === String(form.courseId))
+  const batchDateError = validateBatchDates(form.startDate, form.endDate, selectedCourse?.duration)
+  const maxEndDate = selectedCourse && form.startDate ? calculateMaxEndDate(form.startDate, selectedCourse.duration) : null
+
   const load = () => {
     setLoading(true)
     batchService.list().then(r => setBatches(r.data || [])).catch(err => toast.error(err.message || 'Failed to load batches')).finally(() => setLoading(false))
@@ -64,6 +69,15 @@ export default function BatchesPage() {
       toast.error('Only Super Admins and Admins can create batches')
       return
     }
+    // Frontend batch date validation (course duration + start<=end)
+    if (batchDateError) {
+      toast.error(batchDateError)
+      return
+    }
+    if (!selectedCourse) {
+      toast.error('Please select a course')
+      return
+    }
     setSaving(true)
     const formattedTiming = startTime && endTime ? `${formatTime12h(startTime)} - ${formatTime12h(endTime)}` : ''
     try {
@@ -79,7 +93,8 @@ export default function BatchesPage() {
       setForm({ name: '', courseId: '', trainerId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
       load()
     } catch (err) {
-      toast.error(err.message || 'Failed to create batch')
+      const msg = err.response?.data?.message || err.message || 'Failed to create batch'
+      toast.error(msg)
     } finally { setSaving(false) }
   }
 
@@ -221,8 +236,11 @@ export default function BatchesPage() {
               <select value={form.courseId} onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))} required
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
                 <option value="">Select course</option>
-                {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title} — {c.duration}</option>)}
               </select>
+              {selectedCourse && (
+                <p className="text-xs text-gray-500 mt-1">Selected course duration: <span className="font-semibold text-purple-600">{selectedCourse.duration}</span></p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
@@ -245,9 +263,17 @@ export default function BatchesPage() {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
                 <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} required
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                  className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 ${batchDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'}`} />
               </div>
             </div>
+            {selectedCourse && form.startDate && maxEndDate && (
+              <p className="text-xs text-gray-500">
+                Max allowed end date for <span className="font-semibold">{selectedCourse.duration}</span> from {format(new Date(form.startDate), 'dd MMM yyyy')} is <span className="font-semibold text-purple-600">{format(maxEndDate, 'dd MMM yyyy')}</span>
+              </p>
+            )}
+            {batchDateError && (
+              <p className="text-xs text-red-500 font-medium">{batchDateError}</p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode</label>
