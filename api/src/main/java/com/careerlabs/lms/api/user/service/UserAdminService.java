@@ -1,0 +1,17 @@
+package com.careerlabs.lms.api.user.service;
+
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
+import com.careerlabs.lms.api.user.dto.request.AdminCreateRequest;
+import com.careerlabs.lms.api.user.dto.response.AdminPageResponse;
+import com.careerlabs.lms.api.user.dto.response.AdminResponse;
+
+public interface UserAdminService {
+
+    AdminPageResponse listAdmins(String search, String status, int page, int limit);
+
+    AdminResponse createAdmin(AdminCreateRequest request);
+
+    AdminResponse toggleAdminStatus(Long adminId, JwtUserPrincipal principal);
+
+    void resetPassword(JwtUserPrincipal principal, Long targetUserId, String newPassword);
+}

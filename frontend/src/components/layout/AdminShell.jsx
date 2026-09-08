@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, UserCheck, BookOpen, ClipboardList,
   BarChart2, LogOut, LogIn, Menu, X, ChevronRight,
   Layers, Calendar, Brain, Briefcase, Megaphone, Search,
-  Moon, Sun, Video, UserCircle, Link2
+  Moon, Sun, Video, UserCircle, Link2, ShieldCheck
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi, resolveFileUrl } from '@/lib/api'
@@ -16,6 +16,7 @@ import clsx from 'clsx'
 
 const navItems = [
   { href: '/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/admin/admins',        icon: ShieldCheck,     label: 'Admins',       roles: ['SUPERADMIN'] },
   { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students', roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/trainers',      icon: UserCheck,       label: 'Trainers',     roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
@@ -32,6 +33,7 @@ const navItems = [
 
 const PAGE_TITLES = {
   '/admin/dashboard':     'Dashboard',
+  '/admin/admins':        'Admins',
   '/admin/students':      'Students',
   '/admin/trainers':      'Trainers',
   '/admin/batches':       'Batches',

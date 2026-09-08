@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.profile.service.impl;
 import com.careerlabs.lms.api.academic.entity.AcademicDetails;
 import com.careerlabs.lms.api.academic.repository.AcademicDetailsRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.InvalidCredentialsException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.storage.FileStorageService;
@@ -12,6 +13,7 @@ import com.careerlabs.lms.api.profile.dto.request.UpdateProfileRequest;
 import com.careerlabs.lms.api.profile.dto.response.PhotoUploadResponse;
 import com.careerlabs.lms.api.profile.dto.response.ProfileResponse;
 import com.careerlabs.lms.api.profile.service.ProfileService;
+import com.careerlabs.lms.api.security.TokenRevocationService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
@@ -46,15 +48,18 @@ public class ProfileServiceImpl implements ProfileService {
     private final AcademicDetailsRepository academicDetailsRepository;
     private final FileStorageService fileStorageService;
     private final PasswordEncoder passwordEncoder;
+    private final TokenRevocationService tokenRevocationService;
 
     public ProfileServiceImpl(UserRepository userRepository, StudentRepository studentRepository,
                                AcademicDetailsRepository academicDetailsRepository,
-                               FileStorageService fileStorageService, PasswordEncoder passwordEncoder) {
+                               FileStorageService fileStorageService, PasswordEncoder passwordEncoder,
+                               TokenRevocationService tokenRevocationService) {
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
         this.academicDetailsRepository = academicDetailsRepository;
         this.fileStorageService = fileStorageService;
         this.passwordEncoder = passwordEncoder;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @Override
@@ -92,6 +97,9 @@ public class ProfileServiceImpl implements ProfileService {
     @Transactional
     public void changePassword(Long userId, ChangePasswordRequest request) {
         User user = findUserOrThrow(userId);
+        if (user.getRole() != Role.SUPERADMIN) {
+            throw new ForbiddenException("Only SUPERADMIN is permitted to change their own password.");
+        }
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
             throw new InvalidCredentialsException("Current password is incorrect");
         }
@@ -100,6 +108,7 @@ public class ProfileServiceImpl implements ProfileService {
         }
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        tokenRevocationService.revokeAllUserTokens(userId);
     }
 
     @Override

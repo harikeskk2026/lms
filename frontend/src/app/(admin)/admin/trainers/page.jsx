@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
+import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
 import clsx from 'clsx'
 
 const EMPTY_FORM = {
@@ -57,6 +58,7 @@ export default function TrainersPage() {
   const [deletingTrainer, setDeletingTrainer] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [resetTarget, setResetTarget] = useState(null)
 
   useEffect(() => {
     setMounted(true)
@@ -411,6 +413,13 @@ export default function TrainersPage() {
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={() => setResetTarget({ ...trainer, role: 'TRAINER' })}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                          title="Reset Password"
+                        >
+                          <KeyRound size={16} />
+                        </button>
+                        <button
                           onClick={() => handleOpenEdit(trainer)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
                           title="Edit Trainer"
@@ -730,6 +739,8 @@ export default function TrainersPage() {
         </div>,
         document.body
       )}
+
+      <ResetPasswordModal open={!!resetTarget} user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={fetchTrainers} />
     </div>
   )
 }

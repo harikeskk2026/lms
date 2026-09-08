@@ -104,7 +104,9 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/api/auth/verify-otp", "/api/auth/reset-password", "/api/health", "/oauth2/**", "/api/drive/**", "/error").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/health", "/oauth2/**", "/api/drive/**", "/error").permitAll()
+                        .requestMatchers("/api/admin/admins", "/api/admin/admins/**").hasRole("SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/admin/users/*/reset-password").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
@@ -158,7 +160,7 @@ public class SecurityConfig {
 
     private CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

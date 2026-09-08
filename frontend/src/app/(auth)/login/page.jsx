@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
-import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { loginSchema } from '@/validations/loginValidation'
@@ -176,8 +175,8 @@ export default function LoginPage() {
                 {errors.password && <span className="form-error">{errors.password.message}</span>}
               </div>
 
-              {/* Remember me + Forgot */}
-              <div className="flex items-center justify-between">
+              {/* Remember me */}
+              <div className="flex items-center">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -185,9 +184,6 @@ export default function LoginPage() {
                   />
                   <span className="text-sm text-slate-600">Remember me</span>
                 </label>
-                <Link href="/forgot-password" className="text-sm text-brand-600 font-medium hover:underline">
-                  Forgot password?
-                </Link>
               </div>
 
               {/* Submit */}

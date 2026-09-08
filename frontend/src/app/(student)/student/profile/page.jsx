@@ -9,7 +9,6 @@ import { useAuth } from '@/context/AuthContext'
 import tokenStorage from '@/utilities/tokenStorage'
 import { isValidPhone, PHONE_ERROR_MESSAGE, isValidUrl, LINKEDIN_URL_ERROR_MESSAGE, GITHUB_URL_ERROR_MESSAGE } from '@/utilities/validators'
 import ProfilePhotoUploader from '@/components/shared/profile/ProfilePhotoUploader'
-import ChangePasswordForm from '@/components/shared/profile/ChangePasswordForm'
 import AcademicDetailsSection from '@/components/student/profile/AcademicDetailsSection'
 
 const INPUT_CLS = 'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500'
@@ -291,7 +290,9 @@ export default function StudentProfilePage() {
         <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <ShieldCheck size={16} className="text-purple-600" /> Security
         </h3>
-        <ChangePasswordForm />
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-700">
+          If you need to change your password, please contact your administrator.
+        </div>
       </div>
     </div>
   )

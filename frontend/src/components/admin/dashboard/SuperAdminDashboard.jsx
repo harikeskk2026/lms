@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
   GraduationCap, UserCheck, Users, BookOpen, Layers, Briefcase,
-  UserPlus, FileText, Globe, Activity, Zap, Crown, RefreshCw
+  UserPlus, FileText, Globe, Activity, Zap, Crown, RefreshCw, ShieldCheck
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { adminApi } from '@/lib/api'
@@ -26,6 +26,7 @@ const ATTENDANCE_COLORS = { healthy: '#22c55e', atRisk: '#f59e0b', critical: '#e
 const QUICK_ACTIONS = [
   { label: 'Add Student',      icon: UserPlus,  href: '/admin/students',       grad: 'from-purple-600 to-violet-600' },
   { label: 'Add Trainer',      icon: Users,     href: '/admin/trainers?action=add',        grad: 'from-violet-600 to-indigo-600' },
+  { label: 'Manage Admins',    icon: ShieldCheck, href: '/admin/admins',       grad: 'from-red-500 to-orange-500' },
   { label: 'Create Batch',     icon: Layers,    href: '/admin/batches',        grad: 'from-indigo-600 to-purple-600' },
   { label: 'Courses',          icon: BookOpen,  href: '/admin/course-catalog', grad: 'from-purple-700 to-fuchsia-600' },
   { label: 'Placement Drives', icon: Briefcase, href: '/admin/placement',      grad: 'from-purple-600 to-violet-700' },

@@ -217,7 +217,13 @@ export default function AdminProfilePage() {
             <ShieldCheck size={16} className="text-purple-600" /> Security
           </h3>
           <p className="text-xs text-gray-400 mb-4">Account created and last-login details are shown above. Role and account status are managed by a system administrator and can't be changed here.</p>
-          <ChangePasswordForm />
+          {profile.role === 'SUPERADMIN' ? (
+            <ChangePasswordForm />
+          ) : (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-700">
+              Your password can only be reset by a <strong>SUPERADMIN</strong>. Please contact your administrator in person if you need a password change.
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 import courseService from '@/services/courseService'
+import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
 import { isValidPhone, PHONE_ERROR_MESSAGE, isValidPassword, PASSWORD_ERROR_MESSAGE, isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
@@ -70,6 +71,7 @@ export default function StudentsPage() {
   const [exporting, setExporting] = useState(false)
   const [deletingStudent, setDeletingStudent] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [resetTarget, setResetTarget] = useState(null)
   const searchTimer = useRef(null)
 
   const load = useCallback(() => {
@@ -428,6 +430,10 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setResetTarget(s); }}
+                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="Reset Password">
+                            <KeyRound size={14} />
+                          </button>
                           <button onClick={(e) => { e.stopPropagation(); openEdit(s); }}
                             className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
                             <Pencil size={14} />
@@ -654,6 +660,8 @@ export default function StudentsPage() {
         }
         loading={isDeleting}
       />
+
+      <ResetPasswordModal open={!!resetTarget} user={resetTarget ? { id: resetTarget.id, name: resetTarget.name, email: resetTarget.email, role: 'STUDENT', active: resetTarget.active } : null} onClose={() => setResetTarget(null)} onSuccess={load} />
     </div>
   )
 }

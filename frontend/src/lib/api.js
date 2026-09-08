@@ -2,14 +2,30 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import tokenStorage from '@/utilities/tokenStorage'
 
+function getBaseURL() {
+  const envUrl = process.env.NEXT_PUBLIC_JAVA_API_URL
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+    return envUrl
+  }
+  if (typeof window !== 'undefined') {
+    return '/api'
+  }
+  return envUrl || 'http://localhost:7000/api'
+}
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api',
+  baseURL: getBaseURL(),
   withCredentials: true,
-  timeout: 10000,
+  timeout: 15000,
 })
 
 // ─── Request: attach access token ─────────────────────────────────────────────
 api.interceptors.request.use(config => {
+  if (typeof window !== 'undefined') {
+    if (!config.baseURL || config.baseURL.includes('localhost') || config.baseURL.includes('127.0.0.1')) {
+      config.baseURL = '/api'
+    }
+  }
   const token = tokenStorage.getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
@@ -72,7 +88,11 @@ const API_ORIGIN = (process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:70
 export function resolveFileUrl(path) {
   if (!path) return path
   if (/^https?:\/\//i.test(path)) return path
-  return `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  if (typeof window !== 'undefined') {
+    return normalized
+  }
+  return `${API_ORIGIN}${normalized}`
 }
 
 export const adminApi = {
@@ -82,13 +102,27 @@ export const adminApi = {
   getTrainerDashboard: () => api.get('/admin/dashboard/trainer'),
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
 
+  // Admins (SUPERADMIN only)
+  getAdmins: (params) => api.get('/admin/admins', { params }),
+  createAdmin: (data) => api.post('/admin/admins', data),
+  toggleAdminStatus: (id) => api.patch(`/admin/admins/${id}/status`),
+  resetUserPassword: (userId, newPassword) => api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
+  resetStudentPassword: (id, data) => {
+    const pwd = data?.newPassword || data?.password || data
+    const val = typeof pwd === 'string' ? pwd : pwd?.newPassword
+    return api.post(`/admin/users/${id}/reset-password`, { newPassword: val })
+  },
+  resetTrainerPassword: (id, newPassword) => {
+    const val = typeof newPassword === 'string' ? newPassword : newPassword?.newPassword || newPassword?.password
+    return api.post(`/admin/users/${id}/reset-password`, { newPassword: val })
+  },
+
   // Students
   getStudents: (params) => api.get('/admin/students', { params }),
   createStudent: (data) => api.post('/admin/students', data),
   getStudentDetail: (id) => api.get(`/admin/students/${id}`),
   updateStudent: (id, data) => api.patch(`/admin/students/${id}`, data),
   toggleStudentStatus: (id) => api.patch(`/admin/students/${id}/status`),
-  resetStudentPassword: (id, data) => api.post(`/admin/students/${id}/reset-password`, data),
 
   // Trainers
   getTrainers: (params) => api.get('/trainers', { params }),
