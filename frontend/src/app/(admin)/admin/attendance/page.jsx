@@ -18,19 +18,11 @@ import HistoryTab from './HistoryTab'
 
 // recharts is a heavy dependency - load it only for the trend charts below,
 // and only on the client (SSR doesn't need it).
-const CHART_SKELETON = <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
-const AttendanceDailyTrendChart = dynamic(
-  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.AttendanceDailyTrendChart),
-  { ssr: false, loading: () => CHART_SKELETON }
-)
-const WeeklyAttendanceRateChart = dynamic(
-  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.WeeklyAttendanceRateChart),
-  { ssr: false, loading: () => CHART_SKELETON }
-)
-const MonthlyAttendanceBreakdownChart = dynamic(
-  () => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.MonthlyAttendanceBreakdownChart),
-  { ssr: false, loading: () => CHART_SKELETON }
-)
+import {
+  AttendanceDailyTrendChart,
+  WeeklyAttendanceRateChart,
+  MonthlyAttendanceBreakdownChart
+} from '@/components/admin/attendance/AttendanceTrendCharts'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 

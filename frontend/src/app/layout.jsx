@@ -1,6 +1,7 @@
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/context/AuthContext'
+import ChunkErrorHandler from '@/components/shared/ChunkErrorHandler'
 
 export const metadata = {
   title: 'CareerLabs LMS',
@@ -19,6 +20,7 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body>
+        <ChunkErrorHandler />
         <AuthProvider>
           {children}
           <Toaster

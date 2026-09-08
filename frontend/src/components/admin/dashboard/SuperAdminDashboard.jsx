@@ -12,14 +12,7 @@ import { SkeletonStat, ErrorCard } from '@/components/student/SkeletonCard'
 
 import toast from 'react-hot-toast'
 
-const PerformanceTrendChart = dynamic(
-  () => import('@/components/admin/dashboard/PerformanceCharts').then(m => m.PerformanceTrendChart),
-  { ssr: false, loading: () => <div className="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" /> }
-)
-const AttendanceBreakdownChart = dynamic(
-  () => import('@/components/admin/dashboard/PerformanceCharts').then(m => m.AttendanceBreakdownChart),
-  { ssr: false, loading: () => <div className="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" /> }
-)
+import { PerformanceTrendChart, AttendanceBreakdownChart } from '@/components/admin/dashboard/PerformanceCharts'
 
 const ATTENDANCE_COLORS = { healthy: '#22c55e', atRisk: '#f59e0b', critical: '#ef4444' }
 

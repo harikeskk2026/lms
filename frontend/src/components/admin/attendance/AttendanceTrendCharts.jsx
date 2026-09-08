@@ -1,12 +1,18 @@
 'use client'
+import { useState, useEffect } from 'react'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine
 } from 'recharts'
 
 const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
+const SKELETON = <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
 
 export function AttendanceDailyTrendChart({ data }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return SKELETON
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data} margin={{ left: -10, right: 10 }}>
@@ -33,6 +39,10 @@ export function AttendanceDailyTrendChart({ data }) {
 }
 
 export function WeeklyAttendanceRateChart({ data }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return SKELETON
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <LineChart data={data} margin={{ left: -10, right: 10 }}>
@@ -47,6 +57,10 @@ export function WeeklyAttendanceRateChart({ data }) {
 }
 
 export function MonthlyAttendanceBreakdownChart({ data }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return SKELETON
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} barSize={16} margin={{ left: -10, right: 10 }}>
