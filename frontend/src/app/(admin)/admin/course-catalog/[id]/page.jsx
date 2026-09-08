@@ -156,6 +156,7 @@ export default function CourseManagePage({ params }) {
         <ArrowLeft size={14} /> Back to Courses
       </Link>
 
+      <div className="glass-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center flex-wrap gap-2 mb-1">

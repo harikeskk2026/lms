@@ -284,7 +284,6 @@ export default function CourseCatalogPage() {
                 {c.status === 'ARCHIVED' && (
                   <span className="flex-1 text-center py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs font-semibold">Archived — terminal</span>
                 )}
-                )}
               </div>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => openEdit(c)}
