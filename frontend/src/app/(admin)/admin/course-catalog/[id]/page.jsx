@@ -12,6 +12,9 @@ import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import batchService from '@/services/batchService'
 import EnrolledStudentsTab from '@/components/admin/course/EnrolledStudentsTab'
+import ImportSyllabusModal from '@/components/admin/course/ImportSyllabusModal'
+import SyllabusStatusModal from '@/components/admin/course/SyllabusStatusModal'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import { resolveFileUrl, adminApi } from '@/lib/api'
 
 import SlidePanel from '@/components/admin/SlidePanel'
@@ -153,7 +156,6 @@ export default function CourseManagePage({ params }) {
         <ArrowLeft size={14} /> Back to Courses
       </Link>
 
-      <div className="glass-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center flex-wrap gap-2 mb-1">
@@ -163,9 +165,19 @@ export default function CourseManagePage({ params }) {
                   {course.courseCode}
                 </span>
               )}
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                {course.status}
-              </span>
+              <StatusBadge
+                status={course.status}
+                title="Click to change course status"
+                onChange={async (newStatus) => {
+                  try {
+                    await courseService.updateStatus(courseId, newStatus)
+                    setCourse(c => ({ ...c, status: newStatus }))
+                    toast.success(`Course status changed to ${newStatus}`)
+                  } catch {
+                    toast.error('Failed to update course status')
+                  }
+                }}
+              />
             </div>
             <p className="text-sm text-gray-500 line-clamp-2">{course.description}</p>
           </div>
@@ -537,12 +549,35 @@ function calculateDuration(start, end) {
   return diff > 0 ? String(diff) : ''
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, onChange, disabled, title }) {
   const isDraft = status === 'DRAFT'
+
+  if (!onChange) {
+    return (
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+        isDraft ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+      }`}>{isDraft ? 'DRAFT' : 'PUBLISHED'}</span>
+    )
+  }
+
   return (
-    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-      isDraft ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-    }`}>{isDraft ? 'DRAFT' : 'PUBLISHED'}</span>
+    <div className="relative inline-flex items-center flex-shrink-0" onClick={e => e.stopPropagation()}>
+      <select
+        value={status || 'PUBLISHED'}
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+        title={title || "Click to change status between DRAFT and PUBLISHED"}
+        className={`appearance-none cursor-pointer text-[9px] font-bold pl-2 pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 ${
+          isDraft
+            ? 'bg-amber-100 text-amber-700 border-amber-300/70 hover:bg-amber-200/80 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+            : 'bg-emerald-100 text-emerald-700 border-emerald-300/70 hover:bg-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
+        <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
+      </select>
+      <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
+    </div>
   )
 }
 
@@ -587,6 +622,7 @@ function SyllabusTab({ courseId }) {
   const [expanded, setExpanded] = useState({})
   const [showAddModule, setShowAddModule] = useState(false)
   const [newModule, setNewModule] = useState(EMPTY_MODULE_FORM)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   // Module edit state
   const [editingModule, setEditingModule] = useState(null)
@@ -595,6 +631,150 @@ function SyllabusTab({ courseId }) {
   const [showAddTopic, setShowAddTopic] = useState({})
   const [newTopic, setNewTopic] = useState({})
   const [editingTopic, setEditingTopic] = useState(null)
+  const [statusUpdating, setStatusUpdating] = useState(false)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [targetStatus, setTargetStatus] = useState('PUBLISHED')
+  const [deleteModal, setDeleteModal] = useState({ open: false, type: null, id: null, name: '' })
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  function openStatusModal(desiredStatus) {
+    setTargetStatus(desiredStatus || 'PUBLISHED')
+    setStatusModalOpen(true)
+  }
+
+  async function handleConfirmSyllabusStatus({ status: newStatus, includeTopics }) {
+    setStatusUpdating(true)
+    try {
+      const res = await courseContentService.updateSyllabusStatus(courseId, newStatus, includeTopics)
+      const data = res.data || res
+      setModules(data || [])
+      toast.success(
+        includeTopics
+          ? `All modules and topics marked as ${newStatus}`
+          : `All modules marked as ${newStatus}`
+      )
+      setStatusModalOpen(false)
+    } catch {
+      try {
+        if (includeTopics) {
+          await Promise.all(modules.map(async m => {
+            await courseContentService.updateModule(m.id, {
+              title: m.title,
+              description: m.description || '',
+              status: newStatus,
+              durationValue: m.durationValue ? Number(m.durationValue) : null,
+              durationUnit: m.durationValue ? m.durationUnit : null,
+            })
+            if (m.topics && m.topics.length > 0) {
+              await Promise.all(m.topics.map(t =>
+                courseContentService.updateTopic(t.id, {
+                  title: t.title,
+                  description: t.description || '',
+                  status: newStatus,
+                  durationHours: t.durationHours ? Number(t.durationHours) : null,
+                })
+              ))
+            }
+          }))
+          toast.success(`All modules and topics marked as ${newStatus}`)
+        } else {
+          await Promise.all(modules.map(m =>
+            courseContentService.updateModule(m.id, {
+              title: m.title,
+              description: m.description || '',
+              status: newStatus,
+              durationValue: m.durationValue ? Number(m.durationValue) : null,
+              durationUnit: m.durationValue ? m.durationUnit : null,
+            })
+          ))
+          toast.success(`All modules marked as ${newStatus}`)
+        }
+        load()
+        setStatusModalOpen(false)
+      } catch (err) {
+        toast.error(err.message || 'Failed to update syllabus status')
+        load()
+      }
+    } finally {
+      setStatusUpdating(false)
+    }
+  }
+
+  async function updateModuleStatus(module, newStatus) {
+    if (!module || module.status === newStatus) return
+    setModules(prev => prev.map(m => m.id === module.id ? { ...m, status: newStatus } : m))
+    try {
+      await courseContentService.updateModule(module.id, {
+        title: module.title,
+        description: module.description || '',
+        status: newStatus,
+        durationValue: module.durationValue ? Number(module.durationValue) : null,
+        durationUnit: module.durationValue ? module.durationUnit : null,
+      })
+      toast.success(`Module marked as ${newStatus}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to update module status')
+      load()
+    }
+  }
+
+  async function updateTopicStatus(topic, newStatus) {
+    if (!topic || topic.status === newStatus) return
+    setModules(prev => prev.map(m => ({
+      ...m,
+      topics: (m.topics || []).map(t => t.id === topic.id ? { ...t, status: newStatus } : t)
+    })))
+    try {
+      await courseContentService.updateTopic(topic.id, {
+        title: topic.title,
+        description: topic.description || '',
+        status: newStatus,
+        durationHours: topic.durationHours ? Number(topic.durationHours) : null,
+      })
+      toast.success(`Topic marked as ${newStatus}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to update topic status')
+      load()
+    }
+  }
+
+  function promptDeleteModule(m) {
+    setDeleteModal({
+      open: true,
+      type: 'module',
+      id: m.id,
+      name: m.title,
+    })
+  }
+
+  function promptDeleteTopic(t) {
+    setDeleteModal({
+      open: true,
+      type: 'topic',
+      id: t.id,
+      name: t.title,
+    })
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteModal.id) return
+    setDeleteLoading(true)
+    try {
+      if (deleteModal.type === 'module') {
+        await courseContentService.deleteModule(deleteModal.id)
+        toast.success('Module deleted')
+      } else if (deleteModal.type === 'topic') {
+        await courseContentService.deleteTopic(deleteModal.id)
+        toast.success('Topic deleted')
+      }
+      setDeleteModal({ open: false, type: null, id: null, name: '' })
+      load()
+    } catch {
+      toast.error(`Failed to delete ${deleteModal.type || 'item'}`)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
 
   const load = useCallback((isInitial = false) => {
     setLoading(true)
@@ -845,6 +1025,33 @@ function SyllabusTab({ courseId }) {
               {modules.every(m => expanded[m.id]) ? 'Collapse All' : 'Expand All'}
             </button>
           )}
+          {modules.length > 0 && (
+            <div className="relative inline-flex items-center">
+              <select
+                disabled={statusUpdating}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    openStatusModal(e.target.value)
+                    e.target.value = ''
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors shadow-sm outline-none cursor-pointer"
+                title="Change status for modules and topics in the syllabus"
+              >
+                <option value="" disabled>{statusUpdating ? 'Updating...' : 'Syllabus Status ▾'}</option>
+                <option value="PUBLISHED">Publish All...</option>
+                <option value="DRAFT">Draft All...</option>
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="px-3.5 py-1.5 border border-purple-200 dark:border-purple-800 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <Upload size={14} /> Import Syllabus
+          </button>
           <button
             type="button"
             onClick={() => setShowAddModule(s => !s)}
@@ -1000,7 +1207,11 @@ function SyllabusTab({ courseId }) {
                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
                       {m.title}
                     </span>
-                    <StatusBadge status={m.status} />
+                    <StatusBadge
+                      status={m.status}
+                      title="Click to switch module status"
+                      onChange={(newStatus) => updateModuleStatus(m, newStatus)}
+                    />
                     <span className="text-xs text-gray-400 flex-shrink-0">
                       ({topics.length} {topics.length === 1 ? 'topic' : 'topics'})
                     </span>
@@ -1044,7 +1255,7 @@ function SyllabusTab({ courseId }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteModule(m.id)}
+                      onClick={() => promptDeleteModule(m)}
                       title="Delete Module"
                       className="w-7 h-7 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 flex items-center justify-center transition-colors"
                     >
@@ -1198,7 +1409,11 @@ function SyllabusTab({ courseId }) {
                                 <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
                                   {t.title}
                                 </span>
-                                <StatusBadge status={t.status} />
+                                <StatusBadge
+                                  status={t.status}
+                                  title="Click to switch topic status"
+                                  onChange={(newStatus) => updateTopicStatus(t, newStatus)}
+                                />
                                 {t.durationHours && (
                                   <span className="text-[11px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
                                     <Clock size={10} /> {t.durationHours}h
@@ -1233,7 +1448,7 @@ function SyllabusTab({ courseId }) {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => deleteTopic(t.id)}
+                                  onClick={() => promptDeleteTopic(t)}
                                   title="Delete Topic"
                                   className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"
                                 >
@@ -1265,6 +1480,36 @@ function SyllabusTab({ courseId }) {
           )
         })}
       </div>
+      <ImportSyllabusModal
+        courseId={courseId}
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={() => load()}
+      />
+
+      {/* Syllabus Bulk Status Modal */}
+      <SyllabusStatusModal
+        open={statusModalOpen}
+        initialStatus={targetStatus}
+        moduleCount={modules.length}
+        topicCount={modules.reduce((sum, m) => sum + (m.topics?.length || 0), 0)}
+        loading={statusUpdating}
+        onClose={() => setStatusModalOpen(false)}
+        onConfirm={handleConfirmSyllabusStatus}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteModal.open}
+        loading={deleteLoading}
+        onClose={() => setDeleteModal({ open: false, type: null, id: null, name: '' })}
+        onConfirm={handleConfirmDelete}
+        title={deleteModal.type === 'module' ? 'Delete Module?' : 'Delete Topic?'}
+        itemName={deleteModal.name}
+        message={deleteModal.type === 'module'
+          ? 'Are you sure you want to delete this module and all its topics? This action cannot be undone.'
+          : 'Are you sure you want to delete this topic? This action cannot be undone.'}
+      />
     </div>
   )
 }

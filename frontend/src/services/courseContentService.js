@@ -15,6 +15,8 @@ const courseContentService = {
   deleteTopic: (id) => apiCall({ method: 'DELETE', url: `/topics/${id}` }),
   reorderTopics: (moduleId, orderedIds) =>
     apiCall({ method: 'PUT', url: `/modules/${moduleId}/topics/reorder`, data: { orderedIds } }),
+  updateSyllabusStatus: (courseId, status, includeTopics = true) =>
+    apiCall({ method: 'PUT', url: `/courses/${courseId}/syllabus/status`, data: { status, includeTopics } }),
 
   // Sessions
   getSessions: (topicId) => apiCall({ method: 'GET', url: `/topics/${topicId}/sessions` }),
@@ -23,6 +25,18 @@ const courseContentService = {
   deleteSession: (id) => apiCall({ method: 'DELETE', url: `/sessions/${id}` }),
   reorderSessions: (topicId, orderedIds) =>
     apiCall({ method: 'PUT', url: `/topics/${topicId}/sessions/reorder`, data: { orderedIds } }),
+
+  // Syllabus import
+  previewImportSyllabus: (courseId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiCall({ method: 'POST', url: `/courses/${courseId}/modules/import/preview`, data: formData, headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  confirmImportSyllabus: (courseId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiCall({ method: 'POST', url: `/courses/${courseId}/modules/import`, data: formData, headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 
   // Materials
   getMaterials: (params) => apiCall({ method: 'GET', url: '/materials', params }),

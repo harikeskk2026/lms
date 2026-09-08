@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.syllabus.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
+import com.careerlabs.lms.api.syllabus.dto.request.SyllabusStatusRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusModuleRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusTopicRequest;
 import com.careerlabs.lms.api.syllabus.dto.response.SyllabusModuleResponse;
@@ -47,6 +48,13 @@ public class SyllabusController {
     public ResponseEntity<ApiResponse<List<SyllabusModuleResponse>>> reorderModules(
             @PathVariable Long courseId, @Valid @RequestBody ReorderRequest request) {
         return ResponseEntity.ok(ApiResponse.of("Modules reordered", syllabusService.reorderModules(courseId, request)));
+    }
+
+    @PutMapping("/api/courses/{courseId}/syllabus/status")
+    public ResponseEntity<ApiResponse<List<SyllabusModuleResponse>>> updateSyllabusStatus(
+            @PathVariable Long courseId, @Valid @RequestBody SyllabusStatusRequest request) {
+        return ResponseEntity.ok(ApiResponse.of("Syllabus status updated",
+                syllabusService.updateSyllabusStatus(courseId, request.getStatus(), request.isIncludeTopics())));
     }
 
     @PutMapping("/api/modules/{id}")

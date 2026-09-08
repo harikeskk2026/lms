@@ -306,6 +306,25 @@ public class SyllabusServiceImpl implements SyllabusService {
                 .toList();
     }
 
+    @Override
+    @Transactional
+    public List<SyllabusModuleResponse> updateSyllabusStatus(Long courseId, CourseStatus status, boolean includeTopics) {
+        findCourseOrThrow(courseId);
+        List<SyllabusModule> modules = moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(courseId);
+        for (SyllabusModule module : modules) {
+            module.setStatus(status);
+            if (includeTopics) {
+                List<SyllabusTopic> topics = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(module.getId());
+                for (SyllabusTopic topic : topics) {
+                    topic.setStatus(status);
+                }
+                topicRepository.saveAll(topics);
+            }
+        }
+        moduleRepository.saveAll(modules);
+        return reloadTree(courseId);
+    }
+
     private List<SyllabusModuleResponse> reloadTree(Long courseId) {
         List<SyllabusModule> modules = moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(courseId);
         List<Long> moduleIds = modules.stream().map(SyllabusModule::getId).toList();

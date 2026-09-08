@@ -135,6 +135,29 @@
       <artifactId>google-api-services-drive</artifactId>
       <version>v3-rev20240521-2.0.0</version>
     </dependency>
+
+    <!-- Excel parsing -->
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi</artifactId>
+      <version>5.2.5</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>5.2.5</version>
+    </dependency>
+    <!-- CSV parsing -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>1.10.0</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.16.1</version>
+    </dependency>
   </dependencies>
   <build>
     <finalName>lms-api</finalName>
@@ -142,6 +165,9 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <mainClass>com.careerlabs.lms.api.LmsApiApplication</mainClass>
+        </configuration>
       </plugin>
     </plugins>
   </build>

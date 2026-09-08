@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.syllabus.service;
 
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
 import com.careerlabs.lms.api.syllabus.dto.request.SyllabusModuleRequest;
@@ -28,4 +29,6 @@ public interface SyllabusService {
     void deleteTopic(Long id);
 
     List<SyllabusTopicResponse> reorderTopics(Long moduleId, ReorderRequest request);
+
+    List<SyllabusModuleResponse> updateSyllabusStatus(Long courseId, CourseStatus status, boolean includeTopics);
 }
