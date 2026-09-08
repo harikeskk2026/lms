@@ -12,7 +12,11 @@ import SlidePanel from '@/components/admin/SlidePanel'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
-const MODE_COLORS = { ONLINE: 'bg-blue-100 text-blue-700', OFFLINE: 'bg-green-100 text-green-700', HYBRID: 'bg-purple-100 text-purple-700' }
+const MODE_COLORS = {
+  ONLINE: 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
+  OFFLINE: 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+  HYBRID: 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40',
+}
 const BATCH_GRADIENTS = [
   'from-purple-500 to-violet-600', 'from-blue-500 to-indigo-600',
   'from-indigo-500 to-purple-600', 'from-violet-500 to-purple-700',

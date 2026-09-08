@@ -82,7 +82,15 @@ public class CourseServiceImpl implements CourseService {
         }
         Course course = new Course();
         applyRequest(course, request, true);
-        course.setSlug(slugGenerator.generateUnique(request.getTitle()));
+        if (request.getSlug() != null && !request.getSlug().isBlank()) {
+            String cleanSlug = slugGenerator.clean(request.getSlug());
+            if (courseRepository.existsBySlug(cleanSlug)) {
+                throw new BadRequestException("Course slug is already in use: " + cleanSlug);
+            }
+            course.setSlug(cleanSlug);
+        } else {
+            course.setSlug(slugGenerator.generateUnique(request.getTitle()));
+        }
 
         return CourseResponse.from(courseRepository.save(course));
     }
@@ -96,6 +104,13 @@ public class CourseServiceImpl implements CourseService {
             validateTransition(course.getStatus(), request.getStatus());
         }
         applyRequest(course, request, false);
+        if (request.getSlug() != null && !request.getSlug().isBlank()) {
+            String cleanSlug = slugGenerator.clean(request.getSlug());
+            if (courseRepository.existsBySlugAndIdNot(cleanSlug, id)) {
+                throw new BadRequestException("Course slug is already in use: " + cleanSlug);
+            }
+            course.setSlug(cleanSlug);
+        }
         return CourseResponse.from(courseRepository.save(course));
     }
 
@@ -149,6 +164,7 @@ public class CourseServiceImpl implements CourseService {
         course.setLevel(request.getLevel());
         course.setThumbnail(request.getThumbnail());
         course.setStatus(request.getStatus());
+        course.setCourseCode(request.getCourseCode() != null && !request.getCourseCode().isBlank() ? request.getCourseCode().trim() : null);
     }
 
     private Set<Long> enrolledCourseIds(JwtUserPrincipal principal) {
