@@ -12,9 +12,9 @@ import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const STATUS_COLORS = {
-  DRAFT:     'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
-  PUBLISHED: 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
-  CLOSED:    'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
+  DRAFT:     'bg-gray-100 text-gray-600',
+  PUBLISHED: 'bg-green-100 text-green-700',
+  CLOSED:    'bg-red-100 text-red-700',
 }
 
 const EMPTY_FORM = {
@@ -307,27 +307,27 @@ export default function AssignmentsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <button onClick={() => router.push(`/admin/assignments/${a.id}`)}
-                            className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View">
+                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="View">
                             <Eye size={14} />
                           </button>
                           <button onClick={() => openEdit(a)}
-                            className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors" title="Edit">
+                            className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
                           {a.status === 'DRAFT' && (
                             <button onClick={() => handlePublish(a.id)}
-                              className="w-7 h-7 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/60 flex items-center justify-center transition-colors" title="Publish">
+                              className="w-7 h-7 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 flex items-center justify-center transition-colors" title="Publish">
                               <Send size={14} />
                             </button>
                           )}
                           {a.status === 'PUBLISHED' && (
                             <button onClick={() => handleClose(a.id)}
-                              className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/60 flex items-center justify-center transition-colors" title="Close">
+                              className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 flex items-center justify-center transition-colors" title="Close">
                               <Lock size={14} />
                             </button>
                           )}
                           <button onClick={() => setDeletingAssignment(a)}
-                            className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 flex items-center justify-center transition-colors" title="Delete">
+                            className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
                         </div>

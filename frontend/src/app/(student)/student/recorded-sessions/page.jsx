@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic'
 import { PlayCircle, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import recordedSessionService from '@/services/recordedSessionService'
-import { resolveFileUrl } from '@/lib/api'
 
 // hls.js is a heavy dependency pulled in by the player - load it only when a
 // video is actually opened, and only on the client (SSR doesn't need it).
@@ -50,7 +49,7 @@ export default function StudentRecordedSessionsPage() {
             <div key={s.id} className="glass-card overflow-hidden flex flex-col">
               <div className="h-32 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                 {s.thumbnailUrl ? (
-                  <img src={resolveFileUrl(s.thumbnailUrl)} alt={s.title} className="w-full h-full object-cover" />
+                  <img src={s.thumbnailUrl} alt={s.title} className="w-full h-full object-cover" />
                 ) : (
                   <PlayCircle className="text-gray-300" size={40} />
                 )}

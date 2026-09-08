@@ -244,15 +244,6 @@ export default function AdminShell({ children }) {
   const [badges, setBadges] = useState({ students: 0, assignments: 0 })
   const { user } = useAuth()
 
-  // Theme sync
-  useEffect(() => {
-    const stored = localStorage.getItem('theme')
-    if (stored === 'dark') {
-      document.documentElement.classList.add('dark')
-      setDarkMode(true)
-    }
-  }, [])
-
   // Fetch badge counts
   useEffect(() => {
     adminApi.getDashboard().then(res => {
@@ -268,13 +259,8 @@ export default function AdminShell({ children }) {
   const toggleDark = () => {
     setDarkMode(p => {
       const next = !p
-      if (next) {
-        document.documentElement.classList.add('dark')
-        localStorage.setItem('theme', 'dark')
-      } else {
-        document.documentElement.classList.remove('dark')
-        localStorage.setItem('theme', 'light')
-      }
+      if (next) document.documentElement.classList.add('dark')
+      else document.documentElement.classList.remove('dark')
       return next
     })
   }

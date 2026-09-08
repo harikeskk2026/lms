@@ -1,8 +1,6 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
-import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.quiz.dto.request.CreateQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.QuestionOptionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuestionRequest;
@@ -33,21 +31,19 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionRepository questionRepository;
     private final QuizTopicRepository quizTopicRepository;
     private final QuestionAttemptRepository questionAttemptRepository;
-    private final CourseRepository courseRepository;
 
     public QuestionServiceImpl(QuestionRepository questionRepository, QuizTopicRepository quizTopicRepository,
-                                QuestionAttemptRepository questionAttemptRepository, CourseRepository courseRepository) {
+                                QuestionAttemptRepository questionAttemptRepository) {
         this.questionRepository = questionRepository;
         this.quizTopicRepository = quizTopicRepository;
         this.questionAttemptRepository = questionAttemptRepository;
-        this.courseRepository = courseRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<QuestionResponse> search(Long topicId, Long courseId, QuizDifficulty difficulty, QuestionType questionType,
+    public List<QuestionResponse> search(Long topicId, QuizDifficulty difficulty, QuestionType questionType,
                                           Boolean active, String search) {
-        Specification<Question> spec = buildSpecification(topicId, courseId, difficulty, questionType, active, search);
+        Specification<Question> spec = buildSpecification(topicId, difficulty, questionType, active, search);
         return questionRepository.findAll(spec).stream()
                 .map(QuestionResponse::from)
                 .toList();
@@ -64,7 +60,7 @@ public class QuestionServiceImpl implements QuestionService {
     public QuestionResponse create(CreateQuestionRequest request, Long createdBy) {
         Question question = new Question();
         question.setCreatedBy(createdBy);
-        applyRequest(question, request.getTopicId(), request.getCourseId(), request.getQuestionText(), request.getQuestionType(),
+        applyRequest(question, request.getTopicId(), request.getQuestionText(), request.getQuestionType(),
                 request.getDifficulty(), request.getExplanation(), request.getCodeSnippet(), request.getPoints(),
                 request.getOptions());
 
@@ -75,7 +71,7 @@ public class QuestionServiceImpl implements QuestionService {
     @Transactional
     public QuestionResponse update(Long id, UpdateQuestionRequest request) {
         Question question = findOrThrow(id);
-        applyRequest(question, request.getTopicId(), request.getCourseId(), request.getQuestionText(), request.getQuestionType(),
+        applyRequest(question, request.getTopicId(), request.getQuestionText(), request.getQuestionType(),
                 request.getDifficulty(), request.getExplanation(), request.getCodeSnippet(), request.getPoints(),
                 request.getOptions());
         question.setActive(request.isActive());
@@ -93,19 +89,11 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    public void delete(Long id) {
-        Question question = findOrThrow(id);
-        questionRepository.delete(question);
-    }
-
-    @Override
-    @Transactional
     public QuestionResponse duplicate(Long id) {
         Question source = findOrThrow(id);
 
         Question copy = new Question();
         copy.setTopic(source.getTopic());
-        copy.setCourse(source.getCourse());
         copy.setQuestionText(source.getQuestionText() + " (Copy)");
         copy.setQuestionType(source.getQuestionType());
         copy.setDifficulty(source.getDifficulty());
@@ -158,11 +146,10 @@ public class QuestionServiceImpl implements QuestionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Question not found: " + id));
     }
 
-    private void applyRequest(Question question, Long topicId, Long courseId, String questionText, QuestionType questionType,
+    private void applyRequest(Question question, Long topicId, String questionText, QuestionType questionType,
                                QuizDifficulty difficulty, String explanation, String codeSnippet, Integer points,
                                List<QuestionOptionRequest> optionRequests) {
         question.setTopic(resolveTopic(topicId));
-        question.setCourse(resolveCourse(courseId));
         question.setQuestionText(questionText);
         question.setQuestionType(questionType);
         question.setDifficulty(difficulty);
@@ -190,23 +177,12 @@ public class QuestionServiceImpl implements QuestionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz topic not found: " + topicId));
     }
 
-    private Course resolveCourse(Long courseId) {
-        if (courseId == null) {
-            return null;
-        }
-        return courseRepository.findById(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
-    }
-
-    private Specification<Question> buildSpecification(Long topicId, Long courseId, QuizDifficulty difficulty,
+    private Specification<Question> buildSpecification(Long topicId, QuizDifficulty difficulty,
                                                          QuestionType questionType, Boolean active, String search) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (topicId != null) {
                 predicates.add(cb.equal(root.get("topic").get("id"), topicId));
-            }
-            if (courseId != null) {
-                predicates.add(cb.equal(root.get("course").get("id"), courseId));
             }
             if (difficulty != null) {
                 predicates.add(cb.equal(root.get("difficulty"), difficulty));

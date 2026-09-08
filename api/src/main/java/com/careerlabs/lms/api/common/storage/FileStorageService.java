@@ -22,10 +22,7 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "pdf", "docx", "doc", "xls", "xlsx", "csv", "txt", "ppt", "pptx",
-            "png", "jpg", "jpeg", "webp", "gif", "svg", "mp4", "webm", "zip"
-    );
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "xls", "xlsx");
     private static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024;
 
     private final Path root;

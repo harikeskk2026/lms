@@ -17,8 +17,6 @@ import java.util.List;
 public class UpdateQuestionRequest implements QuestionOptionsAware {
 
     private Long topicId;
-    @NotNull(message = QuestionValidationMessages.COURSE_REQUIRED)
-    private Long courseId;
 
     @NotBlank(message = QuestionValidationMessages.TEXT_REQUIRED)
     private String questionText;
@@ -49,14 +47,6 @@ public class UpdateQuestionRequest implements QuestionOptionsAware {
 
     public void setTopicId(Long topicId) {
         this.topicId = topicId;
-    }
-
-    public Long getCourseId() {
-        return courseId;
-    }
-
-    public void setCourseId(Long courseId) {
-        this.courseId = courseId;
     }
 
     public String getQuestionText() {

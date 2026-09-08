@@ -18,21 +18,15 @@ class SlugGenerator {
     }
 
     /**
-     * Cleans a raw slug string to be URL-friendly (lowercase alphanumeric with hyphens).
-     */
-    String clean(String raw) {
-        if (raw == null) return "course";
-        String base = NON_ALPHANUMERIC.matcher(raw.toLowerCase(Locale.ROOT)).replaceAll("-");
-        base = base.replaceAll("^-+|-+$", "");
-        return base.isBlank() ? "course" : base;
-    }
-
-    /**
      * Derives a URL-friendly, unique slug from a title, e.g. "Full Stack Python" -> "full-stack-python",
      * appending "-2", "-3", ... on collision.
      */
     String generateUnique(String title) {
-        String base = clean(title);
+        String base = NON_ALPHANUMERIC.matcher(title.toLowerCase(Locale.ROOT)).replaceAll("-");
+        base = base.replaceAll("^-+|-+$", "");
+        if (base.isBlank()) {
+            base = "course";
+        }
 
         String candidate = base;
         int suffix = 2;

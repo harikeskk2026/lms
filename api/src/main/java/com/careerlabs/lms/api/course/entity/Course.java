@@ -27,9 +27,6 @@ public class Course {
     @Column(nullable = false, unique = true)
     private String slug;
 
-    @Column(name = "course_code")
-    private String courseCode;
-
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
@@ -85,14 +82,6 @@ public class Course {
 
     public void setSlug(String slug) {
         this.slug = slug;
-    }
-
-    public String getCourseCode() {
-        return courseCode;
-    }
-
-    public void setCourseCode(String courseCode) {
-        this.courseCode = courseCode;
     }
 
     public String getDescription() {

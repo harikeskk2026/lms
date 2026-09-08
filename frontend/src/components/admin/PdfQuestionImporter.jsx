@@ -3,14 +3,11 @@ import { useState, useRef } from 'react'
 import { FileText, Download, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
-import courseService from '@/services/courseService'
 
 const SAMPLE_TEXT = `Q1. Which keyword is used to inherit a class in Java?
 Type: MCQ
 Difficulty: EASY
 Points: 1
-Topic: Java Basics
-Course: Java Full Stack
 A) extends
 B) implements
 C) inherits
@@ -22,8 +19,6 @@ Q2. Which of the following are Java collection interfaces?
 Type: MULTIPLE_CORRECT
 Difficulty: MEDIUM
 Points: 2
-Topic: Java Collections
-Course: Java Full Stack
 A) List
 B) Set
 C) Map
@@ -35,8 +30,6 @@ Q3. In Java, a class can extend multiple classes.
 Type: TRUE_FALSE
 Difficulty: EASY
 Points: 1
-Topic: Java Basics
-Course: Java Full Stack
 A) True
 B) False
 Answer: B
@@ -48,8 +41,6 @@ const OPTION_RE = /^([A-Da-d])[.)\-:]\s*(.+)$/
 const TYPE_RE = /^Type\s*[:\-]\s*(.+)$/i
 const DIFF_RE = /^Difficulty\s*[:\-]\s*(.+)$/i
 const POINTS_RE = /^Points?\s*[:\-]\s*(.+)$/i
-const TOPIC_RE = /^Topic\s*[:\-]\s*(.+)$/i
-const COURSE_RE = /^(?:Course|Courses)\s*[:\-]\s*(.+)$/i
 const ANSWER_RE = /^(?:Answer|Correct(?:\s*Answer)?)\s*[:\-]\s*(.+)$/i
 const EXPLAIN_RE = /^Explanation\s*[:\-]\s*(.+)$/i
 const VALID_TYPES = ['MCQ', 'MULTIPLE_CORRECT', 'TRUE_FALSE', 'CODE_OUTPUT', 'DEBUGGING', 'SCENARIO', 'SQL', 'INTERVIEW']
@@ -114,7 +105,7 @@ function parseQuestionsFromLines(lines) {
     const qMatch = line.match(QSTART_RE)
     if (qMatch) {
       pushCurrent()
-      current = { questionText: qMatch[1].trim(), questionType: 'MCQ', difficulty: 'MEDIUM', points: 1, topicName: '', courseName: '', options: [], explanation: '', rawAnswer: '' }
+      current = { questionText: qMatch[1].trim(), questionType: 'MCQ', difficulty: 'MEDIUM', points: 1, options: [], explanation: '', rawAnswer: '' }
       return
     }
     if (!current) return
@@ -132,14 +123,6 @@ function parseQuestionsFromLines(lines) {
     }
     if ((m = line.match(POINTS_RE))) {
       current.points = Number(m[1].trim()) || 1
-      return
-    }
-    if ((m = line.match(TOPIC_RE))) {
-      current.topicName = m[1].trim()
-      return
-    }
-    if ((m = line.match(COURSE_RE))) {
-      current.courseName = m[1].trim()
       return
     }
     if ((m = line.match(ANSWER_RE))) {
@@ -161,7 +144,7 @@ function parseQuestionsFromLines(lines) {
   return questions
 }
 
-export default function PdfQuestionImporter({ onImported, onCancel, topics = [], courses = [] }) {
+export default function PdfQuestionImporter({ onImported, onCancel }) {
   const [file, setFile] = useState(null)
   const [extracted, setExtracted] = useState([])
   const [loading, setLoading] = useState(false)
@@ -234,84 +217,14 @@ export default function PdfQuestionImporter({ onImported, onCancel, topics = [],
     }
     setImporting(true)
     try {
-      // 1. Fetch latest topics and courses from API or use props
-      let currentTopics = topics || []
-      let currentCourses = courses || []
-      try {
-        const [tRes, cRes] = await Promise.all([
-          quizService.listTopics(),
-          courseService.list()
-        ])
-        if (tRes.data) currentTopics = tRes.data
-        if (cRes.data) currentCourses = cRes.data
-      } catch (_) {}
-
-      // 2. Map existing topics and courses by lowercased name
-      const topicMap = new Map()
-      currentTopics.forEach(t => {
-        if (t.name) topicMap.set(t.name.trim().toLowerCase(), t.id)
-      })
-
-      const courseMap = new Map()
-      currentCourses.forEach(c => {
-        const cName = c.title || c.name
-        if (cName) courseMap.set(cName.trim().toLowerCase(), c.id)
-      })
-
-      // 3. Find unique topic names from PDF that need creation
-      const uniqueTopicNames = Array.from(
-        new Set(
-          extracted
-            .map(q => q.topicName?.trim())
-            .filter(Boolean)
-        )
-      )
-
-      for (const name of uniqueTopicNames) {
-        const lower = name.toLowerCase()
-        if (!topicMap.has(lower)) {
-          try {
-            const created = await quizService.createTopic({ name })
-            if (created.data?.id) {
-              topicMap.set(lower, created.data.id)
-            }
-          } catch (err) {
-            console.error('Failed to create topic:', name, err)
-          }
-        }
-      }
-
-      // 4. Build question payloads with resolved topicId and courseId
-      const payloads = extracted.map(q => {
-        const trimmedTopic = q.topicName?.trim()
-        const topicId = trimmedTopic ? topicMap.get(trimmedTopic.toLowerCase()) : null
-        const trimmedCourse = q.courseName?.trim()
-        let courseId = null
-        if (trimmedCourse) {
-          const lower = trimmedCourse.toLowerCase()
-          if (courseMap.has(lower)) {
-            courseId = courseMap.get(lower)
-          } else {
-            const match = currentCourses.find(c => {
-              const name = (c.title || c.name || '').trim().toLowerCase()
-              return name && (name === lower || name.includes(lower) || lower.includes(name))
-            })
-            if (match) courseId = match.id
-          }
-        }
-
-        return {
-          questionText: q.questionText,
-          questionType: q.questionType,
-          difficulty: q.difficulty,
-          points: q.points,
-          explanation: q.explanation || '',
-          options: q.options.map(o => ({ optionText: o.optionText, correct: o.correct })),
-          topicId: topicId ?? null,
-          courseId: courseId ?? null,
-        }
-      })
-
+      const payloads = extracted.map(q => ({
+        questionText: q.questionText,
+        questionType: q.questionType,
+        difficulty: q.difficulty,
+        points: q.points,
+        explanation: q.explanation || '',
+        options: q.options.map(o => ({ optionText: o.optionText, correct: o.correct })),
+      }))
       const results = await Promise.all(payloads.map(p => quizService.createQuestion(p)))
       const saved = results.map(r => r.data)
       toast.success(`Imported ${saved.length} questions successfully!`)
@@ -358,15 +271,13 @@ export default function PdfQuestionImporter({ onImported, onCancel, topics = [],
 Type: MCQ | MULTIPLE_CORRECT | TRUE_FALSE | ...
 Difficulty: EASY | MEDIUM | HARD
 Points: 1
-Topic: <topic name>  (optional)
-Course: <course name>  (required)
 A) <option>
 B) <option>
 Answer: A            (comma-separated for MULTIPLE_CORRECT, e.g. "A, C")
 Explanation: <optional>`}
         </pre>
         <p className="text-[11px] text-gray-500">
-          Course is required. Type/Difficulty/Points/Topic/Explanation are optional. Works best on
+          Type/Difficulty/Points/Explanation are optional and default to MCQ / MEDIUM / 1 / none. Works best on
           text-based PDFs (exported from Word/Google Docs) — scanned or image-only PDFs can't be read this way.
         </p>
       </div>
@@ -391,8 +302,6 @@ Explanation: <optional>`}
                     <th className="px-3 py-2.5 font-semibold">Question Text</th>
                     <th className="px-3 py-2.5 font-semibold">Type</th>
                     <th className="px-3 py-2.5 font-semibold">Difficulty</th>
-                    <th className="px-3 py-2.5 font-semibold">Topic</th>
-                    <th className="px-3 py-2.5 font-semibold">Course</th>
                     <th className="px-3 py-2.5 font-semibold">Options</th>
                     <th className="px-3 py-2.5 font-semibold text-right">Action</th>
                   </tr>
@@ -404,18 +313,6 @@ Explanation: <optional>`}
                       <td className="px-3 py-2 text-gray-800 dark:text-gray-100 font-medium max-w-xs truncate">{q.questionText}</td>
                       <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold text-[10px]">{q.questionType}</span></td>
                       <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold text-[10px]">{q.difficulty}</span></td>
-                      <td className="px-3 py-2">
-                        {q.topicName
-                          ? <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold text-[10px]">{q.topicName}</span>
-                          : <span className="text-gray-300 text-[10px]">—</span>
-                        }
-                      </td>
-                      <td className="px-3 py-2">
-                        {q.courseName
-                          ? <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold text-[10px]">{q.courseName}</span>
-                          : <span className="text-gray-300 text-[10px]">—</span>
-                        }
-                      </td>
                       <td className="px-3 py-2 max-w-xs text-gray-500 truncate">
                         {q.options.map(o => (o.correct ? `✓ ${o.optionText}` : o.optionText)).join(' | ')}
                       </td>

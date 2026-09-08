@@ -25,7 +25,6 @@ function createEmptyQuestion(index = 1) {
     questionType: 'MCQ',
     difficulty: 'MEDIUM',
     topicId: '',
-    courseId: '',
     points: 1,
     codeSnippet: '',
     explanation: '',
@@ -39,7 +38,7 @@ function createEmptyQuestion(index = 1) {
   }
 }
 
-export default function BulkQuestionForm({ topics = [], courses = [], onSaved, onCancel }) {
+export default function BulkQuestionForm({ topics = [], onSaved, onCancel }) {
   const [questions, setQuestions] = useState([
     createEmptyQuestion(1),
     createEmptyQuestion(2),
@@ -140,10 +139,6 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
         qErrs.questionText = 'Question text is required'
         isValid = false
       }
-      if (!q.courseId) {
-        qErrs.courseId = 'Course is required'
-        isValid = false
-      }
       if (!q.points || q.points < 1) {
         qErrs.points = 'Points must be at least 1'
         isValid = false
@@ -192,7 +187,6 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
         questionType: q.questionType,
         difficulty: q.difficulty,
         topicId: q.topicId === '' ? null : Number(q.topicId),
-        courseId: q.courseId === '' ? null : Number(q.courseId),
         points: Number(q.points),
         codeSnippet: q.codeSnippet || '',
         explanation: q.explanation || '',
@@ -319,42 +313,6 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
                         onChange={e => updateQuestion(qIndex, 'points', Number(e.target.value))}
                         className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
                       />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Topic</label>
-                      <select
-                        value={q.topicId}
-                        onChange={e => updateQuestion(qIndex, 'topicId', e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
-                      >
-                        <option value="">No topic</option>
-                        {topics.map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-                      <select
-                        value={q.courseId}
-                        onChange={e => updateQuestion(qIndex, 'courseId', e.target.value)}
-                        className={`w-full rounded-xl border px-3 py-2 text-xs outline-none focus:ring-2 ${
-                          errors[qIndex]?.courseId
-                            ? 'border-red-500 focus:ring-red-400 bg-red-50/20'
-                            : 'border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:ring-purple-500'
-                        } dark:text-white`}
-                      >
-                        <option value="">Select Course</option>
-                        {courses.map(c => (
-                          <option key={c.id} value={c.id}>{c.title || c.name}</option>
-                        ))}
-                      </select>
-                      {errors[qIndex]?.courseId && (
-                        <span className="text-xs text-red-500 mt-1 block">{errors[qIndex].courseId}</span>
-                      )}
                     </div>
                   </div>
 

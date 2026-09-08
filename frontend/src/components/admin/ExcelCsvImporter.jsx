@@ -3,12 +3,11 @@ import React, { useState, useRef } from 'react'
 import { Upload, FileSpreadsheet, Download, CheckCircle, AlertCircle, Trash2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
-import courseService from '@/services/courseService'
 
-const SAMPLE_CSV = `Question,Type,Difficulty,Points,Option 1,Option 2,Option 3,Option 4,Correct Options,Explanation,Topic,Course
-"Which keyword is used to inherit a class in Java?",MCQ,EASY,1,extends,implements,inherits,super,extends,"extends is used for class inheritance",Java Basics,Java Full Stack
-"Which of the following are Java collection interfaces?",MULTIPLE_CORRECT,MEDIUM,2,List,Set,Map,String,"List, Set, Map","List, Set, Map are interfaces",Java Collections,Java Full Stack
-"In Java, a class can extend multiple classes.",TRUE_FALSE,EASY,1,True,False,, ,False,"Java supports single class inheritance",Java Basics,Java Full Stack
+const SAMPLE_CSV = `Question,Type,Difficulty,Points,Option 1,Option 2,Option 3,Option 4,Correct Options,Explanation
+"Which keyword is used to inherit a class in Java?",MCQ,EASY,1,extends,implements,inherits,super,extends,"extends is used for class inheritance"
+"Which of the following are Java collection interfaces?",MULTIPLE_CORRECT,MEDIUM,2,List,Set,Map,String,"List, Set, Map","List, Set, Map are interfaces"
+"In Java, a class can extend multiple classes.",TRUE_FALSE,EASY,1,True,False,, ,False,"Java supports single class inheritance"
 `
 
 // Native pure-JS XLSX (Zip+XML) sheet reader without third-party dependencies
@@ -167,7 +166,7 @@ function parseCSV(text) {
   return lines
 }
 
-export default function ExcelCsvImporter({ onImported, onCancel, topics = [], courses = [] }) {
+export default function ExcelCsvImporter({ onImported, onCancel }) {
   const [file, setFile] = useState(null)
   const [extractedQuestions, setExtractedQuestions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -258,8 +257,6 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
 
         const rawCorrect = getVal('correct', 8).toLowerCase()
         const explanation = getVal('explanation', 9)
-        const topicName = getVal('topic', 10)
-        const courseName = getVal('course', 11) || getVal('courses', 11)
 
         const rawOptions = [opt1, opt2, opt3, opt4].filter(Boolean)
         if (rawOptions.length < 2 && type === 'TRUE_FALSE') {
@@ -289,8 +286,6 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
           difficulty: difficulty,
           points: points,
           explanation: explanation,
-          topicName: topicName,
-          courseName: courseName,
           options: options,
           isValid: qText.trim().length > 0 && options.length >= 2,
         })
@@ -318,83 +313,14 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
 
     setImporting(true)
     try {
-      // 1. Fetch latest topics & courses from API or use props
-      let currentTopics = topics || []
-      let currentCourses = courses || []
-      try {
-        const [tRes, cRes] = await Promise.all([
-          quizService.listTopics(),
-          courseService.list()
-        ])
-        if (tRes.data) currentTopics = tRes.data
-        if (cRes.data) currentCourses = cRes.data
-      } catch (_) {}
-
-      // 2. Map existing topics and courses by lowercased name
-      const topicMap = new Map()
-      currentTopics.forEach(t => {
-        if (t.name) topicMap.set(t.name.trim().toLowerCase(), t.id)
-      })
-
-      const courseMap = new Map()
-      currentCourses.forEach(c => {
-        const cName = c.title || c.name
-        if (cName) courseMap.set(cName.trim().toLowerCase(), c.id)
-      })
-
-      // 3. Find unique topic names that need creation
-      const uniqueTopicNames = Array.from(
-        new Set(
-          extractedQuestions
-            .map(q => q.topicName?.trim())
-            .filter(Boolean)
-        )
-      )
-
-      for (const name of uniqueTopicNames) {
-        const lower = name.toLowerCase()
-        if (!topicMap.has(lower)) {
-          try {
-            const created = await quizService.createTopic({ name })
-            if (created.data?.id) {
-              topicMap.set(lower, created.data.id)
-            }
-          } catch (err) {
-            console.error('Failed to create topic:', name, err)
-          }
-        }
-      }
-
-      // 4. Build question payloads with resolved topicId and courseId
-      const payloads = extractedQuestions.map(q => {
-        const trimmedTopic = q.topicName?.trim()
-        const topicId = trimmedTopic ? topicMap.get(trimmedTopic.toLowerCase()) : null
-        const trimmedCourse = q.courseName?.trim()
-        let courseId = null
-        if (trimmedCourse) {
-          const lower = trimmedCourse.toLowerCase()
-          if (courseMap.has(lower)) {
-            courseId = courseMap.get(lower)
-          } else {
-            const match = currentCourses.find(c => {
-              const name = (c.title || c.name || '').trim().toLowerCase()
-              return name && (name === lower || name.includes(lower) || lower.includes(name))
-            })
-            if (match) courseId = match.id
-          }
-        }
-
-        return {
-          questionText: q.questionText,
-          questionType: q.questionType,
-          difficulty: q.difficulty,
-          points: q.points,
-          explanation: q.explanation || '',
-          options: q.options.map(o => ({ optionText: o.optionText, correct: o.correct })),
-          topicId: topicId ?? null,
-          courseId: courseId ?? null,
-        }
-      })
+      const payloads = extractedQuestions.map(q => ({
+        questionText: q.questionText,
+        questionType: q.questionType,
+        difficulty: q.difficulty,
+        points: q.points,
+        explanation: q.explanation || '',
+        options: q.options.map(o => ({ optionText: o.optionText, correct: o.correct })),
+      }))
 
       const results = await Promise.all(payloads.map(p => quizService.createQuestion(p)))
       const saved = results.map(r => r.data)
@@ -478,17 +404,9 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
             <span className="font-bold text-gray-800 dark:text-gray-200">9. Correct Options</span>
             <p className="text-[11px] text-gray-500">Text of correct option(s)</p>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-2 rounded-lg border border-purple-100 dark:border-purple-900">
+          <div className="bg-white dark:bg-gray-800 p-2 rounded-lg border border-purple-100 dark:border-purple-900 col-span-2">
             <span className="font-bold text-gray-800 dark:text-gray-200">10. Explanation</span>
             <p className="text-[11px] text-gray-500">Answer explanation (optional)</p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-2 rounded-lg border border-purple-100 dark:border-purple-900 border-l-2 border-l-purple-400">
-            <span className="font-bold text-purple-700 dark:text-purple-300">11. Topic</span>
-            <p className="text-[11px] text-gray-500">Topic name (optional)</p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-2 rounded-lg border border-purple-100 dark:border-purple-900 border-l-2 border-l-emerald-400">
-            <span className="font-bold text-emerald-700 dark:text-emerald-300">12. Course *</span>
-            <p className="text-[11px] text-gray-500">Course title (required)</p>
           </div>
         </div>
       </div>
@@ -518,8 +436,6 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
                     <th className="px-3 py-2.5 font-semibold">Question Text</th>
                     <th className="px-3 py-2.5 font-semibold">Type</th>
                     <th className="px-3 py-2.5 font-semibold">Difficulty</th>
-                    <th className="px-3 py-2.5 font-semibold">Topic</th>
-                    <th className="px-3 py-2.5 font-semibold">Course</th>
                     <th className="px-3 py-2.5 font-semibold">Options</th>
                     <th className="px-3 py-2.5 font-semibold text-right">Action</th>
                   </tr>
@@ -540,18 +456,6 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
                         <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold text-[10px]">
                           {q.difficulty}
                         </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        {q.topicName
-                          ? <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold text-[10px]">{q.topicName}</span>
-                          : <span className="text-gray-300 text-[10px]">—</span>
-                        }
-                      </td>
-                      <td className="px-3 py-2">
-                        {q.courseName
-                          ? <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold text-[10px]">{q.courseName}</span>
-                          : <span className="text-gray-300 text-[10px]">—</span>
-                        }
                       </td>
                       <td className="px-3 py-2 max-w-xs text-gray-500 truncate">
                         {q.options.map(o => (o.correct ? `✓ ${o.optionText}` : o.optionText)).join(' | ')}

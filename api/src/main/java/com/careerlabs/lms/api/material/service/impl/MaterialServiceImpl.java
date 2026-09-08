@@ -47,8 +47,7 @@ public class MaterialServiceImpl implements MaterialService {
     public static final Set<String> VIDEO_EXTENSIONS = Set.of("mp4", "mov", "webm", "mkv", "avi");
     public static final Set<String> OTHER_EXTENSIONS = Set.of(
             "csv", "xls", "xlsx", "txt", "zip", "rar", "7z", "tar", "gz",
-            "pdf", "doc", "docx", "ppt", "pptx", "mp4", "mov", "webm",
-            "png", "jpg", "jpeg", "webp", "gif", "svg"
+            "pdf", "doc", "docx", "ppt", "pptx", "mp4", "mov", "webm"
     );
 
     public static final Set<String> ALL_ALLOWED_EXTENSIONS = Stream.of(

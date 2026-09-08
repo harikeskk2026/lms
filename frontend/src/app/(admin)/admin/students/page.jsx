@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Eye } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
@@ -14,10 +14,10 @@ import BulkImportModal from '@/components/admin/BulkImportModal'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const PLACEMENT_COLORS = {
-  SEEKING:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
-  INTERVIEWING: 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
-  PLACED:       'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
-  NOT_SEEKING:  'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
+  SEEKING:      'bg-blue-100 text-blue-700',
+  INTERVIEWING: 'bg-yellow-100 text-yellow-700',
+  PLACED:       'bg-green-100 text-green-700',
+  NOT_SEEKING:  'bg-gray-100 text-gray-600',
 }
 
 const EMPTY_FORM = {
@@ -430,20 +430,16 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); router.push(`/admin/students/${s.id}`); }}
-                            className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
-                            <Eye size={14} />
-                          </button>
                           <button onClick={(e) => { e.stopPropagation(); setResetTarget(s); }}
-                            className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
+                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center transition-colors" title="Reset Password">
                             <KeyRound size={14} />
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); openEdit(s); }}
-                            className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors" title="Edit">
+                            className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); setDeletingStudent(s); }}
-                            className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 flex items-center justify-center transition-colors" title="Delete">
+                            className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -497,7 +493,7 @@ export default function StudentsPage() {
               type="text"
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Rahul Sharma"
+              placeholder="Ravi Kumar"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
               required
             />
@@ -513,7 +509,7 @@ export default function StudentsPage() {
                   setForm(f => ({ ...f, email: val }))
                   if (emailError && isValidEmail(val.trim())) setEmailError('')
                 }}
-                placeholder="e.g. rahul.sharma@example.com"
+                placeholder="ravi@example.com"
                 className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
                   emailError
                     ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
@@ -537,7 +533,7 @@ export default function StudentsPage() {
               maxLength={10}
               value={form.phone}
               onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-              placeholder="e.g. 9876543210"
+              placeholder="9876543210"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>

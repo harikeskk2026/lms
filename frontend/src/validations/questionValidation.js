@@ -10,9 +10,6 @@ const SINGLE_CORRECT_TYPES = ['MCQ', 'TRUE_FALSE']
 
 export const questionSchema = z.object({
   topicId: z.union([z.coerce.number(), z.literal('')]).optional(),
-  courseId: z.union([z.coerce.number().min(1, 'Course is required'), z.literal('')]).refine(val => val !== '' && val !== null && val !== undefined && Number(val) >= 1, {
-    message: 'Course is required',
-  }),
   questionText: z.string().min(1, 'Question text is required'),
   questionType: z.enum(QUESTION_TYPES, { errorMap: () => ({ message: 'Question type is required' }) }),
   difficulty: z.enum(QUESTION_DIFFICULTIES, { errorMap: () => ({ message: 'Difficulty is required' }) }),

@@ -26,8 +26,8 @@ const quizService = {
   getQuestion: (id) => apiCall({ method: 'GET', url: `/admin/questions/${id}` }),
   createQuestion: (question) => apiCall({ method: 'POST', url: '/admin/questions', data: question }),
   updateQuestion: (id, question) => apiCall({ method: 'PUT', url: `/admin/questions/${id}`, data: question }),
-  deleteQuestion: (id) => apiCall({ method: 'DELETE', url: `/admin/questions/${id}/permanent` }),
   deactivateQuestion: (id) => apiCall({ method: 'DELETE', url: `/admin/questions/${id}` }),
+  duplicateQuestion: (id) => apiCall({ method: 'POST', url: `/admin/questions/${id}/duplicate` }),
 
   // Admin - topics
   listTopics: () => apiCall({ method: 'GET', url: '/admin/quiz-topics' }),

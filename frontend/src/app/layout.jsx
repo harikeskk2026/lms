@@ -25,21 +25,13 @@ export default function RootLayout({ children }) {
           {children}
           <Toaster
             position="top-right"
-            reverseOrder={false}
-            gutter={8}
-            containerStyle={{
-              top: 24,
-              right: 24,
-              zIndex: 99999,
-            }}
             toastOptions={{
-              duration: 3500,
+              duration: 4000,
               style: {
                 borderRadius: '12px',
                 fontFamily: 'Plus Jakarta Sans, sans-serif',
                 fontSize: '14px',
                 fontWeight: '500',
-                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
               },
               success: {
                 iconTheme: { primary: '#6d28d9', secondary: '#fff' },

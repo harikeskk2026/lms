@@ -92,9 +92,9 @@ export default function DateTimePicker12h({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-center">
+      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
         {/* Date Section */}
-        <div className="relative flex items-center min-w-0">
+        <div className="sm:col-span-6 relative flex items-center">
           <div className="absolute left-3 text-slate-400 pointer-events-none">
             <Calendar size={15} />
           </div>
@@ -105,28 +105,28 @@ export default function DateTimePicker12h({
             min={minDate}
             value={date}
             onChange={handleDateChange}
-            className="w-full h-11 pl-9 pr-2.5 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all cursor-pointer min-w-0"
+            className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all cursor-pointer"
           />
         </div>
 
         {/* Time + AM/PM Section */}
         <div
-          className={`h-11 flex items-center justify-between gap-1 px-2.5 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 transition-all focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 min-w-0 ${
+          className={`sm:col-span-6 h-11 flex items-center justify-between gap-1.5 px-3 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 transition-all focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 ${
             !hasValue && !required ? 'opacity-85' : ''
           }`}
         >
           {/* Time digits */}
-          <div className="flex items-center gap-0.5 min-w-0 flex-shrink-0">
-            <Clock size={14} className="text-slate-400 flex-shrink-0 mr-1" />
+          <div className="flex items-center gap-1">
+            <Clock size={15} className="text-slate-400 flex-shrink-0 mr-1" />
 
-            {/* Hour select */}
+            {/* Hour select (No default arrow) */}
             <div className="relative">
               <select
                 disabled={disabled}
                 value={hour12}
                 onChange={handleHourChange}
                 aria-label="Hour"
-                className="appearance-none bg-transparent text-center font-bold text-sm text-slate-800 dark:text-slate-100 outline-none cursor-pointer py-1 px-1 rounded-lg hover:bg-purple-100/70 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
+                className="appearance-none bg-transparent text-center font-bold text-sm text-slate-800 dark:text-slate-100 outline-none cursor-pointer py-1 px-1.5 rounded-lg hover:bg-purple-100/70 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
               >
                 {HOURS.map((h) => (
                   <option key={h} value={h} className="bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100">
@@ -138,14 +138,14 @@ export default function DateTimePicker12h({
 
             <span className="text-slate-400 font-bold select-none text-sm -mt-0.5">:</span>
 
-            {/* Minute select */}
+            {/* Minute select (No default arrow) */}
             <div className="relative">
               <select
                 disabled={disabled}
                 value={minute}
                 onChange={handleMinuteChange}
                 aria-label="Minute"
-                className="appearance-none bg-transparent text-center font-bold text-sm text-slate-800 dark:text-slate-100 outline-none cursor-pointer py-1 px-1 rounded-lg hover:bg-purple-100/70 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
+                className="appearance-none bg-transparent text-center font-bold text-sm text-slate-800 dark:text-slate-100 outline-none cursor-pointer py-1 px-1.5 rounded-lg hover:bg-purple-100/70 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
               >
                 {MINUTES.map((m) => (
                   <option key={m} value={m} className="bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100">
@@ -157,13 +157,13 @@ export default function DateTimePicker12h({
           </div>
 
           {/* AM / PM Segmented Pills + Optional Clear */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1.5">
             <div className="flex items-center bg-slate-200/90 dark:bg-gray-700/80 p-0.5 rounded-lg text-xs font-bold select-none border border-slate-300/40 dark:border-gray-600/50">
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => handleAmPmToggle('AM')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wide transition-all duration-150 ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide transition-all duration-150 ${
                   hasValue && ampm === 'AM'
                     ? 'bg-purple-600 text-white shadow-xs'
                     : !hasValue && ampm === 'AM'
@@ -177,7 +177,7 @@ export default function DateTimePicker12h({
                 type="button"
                 disabled={disabled}
                 onClick={() => handleAmPmToggle('PM')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wide transition-all duration-150 ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide transition-all duration-150 ${
                   hasValue && ampm === 'PM'
                     ? 'bg-purple-600 text-white shadow-xs'
                     : !hasValue && ampm === 'PM'
