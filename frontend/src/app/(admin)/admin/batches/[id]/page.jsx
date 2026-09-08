@@ -1,11 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, Plus, CheckSquare, ChevronLeft, ChevronRight, UserCheck, Pencil, Search } from 'lucide-react'
-import {
-  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameDay, isSameMonth, isToday, addMonths, subMonths,
-} from 'date-fns'
+import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search } from 'lucide-react'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
@@ -13,10 +10,9 @@ import studentService from '@/services/studentService'
 import reportService from '@/services/reportService'
 import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
-import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
-const TABS = ['Overview', 'Students', 'Schedule', 'Attendance', 'Assignments']
+const TABS = ['Overview', 'Students', 'Attendance', 'Assignments']
 
 const PLACEMENT_COLORS = {
   SEEKING: 'bg-blue-100 text-blue-700',
@@ -35,15 +31,11 @@ export default function BatchDetailPage() {
   const [trainers, setTrainers] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Overview')
-  const [scheduleView, setScheduleView] = useState('list')
-  const [calendarMonth, setCalendarMonth] = useState(new Date())
-  const [classPanel, setClassPanel] = useState(false)
   const [attPanel, setAttPanel] = useState(false)
   const [attClass, setAttClass] = useState(null)
   const [attSheet, setAttSheet] = useState(null)
   const [attStatuses, setAttStatuses] = useState({})
   const [saving, setSaving] = useState(false)
-  const [classForm, setClassForm] = useState({ title: '', date: '', notes: '', meetLink: '' })
   const [addStudentPanel, setAddStudentPanel] = useState(false)
   const [addStudentQuery, setAddStudentQuery] = useState('')
   const [addStudentResults, setAddStudentResults] = useState([])
@@ -261,23 +253,6 @@ export default function BatchDetailPage() {
       toast.success('Student removed')
       load()
     } catch { toast.error('Failed to remove') }
-  }
-
-  const handleCreateClass = async (e) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await adminApi.createClass({ ...classForm, batchId: id })
-      toast.success('Class scheduled')
-      setClassPanel(false)
-      setClassForm({ title: '', date: '', notes: '', meetLink: '' })
-      load()
-    } catch { toast.error('Failed to schedule class') } finally { setSaving(false) }
-  }
-
-  const openScheduleForDay = (day) => {
-    setClassForm(f => ({ ...f, date: format(day, "yyyy-MM-dd'T'HH:mm") }))
-    setClassPanel(true)
   }
 
   if (loading) return <div className="max-w-5xl mx-auto"><div className="glass-card p-6 animate-pulse h-40" /></div>
@@ -555,192 +530,23 @@ export default function BatchDetailPage() {
         </div>
       )}
 
-      {/* Schedule Tab */}
-      {tab === 'Schedule' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1 bg-white/80 dark:bg-gray-900/70 border border-purple-100 dark:border-purple-900/30 rounded-xl p-1">
-              {['list', 'calendar'].map(v => (
-                <button key={v} onClick={() => setScheduleView(v)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${scheduleView === v ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-purple-600 hover:bg-purple-50'}`}>
-                  {v}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setClassPanel(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
-              <Plus size={14} /> Schedule Class
-            </button>
-          </div>
-
-          {scheduleView === 'list' ? (
-            <div className="glass-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-purple-50/50 border-b border-purple-100">
-                      {['Date & Time', 'Title', 'Status', 'Topics', 'Recording', 'Attendance'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {classes.length === 0 ? (
-                      <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No classes scheduled</td></tr>
-                    ) : (
-                      classes.map(c => (
-                        <tr key={c.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
-                          <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap font-medium">{format(new Date(c.date), 'dd MMM yyyy, hh:mm a')}</td>
-                          <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{c.title}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : c.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                              {c.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-gray-400">{c._count?.topics || 0}</td>
-                          <td className="px-4 py-3">
-                            {c.recordingUrl ? (
-                              <a href={c.recordingUrl} target="_blank" className="text-xs text-purple-600 hover:underline">Watch</a>
-                            ) : <span className="text-gray-300 text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button onClick={() => loadAttSheet(c.id)}
-                              className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-semibold">
-                              <CheckSquare size={12} /> Mark
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="glass-card p-5">
-              <div className="flex items-center justify-between mb-5">
-                <button onClick={() => setCalendarMonth(m => subMonths(m, 1))}
-                  className="w-9 h-9 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-500 shadow-sm hover:bg-purple-50 hover:text-purple-600 hover:shadow-md flex items-center justify-center transition-all">
-                  <ChevronLeft size={16} />
-                </button>
-                <div className="flex items-center gap-2">
-                  <p className="font-display font-extrabold text-lg text-gray-800 dark:text-white">{format(calendarMonth, 'MMMM yyyy')}</p>
-                  <button onClick={() => setCalendarMonth(new Date())}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 transition-colors">
-                    Today
-                  </button>
-                </div>
-                <button onClick={() => setCalendarMonth(m => addMonths(m, 1))}
-                  className="w-9 h-9 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-500 shadow-sm hover:bg-purple-50 hover:text-purple-600 hover:shadow-md flex items-center justify-center transition-all">
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-              <div className="grid grid-cols-7 gap-2">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <div key={d} className="text-center text-[10px] font-extrabold tracking-wider text-gray-400 dark:text-gray-500 uppercase pb-1 font-display">{d}</div>
-                ))}
-                {eachDayOfInterval({
-                  start: startOfWeek(startOfMonth(calendarMonth)),
-                  end: endOfWeek(endOfMonth(calendarMonth)),
-                }).map(day => {
-                  const dayClasses = classes.filter(c => isSameDay(new Date(c.date), day))
-                  const inMonth = isSameMonth(day, calendarMonth)
-                  const today = isToday(day)
-                  return (
-                    <div key={day.toISOString()}
-                      onClick={() => dayClasses.length === 0 && openScheduleForDay(day)}
-                      className={`group relative min-h-[100px] rounded-xl border p-2 text-left align-top transition-all duration-200 ${!inMonth ? 'border-transparent opacity-30' :
-                        today ? 'border-purple-300 dark:border-purple-700 bg-gradient-to-b from-purple-50/70 to-white dark:from-purple-950/20 dark:to-gray-900/40 shadow-sm' :
-                        dayClasses.length > 0 ? 'border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5' :
-                        'border-gray-100 dark:border-gray-800 cursor-pointer hover:border-purple-200 hover:bg-purple-50/40 dark:hover:bg-purple-900/10 hover:-translate-y-0.5'}`}>
-                      <span className={`text-[11px] font-bold ${today ? 'inline-flex w-5 h-5 items-center justify-center rounded-full bg-gradient-to-r from-purple-600 to-violet-600 text-white shadow-sm' : 'text-gray-400 dark:text-gray-500'}`}>
-                        {format(day, 'd')}
-                      </span>
-                      <div className="mt-1.5 space-y-1">
-                        {dayClasses.map(c => (
-                          <button key={c.id} onClick={(e) => { e.stopPropagation(); loadAttSheet(c.id) }}
-                            title={`${c.title} — ${format(new Date(c.date), 'h:mm a')} — ${c.status}${c.recordingUrl ? ' — recording available' : ''}`}
-                            className={`w-full text-left leading-tight px-1.5 py-1 rounded-lg border transition-colors ${c.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200/70 hover:bg-green-100 dark:bg-green-950/30 dark:border-green-900/40' : c.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-700 border-blue-200/70 hover:bg-blue-100 dark:bg-blue-950/30 dark:border-blue-900/40' : 'bg-gray-50 text-gray-500 border-gray-200/70 hover:bg-gray-100 dark:bg-gray-800/60 dark:border-gray-700'}`}>
-                            <span className="block text-[9px] font-bold opacity-70">{format(new Date(c.date), 'h:mm a')} · {c.status[0]}{c.status.slice(1).toLowerCase()}</span>
-                            <span className="block truncate text-[10px] font-semibold">{c.title}</span>
-                          </button>
-                        ))}
-                        {dayClasses.length === 0 && inMonth && (
-                          <Plus size={12} className="mx-auto mt-3 text-gray-200 dark:text-gray-700 group-hover:text-purple-400 transition-colors" />
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="flex items-center gap-4 flex-wrap pt-4 mt-4 border-t border-gray-100 dark:border-gray-800/60 text-xs">
-                <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Legend</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                  <span className="font-semibold text-gray-600 dark:text-gray-300">Scheduled</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
-                  <span className="font-semibold text-gray-600 dark:text-gray-300">Completed</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block" />
-                  <span className="font-semibold text-gray-600 dark:text-gray-300">Cancelled</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <SlidePanel open={classPanel} onClose={() => setClassPanel(false)} title="Schedule Class">
-            <form onSubmit={handleCreateClass} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
-                <input value={classForm.title} onChange={e => setClassForm(f => ({ ...f, title: e.target.value }))} placeholder="Python OOP Concepts"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Date & Time *</label>
-                <DateTimePicker12h
-                  required
-                  value={classForm.date}
-                  onChange={val => setClassForm(f => ({ ...f, date: val }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Meet Link</label>
-                <input value={classForm.meetLink} onChange={e => setClassForm(f => ({ ...f, meetLink: e.target.value }))} placeholder="https://meet.google.com/..."
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
-                <textarea value={classForm.notes} onChange={e => setClassForm(f => ({ ...f, notes: e.target.value }))} rows={3}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setClassPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-                  {saving ? 'Saving...' : 'Schedule'}
-                </button>
-              </div>
-            </form>
-          </SlidePanel>
-        </div>
-      )}
-
       {/* Attendance Tab */}
       {tab === 'Attendance' && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">Select a class from the Schedule tab and click "Mark" to take attendance.</p>
           <div className="glass-card p-6">
-            <p className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Quick Select Class</p>
+            <p className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Select Class to Mark Attendance</p>
             <div className="space-y-2">
-              {classes.filter(c => c.status !== 'CANCELLED').map(c => (
-                <button key={c.id} onClick={() => { setTab('Schedule'); loadAttSheet(c.id) }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-purple-50 transition-colors text-left">
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{c.title}</span>
-                  <span className="text-xs text-gray-400 font-medium">{format(new Date(c.date), 'dd MMM yyyy, hh:mm a')}</span>
-                </button>
-              ))}
+              {classes.filter(c => c.status !== 'CANCELLED').length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">No active classes found for attendance</p>
+              ) : (
+                classes.filter(c => c.status !== 'CANCELLED').map(c => (
+                  <button key={c.id} onClick={() => loadAttSheet(c.id)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left">
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{c.title}</span>
+                    <span className="text-xs text-gray-400 font-medium">{format(new Date(c.date), 'dd MMM yyyy, hh:mm a')}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

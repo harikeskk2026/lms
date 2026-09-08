@@ -18,14 +18,6 @@ const courseContentService = {
   updateSyllabusStatus: (courseId, status, includeTopics = true) =>
     apiCall({ method: 'PUT', url: `/courses/${courseId}/syllabus/status`, data: { status, includeTopics } }),
 
-  // Sessions
-  getSessions: (topicId) => apiCall({ method: 'GET', url: `/topics/${topicId}/sessions` }),
-  createSession: (topicId, data) => apiCall({ method: 'POST', url: `/topics/${topicId}/sessions`, data }),
-  updateSession: (id, data) => apiCall({ method: 'PUT', url: `/sessions/${id}`, data }),
-  deleteSession: (id) => apiCall({ method: 'DELETE', url: `/sessions/${id}` }),
-  reorderSessions: (topicId, orderedIds) =>
-    apiCall({ method: 'PUT', url: `/topics/${topicId}/sessions/reorder`, data: { orderedIds } }),
-
   // Syllabus import
   previewImportSyllabus: (courseId, file) => {
     const formData = new FormData()

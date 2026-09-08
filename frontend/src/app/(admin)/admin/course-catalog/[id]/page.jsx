@@ -19,7 +19,7 @@ import { resolveFileUrl, adminApi } from '@/lib/api'
 
 import SlidePanel from '@/components/admin/SlidePanel'
 
-const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches', 'Enrolled Students']
+const TABS = ['Overview', 'Syllabus', 'Materials', 'Batches', 'Enrolled Students']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
 const ALLOWED_EXTENSIONS_BY_TYPE = {
   PDF: ['pdf'],
@@ -27,10 +27,6 @@ const ALLOWED_EXTENSIONS_BY_TYPE = {
   PRESENTATION: ['ppt', 'pptx'],
   VIDEO: ['mp4', 'mov', 'webm', 'mkv', 'avi'],
   OTHER: ['csv', 'xls', 'xlsx', 'txt', 'zip', 'rar', '7z', 'tar', 'gz', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'mp4', 'mov', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'],
-}
-const EMPTY_SESSION = {
-  title: '', description: '', trainerName: '', sessionDate: '', startTime: '', endTime: '',
-  durationMinutes: '', type: 'LIVE', meetingUrl: '', recordingUrl: '', status: 'PUBLISHED',
 }
 
 export default function CourseManagePage({ params }) {
@@ -205,7 +201,6 @@ export default function CourseManagePage({ params }) {
 
       {tab === 'Overview' && <OverviewTab course={course} onEdit={handleOpenEdit} />}
       {tab === 'Syllabus' && <SyllabusTab courseId={courseId} />}
-      {tab === 'Sessions' && <SessionsTab courseId={courseId} trainers={trainers} loadingTrainers={loadingTrainers} />}
       {tab === 'Materials' && <MaterialsTab courseId={courseId} />}
       {tab === 'Batches' && <BatchesTab courseId={courseId} courseTitle={course.title} trainers={trainers} loadingTrainers={loadingTrainers} />}
       {tab === 'Enrolled Students' && (
@@ -1515,266 +1510,6 @@ function SyllabusTab({ courseId }) {
   )
 }
 
-function SessionsTab({ courseId, trainers = [], loadingTrainers = false }) {
-  const [modules, setModules] = useState([])
-  const [moduleId, setModuleId] = useState('')
-  const [topicId, setTopicId] = useState('')
-  const [sessions, setSessions] = useState([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const [form, setForm] = useState(EMPTY_SESSION)
-  const [editingId, setEditingId] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const isTimeInvalid = Boolean(form.startTime && form.endTime && form.endTime <= form.startTime)
-
-  useEffect(() => {
-    courseContentService.getModules(courseId).then(r => setModules(r.data || [])).catch(() => toast.error('Failed to load syllabus'))
-  }, [courseId])
-
-  const topics = modules.find(m => String(m.id) === String(moduleId))?.topics || []
-
-  const loadSessions = useCallback(() => {
-    if (!topicId) { setSessions([]); return }
-    setLoadingSessions(true)
-    courseContentService.getSessions(topicId)
-      .then(r => setSessions(r.data || []))
-      .catch(() => toast.error('Failed to load sessions'))
-      .finally(() => setLoadingSessions(false))
-  }, [topicId])
-
-  useEffect(() => { loadSessions() }, [loadSessions])
-
-  function resetForm() { setForm(EMPTY_SESSION); setEditingId(null) }
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!topicId) { toast.error('Select a topic first'); return }
-    if (form.startTime && form.endTime && form.endTime <= form.startTime) {
-      toast.error('End time must be greater than start time')
-      return
-    }
-    const computedDuration = form.durationMinutes || calculateDuration(form.startTime, form.endTime)
-    const payload = {
-      ...form,
-      durationMinutes: computedDuration ? Number(computedDuration) : ''
-    }
-    setSaving(true)
-    try {
-      if (editingId) await courseContentService.updateSession(editingId, payload)
-      else await courseContentService.createSession(topicId, payload)
-      toast.success(editingId ? 'Session updated' : 'Session added')
-      resetForm()
-      loadSessions()
-    } catch (err) { toast.error(err.message || 'Failed to save session') } finally { setSaving(false) }
-  }
-
-  function openEdit(s) {
-    setEditingId(s.id)
-    const startTime = formatTimeForInput(s.startTime)
-    const endTime = formatTimeForInput(s.endTime)
-    const autoDur = calculateDuration(startTime, endTime)
-    setForm({
-      title: s.title, description: s.description || '', trainerName: s.trainerName || '',
-      sessionDate: s.sessionDate || '', startTime, endTime,
-      durationMinutes: s.durationMinutes ? String(s.durationMinutes) : (autoDur || ''), type: s.type || 'LIVE',
-      meetingUrl: s.meetingUrl || '', recordingUrl: s.recordingUrl || '', status: s.status || 'PUBLISHED',
-    })
-  }
-
-  async function handleDelete(id) {
-    if (!confirm('Delete this session?')) return
-    try { await courseContentService.deleteSession(id); loadSessions() } catch (err) { toast.error(err.message || 'Failed to delete') }
-  }
-
-  async function moveSession(index, direction) {
-    const newOrder = [...sessions]
-    const target = index + direction
-    if (target < 0 || target >= newOrder.length) return
-    ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
-    setSessions(newOrder)
-    try { await courseContentService.reorderSessions(topicId, newOrder.map(s => s.id)) } catch { toast.error('Failed to reorder'); loadSessions() }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="glass-card p-4 flex flex-col sm:flex-row gap-3">
-        <select value={moduleId} onChange={e => { setModuleId(e.target.value); setTopicId(''); resetForm() }}
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">Select module...</option>
-          {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-        </select>
-        <select value={topicId} onChange={e => { setTopicId(e.target.value); resetForm() }} disabled={!moduleId}
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50">
-          <option value="">Select topic...</option>
-          {topics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-        </select>
-      </div>
-
-      {!topicId ? (
-        <div className="glass-card p-10 text-center text-gray-400 text-sm">Pick a module and topic to manage its sessions.</div>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="glass-card p-4 space-y-3">
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{editingId ? 'Edit Session' : 'Add Session'}</p>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Session title *"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description" rows={2}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-              <div>
-                <label className="block text-[10px] text-gray-400 mb-1">Trainer (optional)</label>
-                <select
-                  value={form.trainerName}
-                  onChange={e => setForm(f => ({ ...f, trainerName: e.target.value }))}
-                  disabled={loadingTrainers}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60 text-gray-800 dark:text-gray-100"
-                >
-                  <option value="">{loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}</option>
-                  {form.trainerName && !trainers.some(t => t.name === form.trainerName) && (
-                    <option value={form.trainerName}>{form.trainerName} (current)</option>
-                  )}
-                  {trainers.map(t => (
-                    <option key={t.id} value={t.name}>
-                      {t.name}{t.designation ? ` · ${t.designation}` : ''}
-                    </option>
-                  ))}
-                </select>
-                {!loadingTrainers && trainers.length === 0 && !form.trainerName && (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    No active trainers found.{' '}
-                    <Link href="/admin/trainers" className="text-purple-600 hover:underline">
-                      Manage trainers
-                    </Link>
-                  </p>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input type="date" value={form.sessionDate} onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
-                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                  <option value="LIVE">Live</option>
-                  <option value="RECORDED">Recorded</option>
-                </select>
-              </div>
-              <div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] text-gray-400 mb-1">Start Time</label>
-                    <input type="time" value={form.startTime} max={form.endTime || undefined}
-                      onChange={e => {
-                        const newStart = e.target.value
-                        const autoDur = calculateDuration(newStart, form.endTime)
-                        setForm(f => ({
-                          ...f,
-                          startTime: newStart,
-                          durationMinutes: autoDur
-                        }))
-                      }}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                        isTimeInvalid
-                          ? 'border-red-300 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
-                          : 'border-gray-200 bg-gray-50 focus:ring-2 focus:ring-purple-500'
-                      }`} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-400 mb-1">End Time</label>
-                    <input type="time" value={form.endTime} min={form.startTime || undefined}
-                      onChange={e => {
-                        const newEnd = e.target.value
-                        const autoDur = calculateDuration(form.startTime, newEnd)
-                        setForm(f => ({
-                          ...f,
-                          endTime: newEnd,
-                          durationMinutes: autoDur
-                        }))
-                      }}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                        isTimeInvalid
-                          ? 'border-red-300 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
-                          : 'border-gray-200 bg-gray-50 focus:ring-2 focus:ring-purple-500'
-                      }`} />
-                  </div>
-                </div>
-                {isTimeInvalid && (
-                  <p className="text-[11px] text-red-500 font-medium mt-1">
-                    End time must be greater than start time.
-                  </p>
-                )}
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[10px] text-gray-400">Duration (minutes)</label>
-                  {isTimeInvalid ? (
-                    <span className="text-[10px] text-red-500 font-medium">End time must be greater</span>
-                  ) : form.durationMinutes ? (
-                    <span className="text-[10px] text-purple-600 font-medium">Auto-calculated</span>
-                  ) : null}
-                </div>
-                <input
-                  type="number"
-                  readOnly
-                  tabIndex={-1}
-                  value={form.durationMinutes}
-                  placeholder={isTimeInvalid ? 'Invalid: End time must be greater' : 'Calculated from start and end time'}
-                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none cursor-not-allowed select-none transition-colors ${
-                    isTimeInvalid
-                      ? 'border-red-200 bg-red-50/30 text-red-400 placeholder-red-400'
-                      : 'border-gray-200 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-                  }`}
-                />
-              </div>
-              <input value={form.meetingUrl} onChange={e => setForm(f => ({ ...f, meetingUrl: e.target.value }))} placeholder="Meeting URL"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <input value={form.recordingUrl} onChange={e => setForm(f => ({ ...f, recordingUrl: e.target.value }))} placeholder="Recording URL"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <div>
-                <label className="block text-[10px] text-gray-400 mb-1">Status</label>
-                <StatusSelect value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} />
-              </div>
-              <div className="flex gap-2">
-                {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}
-                <button type="submit" disabled={saving || isTimeInvalid} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-                  {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Session'}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div className="glass-card p-4">
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Sessions</p>
-            {loadingSessions ? <div className="h-24 animate-pulse bg-gray-100 rounded-xl" /> : sessions.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">No sessions yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {sessions.map((s, i) => (
-                  <div key={s.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate flex items-center gap-1.5">
-                        {s.title}
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">{s.type || 'LIVE'}</span>
-                        <StatusBadge status={s.status} />
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {s.trainerName || '—'} {s.sessionDate ? `· ${s.sessionDate}` : ''} {s.startTime ? `· ${s.startTime}${s.endTime ? `–${s.endTime}` : ''}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => moveSession(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronUp size={12} /></button>
-                      <button onClick={() => moveSession(i, 1)} disabled={i === sessions.length - 1} className="w-7 h-7 rounded-lg hover:bg-gray-200 disabled:opacity-30 flex items-center justify-center"><ChevronDown size={12} /></button>
-                      <button onClick={() => openEdit(s)} className="w-7 h-7 rounded-lg hover:bg-purple-100 text-purple-600 flex items-center justify-center"><Pencil size={12} /></button>
-                      <button onClick={() => handleDelete(s.id)} className="w-7 h-7 rounded-lg hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 size={12} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function MaterialsTab({ courseId }) {
   const [modules, setModules] = useState([])
   const [scope, setScope] = useState('COURSE')
@@ -1795,16 +1530,8 @@ function MaterialsTab({ courseId }) {
 
   const topics = modules.find(m => String(m.id) === String(moduleId))?.topics || []
 
-  useEffect(() => {
-    if (scope === 'SESSION' && topicId) {
-      courseContentService.getSessions(topicId).then(r => setSessions(r.data || [])).catch(() => setSessions([]))
-    } else {
-      setSessions([])
-    }
-  }, [scope, topicId])
-
-  const ownerId = scope === 'COURSE' ? courseId : scope === 'MODULE' ? moduleId : scope === 'TOPIC' ? topicId : sessionId
-  const ownerParamKey = { COURSE: 'courseId', MODULE: 'moduleId', TOPIC: 'topicId', SESSION: 'sessionId' }[scope]
+  const ownerId = scope === 'COURSE' ? courseId : scope === 'MODULE' ? moduleId : topicId
+  const ownerParamKey = { COURSE: 'courseId', MODULE: 'moduleId', TOPIC: 'topicId' }[scope]
 
   const load = useCallback(() => {
     if (!ownerId) { setMaterials([]); return }
@@ -1829,8 +1556,10 @@ function MaterialsTab({ courseId }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!editingId && !ownerId) { toast.error('Select a target first'); return }
-    if (!form.url.trim()) { toast.error('Provide a URL or upload a file'); return }
+    if (!ownerId) { toast.error('Select a target first'); return }
+    if (!form.title.trim()) { toast.error('Title is required'); return }
+    if (!form.url.trim()) { toast.error('File / URL is required'); return }
+
     setSaving(true)
     try {
       const payload = { title: form.title, type: form.type, url: form.url, description: form.description, visibility: form.visibility }
@@ -1887,32 +1616,25 @@ function MaterialsTab({ courseId }) {
     <div className="space-y-4">
       <div className="glass-card p-4 flex flex-wrap gap-3 items-center">
         <div className="flex gap-1">
-          {['COURSE', 'MODULE', 'TOPIC', 'SESSION'].map(s => (
-            <button key={s} onClick={() => { setScope(s); setModuleId(''); setTopicId(''); setSessionId('') }}
+          {['COURSE', 'MODULE', 'TOPIC'].map(s => (
+            <button key={s} onClick={() => { setScope(s); setModuleId(''); setTopicId('') }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${scope === s ? 'bg-purple-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
               {s === 'COURSE' ? 'Course-level' : s.charAt(0) + s.slice(1).toLowerCase()}
             </button>
           ))}
         </div>
-        {(scope === 'MODULE' || scope === 'TOPIC' || scope === 'SESSION') && (
-          <select value={moduleId} onChange={e => { setModuleId(e.target.value); setTopicId(''); setSessionId('') }}
+        {(scope === 'MODULE' || scope === 'TOPIC') && (
+          <select value={moduleId} onChange={e => { setModuleId(e.target.value); setTopicId('') }}
             className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none">
             <option value="">Select module...</option>
             {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
           </select>
         )}
-        {(scope === 'TOPIC' || scope === 'SESSION') && (
-          <select value={topicId} onChange={e => { setTopicId(e.target.value); setSessionId('') }} disabled={!moduleId}
+        {scope === 'TOPIC' && (
+          <select value={topicId} onChange={e => setTopicId(e.target.value)} disabled={!moduleId}
             className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none disabled:opacity-50">
             <option value="">Select topic...</option>
             {topics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-          </select>
-        )}
-        {scope === 'SESSION' && (
-          <select value={sessionId} onChange={e => setSessionId(e.target.value)} disabled={!topicId}
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none disabled:opacity-50">
-            <option value="">Select session...</option>
-            {sessions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
           </select>
         )}
       </div>
