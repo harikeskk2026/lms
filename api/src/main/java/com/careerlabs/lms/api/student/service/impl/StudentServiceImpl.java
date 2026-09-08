@@ -21,6 +21,7 @@ import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.enrollment.service.BatchScheduleConflictValidator;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationStatusHistoryRepository;
@@ -80,6 +81,7 @@ public class StudentServiceImpl implements StudentService {
     private final CourseRepository courseRepository;
     private final CollegeRepository collegeRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final BatchScheduleConflictValidator batchScheduleConflictValidator;
     private final PasswordEncoder passwordEncoder;
 
     // Delete-cascade dependencies only - see delete(Long) for why each is here.
@@ -106,7 +108,9 @@ public class StudentServiceImpl implements StudentService {
     public StudentServiceImpl(StudentRepository studentRepository, UserRepository userRepository,
                                BatchRepository batchRepository, CourseRepository courseRepository,
                                CollegeRepository collegeRepository,
-                               EnrollmentRepository enrollmentRepository, PasswordEncoder passwordEncoder,
+                               EnrollmentRepository enrollmentRepository,
+                               BatchScheduleConflictValidator batchScheduleConflictValidator,
+                               PasswordEncoder passwordEncoder,
                                AttendanceCorrectionRepository attendanceCorrectionRepository,
                                AttendanceRepository attendanceRepository,
                                AttendanceAlertRepository attendanceAlertRepository,
@@ -132,6 +136,7 @@ public class StudentServiceImpl implements StudentService {
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
         this.enrollmentRepository = enrollmentRepository;
+        this.batchScheduleConflictValidator = batchScheduleConflictValidator;
         this.passwordEncoder = passwordEncoder;
         this.attendanceCorrectionRepository = attendanceCorrectionRepository;
         this.attendanceRepository = attendanceRepository;
@@ -348,6 +353,11 @@ public class StudentServiceImpl implements StudentService {
         long currentCount = studentRepository.findByBatchId(batchId).size();
         if (currentCount >= batch.getMaxStudents()) {
             throw new ConflictException("Batch '" + batch.getName() + "' is full (" + batch.getMaxStudents() + " max)");
+        }
+        // Schedule conflict: new batch must not overlap with any of the student's active enrollment batches.
+        // For pure batch reassignment we exclude legacy batch being replaced (includeLegacyBatch=false)
+        if (student.getId() != null) {
+            batchScheduleConflictValidator.validate(student, batch, null, false);
         }
         student.setBatch(batch);
     }

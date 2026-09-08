@@ -14,6 +14,7 @@ import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPage
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.enrollment.service.BatchScheduleConflictValidator;
 import com.careerlabs.lms.api.enrollment.service.EnrollmentService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
@@ -40,13 +41,16 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     private final StudentRepository studentRepository;
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
+    private final BatchScheduleConflictValidator batchScheduleConflictValidator;
 
     public EnrollmentServiceImpl(EnrollmentRepository enrollmentRepository, StudentRepository studentRepository,
-                                  CourseRepository courseRepository, BatchRepository batchRepository) {
+                                  CourseRepository courseRepository, BatchRepository batchRepository,
+                                  BatchScheduleConflictValidator batchScheduleConflictValidator) {
         this.enrollmentRepository = enrollmentRepository;
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
+        this.batchScheduleConflictValidator = batchScheduleConflictValidator;
     }
 
     @Override
@@ -67,6 +71,10 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             Enrollment existing = existingOpt.get();
             if (existing.isActive()) {
                 throw new ConflictException("Already enrolled in this course");
+            }
+            // Validate schedule conflict if reactivated enrollment has a batch
+            if (existing.getBatch() != null && existing.getBatch().isActive()) {
+                batchScheduleConflictValidator.validate(student, existing.getBatch(), courseId);
             }
             existing.setActive(true);
             existing.setEnrolledAt(Instant.now());
@@ -200,6 +208,13 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             if (enrollment.isActive()) {
                 throw new ConflictException("Student '" + student.getUser().getName() + "' is already actively enrolled in this course");
             }
+            // Validate schedule conflict before reactivating (exclude this course's inactive enrollment)
+            if (batch != null) {
+                batchScheduleConflictValidator.validate(student, batch, courseId);
+            } else if (enrollment.getBatch() != null && enrollment.getBatch().isActive()) {
+                // Reactivating enrollment keeps its original batch - validate that batch if no new batch provided
+                batchScheduleConflictValidator.validate(student, enrollment.getBatch(), courseId);
+            }
             // Reactivate existing enrollment
             enrollment.setActive(true);
             if (batch != null) {
@@ -207,6 +222,10 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             }
             enrollment.setEnrolledAt(Instant.now());
         } else {
+            // Validate schedule conflict for new enrollment
+            if (batch != null) {
+                batchScheduleConflictValidator.validate(student, batch);
+            }
             enrollment = new Enrollment();
             enrollment.setStudent(student);
             enrollment.setCourse(course);

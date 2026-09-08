@@ -13,6 +13,7 @@ import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.course.util.CourseDurationParser;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
@@ -28,8 +29,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -238,8 +237,8 @@ public class BatchServiceImpl implements BatchService {
                 continue;
             }
 
-            if (isDateOverlap(startDate, endDate, existing.getStartDate(), existing.getEndDate())) {
-                if (isTimeOverlap(timing, existing.getTiming())) {
+            if (ScheduleOverlapUtil.isDateOverlap(startDate, endDate, existing.getStartDate(), existing.getEndDate())) {
+                if (ScheduleOverlapUtil.isTimeOverlap(timing, existing.getTiming())) {
                     String existingTiming = (existing.getTiming() != null && !existing.getTiming().isBlank())
                             ? existing.getTiming()
                             : "full day";
@@ -252,73 +251,6 @@ public class BatchServiceImpl implements BatchService {
                     ));
                 }
             }
-        }
-    }
-
-    private boolean isDateOverlap(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
-        if (start1 == null || end1 == null || start2 == null || end2 == null) {
-            return true;
-        }
-        return !start1.isAfter(end2) && !end1.isBefore(start2);
-    }
-
-    private boolean isTimeOverlap(String timing1, String timing2) {
-        if (timing1 == null || timing1.isBlank() || timing2 == null || timing2.isBlank()) {
-            return true;
-        }
-        if (timing1.trim().equalsIgnoreCase(timing2.trim())) {
-            return true;
-        }
-        TimeRange range1 = parseTiming(timing1);
-        TimeRange range2 = parseTiming(timing2);
-        if (range1 == null || range2 == null) {
-            return timing1.trim().equalsIgnoreCase(timing2.trim());
-        }
-        return range1.overlapsWith(range2);
-    }
-
-    private static final Pattern TIME_12H_PATTERN =
-            Pattern.compile("(?i)^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$");
-    private static final Pattern TIME_24H_PATTERN =
-            Pattern.compile("^(\\d{1,2}):(\\d{2})$");
-
-    private Integer parseTimeToMinutes(String timeStr) {
-        if (timeStr == null) return null;
-        String s = timeStr.trim();
-        Matcher m12 = TIME_12H_PATTERN.matcher(s);
-        if (m12.matches()) {
-            int hour = Integer.parseInt(m12.group(1));
-            int minute = Integer.parseInt(m12.group(2));
-            String ampm = m12.group(3).toUpperCase();
-            if (hour == 12) {
-                hour = ampm.equals("AM") ? 0 : 12;
-            } else if (ampm.equals("PM")) {
-                hour += 12;
-            }
-            return hour * 60 + minute;
-        }
-        Matcher m24 = TIME_24H_PATTERN.matcher(s);
-        if (m24.matches()) {
-            int hour = Integer.parseInt(m24.group(1));
-            int minute = Integer.parseInt(m24.group(2));
-            return hour * 60 + minute;
-        }
-        return null;
-    }
-
-    private TimeRange parseTiming(String timing) {
-        if (timing == null || timing.isBlank()) return null;
-        String[] parts = timing.split("-");
-        if (parts.length != 2) return null;
-        Integer start = parseTimeToMinutes(parts[0]);
-        Integer end = parseTimeToMinutes(parts[1]);
-        if (start == null || end == null || start >= end) return null;
-        return new TimeRange(start, end);
-    }
-
-    private record TimeRange(int startMinutes, int endMinutes) {
-        boolean overlapsWith(TimeRange other) {
-            return this.startMinutes < other.endMinutes && this.endMinutes > other.startMinutes;
         }
     }
 }
