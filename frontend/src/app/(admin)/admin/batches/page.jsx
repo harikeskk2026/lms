@@ -428,9 +428,9 @@ export default function BatchesPage() {
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
               >
                 <option value="">Select course</option>
-                {courses.filter(c => c.status !== 'ARCHIVED').map(c => (
+                {courses.filter(c => c.status === 'PUBLISHED').map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.title}{c.status && c.status !== 'PUBLISHED' ? ` (${c.status})` : ''}
+                    {c.title}
                   </option>
                 ))}
               </select>

@@ -60,7 +60,8 @@ public class CourseServiceImpl implements CourseService {
 
         Set<Long> enrolledCourseIds = enrolledCourseIds(principal);
         return courseRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(course -> course.getStatus() == CourseStatus.PUBLISHED || enrolledCourseIds.contains(course.getId()))
+                .filter(course -> course.getStatus() == CourseStatus.PUBLISHED
+                        || (course.getStatus() == CourseStatus.ARCHIVED && enrolledCourseIds.contains(course.getId())))
                 .map(course -> CourseResponse.from(course, enrolledCourseIds.contains(course.getId())))
                 .toList();
     }
@@ -80,7 +81,7 @@ public class CourseServiceImpl implements CourseService {
             throw new BadRequestException("Courses cannot be created directly as ARCHIVED. Archive is available after the course is created.");
         }
         Course course = new Course();
-        applyRequest(course, request);
+        applyRequest(course, request, true);
         course.setSlug(slugGenerator.generateUnique(request.getTitle()));
 
         return CourseResponse.from(courseRepository.save(course));
@@ -90,8 +91,11 @@ public class CourseServiceImpl implements CourseService {
     @Transactional
     public CourseResponse update(Long id, CourseRequest request) {
         Course course = findOrThrow(id);
-        applyRequest(course, request);
-
+        // Content edit must not bypass status lifecycle - validate any status change via PUT as well
+        if (request.getStatus() != null && request.getStatus() != course.getStatus()) {
+            validateTransition(course.getStatus(), request.getStatus());
+        }
+        applyRequest(course, request, false);
         return CourseResponse.from(courseRepository.save(course));
     }
 
@@ -99,8 +103,24 @@ public class CourseServiceImpl implements CourseService {
     @Transactional
     public CourseResponse updateStatus(Long id, CourseStatus status) {
         Course course = findOrThrow(id);
+        if (status == course.getStatus()) {
+            return CourseResponse.from(course);
+        }
+        validateTransition(course.getStatus(), status);
         course.setStatus(status);
         return CourseResponse.from(courseRepository.save(course));
+    }
+
+    private void validateTransition(CourseStatus current, CourseStatus requested) {
+        if (current == requested) {
+            return;
+        }
+        boolean allowed = (current == CourseStatus.DRAFT && requested == CourseStatus.PUBLISHED)
+                || (current == CourseStatus.PUBLISHED && requested == CourseStatus.ARCHIVED);
+        if (!allowed) {
+            throw new BadRequestException(
+                    String.format("Invalid status transition from %s to %s. Allowed transitions are DRAFT -> PUBLISHED and PUBLISHED -> ARCHIVED. ARCHIVED is terminal and DRAFT cannot be skipped to ARCHIVED.", current, requested));
+        }
     }
 
     @Override
@@ -122,7 +142,7 @@ public class CourseServiceImpl implements CourseService {
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + id));
     }
 
-    private void applyRequest(Course course, CourseRequest request) {
+    private void applyRequest(Course course, CourseRequest request, boolean isCreate) {
         course.setTitle(request.getTitle());
         course.setDescription(request.getDescription());
         course.setDuration(request.getDuration());

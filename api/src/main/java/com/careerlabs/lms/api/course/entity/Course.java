@@ -44,7 +44,7 @@ public class Course {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private CourseStatus status = CourseStatus.PUBLISHED;
+    private CourseStatus status = CourseStatus.DRAFT;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

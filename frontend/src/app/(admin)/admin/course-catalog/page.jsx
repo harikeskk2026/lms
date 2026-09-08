@@ -110,7 +110,6 @@ export default function CourseCatalogPage() {
       await courseService.updateStatus(course.id, nextStatus)
       const labels = {
         PUBLISHED: 'Course published',
-        DRAFT: 'Course moved to draft',
         ARCHIVED: 'Course archived',
       }
       toast.success(labels[nextStatus] || 'Status updated')
@@ -259,41 +258,20 @@ export default function CourseCatalogPage() {
                 <FolderOpen size={12} /> Manage Content
               </Link>
               <div className="flex gap-2">
-                {c.status === 'PUBLISHED' && (
-                  <>
-                    <button onClick={() => handleStatusChange(c, 'DRAFT')} disabled={statusUpdatingId === c.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-60">
-                      <EyeOff size={12} /> Draft
-                    </button>
-                    <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-60">
-                      <Archive size={12} /> Archive
-                    </button>
-                  </>
-                )}
                 {c.status === 'DRAFT' && (
-                  <>
-                    <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
-                      <Eye size={12} /> Publish
-                    </button>
-                    <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-60">
-                      <Archive size={12} /> Archive
-                    </button>
-                  </>
+                  <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
+                    <Eye size={12} /> Publish
+                  </button>
+                )}
+                {c.status === 'PUBLISHED' && (
+                  <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-60">
+                    <Archive size={12} /> Archive
+                  </button>
                 )}
                 {c.status === 'ARCHIVED' && (
-                  <>
-                    <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-60">
-                      <Eye size={12} /> Publish
-                    </button>
-                    <button onClick={() => handleStatusChange(c, 'DRAFT')} disabled={statusUpdatingId === c.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-60">
-                      <EyeOff size={12} /> Move to Draft
-                    </button>
-                  </>
+                  <span className="flex-1 text-center py-1.5 rounded-xl bg-gray-100 text-gray-500 text-xs font-semibold">Archived — terminal</span>
                 )}
               </div>
               <div className="flex gap-2 pt-1">
@@ -348,11 +326,39 @@ export default function CourseCatalogPage() {
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Status *</label>
             <select {...register('status')}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="DRAFT">DRAFT</option>
-              <option value="PUBLISHED">PUBLISHED</option>
-              {editingId && <option value="ARCHIVED">ARCHIVED</option>}
+              disabled={editingCourseStatus === 'ARCHIVED'}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:text-gray-500">
+              {!editingId && (
+                <>
+                  <option value="DRAFT">DRAFT</option>
+                  <option value="PUBLISHED">PUBLISHED</option>
+                </>
+              )}
+              {editingId && editingCourseStatus === 'DRAFT' && (
+                <>
+                  <option value="DRAFT">DRAFT</option>
+                  <option value="PUBLISHED">PUBLISHED</option>
+                </>
+              )}
+              {editingId && editingCourseStatus === 'PUBLISHED' && (
+                <>
+                  <option value="PUBLISHED">PUBLISHED</option>
+                  <option value="ARCHIVED">ARCHIVED</option>
+                </>
+              )}
+              {editingId && editingCourseStatus === 'ARCHIVED' && (
+                <option value="ARCHIVED">ARCHIVED — terminal</option>
+              )}
             </select>
+            {editingId && editingCourseStatus === 'ARCHIVED' && (
+              <p className="text-xs text-gray-500 mt-1">Archived is terminal — status cannot be changed.</p>
+            )}
+            {editingId && editingCourseStatus === 'PUBLISHED' && (
+              <p className="text-xs text-gray-500 mt-1">PUBLISHED can only be archived. Editing content does not change status.</p>
+            )}
+            {editingId && editingCourseStatus === 'DRAFT' && (
+              <p className="text-xs text-gray-500 mt-1">DRAFT can only be published (DRAFT → PUBLISHED).</p>
+            )}
             {errors.status && <span className="text-xs text-red-500 mt-1 block">{errors.status.message}</span>}
           </div>
 

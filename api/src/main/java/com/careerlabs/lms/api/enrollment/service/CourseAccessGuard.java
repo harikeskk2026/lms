@@ -45,9 +45,10 @@ public class CourseAccessGuard {
                 .orElse(false);
     }
 
-    /** Course browsing/detail visibility: admin always, student if published or enrolled. */
+    /** Course browsing/detail visibility: admin always, PUBLISHED for all, ARCHIVED only if already enrolled, DRAFT never for students. */
     public void requireVisible(JwtUserPrincipal principal, Course course) {
-        if (isAdmin(principal) || course.getStatus() == CourseStatus.PUBLISHED || isEnrolled(principal, course.getId())) {
+        if (isAdmin(principal) || course.getStatus() == CourseStatus.PUBLISHED
+                || (course.getStatus() == CourseStatus.ARCHIVED && isEnrolled(principal, course.getId()))) {
             return;
         }
         throw new ResourceNotFoundException("Course not found: " + course.getId());

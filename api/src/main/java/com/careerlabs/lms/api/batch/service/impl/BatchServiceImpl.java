@@ -12,6 +12,7 @@ import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.course.util.CourseDurationParser;
@@ -179,6 +180,11 @@ public class BatchServiceImpl implements BatchService {
 
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + request.getCourseId()));
+
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new BadRequestException(
+                    String.format("Cannot create or assign batch to course '%s' because it is not PUBLISHED (current status: %s). DRAFT courses are still being prepared and ARCHIVED courses are retired from new use.", course.getTitle(), course.getStatus()));
+        }
 
         validateBatchDates(course, request.getStartDate(), request.getEndDate());
 

@@ -66,6 +66,7 @@ class BatchServiceTrainerValidationTest {
         course = new Course();
         setId(course, 10L);
         course.setTitle("Java Bootcamp");
+        course.setStatus(com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED);
 
         activeTrainer = new User();
         setId(activeTrainer, 1L);
