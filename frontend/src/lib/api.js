@@ -2,30 +2,18 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import tokenStorage from '@/utilities/tokenStorage'
 
-function getBaseURL() {
-  const envUrl = process.env.NEXT_PUBLIC_JAVA_API_URL
-  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-    return envUrl
-  }
-  if (typeof window !== 'undefined') {
-    return '/api'
-  }
-  return envUrl || 'http://localhost:7000/api'
-}
+// Use NEXT_PUBLIC_JAVA_API_URL directly from the environment.
+// Defined in .env as: NEXT_PUBLIC_JAVA_API_URL=http://localhost:7000/api
+const BASE_URL = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api'
 
 const api = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: BASE_URL,
   withCredentials: true,
   timeout: 15000,
 })
 
 // ─── Request: attach access token ─────────────────────────────────────────────
 api.interceptors.request.use(config => {
-  if (typeof window !== 'undefined') {
-    if (!config.baseURL || config.baseURL.includes('localhost') || config.baseURL.includes('127.0.0.1')) {
-      config.baseURL = '/api'
-    }
-  }
   const token = tokenStorage.getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
@@ -83,7 +71,7 @@ export default api
 // Files (e.g. assignment attachments, submissions) come back from the API as
 // paths relative to the API origin (e.g. "/uploads/assignments/x.pdf"), not
 // the frontend origin — resolve them to an absolute URL before linking.
-const API_ORIGIN = (process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api').replace(/\/api\/?$/, '')
+const API_ORIGIN = BASE_URL.replace(/\/api\/?$/, '')
 
 export function resolveFileUrl(path) {
   if (!path) return path
