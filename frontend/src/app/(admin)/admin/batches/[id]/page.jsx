@@ -835,6 +835,7 @@ export default function BatchDetailPage() {
           const selectedForEdit = courses.find(c => String(c.id) === String(editForm.courseId)) || batch.course
           const editDateError = validateBatchDates(editForm.startDate, editForm.endDate, selectedForEdit?.duration)
           const editMaxEnd = editForm.startDate && selectedForEdit?.duration ? calculateMaxEndDate(editForm.startDate, selectedForEdit.duration) : null
+          const editMaxEndStr = editMaxEnd ? format(editMaxEnd, 'yyyy-MM-dd') : undefined
           return (
             <form onSubmit={handleUpdateBatch} className="space-y-4">
               <div>
@@ -856,13 +857,32 @@ export default function BatchDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date *</label>
-                  <input type="date" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} required
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                  <input
+                    type="date"
+                    value={editForm.startDate}
+                    onChange={e => {
+                      const newStart = e.target.value
+                      setEditForm(f => ({
+                        ...f,
+                        startDate: newStart,
+                        endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
+                      }))
+                    }}
+                    required
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">End Date *</label>
-                  <input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} required
-                    className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${editDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
+                  <input
+                    type="date"
+                    min={editForm.startDate || undefined}
+                    max={editMaxEndStr}
+                    value={editForm.endDate}
+                    onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))}
+                    required
+                    className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${editDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`}
+                  />
                 </div>
               </div>
               {selectedForEdit && editForm.startDate && editMaxEnd && (

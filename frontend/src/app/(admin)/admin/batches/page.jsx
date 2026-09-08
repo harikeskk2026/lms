@@ -72,6 +72,7 @@ export default function BatchesPage() {
   const selectedCourse = courses.find(c => String(c.id) === String(form.courseId))
   const batchDateError = validateBatchDates(form.startDate, form.endDate, selectedCourse?.duration)
   const maxEndDate = selectedCourse && form.startDate ? calculateMaxEndDate(form.startDate, selectedCourse.duration) : null
+  const maxEndDateStr = maxEndDate ? format(maxEndDate, 'yyyy-MM-dd') : undefined
 
   const load = () => {
     setLoading(true)
@@ -505,7 +506,14 @@ export default function BatchesPage() {
                 <input
                   type="date"
                   value={form.startDate}
-                  onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                  onChange={e => {
+                    const newStart = e.target.value
+                    setForm(f => ({
+                      ...f,
+                      startDate: newStart,
+                      endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
+                    }))
+                  }}
                   required
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
@@ -514,11 +522,12 @@ export default function BatchesPage() {
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
                 <input
                   type="date"
-                  value={form.endDate}
                   min={form.startDate || undefined}
+                  max={maxEndDateStr}
+                  value={form.endDate}
                   onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                   required
-                  className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 ${batchDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'}`}
+                  className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 ${batchDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'} text-gray-800 dark:text-gray-200`}
                 />
               </div>
             </div>

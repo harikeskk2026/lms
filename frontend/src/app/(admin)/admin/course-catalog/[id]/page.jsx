@@ -1470,10 +1470,28 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
               </option>
             ))}
           </select>
-          <input required type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          <input required type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+          <input
+            required
+            type="date"
+            value={form.startDate}
+            onChange={e => {
+              const newStart = e.target.value
+              setForm(f => ({
+                ...f,
+                startDate: newStart,
+                endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
+              }))
+            }}
+            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <input
+            required
+            type="date"
+            min={form.startDate || undefined}
+            value={form.endDate}
+            onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+          />
 
           {/* Clean Start Time & End Time */}
           <div>
