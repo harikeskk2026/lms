@@ -12,6 +12,7 @@ import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
+import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
@@ -58,12 +59,21 @@ public class CourseServiceImpl implements CourseService {
                     .toList();
         }
 
-        Set<Long> enrolledCourseIds = enrolledCourseIds(principal);
-        return courseRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(course -> course.getStatus() == CourseStatus.PUBLISHED
-                        || (course.getStatus() == CourseStatus.ARCHIVED && enrolledCourseIds.contains(course.getId())))
-                .map(course -> CourseResponse.from(course, enrolledCourseIds.contains(course.getId())))
-                .toList();
+        if (accessGuard.isTrainer(principal)) {
+            return courseRepository.findCoursesByTrainerId(principal.id()).stream()
+                    .map(c -> CourseResponse.from(c, true))
+                    .toList();
+        }
+
+        if (accessGuard.isStudent(principal)) {
+            Student student = studentRepository.findByUserId(principal.id()).orElse(null);
+            if (student != null && student.getBatch() != null && student.getBatch().getCourse() != null) {
+                return List.of(CourseResponse.from(student.getBatch().getCourse(), true));
+            }
+            return List.of();
+        }
+
+        return List.of();
     }
 
     @Override

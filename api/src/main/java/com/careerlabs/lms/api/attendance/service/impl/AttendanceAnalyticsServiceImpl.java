@@ -108,6 +108,68 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
 
     @Override
     @Transactional(readOnly = true)
+    public AttendanceCommandCenterResponse getCommandCenterForBatches(List<Long> batchIds) {
+        if (batchIds == null || batchIds.isEmpty()) {
+            return new AttendanceCommandCenterResponse(0, 0, 0, 0, 0, 0);
+        }
+        List<Batch> activeBatches = batchRepository.findAllById(batchIds).stream()
+                .filter(Batch::isActive)
+                .toList();
+
+        int totalStudents = 0;
+        int below75Count = 0;
+        int criticalCount = 0;
+        int totalPctSum = 0;
+        int batchesWithStudents = 0;
+
+        for (Batch batch : activeBatches) {
+            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            if (students.isEmpty()) continue;
+
+            List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
+            Map<Long, List<Attendance>> byStudent = attendances.stream()
+                    .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
+            AttendancePolicy policy = attendancePolicyService.getEffectivePolicy(batch.getId());
+
+            int batchPctSum = 0;
+            for (Student student : students) {
+                totalStudents++;
+                List<Attendance> studentAttendance = byStudent.getOrDefault(student.getId(), List.of());
+                int total = studentAttendance.size();
+                if (total == 0) continue;
+
+                int present = (int) studentAttendance.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+                int pct = (int) Math.round((present * 100.0) / total);
+                batchPctSum += pct;
+
+                if (pct < policy.getHealthyThreshold()) {
+                    below75Count++;
+                }
+                if (attendanceRiskService.classify(pct, policy) == RiskLevel.CRITICAL) {
+                    criticalCount++;
+                }
+            }
+            totalPctSum += students.isEmpty() ? 0 : batchPctSum / students.size();
+            batchesWithStudents++;
+        }
+
+        int averageAttendance = batchesWithStudents > 0 ? totalPctSum / batchesWithStudents : 0;
+
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
+        List<DailyClass> todayClasses = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay).stream()
+                .filter(c -> c.getBatch() != null && batchIds.contains(c.getBatch().getId()))
+                .toList();
+        int todaysClasses = todayClasses.size();
+        int unmarkedClasses = (int) todayClasses.stream()
+                .filter(c -> c.getStatus() == ClassStatus.SCHEDULED && !c.getDate().isAfter(LocalDateTime.now()))
+                .count();
+
+        return new AttendanceCommandCenterResponse(totalStudents, todaysClasses, averageAttendance, below75Count, criticalCount, unmarkedClasses);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<TodayClassResponse> getTodayClasses() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);

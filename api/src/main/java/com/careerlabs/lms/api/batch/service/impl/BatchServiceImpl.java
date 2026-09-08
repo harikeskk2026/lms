@@ -17,6 +17,7 @@ import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.course.util.CourseDurationParser;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
+import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
@@ -68,6 +69,13 @@ public class BatchServiceImpl implements BatchService {
         List<Batch> batches;
         if (principal != null && "TRAINER".equalsIgnoreCase(principal.role())) {
             batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(principal.id());
+        } else if (principal != null && "STUDENT".equalsIgnoreCase(principal.role())) {
+            Student student = studentRepository.findByUserId(principal.id()).orElse(null);
+            if (student != null && student.getBatch() != null) {
+                batches = List.of(student.getBatch());
+            } else {
+                batches = List.of();
+            }
         } else {
             batches = batchRepository.findAllByOrderByCreatedAtDesc();
         }
@@ -106,9 +114,16 @@ public class BatchServiceImpl implements BatchService {
     @Transactional(readOnly = true)
     public BatchResponse get(Long id, JwtUserPrincipal principal) {
         Batch batch = findOrThrow(id);
-        if (principal != null && "TRAINER".equalsIgnoreCase(principal.role())) {
-            if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
-                throw new ForbiddenException("You are not assigned to this batch");
+        if (principal != null) {
+            if ("TRAINER".equalsIgnoreCase(principal.role())) {
+                if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
+                    throw new ForbiddenException("You are not assigned to this batch");
+                }
+            } else if ("STUDENT".equalsIgnoreCase(principal.role())) {
+                Student student = studentRepository.findByUserId(principal.id()).orElse(null);
+                if (student == null || student.getBatch() == null || !student.getBatch().getId().equals(batch.getId())) {
+                    throw new ForbiddenException("You are not enrolled in this batch");
+                }
             }
         }
         User tr = batch.getTrainerId() != null ? userRepository.findById(batch.getTrainerId()).orElse(null) : null;

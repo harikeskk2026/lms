@@ -20,7 +20,7 @@ const navItems = [
   { href: '/admin/students',      icon: Users,           label: 'Students',     badge: 'students', roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/trainers',      icon: UserCheck,       label: 'Trainers',     roles: ['SUPERADMIN', 'ADMIN'] },
   { href: '/admin/batches',       icon: Layers,          label: 'Batches' },
-  { href: '/admin/course-catalog',icon: BookOpen,        label: 'Courses',      roles: ['SUPERADMIN', 'ADMIN'] },
+  { href: '/admin/course-catalog',icon: BookOpen,        label: 'Courses',      roles: ['SUPERADMIN', 'ADMIN', 'TRAINER'] },
   { href: '/admin/meeting-links', icon: Link2,           label: 'Scheduled Class' },
   { href: '/admin/attendance',    icon: Calendar,        label: 'Attendance' },
   { href: '/admin/recorded-sessions', icon: Video,       label: 'Recorded Sessions' },
@@ -116,6 +116,9 @@ function Sidebar({ open, onClose, badges }) {
           {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ href, icon: Icon, label, badge }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
             const count  = badge ? (badges[badge] || 0) : 0
+            const displayLabel = user?.role === 'TRAINER'
+              ? (label === 'Batches' ? 'My Batches' : label === 'Courses' ? 'My Courses' : label)
+              : label
             return (
               <Link
                 key={href} href={href}
@@ -128,7 +131,7 @@ function Sidebar({ open, onClose, badges }) {
                 onClick={onClose}
               >
                 <Icon size={18} className={active ? 'text-yellow-300' : ''} />
-                <span className="flex-1">{label}</span>
+                <span className="flex-1">{displayLabel}</span>
                 {count > 0 && (
                   <span className="bg-yellow-400 text-purple-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                     {count}

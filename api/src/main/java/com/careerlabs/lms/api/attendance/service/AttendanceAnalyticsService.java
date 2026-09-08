@@ -9,5 +9,7 @@ public interface AttendanceAnalyticsService {
 
     AttendanceCommandCenterResponse getCommandCenter();
 
+    AttendanceCommandCenterResponse getCommandCenterForBatches(List<Long> batchIds);
+
     List<TodayClassResponse> getTodayClasses();
 }

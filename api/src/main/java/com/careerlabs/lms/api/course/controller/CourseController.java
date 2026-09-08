@@ -26,9 +26,12 @@ import java.util.List;
 public class CourseController {
 
     private final CourseService courseService;
+    private final com.careerlabs.lms.api.material.service.MaterialService materialService;
 
-    public CourseController(CourseService courseService) {
+    public CourseController(CourseService courseService,
+                            com.careerlabs.lms.api.material.service.MaterialService materialService) {
         this.courseService = courseService;
+        this.materialService = materialService;
     }
 
     @GetMapping
@@ -40,6 +43,13 @@ public class CourseController {
     public ResponseEntity<ApiResponse<CourseResponse>> get(@PathVariable Long id,
                                                              @AuthenticationPrincipal JwtUserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.of(courseService.get(id, principal)));
+    }
+
+    @GetMapping("/{id}/materials")
+    public ResponseEntity<ApiResponse<List<com.careerlabs.lms.api.material.dto.response.MaterialResponse>>> listMaterials(
+            @PathVariable Long id,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(materialService.listAllForCourse(id, principal)));
     }
 
     @PostMapping

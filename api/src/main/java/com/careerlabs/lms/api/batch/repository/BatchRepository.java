@@ -3,6 +3,8 @@ package com.careerlabs.lms.api.batch.repository;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -29,4 +31,7 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
 
     @EntityGraph(attributePaths = {"course"})
     Optional<Batch> findWithCourseById(Long id);
+
+    @Query("SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END FROM Batch b WHERE b.trainerId = :trainerId AND b.course.id = :courseId")
+    boolean existsByTrainerIdAndCourseId(@Param("trainerId") Long trainerId, @Param("courseId") Long courseId);
 }

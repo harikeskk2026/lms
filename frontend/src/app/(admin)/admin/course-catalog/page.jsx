@@ -46,7 +46,7 @@ export default function CourseCatalogPage() {
   const thumbFileInputRef = useRef(null)
 
   useEffect(() => {
-    if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
+    if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN' && user.role !== 'TRAINER') {
       router.replace('/admin/dashboard')
     }
   }, [user, router])
@@ -164,23 +164,31 @@ export default function CourseCatalogPage() {
     return matchesStatus && (titleMatch || slugMatch || levelMatch)
   })
 
-  if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') {
+  if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN' && user.role !== 'TRAINER') {
     return null
   }
+
+  const isTrainer = user?.role === 'TRAINER'
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Courses</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Core course records, served by the Java API.</p>
+          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">
+            {isTrainer ? 'My Courses' : 'Courses'}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {isTrainer ? 'Courses associated with your assigned batches.' : 'Core course records, served by the Java API.'}
+          </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700"
-        >
-          <Plus size={16} /> Add Course
-        </button>
+        {!isTrainer && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700"
+          >
+            <Plus size={16} /> Add Course
+          </button>
+        )}
       </div>
 
       {/* Filter Tabs & Search Bar */}
@@ -211,25 +219,15 @@ export default function CourseCatalogPage() {
           ))}
         </div>
 
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <div className="relative min-w-[220px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
+            placeholder="Search courses..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search courses by title or level..."
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
           />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
-              title="Clear search"
-            >
-              <X size={13} />
-            </button>
-          )}
         </div>
       </div>
 
@@ -238,7 +236,9 @@ export default function CourseCatalogPage() {
           {[...Array(3)].map((_, i) => <div key={i} className="h-40 glass-card animate-pulse" />)}
         </div>
       ) : courses.length === 0 ? (
-        <div className="glass-card p-16 text-center text-gray-400">No courses yet.</div>
+        <div className="glass-card p-16 text-center text-gray-400">
+          {isTrainer ? 'No courses associated with your assigned batches yet.' : 'No courses yet.'}
+        </div>
       ) : filteredCourses.length === 0 ? (
         <div className="glass-card p-12 text-center text-gray-400 space-y-2">
           <p className="text-sm">No courses matching your filter.</p>
@@ -266,35 +266,39 @@ export default function CourseCatalogPage() {
               </div>
               <Link href={`/admin/course-catalog/${c.id}`}
                 className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors">
-                <FolderOpen size={12} /> Manage Content
+                <FolderOpen size={12} /> {isTrainer ? 'View Content & Syllabus' : 'Manage Content'}
               </Link>
-              <div className="flex gap-2">
-                {c.status === 'DRAFT' && (
-                  <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition-colors disabled:opacity-60 border border-emerald-200/60 dark:border-emerald-800/40">
-                    <Eye size={12} /> Publish
-                  </button>
-                )}
-                {c.status === 'PUBLISHED' && (
-                  <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 text-xs font-semibold hover:bg-orange-100 dark:hover:bg-orange-950/60 transition-colors disabled:opacity-60 border border-orange-200/60 dark:border-orange-800/40">
-                    <Archive size={12} /> Archive
-                  </button>
-                )}
-                {c.status === 'ARCHIVED' && (
-                  <span className="flex-1 text-center py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs font-semibold">Archived — terminal</span>
-                )}
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => openEdit(c)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors border border-purple-200/60 dark:border-purple-800/40">
-                  <Pencil size={12} /> Edit
-                </button>
-                <button onClick={() => setDeletingCourse(c)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors border border-red-200/60 dark:border-red-800/40">
-                  <Trash2 size={12} /> Delete
-                </button>
-              </div>
+              {!isTrainer && (
+                <>
+                  <div className="flex gap-2">
+                    {c.status === 'DRAFT' && (
+                      <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition-colors disabled:opacity-60 border border-emerald-200/60 dark:border-emerald-800/40">
+                        <Eye size={12} /> Publish
+                      </button>
+                    )}
+                    {c.status === 'PUBLISHED' && (
+                      <button onClick={() => handleStatusChange(c, 'ARCHIVED')} disabled={statusUpdatingId === c.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 text-xs font-semibold hover:bg-orange-100 dark:hover:bg-orange-950/60 transition-colors disabled:opacity-60 border border-orange-200/60 dark:border-orange-800/40">
+                        <Archive size={12} /> Archive
+                      </button>
+                    )}
+                    {c.status === 'ARCHIVED' && (
+                      <span className="flex-1 text-center py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs font-semibold">Archived — terminal</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => openEdit(c)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors border border-purple-200/60 dark:border-purple-800/40">
+                      <Pencil size={12} /> Edit
+                    </button>
+                    <button onClick={() => setDeletingCourse(c)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors border border-red-200/60 dark:border-red-800/40">
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>

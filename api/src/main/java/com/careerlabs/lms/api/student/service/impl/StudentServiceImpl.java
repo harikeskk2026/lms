@@ -252,6 +252,7 @@ public class StudentServiceImpl implements StudentService {
     public StudentResponse assignToBatch(Long studentId, Long batchId) {
         Student student = findOrThrow(studentId);
         assignBatch(student, batchId);
+        syncCourseEnrollment(student);
         student = studentRepository.save(student);
 
         return StudentResponse.from(student);
@@ -343,6 +344,7 @@ public class StudentServiceImpl implements StudentService {
     private void assignBatch(Student student, Long batchId) {
         if (batchId == null) {
             student.setBatch(null);
+            student.setCourse(null);
             return;
         }
         Batch currentBatch = student.getBatch();
@@ -360,6 +362,9 @@ public class StudentServiceImpl implements StudentService {
             batchScheduleConflictValidator.validate(student, batch, null, false);
         }
         student.setBatch(batch);
+        if (batch.getCourse() != null) {
+            student.setCourse(batch.getCourse());
+        }
     }
 
     private Course findCourseOrThrow(Long courseId) {

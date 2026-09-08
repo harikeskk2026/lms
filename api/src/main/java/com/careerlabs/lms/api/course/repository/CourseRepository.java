@@ -3,6 +3,9 @@ package com.careerlabs.lms.api.course.repository;
 import com.careerlabs.lms.api.course.entity.Course;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -17,4 +20,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     Optional<Course> findByTitleIgnoreCase(String title);
 
     List<Course> findAllByOrderByCreatedAtDesc();
+
+    @Query("SELECT DISTINCT b.course FROM Batch b WHERE b.trainerId = :trainerId AND b.course IS NOT NULL")
+    List<Course> findCoursesByTrainerId(@Param("trainerId") Long trainerId);
 }

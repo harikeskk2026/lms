@@ -261,8 +261,8 @@ public class DashboardServiceImpl implements DashboardService {
                 ))
                 .toList();
 
-        // Real attendance data from analytics service
-        var cc = attendanceAnalyticsService.getCommandCenter();
+        // Real attendance data from analytics service scoped to trainer's batches
+        var cc = attendanceAnalyticsService.getCommandCenterForBatches(batchIds);
         int overallAttendancePct = cc.averageAttendance();
 
         // Real per-batch: actual student counts + progress from completed/total daily classes
@@ -283,11 +283,12 @@ public class DashboardServiceImpl implements DashboardService {
                 })
                 .toList();
 
-        long pendingGradingCount = assignmentSubmissionRepository.countByReviewedFalse();
-        List<AssignmentSubmission> unsubmittedList = assignmentSubmissionRepository.findTop10ByOrderBySubmittedAtDesc();
+        long pendingGradingCount = batchIds.isEmpty() ? 0L : assignmentSubmissionRepository.countUnreviewedByBatchIds(batchIds);
+        List<AssignmentSubmission> unsubmittedList = batchIds.isEmpty() ? List.of() : assignmentSubmissionRepository.findUnreviewedByBatchIds(batchIds);
 
         List<TrainerDashboardResponse.PendingGradingItem> pendingGrading = unsubmittedList.stream()
                 .filter(sub -> !sub.isReviewed())
+                .limit(10)
                 .map(sub -> new TrainerDashboardResponse.PendingGradingItem(
                         sub.getId(),
                         sub.getAssignment() != null ? sub.getAssignment().getId() : null,

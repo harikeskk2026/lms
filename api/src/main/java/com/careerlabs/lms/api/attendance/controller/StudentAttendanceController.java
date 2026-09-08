@@ -61,7 +61,10 @@ public class StudentAttendanceController {
             @AuthenticationPrincipal JwtUserPrincipal principal,
             @RequestParam(required = false) ClassStatus status) {
         Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-        Long batchId = student != null && student.getBatch() != null ? student.getBatch().getId() : null;
+        if (student == null || student.getBatch() == null) {
+            return ResponseEntity.ok(ApiResponse.of(List.of()));
+        }
+        Long batchId = student.getBatch().getId();
         List<DailyClassResponse> response = attendanceService.getClasses(batchId, null, status);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
