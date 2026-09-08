@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.quiz.entity;
 
+import com.careerlabs.lms.api.course.entity.Course;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,6 +33,10 @@ public class Question {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "topic_id")
     private QuizTopic topic;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_id")
+    private Course course;
 
     @Column(name = "question_text", nullable = false, columnDefinition = "TEXT")
     private String questionText;
@@ -91,6 +96,14 @@ public class Question {
 
     public void setTopic(QuizTopic topic) {
         this.topic = topic;
+    }
+
+    public Course getCourse() {
+        return course;
+    }
+
+    public void setCourse(Course course) {
+        this.course = course;
     }
 
     public String getQuestionText() {

@@ -62,6 +62,10 @@ export function AuthProvider({ children }) {
       console.error('Logout error:', err)
     } finally {
       tokenStorage.clear()
+      if (typeof window !== 'undefined') {
+        document.documentElement.classList.remove('dark')
+        localStorage.removeItem('theme')
+      }
       setUser(null)
       router.push('/login')
     }
@@ -77,6 +81,10 @@ export function AuthProvider({ children }) {
       toast.error(err?.response?.data?.message || 'Failed to sign out all devices from server')
     } finally {
       tokenStorage.clear()
+      if (typeof window !== 'undefined') {
+        document.documentElement.classList.remove('dark')
+        localStorage.removeItem('theme')
+      }
       setUser(null)
       router.push('/login')
     }

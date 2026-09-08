@@ -11,6 +11,7 @@ public final class QuestionValidationMessages {
     public static final String OPTION_TEXT_REQUIRED = "Option text is required";
     public static final String OPTIONS_INVALID_MCQ =
             "MCQ and TRUE_FALSE questions must have exactly one correct option";
+    public static final String COURSE_REQUIRED = "Course is required";
     public static final String OPTIONS_INVALID_MULTI =
             "MULTIPLE_CORRECT questions must have at least one correct option";
 
