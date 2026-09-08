@@ -28,7 +28,7 @@ const navItems = [
 
 function Sidebar({ open, onClose, badges }) {
   const pathname = usePathname()
-  const { user, logout, logoutAll } = useAuth()
+  const { user, logout } = useAuth()
 
   return (
     <>
@@ -110,14 +110,10 @@ function Sidebar({ open, onClose, badges }) {
         </nav>
 
         {/* Logout */}
-        <div className="px-3 py-4 border-t border-white/10 flex flex-col gap-1">
+        <div className="px-3 py-4 border-t border-white/10">
           <button onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-all w-full text-left">
             <LogOut size={17} />
             Logout
-          </button>
-          <button onClick={logoutAll} className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-white/40 hover:text-white/60 transition-all w-full text-left">
-            <LogIn size={15} className="rotate-180" />
-            Logout All Devices
           </button>
         </div>
       </aside>

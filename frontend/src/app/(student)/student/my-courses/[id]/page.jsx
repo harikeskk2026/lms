@@ -8,7 +8,7 @@ import courseContentService from '@/services/courseContentService'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import { resolveFileUrl } from '@/lib/api'
 
-const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials']
+const TABS = ['Overview', 'Syllabus', 'Materials']
 const MATERIAL_ICONS = { PDF: '📄', DOCUMENT: '📃', PRESENTATION: '🖥️', VIDEO: '🎬', LINK: '🔗', OTHER: '📁' }
 
 function getMaterialAction(type) {
@@ -137,7 +137,6 @@ export default function MyCourseDetailPage({ params }) {
   const [notFound, setNotFound] = useState(false)
   const [loading, setLoading] = useState(true)
   const [syllabus, setSyllabus] = useState(null)
-  const [sessions, setSessions] = useState(null)
   const [materials, setMaterials] = useState(null)
   const [typeFilter, setTypeFilter] = useState('ALL')
 
@@ -147,7 +146,7 @@ export default function MyCourseDetailPage({ params }) {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
 
-    // Preload syllabus tree with contextual module, topic, and session materials
+    // Preload syllabus tree with contextual module and topic materials
     courseContentService.getModules(id)
       .then(r => setSyllabus(r.data || []))
       .catch(() => setSyllabus([]))
@@ -162,32 +161,13 @@ export default function MyCourseDetailPage({ params }) {
     loadData()
   }, [loadData])
 
-  // Re-fetch fresh data when switching to Syllabus, Sessions, or Materials tabs to prevent stale UI
+  // Re-fetch fresh data when switching to Syllabus or Materials tabs to prevent stale UI
   useEffect(() => {
-    if (tab === 'Syllabus' || tab === 'Materials' || tab === 'Sessions') {
+    if (tab === 'Syllabus' || tab === 'Materials') {
       courseContentService.getModules(id).then(r => setSyllabus(r.data || [])).catch(() => { })
       courseContentService.getAllCourseMaterials(id).then(r => setMaterials(r.data || [])).catch(() => { })
     }
   }, [tab, id])
-
-  useEffect(() => {
-    if (tab === 'Sessions' && syllabus) {
-      const extracted = syllabus.flatMap(m =>
-        (m.topics || []).flatMap(t =>
-          (t.sessions || []).map(s => ({ ...s, topicTitle: t.title }))
-        )
-      )
-      if (extracted.length > 0) {
-        setSessions(extracted)
-      } else {
-        const topics = syllabus.flatMap(m => (m.topics || []).map(t => ({ ...t, moduleTitle: m.title })))
-        Promise.all(
-          topics.map(t => courseContentService.getSessions(t.id).then(res => (res.data || []).map(s => ({ ...s, topicTitle: t.title }))).catch(() => []))
-        ).then(results => setSessions(results.flat()))
-          .catch(() => setSessions([]))
-      }
-    }
-  }, [tab, id, syllabus])
 
   if (loading) return <div className="page-wrapper"><SkeletonCard lines={6} /></div>
   if (notFound || !course) {
@@ -276,61 +256,6 @@ export default function MyCourseDetailPage({ params }) {
                 {syllabus.map(mod => <ModuleAccordion key={mod.id} mod={mod} />)}
               </div>
             )
-        )}
-
-        {tab === 'Sessions' && (
-          !sessions ? <SkeletonCard lines={4} /> :
-            sessions.length === 0 ? <p className="text-sm text-gray-400 text-center py-8">No sessions scheduled yet.</p> :
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {sessions.map(s => {
-                  const hasSessionMaterials = s.materials && s.materials.length > 0
-                  return (
-                    <div key={s.id} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 bg-white/40 dark:bg-purple-950/10 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-[10px] text-gray-400">{s.topicTitle}</p>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">{s.type || 'LIVE'}</span>
-                        </div>
-                        <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-1">{s.title}</p>
-                        <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
-                          <span>{s.trainerName || '—'}</span>
-                          <span>{s.sessionDate || ''} {s.startTime || ''}{s.endTime ? `–${s.endTime}` : ''}</span>
-                        </div>
-
-                        {s.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{s.description}</p>
-                        )}
-
-                        {hasSessionMaterials && (
-                          <div className="mt-3 pt-2.5 border-t border-purple-100 dark:border-purple-900/30">
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                              Session Materials ({s.materials.length})
-                            </p>
-                            <div className="space-y-1.5">
-                              {s.materials.map(m => (
-                                <MaterialItem key={m.id} material={m} compact />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2 mt-3 pt-2 border-t border-purple-50 dark:border-purple-900/20">
-                        {s.meetingUrl && (
-                          <a href={s.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn-primary flex-1 text-center text-xs py-2 flex items-center justify-center gap-1">
-                            <Play size={12} /> Join
-                          </a>
-                        )}
-                        {s.recordingUrl && (
-                          <a href={s.recordingUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center gap-1">
-                            <ExternalLink size={12} /> Recording
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
         )}
 
         {tab === 'Materials' && (

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { FileDown, BarChart2, FileText, Users, Eye, X } from 'lucide-react'
+import { FileDown, Download, BarChart2, FileText, Users, Eye, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import reportService from '@/services/reportService'
 import batchService from '@/services/batchService'

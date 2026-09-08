@@ -162,16 +162,15 @@ export default function CourseManagePage({ params }) {
                   {course.courseCode}
                 </span>
               )}
-              <StatusBadge
+              <CourseStatusBadge
                 status={course.status}
-                title="Click to change course status"
                 onChange={async (newStatus) => {
                   try {
                     await courseService.updateStatus(courseId, newStatus)
                     setCourse(c => ({ ...c, status: newStatus }))
                     toast.success(`Course status changed to ${newStatus}`)
-                  } catch {
-                    toast.error('Failed to update course status')
+                  } catch (err) {
+                    toast.error(err?.message || 'Failed to update course status')
                   }
                 }}
               />
@@ -293,13 +292,35 @@ export default function CourseManagePage({ params }) {
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status *</label>
             <select
               value={editForm.status}
+              disabled={course?.status === 'ARCHIVED'}
               onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60"
             >
-              <option value="DRAFT">DRAFT</option>
-              <option value="PUBLISHED">PUBLISHED</option>
-              <option value="ARCHIVED">ARCHIVED</option>
+              {course?.status === 'DRAFT' && (
+                <>
+                  <option value="DRAFT">DRAFT</option>
+                  <option value="PUBLISHED">PUBLISHED</option>
+                </>
+              )}
+              {course?.status === 'PUBLISHED' && (
+                <>
+                  <option value="PUBLISHED">PUBLISHED</option>
+                  <option value="ARCHIVED">ARCHIVED</option>
+                </>
+              )}
+              {course?.status === 'ARCHIVED' && (
+                <option value="ARCHIVED">ARCHIVED — terminal</option>
+              )}
             </select>
+            {course?.status === 'ARCHIVED' && (
+              <p className="text-xs text-gray-500 mt-1">Archived is terminal — status cannot be changed.</p>
+            )}
+            {course?.status === 'PUBLISHED' && (
+              <p className="text-xs text-gray-500 mt-1">PUBLISHED can only be archived. Content edits preserve published status.</p>
+            )}
+            {course?.status === 'DRAFT' && (
+              <p className="text-xs text-gray-500 mt-1">DRAFT can be published (DRAFT → PUBLISHED).</p>
+            )}
           </div>
 
           <div>
@@ -571,6 +592,55 @@ function StatusBadge({ status, onChange, disabled, title }) {
       >
         <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
         <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
+      </select>
+      <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
+    </div>
+  )
+}
+
+function CourseStatusBadge({ status, onChange, disabled }) {
+  if (status === 'ARCHIVED' || !onChange) {
+    const colorClass = status === 'DRAFT'
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+      : status === 'ARCHIVED'
+      ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+
+    return (
+      <span
+        title={status === 'ARCHIVED' ? 'Archived is terminal — cannot be changed' : undefined}
+        className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${colorClass}`}
+      >
+        {status || 'DRAFT'}
+      </span>
+    )
+  }
+
+  const isDraft = status === 'DRAFT'
+  const colorClass = isDraft
+    ? 'bg-amber-100 text-amber-700 border-amber-300/70 hover:bg-amber-200/80 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+    : 'bg-emerald-100 text-emerald-700 border-emerald-300/70 hover:bg-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+
+  return (
+    <div className="relative inline-flex items-center flex-shrink-0" onClick={e => e.stopPropagation()}>
+      <select
+        value={status || 'PUBLISHED'}
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+        title={isDraft ? "Click to publish course" : "Click to archive course"}
+        className={`appearance-none cursor-pointer text-[9px] font-bold pl-2 pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 ${colorClass} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        {isDraft ? (
+          <>
+            <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
+            <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISH</option>
+          </>
+        ) : (
+          <>
+            <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
+            <option value="ARCHIVED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">ARCHIVE</option>
+          </>
+        )}
       </select>
       <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
     </div>

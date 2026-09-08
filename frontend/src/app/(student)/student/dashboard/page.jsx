@@ -74,7 +74,6 @@ export default function StudentDashboardPage() {
   const { data, loading, error, refetch } = useDashboard()
   const { data: notifications } = useNotifications()
   const [materials, setMaterials] = useState([])
-  const [sessions,  setSessions]  = useState([])
   const [refreshing, setRefreshing] = useState(false)
 
   const primaryCourseId = data?.continueLearning?.[0]?.courseId
@@ -85,7 +84,6 @@ export default function StudentDashboardPage() {
       await refetch(true)
       if (primaryCourseId) {
         studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
-        studentApi.getSessions(primaryCourseId).then(r => setSessions(r.data.data || [])).catch(() => {})
       }
       toast.success('Dashboard updated')
     } catch (err) {
@@ -98,7 +96,6 @@ export default function StudentDashboardPage() {
   useEffect(() => {
     if (primaryCourseId) {
       studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
-      studentApi.getSessions(primaryCourseId).then(r => setSessions(r.data.data || [])).catch(() => {})
     }
   }, [primaryCourseId])
 
@@ -362,58 +359,31 @@ export default function StudentDashboardPage() {
         </div>
       </div>
 
-      {/* ── ROW 6: Sessions + Materials ───────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recorded Sessions */}
-        <div className="glass-card p-5">
-          <h3 className="section-title"><Play size={16} /> Recorded Sessions</h3>
-          <div className="space-y-3 max-h-80 overflow-y-auto scrollbar-thin">
-            {sessions.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No sessions yet</p>
-            ) : sessions.slice(0, 5).map(s => (
-              <div key={s.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors group">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
-                  <Play size={20} className="text-white" fill="white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{s.title}</p>
-                  {s.sessionDate && <p className="text-xs text-gray-400">{format(new Date(s.sessionDate), 'MMM d, yyyy')}</p>}
-                </div>
-                {s.recordingUrl && (
+      {/* ── ROW 6: Course Materials ─────────────────────────────────── */}
+      <div className="glass-card p-5">
+        <h3 className="section-title"><FileText size={16} /> Course Materials</h3>
+        <div className="space-y-2.5 max-h-80 overflow-y-auto scrollbar-thin">
+          {materials.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No materials yet</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {materials.map(m => (
+                <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-purple-50/70 dark:hover:bg-purple-900/10 transition-colors group border border-purple-50 dark:border-purple-900/20">
+                  <MaterialIcon type={m.type} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{m.title}</p>
+                    <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] px-2 py-0.5">{m.type}</span>
+                  </div>
                   <a
-                    href={resolveFileUrl(s.recordingUrl)} target="_blank" rel="noopener noreferrer"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity chip bg-brand-100 text-brand-700 text-xs px-2 py-1"
+                    href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 chip bg-brand-100 text-brand-700 text-xs px-2 py-1 hover:bg-brand-200 transition-colors"
                   >
-                    Watch
+                    <Download size={12} /> Get
                   </a>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Course Materials */}
-        <div className="glass-card p-5">
-          <h3 className="section-title"><FileText size={16} /> Course Materials</h3>
-          <div className="space-y-2.5 max-h-80 overflow-y-auto scrollbar-thin">
-            {materials.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No materials yet</p>
-            ) : materials.map(m => (
-              <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-purple-50/70 dark:hover:bg-purple-900/10 transition-colors group">
-                <MaterialIcon type={m.type} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{m.title}</p>
-                  <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] px-2 py-0.5">{m.type}</span>
                 </div>
-                <a
-                  href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 chip bg-brand-100 text-brand-700 text-xs px-2 py-1 hover:bg-brand-200 transition-colors"
-                >
-                  <Download size={12} /> Get
-                </a>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
