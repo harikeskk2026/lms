@@ -175,6 +175,7 @@ export default function CourseManagePage({ params }) {
               )}
               <CourseStatusBadge
                 status={course.status}
+                disabled={user?.role === 'TRAINER'}
                 title={user?.role !== 'TRAINER' ? "Click to change course status" : undefined}
                 onChange={user?.role !== 'TRAINER' ? handleStatusChange : undefined}
               />
