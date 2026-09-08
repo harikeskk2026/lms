@@ -2,9 +2,12 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import tokenStorage from '@/utilities/tokenStorage'
 
-// Use NEXT_PUBLIC_JAVA_API_URL directly from the environment.
-// Defined in .env as: NEXT_PUBLIC_JAVA_API_URL=http://localhost:7000/api
-const BASE_URL = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api'
+// The API base URL is configured exclusively via the environment variable NEXT_PUBLIC_JAVA_API_URL.
+const BASE_URL = process.env.NEXT_PUBLIC_JAVA_API_URL
+
+if (!BASE_URL && typeof window !== 'undefined') {
+  console.error('[api.js] Configuration error: NEXT_PUBLIC_JAVA_API_URL is not defined in the environment.')
+}
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -14,6 +17,9 @@ const api = axios.create({
 
 // ─── Request: attach access token ─────────────────────────────────────────────
 api.interceptors.request.use(config => {
+  if (!config.baseURL) {
+    throw new Error('API configuration error: NEXT_PUBLIC_JAVA_API_URL environment variable is not configured.')
+  }
   const token = tokenStorage.getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
@@ -71,7 +77,7 @@ export default api
 // Files (e.g. assignment attachments, submissions) come back from the API as
 // paths relative to the API origin (e.g. "/uploads/assignments/x.pdf"), not
 // the frontend origin — resolve them to an absolute URL before linking.
-const API_ORIGIN = BASE_URL.replace(/\/api\/?$/, '')
+const API_ORIGIN = (BASE_URL || '').replace(/\/api\/?$/, '')
 
 export function resolveFileUrl(path) {
   if (!path) return path
