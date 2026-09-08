@@ -4,6 +4,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { BookOpen, Clock, CheckCircle2 } from 'lucide-react'
 import courseService from '@/services/courseService'
+import { resolveFileUrl } from '@/lib/api'
 import SkeletonCard from '@/components/student/SkeletonCard'
 
 const LEVEL_COLORS = {
@@ -70,15 +71,26 @@ export default function CourseCatalogPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {courses.map((c, idx) => (
             <div key={c.id} className="glass-card overflow-hidden hover:scale-[1.01] transition-all duration-300 group">
-              <div className={`h-28 bg-gradient-to-br ${COURSE_GRADIENTS[idx % COURSE_GRADIENTS.length]} relative overflow-hidden p-5`}>
-                <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" />
-                <div className="absolute -right-2 bottom-2 w-12 h-12 rounded-full bg-white/10" />
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-2">
-                    <BookOpen size={18} className="text-white" />
+              {c.thumbnail ? (
+                <div className="h-32 bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
+                  <img
+                    src={resolveFileUrl(c.thumbnail)}
+                    alt={c.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                </div>
+              ) : (
+                <div className={`h-28 bg-gradient-to-br ${COURSE_GRADIENTS[idx % COURSE_GRADIENTS.length]} relative overflow-hidden p-5`}>
+                  <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" />
+                  <div className="absolute -right-2 bottom-2 w-12 h-12 rounded-full bg-white/10" />
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-2">
+                      <BookOpen size={18} className="text-white" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-2">

@@ -3,11 +3,11 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Eye, EyeOff, GraduationCap, Users, BookOpen, TrendingUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { loginSchema } from '@/validations/loginValidation'
-
 
 const stats = [
   { icon: GraduationCap, label: 'Students Enrolled', value: '2,400+' },
@@ -24,11 +24,16 @@ const demoAccounts = [
   { role: 'Student', email: 'student@careerlabs.com', password: 'Student@123' },
 ]
 
-
 export default function LoginPage() {
   const { user, loading, login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
 
   useEffect(() => {
     if (!loading && user) {
@@ -58,7 +63,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-slate-50">
       {/* ── Left Panel ─────────────────────────────────────────────────── */}
       <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden"
            style={{ background: 'linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%)' }}>
@@ -123,14 +128,14 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             <div className="font-display text-3xl font-extrabold tracking-tight">
-              <span className="text-brand-600">Career</span>
+              <span className="text-purple-600">Career</span>
               <span className="text-slate-800">Labs</span>
             </div>
             <div className="text-slate-500 text-sm mt-1">Learning Management System</div>
           </div>
 
           {/* Form card */}
-          <div className="glass-card p-8">
+          <div className="p-8 bg-white border border-slate-200/90 shadow-xl rounded-3xl">
             <div className="mb-8">
               <h2 className="font-display text-2xl font-bold text-slate-900">Welcome back</h2>
               <p className="text-slate-500 text-sm mt-1">Sign in to your CareerLabs account</p>
@@ -139,21 +144,25 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
               {/* Email */}
               <div className="form-group">
-                <label className="form-label" htmlFor="email">Email address</label>
+                <label className="form-label text-slate-700 text-sm font-semibold" htmlFor="email">
+                  Email address
+                </label>
                 <input
                   id="email"
                   type="email"
                   autoComplete="email"
                   placeholder="Enter your email address"
                   {...register('email')}
-                  className="input-field"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 />
-                {errors.email && <span className="form-error">{errors.email.message}</span>}
+                {errors.email && <span className="text-xs text-red-500 mt-1 block">{errors.email.message}</span>}
               </div>
 
               {/* Password */}
               <div className="form-group">
-                <label className="form-label" htmlFor="password">Password</label>
+                <label className="form-label text-slate-700 text-sm font-semibold" htmlFor="password">
+                  Password
+                </label>
                 <div className="relative">
                   <input
                     id="password"
@@ -161,7 +170,7 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     placeholder="Enter your password"
                     {...register('password')}
-                    className="input-field pr-10"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
@@ -172,25 +181,28 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                {errors.password && <span className="form-error">{errors.password.message}</span>}
+                {errors.password && <span className="text-xs text-red-500 mt-1 block">{errors.password.message}</span>}
               </div>
 
-              {/* Remember me */}
-              <div className="flex items-center">
-                <label className="flex items-center gap-2 cursor-pointer">
+              {/* Remember me + Forgot */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 rounded border-slate-300 accent-brand-600"
+                    className="w-4 h-4 rounded border-slate-300 bg-white accent-purple-600"
                   />
                   <span className="text-sm text-slate-600">Remember me</span>
                 </label>
+                <Link href="/forgot-password" className="text-sm text-purple-600 font-medium hover:underline">
+                  Forgot password?
+                </Link>
               </div>
 
               {/* Submit */}
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="btn-primary w-full mt-1"
+                className="w-full mt-1 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white font-semibold py-3 rounded-xl shadow-md transition-all disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
@@ -206,18 +218,18 @@ export default function LoginPage() {
           </div>
 
           {/* Demo hint */}
-          <div className="mt-4 rounded-2xl border border-brand-100 bg-brand-50 p-4">
-            <p className="text-xs font-semibold text-brand-700 mb-2 uppercase tracking-wide">Demo Credentials</p>
+          <div className="mt-4 rounded-2xl border border-purple-100 bg-purple-50/80 p-4 transition-colors">
+            <p className="text-xs font-bold text-purple-700 mb-2 uppercase tracking-wide">Demo Credentials</p>
             <div className="flex flex-col gap-1.5">
               {demoAccounts.map(acc => (
                 <button
                   key={acc.email}
                   type="button"
                   onClick={() => fillDemo(acc.email, acc.password)}
-                  className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-brand-100 transition-colors text-left"
+                  className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-purple-100/80 transition-colors text-left"
                 >
                   <div>
-                    <span className="text-xs font-semibold text-brand-800">{acc.role}</span>
+                    <span className="text-xs font-bold text-purple-900">{acc.role}</span>
                     <span className="text-xs text-slate-500 ml-2">{acc.email}</span>
                   </div>
                   <span className="text-xs text-slate-400 font-mono">{acc.password}</span>

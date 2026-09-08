@@ -1,14 +1,16 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Copy, Eye, Search, Upload, FileText, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Search, Upload, FileText, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
+import courseService from '@/services/courseService'
 import { QUESTION_TYPES, QUESTION_DIFFICULTIES } from '@/validations/questionValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionForm from '@/components/admin/QuestionForm'
 import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
 import ExcelCsvImporter from '@/components/admin/ExcelCsvImporter'
 import PdfQuestionImporter from '@/components/admin/PdfQuestionImporter'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const DIFFICULTY_COLORS = {
   EASY: 'bg-green-100 text-green-700',
@@ -32,6 +34,7 @@ const TYPE_BADGES = {
 export default function QuestionBankPanel({ onChange }) {
   const [questions, setQuestions] = useState([])
   const [topics, setTopics] = useState([])
+  const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [bulkPanelOpen, setBulkPanelOpen] = useState(false)
@@ -47,8 +50,9 @@ export default function QuestionBankPanel({ onChange }) {
   const [bulkActioning, setBulkActioning] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [deleteModal, setDeleteModal] = useState({ open: false, question: null, isBulk: false, loading: false })
 
-  const [filters, setFilters] = useState({ topicId: '', difficulty: '', questionType: '', active: '', search: '' })
+  const [filters, setFilters] = useState({ topicId: '', courseId: '', difficulty: '', questionType: '', active: '', search: '' })
 
   const load = useCallback(() => {
     setLoading(true)
@@ -62,10 +66,17 @@ export default function QuestionBankPanel({ onChange }) {
       .finally(() => setLoading(false))
   }, [filters])
 
-  useEffect(() => { load() }, [load])
-  useEffect(() => {
+  const loadTopics = useCallback(() => {
     quizService.listTopics().then(r => setTopics(r.data || [])).catch(() => {})
   }, [])
+
+  const loadCourses = useCallback(() => {
+    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
+  }, [])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { loadTopics() }, [loadTopics])
+  useEffect(() => { loadCourses() }, [loadCourses])
 
   function openCreate() {
     setEditingId(null)
@@ -83,6 +94,7 @@ export default function QuestionBankPanel({ onChange }) {
     setEditingId(question.id)
     setEditingDefaults({
       topicId: question.topicId ?? '',
+      courseId: question.courseId ?? '',
       questionText: question.questionText,
       questionType: question.questionType,
       difficulty: question.difficulty,
@@ -113,26 +125,34 @@ export default function QuestionBankPanel({ onChange }) {
     }
   }
 
-  async function handleDeactivate(question) {
-    if (!confirm(`Deactivate "${question.questionText.slice(0, 40)}..."?`)) return
-    try {
-      await quizService.deactivateQuestion(question.id)
-      toast.success('Question deactivated')
-      load()
-      onChange?.()
-    } catch (err) {
-      toast.error(err.message || 'Failed to deactivate question')
-    }
+  async function handleDelete(question) {
+    setDeleteModal({ open: true, question, isBulk: false, loading: false })
   }
 
-  async function handleDuplicate(question) {
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return
+    setDeleteModal({ open: true, question: null, isBulk: true, loading: false })
+  }
+
+  const confirmDelete = async () => {
+    setDeleteModal(prev => ({ ...prev, loading: true }))
     try {
-      await quizService.duplicateQuestion(question.id)
-      toast.success('Question duplicated')
+      if (deleteModal.isBulk) {
+        setBulkActioning(true)
+        await Promise.all(selectedIds.map(id => quizService.deleteQuestion(id)))
+        toast.success(`${selectedIds.length} questions deleted`)
+        setSelectedIds([])
+      } else {
+        await quizService.deleteQuestion(deleteModal.question.id)
+        toast.success('Question deleted')
+      }
       load()
       onChange?.()
     } catch (err) {
-      toast.error(err.message || 'Failed to duplicate question')
+      toast.error(err.message || 'Failed to delete')
+    } finally {
+      setBulkActioning(false)
+      setDeleteModal({ open: false, question: null, isBulk: false, loading: false })
     }
   }
 
@@ -154,37 +174,6 @@ export default function QuestionBankPanel({ onChange }) {
 
   const toggleSelectOne = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
-
-  const handleBulkDeactivate = async () => {
-    if (selectedIds.length === 0) return
-    if (!confirm(`Deactivate ${selectedIds.length} selected question(s)?`)) return
-    setBulkActioning(true)
-    try {
-      await Promise.all(selectedIds.map(id => quizService.deactivateQuestion(id)))
-      toast.success(`${selectedIds.length} questions deactivated`)
-      load()
-      onChange?.()
-    } catch (err) {
-      toast.error('Failed to deactivate some questions')
-    } finally {
-      setBulkActioning(false)
-    }
-  }
-
-  const handleBulkDuplicate = async () => {
-    if (selectedIds.length === 0) return
-    setBulkActioning(true)
-    try {
-      await Promise.all(selectedIds.map(id => quizService.duplicateQuestion(id)))
-      toast.success(`${selectedIds.length} questions duplicated`)
-      load()
-      onChange?.()
-    } catch (err) {
-      toast.error('Failed to duplicate some questions')
-    } finally {
-      setBulkActioning(false)
-    }
   }
 
   return (
@@ -233,6 +222,11 @@ export default function QuestionBankPanel({ onChange }) {
           <option value="">All Topics</option>
           {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+        <select value={filters.courseId} onChange={e => { setFilters(f => ({ ...f, courseId: e.target.value })); setCurrentPage(1); }}
+          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+          <option value="">All Courses</option>
+          {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
+        </select>
         <select value={filters.difficulty} onChange={e => { setFilters(f => ({ ...f, difficulty: e.target.value })); setCurrentPage(1); }}
           className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
           <option value="">All Difficulties</option>
@@ -259,18 +253,12 @@ export default function QuestionBankPanel({ onChange }) {
           </span>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleBulkDeactivate}
+              onClick={handleBulkDelete}
               disabled={bulkActioning}
-              className="px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 font-semibold text-xs transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 font-semibold text-xs transition-colors disabled:opacity-50 flex items-center gap-1.5"
             >
-              Bulk Deactivate
-            </button>
-            <button
-              onClick={handleBulkDuplicate}
-              disabled={bulkActioning}
-              className="px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold text-xs transition-colors disabled:opacity-50"
-            >
-              Bulk Duplicate
+              <Trash2 size={13} />
+              {bulkActioning ? 'Deleting...' : `Bulk Delete (${selectedIds.length})`}
             </button>
             <button
               onClick={() => setSelectedIds([])}
@@ -306,6 +294,7 @@ export default function QuestionBankPanel({ onChange }) {
                   <th className="px-4 py-3 font-semibold">Type</th>
                   <th className="px-4 py-3 font-semibold">Difficulty</th>
                   <th className="px-4 py-3 font-semibold">Topic</th>
+                  <th className="px-4 py-3 font-semibold">Course</th>
                   <th className="px-4 py-3 font-semibold">Points</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   <th className="px-4 py-3 font-semibold text-right">Actions</th>
@@ -332,6 +321,15 @@ export default function QuestionBankPanel({ onChange }) {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[q.difficulty]}`}>{q.difficulty}</span>
                     </td>
                     <td className="px-4 py-3 text-gray-500">{q.topicName || '—'}</td>
+                    <td className="px-4 py-3">
+                      {q.courseName ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                          {q.courseName}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{q.points}</td>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${q.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -344,12 +342,10 @@ export default function QuestionBankPanel({ onChange }) {
                           className="w-8 h-8 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 flex items-center justify-center"><Eye size={14} /></button>
                         <button onClick={() => openEdit(q)} title="Edit"
                           className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center justify-center"><Pencil size={14} /></button>
-                        <button onClick={() => handleDuplicate(q)} title="Duplicate"
-                          className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center"><Copy size={14} /></button>
                         <button onClick={() => handleViewQuestionAnalytics(q)} title="Analytics"
                           className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center"><BarChart3 size={14} /></button>
-                        <button onClick={() => handleDeactivate(q)} title="Deactivate" disabled={!q.active}
-                          className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center disabled:opacity-40"><Trash2 size={14} /></button>
+                        <button onClick={() => handleDelete(q)} title="Delete"
+                          className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center"><Trash2 size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -421,6 +417,7 @@ export default function QuestionBankPanel({ onChange }) {
       <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Question' : 'Add Question'} width="w-[560px]">
         <QuestionForm
           topics={topics}
+          courses={courses}
           onTopicsChange={setTopics}
           defaultValues={editingDefaults}
           editingId={editingId}
@@ -432,6 +429,7 @@ export default function QuestionBankPanel({ onChange }) {
       <SlidePanel open={bulkPanelOpen} onClose={() => setBulkPanelOpen(false)} title="Batch Add Questions" width="w-[680px]">
         <BulkQuestionForm
           topics={topics}
+          courses={courses}
           onSaved={handleBulkSaved}
           onCancel={() => setBulkPanelOpen(false)}
         />
@@ -439,9 +437,13 @@ export default function QuestionBankPanel({ onChange }) {
 
       <SlidePanel open={importPanelOpen} onClose={() => setImportPanelOpen(false)} title="Upload Questions (CSV / Excel)" width="w-[680px]">
         <ExcelCsvImporter
+          topics={topics}
+          courses={courses}
           onImported={() => {
             setImportPanelOpen(false)
             load()
+            loadTopics()
+            loadCourses()
             onChange?.()
           }}
           onCancel={() => setImportPanelOpen(false)}
@@ -450,9 +452,13 @@ export default function QuestionBankPanel({ onChange }) {
 
       <SlidePanel open={pdfImportPanelOpen} onClose={() => setPdfImportPanelOpen(false)} title="Upload Questions (PDF)" width="w-[680px]">
         <PdfQuestionImporter
+          topics={topics}
+          courses={courses}
           onImported={() => {
             setPdfImportPanelOpen(false)
             load()
+            loadTopics()
+            loadCourses()
             onChange?.()
           }}
           onCancel={() => setPdfImportPanelOpen(false)}
@@ -462,11 +468,16 @@ export default function QuestionBankPanel({ onChange }) {
       <SlidePanel open={!!previewing} onClose={() => setPreviewing(null)} title="Preview" width="w-[480px]">
         {previewing && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TYPE_BADGES[previewing.questionType] || 'bg-gray-100 text-gray-600'}`}>
                 {previewing.questionType === 'MULTIPLE_CORRECT' ? 'Multi-Select' : previewing.questionType}
               </span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[previewing.difficulty]}`}>{previewing.difficulty}</span>
+              {previewing.courseName && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  {previewing.courseName}
+                </span>
+              )}
             </div>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{previewing.questionText}</p>
             {previewing.codeSnippet && (
@@ -514,6 +525,22 @@ export default function QuestionBankPanel({ onChange }) {
           </div>
         )}
       </SlidePanel>
+
+      <DeleteConfirmModal
+        isOpen={deleteModal.open}
+        onClose={() => !deleteModal.loading && setDeleteModal({ open: false, question: null, isBulk: false, loading: false })}
+        onConfirm={confirmDelete}
+        loading={deleteModal.loading}
+        title={deleteModal.isBulk ? `Delete ${selectedIds.length} Questions?` : 'Delete Question?'}
+        message={
+          deleteModal.isBulk
+            ? `You are about to permanently delete ${selectedIds.length} selected question(s). This action cannot be undone.`
+            : deleteModal.question
+              ? `Are you sure you want to delete "${deleteModal.question.questionText.slice(0, 80)}${deleteModal.question.questionText.length > 80 ? '...' : ''}"? This action cannot be undone.`
+              : undefined
+        }
+        confirmLabel={deleteModal.isBulk ? `Delete ${selectedIds.length} Questions` : 'Delete Question'}
+      />
     </div>
   )
 }

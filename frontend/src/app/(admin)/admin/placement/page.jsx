@@ -18,8 +18,17 @@ const EMPTY_DRIVE_FORM = {
 }
 
 const TABS = ['Students', 'Mock Interviews', 'Interview Questions', 'Company Drives']
-const PLACEMENT_COLORS = { SEEKING: 'bg-blue-100 text-blue-700', INTERVIEWING: 'bg-yellow-100 text-yellow-700', PLACED: 'bg-green-100 text-green-700', NOT_SEEKING: 'bg-gray-100 text-gray-500' }
-const DIFF_COLORS = { EASY: 'bg-green-100 text-green-700', MEDIUM: 'bg-yellow-100 text-yellow-700', HARD: 'bg-red-100 text-red-700' }
+const PLACEMENT_COLORS = {
+  SEEKING:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
+  INTERVIEWING: 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
+  PLACED:       'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+  NOT_SEEKING:  'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
+}
+const DIFF_COLORS = {
+  EASY:   'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+  MEDIUM: 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
+  HARD:   'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
+}
 const IQ_CATEGORIES = ['All', 'Python', 'Java', 'DSA', 'HR', 'System Design', 'SQL', 'React', 'Node.js']
 
 export default function PlacementPage() {

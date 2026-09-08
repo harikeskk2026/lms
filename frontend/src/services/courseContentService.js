@@ -31,15 +31,23 @@ const courseContentService = {
   updateMaterial: (id, data) => apiCall({ method: 'PUT', url: `/materials/${id}`, data }),
   deleteMaterial: (id) => apiCall({ method: 'DELETE', url: `/materials/${id}` }),
   reorderMaterials: (orderedIds) => apiCall({ method: 'PUT', url: '/materials/reorder', data: { orderedIds } }),
-  uploadMaterial: (file, type) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    if (type) formData.append('type', type)
+  uploadMaterial: (fileOrFormData, type) => {
+    let formData
+    let typeParam = type
+    if (fileOrFormData instanceof FormData) {
+      formData = fileOrFormData
+      if (type && !formData.has('type')) formData.append('type', type)
+      if (!typeParam && formData.has('type')) typeParam = formData.get('type')
+    } else {
+      formData = new FormData()
+      formData.append('file', fileOrFormData)
+      if (type) formData.append('type', type)
+    }
     return apiCall({
       method: 'POST',
       url: '/materials/upload',
       data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' },
+      params: typeParam ? { type: typeParam } : undefined,
     })
   },
 }

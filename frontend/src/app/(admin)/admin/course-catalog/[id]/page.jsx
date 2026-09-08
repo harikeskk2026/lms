@@ -5,7 +5,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronRight, ChevronUp,
-  Upload, ExternalLink, Clock,
+  Upload, ExternalLink, Clock, BookOpen, Image as ImageIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
@@ -14,6 +14,8 @@ import batchService from '@/services/batchService'
 import EnrolledStudentsTab from '@/components/admin/course/EnrolledStudentsTab'
 import { resolveFileUrl, adminApi } from '@/lib/api'
 
+import SlidePanel from '@/components/admin/SlidePanel'
+
 const TABS = ['Overview', 'Syllabus', 'Sessions', 'Materials', 'Batches', 'Enrolled Students']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
 const ALLOWED_EXTENSIONS_BY_TYPE = {
@@ -21,7 +23,7 @@ const ALLOWED_EXTENSIONS_BY_TYPE = {
   DOCUMENT: ['doc', 'docx', 'txt', 'rtf', 'odt'],
   PRESENTATION: ['ppt', 'pptx'],
   VIDEO: ['mp4', 'mov', 'webm', 'mkv', 'avi'],
-  OTHER: ['csv', 'xls', 'xlsx', 'txt', 'zip', 'rar', '7z', 'tar', 'gz', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'mp4', 'mov', 'webm'],
+  OTHER: ['csv', 'xls', 'xlsx', 'txt', 'zip', 'rar', '7z', 'tar', 'gz', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'mp4', 'mov', 'webm', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'],
 }
 const EMPTY_SESSION = {
   title: '', description: '', trainerName: '', sessionDate: '', startTime: '', endTime: '',
@@ -37,6 +39,21 @@ export default function CourseManagePage({ params }) {
   const [tab, setTab] = useState('Overview')
   const [trainers, setTrainers] = useState([])
   const [loadingTrainers, setLoadingTrainers] = useState(false)
+
+  // Edit course state
+  const [editingCourse, setEditingCourse] = useState(false)
+  const [savingCourse, setSavingCourse] = useState(false)
+  const [uploadingThumb, setUploadingThumb] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: '',
+    courseCode: '',
+    slug: '',
+    description: '',
+    duration: '',
+    level: 'BEGINNER',
+    status: 'PUBLISHED',
+    thumbnail: '',
+  })
 
   useEffect(() => {
     setLoadingTrainers(true)
@@ -60,12 +77,70 @@ export default function CourseManagePage({ params }) {
 
   const loadCourse = useCallback(() => {
     courseService.get(courseId)
-      .then(r => setCourse(r.data))
+      .then(r => {
+        setCourse(r.data)
+        if (r.data) {
+          setEditForm({
+            title: r.data.title || '',
+            courseCode: r.data.courseCode || '',
+            slug: r.data.slug || '',
+            description: r.data.description || '',
+            duration: r.data.duration || '',
+            level: r.data.level || 'BEGINNER',
+            status: r.data.status || 'PUBLISHED',
+            thumbnail: r.data.thumbnail || '',
+          })
+        }
+      })
       .catch(() => toast.error('Failed to load course'))
       .finally(() => setLoading(false))
   }, [courseId])
 
   useEffect(() => { loadCourse() }, [loadCourse])
+
+  const handleOpenEdit = () => {
+    if (!course) return
+    setEditForm({
+      title: course.title || '',
+      courseCode: course.courseCode || '',
+      slug: course.slug || '',
+      description: course.description || '',
+      duration: course.duration || '',
+      level: course.level || 'BEGINNER',
+      status: course.status || 'PUBLISHED',
+      thumbnail: course.thumbnail || '',
+    })
+    setEditingCourse(true)
+  }
+
+  const handleSaveCourse = async (e) => {
+    e.preventDefault()
+    if (savingCourse) return
+    if (!editForm.title?.trim() || !editForm.description?.trim() || !editForm.duration?.trim()) {
+      toast.error('Please fill required fields (Title, Description, Duration)', { id: 'save-course' })
+      return
+    }
+    setSavingCourse(true)
+    try {
+      await courseService.update(course.id, {
+        title: editForm.title.trim(),
+        courseCode: editForm.courseCode?.trim() || null,
+        slug: editForm.slug?.trim() || null,
+        description: editForm.description.trim(),
+        duration: editForm.duration.trim(),
+        level: editForm.level,
+        status: editForm.status,
+        thumbnail: editForm.thumbnail?.trim() || null,
+      })
+      toast.success('Course updated successfully', { id: 'save-course' })
+      setEditingCourse(false)
+      loadCourse()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to save course', { id: 'save-course' })
+    } finally {
+      setSavingCourse(false)
+    }
+  }
 
   if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN') return null
 
@@ -79,12 +154,29 @@ export default function CourseManagePage({ params }) {
       </Link>
 
       <div className="glass-card p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="font-display text-xl font-extrabold text-gray-900 dark:text-white">{course.title}</h1>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{course.courseCode}</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{course.status}</span>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center flex-wrap gap-2 mb-1">
+              <h1 className="font-display text-xl font-extrabold text-gray-900 dark:text-white">{course.title}</h1>
+              {course.courseCode && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-mono uppercase">
+                  {course.courseCode}
+                </span>
+              )}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                {course.status}
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 line-clamp-2">{course.description}</p>
+          </div>
+
+          <button
+            onClick={handleOpenEdit}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-semibold transition-colors shadow-xs flex-shrink-0"
+          >
+            <Pencil size={13} /> Edit Course
+          </button>
         </div>
-        <p className="text-sm text-gray-500 line-clamp-2">{course.description}</p>
       </div>
 
       <div className="flex gap-1 overflow-x-auto pb-1">
@@ -98,7 +190,7 @@ export default function CourseManagePage({ params }) {
         ))}
       </div>
 
-      {tab === 'Overview' && <OverviewTab course={course} />}
+      {tab === 'Overview' && <OverviewTab course={course} onEdit={handleOpenEdit} />}
       {tab === 'Syllabus' && <SyllabusTab courseId={courseId} />}
       {tab === 'Sessions' && <SessionsTab courseId={courseId} trainers={trainers} loadingTrainers={loadingTrainers} />}
       {tab === 'Materials' && <MaterialsTab courseId={courseId} />}
@@ -106,27 +198,289 @@ export default function CourseManagePage({ params }) {
       {tab === 'Enrolled Students' && (
         <EnrolledStudentsTab courseId={courseId} courseTitle={course.title} courseStatus={course.status} />
       )}
+
+      {/* Edit Course Slide Panel */}
+      <SlidePanel open={editingCourse} onClose={() => setEditingCourse(false)} title="Edit Course">
+        <form onSubmit={handleSaveCourse} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+            <input
+              type="text"
+              required
+              value={editForm.title}
+              onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Python Full Stack Development"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Course Code <span className="text-xs text-gray-400 font-normal">(e.g. PY-101)</span>
+              </label>
+              <input
+                type="text"
+                value={editForm.courseCode}
+                onChange={e => setEditForm(f => ({ ...f, courseCode: e.target.value }))}
+                placeholder="e.g. PY-101"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 uppercase"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Slug <span className="text-xs text-gray-400 font-normal">(URL Key)</span>
+              </label>
+              <input
+                type="text"
+                value={editForm.slug}
+                onChange={e => setEditForm(f => ({ ...f, slug: e.target.value }))}
+                placeholder="e.g. python-2"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs lowercase"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
+            <textarea
+              required
+              rows={4}
+              value={editForm.description}
+              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Detailed description of the course..."
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
+              <input
+                type="text"
+                required
+                value={editForm.duration}
+                onChange={e => setEditForm(f => ({ ...f, duration: e.target.value }))}
+                placeholder="e.g. 3 months"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Level *</label>
+              <select
+                value={editForm.level}
+                onChange={e => setEditForm(f => ({ ...f, level: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="BEGINNER">BEGINNER</option>
+                <option value="INTERMEDIATE">INTERMEDIATE</option>
+                <option value="ADVANCED">ADVANCED</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status *</label>
+            <select
+              value={editForm.status}
+              onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="ARCHIVED">ARCHIVED</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Thumbnail</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={editForm.thumbnail || ''}
+                onChange={e => setEditForm(f => ({ ...f, thumbnail: e.target.value }))}
+                placeholder="Image URL or upload a file below..."
+                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <label className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 cursor-pointer text-xs font-semibold transition-colors">
+                <Upload size={14} />
+                <span>{uploadingThumb ? 'Uploading...' : 'Upload'}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  disabled={uploadingThumb}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    setUploadingThumb(true)
+                    try {
+                      const res = await courseContentService.uploadMaterial(file, 'OTHER')
+                      const url = res?.data?.url || res?.url || res?.data?.fileUrl || res?.fileUrl
+                      if (url) {
+                        setEditForm(f => ({ ...f, thumbnail: url }))
+                        toast.success('Thumbnail uploaded')
+                      } else {
+                        toast.error('Could not obtain uploaded image URL')
+                      }
+                    } catch (err) {
+                      toast.error(err.message || 'Failed to upload image')
+                    } finally {
+                      setUploadingThumb(false)
+                      e.target.value = ''
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            {editForm.thumbnail && (
+              <div className="mt-2 relative w-32 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
+                <img
+                  src={resolveFileUrl(editForm.thumbnail)}
+                  alt="Thumbnail preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setEditingCourse(false)}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={savingCourse}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-60"
+            >
+              {savingCourse ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </SlidePanel>
     </div>
   )
 }
 
-function OverviewTab({ course }) {
+function OverviewTab({ course, onEdit }) {
+  const [imgError, setImgError] = useState(false)
+
+  useEffect(() => {
+    setImgError(false)
+  }, [course?.thumbnail])
+
+  const hasValidThumbnail = Boolean(course?.thumbnail && !imgError)
+
   return (
-    <div className="glass-card p-5 grid sm:grid-cols-2 gap-4">
-      <div className="space-y-2 text-sm">
-        <p><span className="text-gray-400">Status:</span> <span className="font-semibold text-gray-700 dark:text-gray-200">{course.status}</span></p>
-        <p><span className="text-gray-400">Level:</span> <span className="font-semibold text-gray-700 dark:text-gray-200">{course.level}</span></p>
-        <p><span className="text-gray-400">Duration:</span> <span className="font-semibold text-gray-700 dark:text-gray-200">{course.duration}</span></p>
-        <p><span className="text-gray-400">Course Code:</span> <span className="font-semibold text-gray-700 dark:text-gray-200">{course.courseCode}</span></p>
-        <p><span className="text-gray-400">Slug:</span> <span className="font-semibold text-gray-700 dark:text-gray-200">{course.slug}</span></p>
+    <div className="glass-card p-5 space-y-4">
+      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+        <h2 className="font-display font-bold text-base text-gray-900 dark:text-white">Course Overview</h2>
+        <button
+          onClick={onEdit}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+        >
+          <Pencil size={13} /> Edit Details
+        </button>
       </div>
-      {course.thumbnail && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={course.thumbnail} alt={course.title} className="rounded-xl object-cover h-40 w-full" />
-      )}
-      <div className="sm:col-span-2">
-        <p className="text-gray-400 text-sm mb-1">Description</p>
-        <p className="text-sm text-gray-700 dark:text-gray-300">{course.description}</p>
+
+      <div className="grid sm:grid-cols-2 gap-6 items-start">
+        <div className="space-y-3 text-sm">
+          <p className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/60">
+            <span className="text-gray-400">Status:</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">{course.status}</span>
+          </p>
+          <p className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/60">
+            <span className="text-gray-400">Level:</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">{course.level}</span>
+          </p>
+          <p className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/60">
+            <span className="text-gray-400">Duration:</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">{course.duration}</span>
+          </p>
+          <p className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/60">
+            <span className="text-gray-400">Course Code:</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">
+              {course.courseCode ? (
+                <span className="px-2.5 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono text-xs font-bold">
+                  {course.courseCode}
+                </span>
+              ) : (
+                <span className="text-gray-400 italic text-xs">Not set</span>
+              )}
+            </span>
+          </p>
+          <p className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/60">
+            <span className="text-gray-400">Slug:</span>
+            <span className="font-mono text-xs text-purple-700 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/30 px-2.5 py-0.5 rounded-lg">
+              {course.slug}
+            </span>
+          </p>
+        </div>
+
+        <div>
+          <p className="text-gray-400 text-xs mb-1.5 font-medium">Course Visual</p>
+          {hasValidThumbnail ? (
+            <div className="relative rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 h-44 w-full bg-gray-900 group shadow-sm">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveFileUrl(course.thumbnail)}
+                alt={course.title}
+                onError={() => setImgError(true)}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between pointer-events-none">
+                <span className="text-xs font-semibold text-white truncate max-w-[70%] drop-shadow-sm">
+                  {course.title}
+                </span>
+                {course.level && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-900/70 text-purple-200 backdrop-blur-md border border-purple-400/30">
+                    {course.level}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="relative rounded-2xl overflow-hidden border border-purple-100 dark:border-purple-900/30 h-44 w-full bg-gradient-to-br from-purple-700 via-indigo-700 to-slate-900 p-4 flex flex-col justify-between shadow-sm">
+              <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10 blur-sm pointer-events-none" />
+              <div className="absolute -left-4 -bottom-4 w-24 h-24 rounded-full bg-purple-400/20 blur-sm pointer-events-none" />
+
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner">
+                  <BookOpen size={20} className="text-white" />
+                </div>
+                {course.level && (
+                  <span className="text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-md border border-white/20">
+                    {course.level}
+                  </span>
+                )}
+              </div>
+
+              <div className="relative z-10 space-y-0.5">
+                {course.courseCode && (
+                  <span className="text-[10px] font-mono font-bold text-purple-200 tracking-wider uppercase">
+                    {course.courseCode}
+                  </span>
+                )}
+                <h3 className="font-display font-bold text-base text-white leading-tight line-clamp-1 drop-shadow-sm">
+                  {course.title}
+                </h3>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="sm:col-span-2 pt-2">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Description</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{course.description}</p>
+        </div>
       </div>
     </div>
   )

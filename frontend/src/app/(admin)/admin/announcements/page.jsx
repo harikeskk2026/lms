@@ -19,19 +19,19 @@ const ACTION_TYPES = ['', 'ASSIGNMENT', 'QUIZ', 'COURSE', 'PLACEMENT_DRIVE', 'AT
 const AUDIENCE_RULES = ['NONE', 'ATTENDANCE_BELOW', 'ASSIGNMENT_NOT_SUBMITTED', 'PLACEMENT_ELIGIBLE']
 
 const CATEGORY_STYLES = {
-  GENERAL: 'bg-gray-100 text-gray-600',
-  URGENT: 'bg-red-100 text-red-700',
-  PLACEMENT: 'bg-emerald-100 text-emerald-700',
-  EXAM: 'bg-amber-100 text-amber-700',
-  HOLIDAY: 'bg-sky-100 text-sky-700',
-  ATTENDANCE: 'bg-indigo-100 text-indigo-700',
+  GENERAL:    'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
+  URGENT:     'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
+  PLACEMENT:  'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40',
+  EXAM:       'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40',
+  HOLIDAY:    'bg-sky-100 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/40',
+  ATTENDANCE: 'bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40',
 }
 
 const PRIORITY_STYLES = {
-  LOW: 'bg-gray-100 text-gray-500',
-  NORMAL: 'bg-blue-100 text-blue-700',
-  HIGH: 'bg-orange-100 text-orange-700',
-  CRITICAL: 'bg-red-600 text-white',
+  LOW:      'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700',
+  NORMAL:   'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
+  HIGH:     'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
+  CRITICAL: 'bg-red-600 dark:bg-red-700 text-white shadow-sm',
 }
 
 const emptyForm = {

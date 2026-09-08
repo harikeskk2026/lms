@@ -11,7 +11,7 @@ import java.util.List;
 
 public interface QuestionService {
 
-    List<QuestionResponse> search(Long topicId, QuizDifficulty difficulty, QuestionType questionType,
+    List<QuestionResponse> search(Long topicId, Long courseId, QuizDifficulty difficulty, QuestionType questionType,
                                    Boolean active, String search);
 
     QuestionResponse get(Long id);
@@ -21,6 +21,8 @@ public interface QuestionService {
     QuestionResponse update(Long id, UpdateQuestionRequest request);
 
     void deactivate(Long id);
+
+    void delete(Long id);
 
     QuestionResponse duplicate(Long id);
 

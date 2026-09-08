@@ -10,6 +10,8 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
 
     boolean existsBySlug(String slug);
 
+    boolean existsBySlugAndIdNot(String slug, Long id);
+
     Optional<Course> findBySlug(String slug);
 
     Optional<Course> findByTitleIgnoreCase(String title);

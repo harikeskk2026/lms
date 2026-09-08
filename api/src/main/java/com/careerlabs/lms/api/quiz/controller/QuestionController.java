@@ -42,11 +42,12 @@ public class QuestionController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<QuestionResponse>>> search(
             @RequestParam(required = false) Long topicId,
+            @RequestParam(required = false) Long courseId,
             @RequestParam(required = false) QuizDifficulty difficulty,
             @RequestParam(required = false) QuestionType questionType,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String search) {
-        List<QuestionResponse> results = questionService.search(topicId, difficulty, questionType, active, search);
+        List<QuestionResponse> results = questionService.search(topicId, courseId, difficulty, questionType, active, search);
         return ResponseEntity.ok(ApiResponse.of(results));
     }
 
@@ -73,6 +74,12 @@ public class QuestionController {
     public ResponseEntity<ApiResponse<Void>> deactivate(@PathVariable Long id) {
         questionService.deactivate(id);
         return ResponseEntity.ok(ApiResponse.of("Question deactivated", null));
+    }
+
+    @DeleteMapping("/{id}/permanent")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+        questionService.delete(id);
+        return ResponseEntity.ok(ApiResponse.of("Question deleted", null));
     }
 
     @PostMapping("/{id}/duplicate")

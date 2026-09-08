@@ -12,20 +12,20 @@ import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
 import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
-const STEP_LABELS = ['Settings', 'Questions', 'Preview']
+const STEP_LABELS = ['Basic Details', 'Questions', 'Preview']
 
 const TYPE_LABELS = { MCQ: 'MCQ', APTITUDE: 'Aptitude', CODING: 'Coding', INTERVIEW_PREP: 'Interview', ADAPTIVE: 'Adaptive' }
 const TYPE_STYLES = {
-  MCQ:            'bg-purple-100 text-purple-700',
-  APTITUDE:       'bg-blue-100 text-blue-700',
-  CODING:         'bg-green-100 text-green-700',
-  INTERVIEW_PREP: 'bg-yellow-100 text-yellow-700',
-  ADAPTIVE:       'bg-pink-100 text-pink-700',
+  MCQ:            'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40',
+  APTITUDE:       'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
+  CODING:         'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+  INTERVIEW_PREP: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
+  ADAPTIVE:       'bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/40',
 }
 const DIFFICULTY_STYLES = {
-  EASY: 'bg-green-100 text-green-700',
-  MEDIUM: 'bg-yellow-100 text-yellow-700',
-  HARD: 'bg-red-100 text-red-700',
+  EASY: 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+  MEDIUM: 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
+  HARD: 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
 }
 
 const EMPTY_FORM = {
@@ -38,11 +38,11 @@ const EMPTY_FORM = {
 }
 
 const STATUS_BADGE_STYLES = {
-  DRAFT:     'bg-gray-100 text-gray-600',
-  SCHEDULED: 'bg-blue-100 text-blue-700',
-  LIVE:      'bg-green-100 text-green-700',
-  COMPLETED: 'bg-purple-100 text-purple-700',
-  ARCHIVED:  'bg-red-100 text-red-700',
+  DRAFT:     'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700',
+  SCHEDULED: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
+  LIVE:      'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+  COMPLETED: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40',
+  ARCHIVED:  'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
 }
 
 export default function QuizzesPage() {
@@ -63,6 +63,10 @@ export default function QuizzesPage() {
   const [quizSearch, setQuizSearch] = useState('')
   const [activeTab, setActiveTab]   = useState('quizzes')
   const [questionSearch, setQuestionSearch] = useState('')
+  const [pickerTopicFilter, setPickerTopicFilter] = useState('')
+  const [pickerCourseFilter, setPickerCourseFilter] = useState('')
+  const [pickerDifficultyFilter, setPickerDifficultyFilter] = useState('')
+  const [pickerTypeFilter, setPickerTypeFilter] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErrors, setFormErrors] = useState({})
   const [selectedQuestionIds, setSelectedQuestionIds] = useState([])
@@ -206,9 +210,14 @@ export default function QuizzesPage() {
     .map(id => bankQuestions.find(q => q.id === id))
     .filter(Boolean)
   const totalPoints = selectedQuestions.reduce((a, q) => a + (questionMarks[q.id] ?? q.points ?? 1), 0)
-  const filteredBankQuestions = questionSearch
-    ? bankQuestions.filter(q => q.questionText.toLowerCase().includes(questionSearch.toLowerCase()))
-    : bankQuestions
+  const filteredBankQuestions = bankQuestions.filter(q => {
+    if (questionSearch && !q.questionText.toLowerCase().includes(questionSearch.toLowerCase())) return false
+    if (pickerTopicFilter && String(q.topicId ?? '') !== String(pickerTopicFilter)) return false
+    if (pickerCourseFilter && String(q.courseId ?? '') !== String(pickerCourseFilter)) return false
+    if (pickerDifficultyFilter && q.difficulty !== pickerDifficultyFilter) return false
+    if (pickerTypeFilter && q.questionType !== pickerTypeFilter) return false
+    return true
+  })
 
   const validateSettings = () => {
     const errs = {}
@@ -254,6 +263,12 @@ export default function QuizzesPage() {
     setQuestionMarks({})
     setSelectedBatchIds([])
     setSelectedCourseIds([])
+    setPickerTopicFilter('')
+    setPickerCourseFilter('')
+    setPickerDifficultyFilter('')
+    setPickerTypeFilter('')
+    setQuestionSearch('')
+    setPickerPage(1)
     setStep(0)
     setQuestionsView('list')
     setPanelOpen(true)
@@ -262,8 +277,8 @@ export default function QuizzesPage() {
   const missingPublishRequirements = () => {
     const missing = []
     if (selectedQuestionIds.length === 0) missing.push('at least one question')
-    if (!selectedBatchIds.length && !selectedCourseIds.length && !form.courseId && !form.batchId) {
-      missing.push('an assignment to at least one batch, course, or student')
+    if (!form.courseId && !form.batchId && !selectedBatchIds.length && !selectedCourseIds.length) {
+      missing.push('an assignment to at least one batch or course')
     }
     return missing
   }
@@ -271,7 +286,7 @@ export default function QuizzesPage() {
   const handleSave = async (publish = false) => {
     if (!validateSettings()) {
       setStep(0)
-      toast.error('Please fix errors in quiz settings')
+      toast.error('Please fix errors in quiz details')
       return
     }
     if (selectedQuestionIds.length === 0) {
@@ -304,10 +319,14 @@ export default function QuizzesPage() {
         questionId: id,
         marks: questionMarks[id] ?? null,
       })))
-      if (selectedBatchIds.length) {
+      if (form.batchId) {
+        await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: [Number(form.batchId)] })
+      } else if (selectedBatchIds.length) {
         await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: selectedBatchIds })
       }
-      if (selectedCourseIds.length) {
+      if (form.courseId) {
+        await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: [Number(form.courseId)] })
+      } else if (selectedCourseIds.length) {
         await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: selectedCourseIds })
       }
       if (publish) {
@@ -642,18 +661,12 @@ export default function QuizzesPage() {
       )}
 
       {/* Create Quiz Panel */}
-      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[600px]">
+      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[680px]">
         {/* Steps */}
-        <div className="flex mb-6 gap-1">
+        <div className="flex mb-5 gap-1.5">
           {STEP_LABELS.map((l, i) => (
-            <button key={l} onClick={() => {
-              if (i > 0 && !validateSettings()) {
-                toast.error('Please fix the errors in settings first')
-                return
-              }
-              setStep(i)
-            }}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${step === i ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            <button key={l} onClick={() => setStep(i)}
+              className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold transition-all truncate text-center ${step === i ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
               {i + 1}. {l}
             </button>
           ))}
@@ -704,10 +717,12 @@ export default function QuizzesPage() {
                 </select>
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Course</label>
-                <select value={form.courseId}
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Course</label>
+                <select
+                  value={form.courseId}
                   onChange={e => {
                     const courseId = e.target.value
                     setForm(f => {
@@ -715,22 +730,31 @@ export default function QuizzesPage() {
                       return { ...f, courseId, batchId: stillValid ? f.batchId : '' }
                     })
                   }}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                >
                   <option value="">All courses</option>
-                  {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  {courses.map(c => (
+                    <option key={c.id} value={c.id}>{c.title || c.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Batch</label>
-                <select value={form.batchId} onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Batch</label>
+                <select
+                  value={form.batchId}
+                  onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                >
                   <option value="">All batches</option>
                   {batches
                     .filter(b => !form.courseId || String(b.course?.id) === String(form.courseId))
-                    .map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    .map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
                 </select>
               </div>
             </div>
+
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Duration (min) *</label>
@@ -846,13 +870,7 @@ export default function QuizzesPage() {
                 <span className="text-sm font-semibold text-gray-700">Show explanations after submission</span>
               </label>
             </div>
-            <button onClick={() => {
-              if (!validateSettings()) {
-                toast.error('Please fix errors in settings before proceeding')
-                return
-              }
-              setStep(1)
-            }} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
+            <button onClick={() => setStep(1)} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
               Next: Add Questions →
             </button>
           </div>
@@ -866,34 +884,164 @@ export default function QuizzesPage() {
           const pickerEndIndex = Math.min(pickerStartIndex + pickerPageSize, filteredBankQuestions.length)
           const paginatedPickerQuestions = filteredBankQuestions.slice(pickerStartIndex, pickerEndIndex)
 
+          const allFilteredIds = filteredBankQuestions.map(q => q.id)
+          const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedQuestionIds.includes(id))
+          const pageIds = paginatedPickerQuestions.map(q => q.id)
+          const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedQuestionIds.includes(id))
+          const somePageSelected = pageIds.some(id => selectedQuestionIds.includes(id)) && !allPageSelected
+
+          const selectAllFiltered = () => {
+            setSelectedQuestionIds(prev => {
+              const newIds = allFilteredIds.filter(id => !prev.includes(id))
+              return [...prev, ...newIds]
+            })
+          }
+          const deselectAll = () => {
+            setSelectedQuestionIds([])
+          }
+          const togglePageAll = () => {
+            if (allPageSelected) {
+              setSelectedQuestionIds(prev => prev.filter(id => !pageIds.includes(id)))
+            } else {
+              setSelectedQuestionIds(prev => {
+                const newIds = pageIds.filter(id => !prev.includes(id))
+                return [...prev, ...newIds]
+              })
+            }
+          }
+
           return (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <p className="text-sm font-semibold text-gray-700">{selectedQuestionIds.length} selected</p>
+                <div className="flex items-center gap-2">
+                  {selectedQuestionIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={deselectAll}
+                      className="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50 transition-colors"
+                    >
+                      Deselect All
+                    </button>
+                  )}
+                  {filteredBankQuestions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={allFilteredSelected ? deselectAll : selectAllFiltered}
+                      className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors border ${
+                        allFilteredSelected
+                          ? 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700'
+                          : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                      }`}
+                    >
+                      {allFilteredSelected ? '✓ All Selected' : `Select All (${filteredBankQuestions.length})`}
+                    </button>
+                  )}
+                </div>
               </div>
+
               {/* Info note */}
               <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
                 <span className="mt-0.5 shrink-0">ℹ️</span>
                 <span>Questions are sourced from the <strong>Question Bank</strong> tab. Use the Question Bank to create, import, or manage all your questions centrally — they can be reused across multiple quizzes.</span>
               </div>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input placeholder="Search question bank..." value={questionSearch} onChange={e => { setQuestionSearch(e.target.value); setPickerPage(1); }}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+
+              {/* Search + Filters Grid */}
+              <div className="space-y-2">
+                <div className="relative w-full">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    placeholder="Search question bank..."
+                    value={questionSearch}
+                    onChange={e => { setQuestionSearch(e.target.value); setPickerPage(1); }}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <select
+                    value={pickerTopicFilter}
+                    onChange={e => { setPickerTopicFilter(e.target.value); setPickerPage(1); }}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
+                  >
+                    <option value="">All Topics</option>
+                    {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <select
+                    value={pickerCourseFilter}
+                    onChange={e => { setPickerCourseFilter(e.target.value); setPickerPage(1); }}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
+                  >
+                    <option value="">All Courses</option>
+                    {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
+                  </select>
+                  <select
+                    value={pickerDifficultyFilter}
+                    onChange={e => { setPickerDifficultyFilter(e.target.value); setPickerPage(1); }}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
+                  >
+                    <option value="">All Levels</option>
+                    <option value="EASY">Easy</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HARD">Hard</option>
+                  </select>
+                  <select
+                    value={pickerTypeFilter}
+                    onChange={e => { setPickerTypeFilter(e.target.value); setPickerPage(1); }}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
+                  >
+                    <option value="">All Types</option>
+                    <option value="MCQ">MCQ</option>
+                    <option value="MULTIPLE_CORRECT">Multi-Select</option>
+                    <option value="TRUE_FALSE">True/False</option>
+                    <option value="SHORT_ANSWER">Short Answer</option>
+                  </select>
+                </div>
               </div>
-              <div className="space-y-2 max-h-[320px] overflow-y-auto">
+
+              {/* Page select-all row */}
+              {paginatedPickerQuestions.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl border border-gray-100">
+                  <input
+                    type="checkbox"
+                    id="picker-page-all"
+                    checked={allPageSelected}
+                    ref={el => { if (el) el.indeterminate = somePageSelected }}
+                    onChange={togglePageAll}
+                    className="w-4 h-4 accent-purple-600 cursor-pointer"
+                  />
+                  <label htmlFor="picker-page-all" className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
+                    Select all on this page ({paginatedPickerQuestions.length})
+                  </label>
+                </div>
+              )}
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {paginatedPickerQuestions.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-8">
                     No active questions found. Add some in the Question Bank first.
                   </p>
                 ) : (
                   paginatedPickerQuestions.map(q => (
-                    <label key={q.id} className="flex items-start gap-3 border border-gray-200 rounded-xl p-3 cursor-pointer hover:bg-gray-50">
+                    <label key={q.id} className={`flex items-start gap-3 border rounded-xl p-3 cursor-pointer transition-colors ${
+                      selectedQuestionIds.includes(q.id)
+                        ? 'border-purple-300 bg-purple-50/60 dark:bg-purple-900/20'
+                        : 'border-gray-200 hover:bg-gray-50'
+                    }`}>
                       <input type="checkbox" checked={selectedQuestionIds.includes(q.id)} onChange={() => toggleQuestion(q.id)}
                         className="w-4 h-4 mt-0.5 accent-purple-600 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 truncate">{q.questionText}</p>
-                        <div className="flex gap-1.5 mt-1">
+                        <p className="text-sm text-gray-800 dark:text-white truncate">{q.questionText}</p>
+                        <div className="flex gap-1.5 mt-1 flex-wrap">
+                          {q.topicName && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                              {q.topicName}
+                            </span>
+                          )}
+                          {q.courseName && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">
+                              {q.courseName}
+                            </span>
+                          )}
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${q.questionType === 'MULTIPLE_CORRECT' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
                             {q.questionType === 'MULTIPLE_CORRECT' ? 'Multi-Select' : q.questionType}
                           </span>
@@ -1040,42 +1188,6 @@ export default function QuizzesPage() {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Assign To */}
-            <div className="glass-card p-4 space-y-3">
-              <p className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">Assign To</p>
-              <div>
-                <p className="text-xs font-semibold text-gray-600 mb-1">Batches</p>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {batches.map(b => (
-                    <label key={b.id} className="flex items-center gap-1.5 text-[11px] bg-gray-50 dark:bg-gray-800 rounded-full px-2.5 py-1 cursor-pointer">
-                      <input type="checkbox" checked={selectedBatchIds.includes(b.id)}
-                        onChange={() => setSelectedBatchIds(prev => prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id])}
-                        className="w-3 h-3 accent-purple-600" />
-                      {b.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-600 mb-1">Courses</p>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {courses.map(c => (
-                    <label key={c.id} className="flex items-center gap-1.5 text-[11px] bg-gray-50 dark:bg-gray-800 rounded-full px-2.5 py-1 cursor-pointer">
-                      <input type="checkbox" checked={selectedCourseIds.includes(c.id)}
-                        onChange={() => setSelectedCourseIds(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
-                        className="w-3 h-3 accent-purple-600" />
-                      {c.title}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                {selectedBatchIds.length || selectedCourseIds.length
-                  ? `Assigned to: ${selectedBatchIds.length} batch(es), ${selectedCourseIds.length} course(s)`
-                  : 'No batches/courses selected yet — pick at least one, or use the Course/Batch fields in Step 1, before publishing.'}
-              </p>
             </div>
 
             <div className="flex gap-3 pt-2">

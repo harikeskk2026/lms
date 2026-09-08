@@ -105,36 +105,45 @@ export default function AdminMeetingLinksPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.title || !form.meetUrl || !form.scheduledStart) {
-      toast.error('Please fill required fields (Title, Meeting URL, Start Time)')
+    if (saving) return
+
+    if (!form.title?.trim() || !form.meetUrl?.trim() || !form.scheduledStart) {
+      toast.error('Please fill required fields (Title, Meeting URL, Start Time)', { id: 'save-meeting-toast' })
       return
     }
+
+    if (form.scheduledEnd && new Date(form.scheduledEnd) <= new Date(form.scheduledStart)) {
+      toast.error('Scheduled End time must be after Scheduled Start time', { id: 'save-meeting-toast' })
+      return
+    }
+
     setSaving(true)
     try {
       const payload = {
-        title: form.title,
-        description: form.description || null,
-        meetUrl: form.meetUrl,
+        title: form.title.trim(),
+        description: form.description?.trim() || null,
+        meetUrl: form.meetUrl.trim(),
         platform: form.platform,
         batchId: form.batchId ? Number(form.batchId) : null,
         courseId: form.courseId ? Number(form.courseId) : null,
-        hostName: form.hostName || null,
+        hostName: form.hostName?.trim() || null,
         scheduledStart: form.scheduledStart,
         scheduledEnd: form.scheduledEnd || null,
-        passcode: form.passcode || null,
+        passcode: form.passcode?.trim() || null,
       }
 
       if (editingId) {
         await adminApi.updateMeeting(editingId, payload)
-        toast.success('Scheduled class updated successfully')
+        toast.success('Scheduled class updated successfully', { id: 'save-meeting-toast' })
       } else {
         await adminApi.createMeeting(payload)
-        toast.success('Scheduled class created successfully')
+        toast.success('Scheduled class created successfully', { id: 'save-meeting-toast' })
       }
       setPanelOpen(false)
       loadData()
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to save scheduled class')
+      const msg = err?.response?.data?.message || err?.response?.data?.errors?.[0] || 'Failed to save scheduled class'
+      toast.error(msg, { id: 'save-meeting-toast' })
     } finally {
       setSaving(false)
     }
@@ -143,10 +152,10 @@ export default function AdminMeetingLinksPage() {
   const handleStatusChange = async (id, status) => {
     try {
       await adminApi.updateMeetingStatus(id, status)
-      toast.success(`Meeting status updated to ${status}`)
+      toast.success(`Meeting status updated to ${status}`, { id: 'status-change-toast' })
       loadData()
     } catch {
-      toast.error('Failed to update meeting status')
+      toast.error('Failed to update meeting status', { id: 'status-change-toast' })
     }
   }
 
@@ -406,7 +415,7 @@ export default function AdminMeetingLinksPage() {
                     {m.status !== 'LIVE' && (
                       <button
                         onClick={() => handleStatusChange(m.id, 'LIVE')}
-                        className="text-emerald-600 hover:underline"
+                        className="text-emerald-600 dark:text-emerald-400 hover:underline"
                       >
                         Go Live
                       </button>
@@ -414,7 +423,7 @@ export default function AdminMeetingLinksPage() {
                     {m.status === 'LIVE' && (
                       <button
                         onClick={() => handleStatusChange(m.id, 'COMPLETED')}
-                        className="text-gray-600 hover:underline"
+                        className="text-gray-600 dark:text-gray-300 hover:underline"
                       >
                         Mark Completed
                       </button>
@@ -422,7 +431,7 @@ export default function AdminMeetingLinksPage() {
                     {m.status !== 'CANCELLED' && m.status !== 'COMPLETED' && (
                       <button
                         onClick={() => handleStatusChange(m.id, 'CANCELLED')}
-                        className="text-red-500 hover:underline ml-1"
+                        className="text-red-500 dark:text-red-400 hover:underline ml-1"
                       >
                         Cancel
                       </button>
@@ -430,13 +439,13 @@ export default function AdminMeetingLinksPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <button onClick={() => openAttendees(m)} title="Who joined" className="text-indigo-600 hover:text-indigo-800">
+                    <button onClick={() => openAttendees(m)} title="Who joined" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
                       <Users size={13} />
                     </button>
-                    <button onClick={() => openEdit(m)} className="text-purple-600 hover:text-purple-800">
+                    <button onClick={() => openEdit(m)} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300">
                       <Edit3 size={13} />
                     </button>
-                    <button onClick={() => setDeletingMeeting(m)} className="text-red-500 hover:text-red-700">
+                    <button onClick={() => setDeletingMeeting(m)} className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -450,14 +459,14 @@ export default function AdminMeetingLinksPage() {
       {/* Slide / Modal Form Panel */}
       {panelOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white dark:bg-gray-900 h-full overflow-y-auto p-6 shadow-2xl space-y-5 animate-slideIn">
+          <div className="w-full max-w-lg md:max-w-xl bg-white dark:bg-gray-900 h-full overflow-y-auto overflow-x-hidden p-6 shadow-2xl space-y-5 animate-slideIn">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
               <h2 className="font-display font-bold text-lg text-gray-900 dark:text-white">
                 {editingId ? 'Edit Scheduled Class' : 'Schedule Class'}
               </h2>
               <button
                 onClick={() => setPanelOpen(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-600"
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
               >
                 ✕
               </button>
@@ -492,7 +501,7 @@ export default function AdminMeetingLinksPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Course
@@ -612,16 +621,23 @@ export default function AdminMeetingLinksPage() {
                 <button
                   type="button"
                   onClick={() => setPanelOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Schedule Class'}
+                  {saving ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    editingId ? 'Save Changes' : 'Schedule Class'
+                  )}
                 </button>
               </div>
             </form>

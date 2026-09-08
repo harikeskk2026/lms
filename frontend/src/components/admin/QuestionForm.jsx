@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, X } from 'lucide-react'
@@ -11,6 +11,7 @@ const SINGLE_CORRECT_TYPES = ['MCQ', 'TRUE_FALSE']
 
 const EMPTY_FORM = {
   topicId: '',
+  courseId: '',
   questionText: '',
   questionType: 'MCQ',
   difficulty: 'MEDIUM',
@@ -37,7 +38,7 @@ const TYPE_DISPLAY_NAMES = {
 // Shared create/edit question form. Used both by the Question Bank tab and by
 // "Quick Add Question" inside the Quiz Builder, so a new question (or a new
 // topic) can be created without losing whatever the caller was already doing.
-export default function QuestionForm({ topics, onTopicsChange, defaultValues, editingId, onSaved, onCancel }) {
+export default function QuestionForm({ topics = [], courses = [], onTopicsChange, defaultValues, editingId, onSaved, onCancel }) {
   const [saving, setSaving] = useState(false)
   const [newTopicOpen, setNewTopicOpen] = useState(false)
   const [newTopicName, setNewTopicName] = useState('')
@@ -49,8 +50,13 @@ export default function QuestionForm({ topics, onTopicsChange, defaultValues, ed
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(questionSchema), defaultValues: defaultValues || EMPTY_FORM })
+
+  useEffect(() => {
+    reset(defaultValues || EMPTY_FORM)
+  }, [defaultValues, reset])
 
   const { fields, append, remove } = useFieldArray({ control, name: 'options' })
   const questionType = watch('questionType')
@@ -67,7 +73,7 @@ export default function QuestionForm({ topics, onTopicsChange, defaultValues, ed
     try {
       const res = await quizService.createTopic({ name: newTopicName.trim() })
       const topic = res.data
-      onTopicsChange([...topics, topic])
+      onTopicsChange?.([...topics, topic])
       setValue('topicId', topic.id)
       setNewTopicName('')
       setNewTopicOpen(false)
@@ -82,7 +88,11 @@ export default function QuestionForm({ topics, onTopicsChange, defaultValues, ed
   async function onSubmit(data) {
     setSaving(true)
     try {
-      const payload = { ...data, topicId: data.topicId === '' ? null : Number(data.topicId) }
+      const payload = {
+        ...data,
+        topicId: data.topicId === '' ? null : Number(data.topicId),
+        courseId: data.courseId === '' ? null : Number(data.courseId),
+      }
       let saved
       if (editingId) {
         saved = await quizService.updateQuestion(editingId, { ...payload, active: true })
@@ -152,11 +162,23 @@ export default function QuestionForm({ topics, onTopicsChange, defaultValues, ed
           )}
         </div>
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Points *</label>
-          <input type="number" min={1} {...register('points')}
-            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          {errors.points && <span className="text-xs text-red-500 mt-1 block">{errors.points.message}</span>}
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
+          <select {...register('courseId')}
+            className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${
+              errors.courseId ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+            }`}>
+            <option value="">Select Course</option>
+            {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
+          </select>
+          {errors.courseId && <span className="text-xs text-red-500 mt-1 block">{errors.courseId.message}</span>}
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Points *</label>
+        <input type="number" min={1} {...register('points')}
+          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+        {errors.points && <span className="text-xs text-red-500 mt-1 block">{errors.points.message}</span>}
       </div>
 
       <div>
