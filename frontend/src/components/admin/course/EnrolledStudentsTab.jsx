@@ -52,7 +52,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
   const [candidateStudents, setCandidateStudents] = useState([])
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [candidateSearch, setCandidateSearch] = useState('')
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [selectedStudentIds, setSelectedStudentIds] = useState([])
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [enrolling, setEnrolling] = useState(false)
 
@@ -108,15 +108,24 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
 
   // Load candidate students when enroll modal opens
   const openEnrollModal = () => {
-    setSelectedStudentId('')
+    setSelectedStudentIds([])
     setSelectedBatchId('')
     setCandidateSearch('')
     setEnrollModalOpen(true)
     setLoadingCandidates(true)
 
-    studentService.list({ limit: 200, status: 'active' })
-      .then(res => {
-        setCandidateStudents(res.data?.students || [])
+    Promise.all([
+      studentService.list({ limit: 500, status: 'active' }),
+      courseService.getEnrollments(courseId, { status: 'active', limit: 10000 }),
+    ])
+      .then(([studentsRes, enrollmentsRes]) => {
+        const allStudents = studentsRes.data?.students || []
+        const activeCourseEnrollments = enrollmentsRes.data?.enrollments || []
+        const alreadyEnrolledIds = new Set(activeCourseEnrollments.map(e => String(e.studentId)))
+
+        // Only keep active students who are NOT already enrolled in this course
+        const availableCandidates = allStudents.filter(s => !alreadyEnrolledIds.has(String(s.id)))
+        setCandidateStudents(availableCandidates)
       })
       .catch(err => {
         toast.error('Failed to load students list: ' + err.message)
@@ -124,25 +133,58 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
       .finally(() => setLoadingCandidates(false))
   }
 
-  // Submit enrollment
+  // Toggle student selection
+  const toggleStudent = (id) => {
+    setSelectedStudentIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
+
+  // Select / Deselect all filtered candidates
+  const handleSelectAllCandidates = (filteredList) => {
+    const candidateIds = filteredList.map(s => s.id)
+    const allSelected = candidateIds.every(id => selectedStudentIds.includes(id))
+    if (allSelected) {
+      setSelectedStudentIds(prev => prev.filter(id => !candidateIds.includes(id)))
+    } else {
+      const merged = new Set([...selectedStudentIds, ...candidateIds])
+      setSelectedStudentIds(Array.from(merged))
+    }
+  }
+
+  // Submit enrollment (supports single or multiple students)
   const handleEnrollSubmit = async (e) => {
     e.preventDefault()
-    if (!selectedStudentId) {
-      toast.error('Please select a student')
+    if (!selectedStudentIds || selectedStudentIds.length === 0) {
+      toast.error('Please select at least one student')
       return
     }
 
     setEnrolling(true)
     try {
-      await courseService.enrollStudent(courseId, {
-        studentId: Number(selectedStudentId),
+      const payload = {
+        studentIds: selectedStudentIds.map(Number),
         batchId: selectedBatchId ? Number(selectedBatchId) : null,
-      })
-      toast.success('Student enrolled successfully')
+      }
+
+      try {
+        await courseService.bulkEnrollStudents(courseId, payload)
+      } catch (bulkErr) {
+        // Fallback to sequential single enrollments if bulk endpoint is unavailable
+        for (const sid of selectedStudentIds) {
+          await courseService.enrollStudent(courseId, {
+            studentId: Number(sid),
+            batchId: selectedBatchId ? Number(selectedBatchId) : null,
+          })
+        }
+      }
+
+      const count = selectedStudentIds.length
+      toast.success(`Successfully enrolled ${count} student${count > 1 ? 's' : ''}`)
       setEnrollModalOpen(false)
       loadEnrollments()
     } catch (err) {
-      toast.error(err.message || 'Failed to enroll student')
+      toast.error(err.message || 'Failed to enroll student(s)')
     } finally {
       setEnrolling(false)
     }
@@ -520,18 +562,18 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         </>
       )}
 
-      {/* Enroll Student Modal */}
+      {/* Enroll Students Modal */}
       {enrollModalOpen && mounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-xl w-full shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center">
                   <Plus size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Enroll Student</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Enroll a student into {courseTitle}</p>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Enroll Students</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Enroll one or multiple students into {courseTitle}</p>
                 </div>
               </div>
               <button
@@ -543,35 +585,120 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
             </div>
 
             <form onSubmit={handleEnrollSubmit} className="p-6 space-y-4">
+              {/* Selected Students Chips summary */}
+              {selectedStudentIds.length > 0 && (
+                <div className="space-y-1.5 bg-purple-50/60 dark:bg-purple-950/30 p-3 rounded-2xl border border-purple-100 dark:border-purple-900/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-purple-900 dark:text-purple-300">
+                      Selected Students ({selectedStudentIds.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStudentIds([])}
+                      className="text-[11px] text-purple-600 hover:underline font-semibold"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                    {selectedStudentIds.map(id => {
+                      const studentObj = candidateStudents.find(s => String(s.id) === String(id))
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-600 text-white text-xs font-medium shadow-sm"
+                        >
+                          {studentObj?.name || `ID: ${id}`}
+                          <button
+                            type="button"
+                            onClick={() => toggleStudent(id)}
+                            className="hover:bg-purple-700 rounded-full p-0.5"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Student Picker */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
-                  Select Student *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Select Students *
+                  </label>
+                  {!loadingCandidates && filteredCandidates.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAllCandidates(filteredCandidates)}
+                      className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline"
+                    >
+                      {filteredCandidates.every(s => selectedStudentIds.includes(s.id))
+                        ? 'Deselect Filtered'
+                        : `Select All Matching (${filteredCandidates.length})`}
+                    </button>
+                  )}
+                </div>
+
                 {loadingCandidates ? (
-                  <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />
+                  <div className="h-36 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />
                 ) : (
                   <div className="space-y-2">
-                    <input
-                      type="text"
-                      placeholder="Filter student by name or email..."
-                      value={candidateSearch}
-                      onChange={e => setCandidateSearch(e.target.value)}
-                      className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <select
-                      required
-                      value={selectedStudentId}
-                      onChange={e => setSelectedStudentId(e.target.value)}
-                      className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                    >
-                      <option value="">-- Choose a student ({filteredCandidates.length} available) --</option>
-                      {filteredCandidates.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.email}) {s.enrollmentNo ? `· ${s.enrollmentNo}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Filter student by name, email, or enrollment ID..."
+                        value={candidateSearch}
+                        onChange={e => setCandidateSearch(e.target.value)}
+                        className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
+                      />
+                    </div>
+
+                    <div className="border border-gray-200 dark:border-gray-800 rounded-2xl max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
+                      {filteredCandidates.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-gray-400">
+                          {candidateSearch ? 'No matching students found' : 'No available active students'}
+                        </div>
+                      ) : (
+                        filteredCandidates.map(s => {
+                          const isSelected = selectedStudentIds.includes(s.id)
+                          return (
+                            <label
+                              key={s.id}
+                              className={`flex items-center justify-between p-2.5 cursor-pointer hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition-colors ${
+                                isSelected ? 'bg-purple-50/80 dark:bg-purple-950/30' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleStudent(s.id)}
+                                  className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 border-gray-300 dark:border-gray-700"
+                                />
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-white">{s.name}</p>
+                                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                    {s.email} {s.enrollmentNo ? `· ${s.enrollmentNo}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                              {s.batch && (
+                                <span className={`text-[10px] px-2 py-0.5 rounded-md ${
+                                  batches.some(b => String(b.id) === String(s.batch.id))
+                                    ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-semibold'
+                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                                }`}>
+                                  {batches.some(b => String(b.id) === String(s.batch.id)) ? s.batch.name : `Other course: ${s.batch.name}`}
+                                </span>
+                              )}
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -611,11 +738,13 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                 </button>
                 <button
                   type="submit"
-                  disabled={enrolling || !selectedStudentId}
+                  disabled={enrolling || selectedStudentIds.length === 0}
                   className="flex-1 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/20"
                 >
                   {enrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                  {enrolling ? 'Enrolling...' : 'Confirm Enrollment'}
+                  {enrolling
+                    ? `Enrolling (${selectedStudentIds.length})...`
+                    : `Confirm Enrollment (${selectedStudentIds.length})`}
                 </button>
               </div>
             </form>

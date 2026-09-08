@@ -148,35 +148,43 @@ class CourseStatusTransitionTest {
     }
 
     @Test
-    @DisplayName("ARCHIVED -> DRAFT via PATCH = REJECT")
-    void patch_archived_to_draft_reject() {
+    @DisplayName("ARCHIVED -> DRAFT via PATCH = ALLOW (Unarchive)")
+    void patch_archived_to_draft_allow() {
         Course c = courseWithStatus(CourseStatus.ARCHIVED);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
-        assertThrows(BadRequestException.class, () -> courseService.updateStatus(1L, CourseStatus.DRAFT));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+        var resp = courseService.updateStatus(1L, CourseStatus.DRAFT);
+        assertEquals(CourseStatus.DRAFT, resp.status());
     }
 
     @Test
-    @DisplayName("ARCHIVED -> PUBLISHED via PATCH = REJECT")
-    void patch_archived_to_published_reject() {
+    @DisplayName("ARCHIVED -> PUBLISHED via PATCH = ALLOW (Unarchive)")
+    void patch_archived_to_published_allow() {
         Course c = courseWithStatus(CourseStatus.ARCHIVED);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
-        assertThrows(BadRequestException.class, () -> courseService.updateStatus(1L, CourseStatus.PUBLISHED));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+        var resp = courseService.updateStatus(1L, CourseStatus.PUBLISHED);
+        assertEquals(CourseStatus.PUBLISHED, resp.status());
     }
 
     @Test
-    @DisplayName("ARCHIVED -> DRAFT via PUT = REJECT")
-    void put_archived_to_draft_reject() {
+    @DisplayName("ARCHIVED -> DRAFT via PUT = ALLOW (Unarchive)")
+    void put_archived_to_draft_allow() {
         Course c = courseWithStatus(CourseStatus.ARCHIVED);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
-        assertThrows(BadRequestException.class, () -> courseService.update(1L, requestWithStatus(CourseStatus.DRAFT)));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+        var resp = courseService.update(1L, requestWithStatus(CourseStatus.DRAFT));
+        assertEquals(CourseStatus.DRAFT, resp.status());
     }
 
     @Test
-    @DisplayName("ARCHIVED -> PUBLISHED via PUT = REJECT")
-    void put_archived_to_published_reject() {
+    @DisplayName("ARCHIVED -> PUBLISHED via PUT = ALLOW (Unarchive)")
+    void put_archived_to_published_allow() {
         Course c = courseWithStatus(CourseStatus.ARCHIVED);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
-        assertThrows(BadRequestException.class, () -> courseService.update(1L, requestWithStatus(CourseStatus.PUBLISHED)));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+        var resp = courseService.update(1L, requestWithStatus(CourseStatus.PUBLISHED));
+        assertEquals(CourseStatus.PUBLISHED, resp.status());
     }
 
     @Test

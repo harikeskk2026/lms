@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 public record AssignmentResponse(
         Long id,
@@ -13,7 +14,9 @@ public record AssignmentResponse(
         CourseSummary course,
         BatchSummary batch,
         LocalDate startDate,
+        LocalTime publishTime,
         LocalDate dueDate,
+        LocalTime closeTime,
         int totalMarks,
         String attachmentUrl,
         String attachmentName,
@@ -30,7 +33,9 @@ public record AssignmentResponse(
                 new CourseSummary(assignment.getCourse().getId(), assignment.getCourse().getTitle()),
                 new BatchSummary(assignment.getBatch().getId(), assignment.getBatch().getName()),
                 assignment.getStartDate(),
+                assignment.getPublishTime(),
                 assignment.getDueDate(),
+                assignment.getCloseTime(),
                 assignment.getTotalMarks(),
                 assignment.getAttachmentUrl(),
                 assignment.getAttachmentName(),

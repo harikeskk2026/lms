@@ -18,6 +18,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "assignments")
@@ -44,8 +45,14 @@ public class Assignment {
     @Column(name = "start_date")
     private LocalDate startDate;
 
+    @Column(name = "publish_time")
+    private LocalTime publishTime;
+
     @Column(name = "due_date", nullable = false)
     private LocalDate dueDate;
+
+    @Column(name = "close_time")
+    private LocalTime closeTime;
 
     @Column(name = "total_marks", nullable = false)
     private int totalMarks;
@@ -122,12 +129,28 @@ public class Assignment {
         this.startDate = startDate;
     }
 
+    public LocalTime getPublishTime() {
+        return publishTime;
+    }
+
+    public void setPublishTime(LocalTime publishTime) {
+        this.publishTime = publishTime;
+    }
+
     public LocalDate getDueDate() {
         return dueDate;
     }
 
     public void setDueDate(LocalDate dueDate) {
         this.dueDate = dueDate;
+    }
+
+    public LocalTime getCloseTime() {
+        return closeTime;
+    }
+
+    public void setCloseTime(LocalTime closeTime) {
+        this.closeTime = closeTime;
     }
 
     public int getTotalMarks() {

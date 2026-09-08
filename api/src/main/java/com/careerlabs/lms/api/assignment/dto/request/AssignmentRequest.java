@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 public class AssignmentRequest {
 
@@ -27,8 +28,12 @@ public class AssignmentRequest {
 
     private LocalDate startDate;
 
+    private LocalTime publishTime;
+
     @NotNull(message = AssignmentValidationMessages.DUE_DATE_REQUIRED)
     private LocalDate dueDate;
+
+    private LocalTime closeTime;
 
     @NotNull(message = AssignmentValidationMessages.TOTAL_MARKS_REQUIRED)
     @Min(value = 1, message = AssignmentValidationMessages.TOTAL_MARKS_MIN)
@@ -81,12 +86,28 @@ public class AssignmentRequest {
         this.startDate = startDate;
     }
 
+    public LocalTime getPublishTime() {
+        return publishTime;
+    }
+
+    public void setPublishTime(LocalTime publishTime) {
+        this.publishTime = publishTime;
+    }
+
     public LocalDate getDueDate() {
         return dueDate;
     }
 
     public void setDueDate(LocalDate dueDate) {
         this.dueDate = dueDate;
+    }
+
+    public LocalTime getCloseTime() {
+        return closeTime;
+    }
+
+    public void setCloseTime(LocalTime closeTime) {
+        this.closeTime = closeTime;
     }
 
     public Integer getTotalMarks() {

@@ -21,6 +21,8 @@ const courseService = {
 
   enrollStudent: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enrollments`, data }),
 
+  bulkEnrollStudents: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enrollments/bulk`, data }),
+
   unenrollStudent: (courseId, enrollmentId) => apiCall({ method: 'DELETE', url: `/courses/${courseId}/enrollments/${enrollmentId}` }),
 }
 

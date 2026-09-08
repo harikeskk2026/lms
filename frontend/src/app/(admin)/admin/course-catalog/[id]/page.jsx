@@ -575,12 +575,24 @@ function calculateDuration(start, end) {
 
 function StatusBadge({ status, onChange, disabled, title }) {
   const isDraft = status === 'DRAFT'
+  const isArchived = status === 'ARCHIVED'
+
+  let badgeStyle = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+  let selectStyle = 'bg-emerald-100 text-emerald-700 border-emerald-300/70 hover:bg-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+
+  if (isDraft) {
+    badgeStyle = 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+    selectStyle = 'bg-amber-100 text-amber-700 border-amber-300/70 hover:bg-amber-200/80 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+  } else if (isArchived) {
+    badgeStyle = 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+    selectStyle = 'bg-red-100 text-red-700 border-red-300/70 hover:bg-red-200/80 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
+  }
 
   if (!onChange) {
     return (
-      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-        isDraft ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-      }`}>{isDraft ? 'DRAFT' : 'PUBLISHED'}</span>
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${badgeStyle}`}>
+        {status || 'PUBLISHED'}
+      </span>
     )
   }
 
@@ -590,15 +602,12 @@ function StatusBadge({ status, onChange, disabled, title }) {
         value={status || 'PUBLISHED'}
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        title={title || "Click to change status between DRAFT and PUBLISHED"}
-        className={`appearance-none cursor-pointer text-[9px] font-bold pl-2 pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 ${
-          isDraft
-            ? 'bg-amber-100 text-amber-700 border-amber-300/70 hover:bg-amber-200/80 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
-            : 'bg-emerald-100 text-emerald-700 border-emerald-300/70 hover:bg-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        title={title || "Click to change course status"}
+        className={`appearance-none cursor-pointer text-[9px] font-bold pl-2 pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 ${selectStyle} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
         <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
+        <option value="ARCHIVED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">ARCHIVED</option>
       </select>
       <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
     </div>
@@ -660,6 +669,7 @@ function StatusSelect({ value, onChange, small }) {
       className={`rounded-lg border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-purple-500 ${small ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}`}>
       <option value="DRAFT">Draft</option>
       <option value="PUBLISHED">Published</option>
+      <option value="ARCHIVED">Archived</option>
     </select>
   )
 }
@@ -722,7 +732,7 @@ function SyllabusTab({ courseId }) {
     try {
       const res = await courseContentService.updateSyllabusStatus(courseId, newStatus, includeTopics)
       const data = res.data || res
-      setModules(data || [])
+      setModules(Array.isArray(data) ? data : (data?.data || []))
       toast.success(
         includeTopics
           ? `All modules and topics marked as ${newStatus}`
@@ -737,8 +747,8 @@ function SyllabusTab({ courseId }) {
               title: m.title,
               description: m.description || '',
               status: newStatus,
-              durationValue: m.durationValue ? Number(m.durationValue) : null,
-              durationUnit: m.durationValue ? m.durationUnit : null,
+              durationValue: m.durationValue != null && m.durationValue !== '' ? Number(m.durationValue) : null,
+              durationUnit: m.durationValue != null && m.durationValue !== '' ? (m.durationUnit || 'WEEKS') : null,
             })
             if (m.topics && m.topics.length > 0) {
               await Promise.all(m.topics.map(t =>
@@ -746,7 +756,7 @@ function SyllabusTab({ courseId }) {
                   title: t.title,
                   description: t.description || '',
                   status: newStatus,
-                  durationHours: t.durationHours ? Number(t.durationHours) : null,
+                  durationHours: t.durationHours != null && t.durationHours !== '' ? Number(t.durationHours) : null,
                 })
               ))
             }
@@ -758,8 +768,8 @@ function SyllabusTab({ courseId }) {
               title: m.title,
               description: m.description || '',
               status: newStatus,
-              durationValue: m.durationValue ? Number(m.durationValue) : null,
-              durationUnit: m.durationValue ? m.durationUnit : null,
+              durationValue: m.durationValue != null && m.durationValue !== '' ? Number(m.durationValue) : null,
+              durationUnit: m.durationValue != null && m.durationValue !== '' ? (m.durationUnit || 'WEEKS') : null,
             })
           ))
           toast.success(`All modules marked as ${newStatus}`)
@@ -783,8 +793,8 @@ function SyllabusTab({ courseId }) {
         title: module.title,
         description: module.description || '',
         status: newStatus,
-        durationValue: module.durationValue ? Number(module.durationValue) : null,
-        durationUnit: module.durationValue ? module.durationUnit : null,
+        durationValue: module.durationValue != null && module.durationValue !== '' ? Number(module.durationValue) : null,
+        durationUnit: module.durationValue != null && module.durationValue !== '' ? (module.durationUnit || 'WEEKS') : null,
       })
       toast.success(`Module marked as ${newStatus}`)
     } catch (err) {
@@ -804,7 +814,7 @@ function SyllabusTab({ courseId }) {
         title: topic.title,
         description: topic.description || '',
         status: newStatus,
-        durationHours: topic.durationHours ? Number(topic.durationHours) : null,
+        durationHours: topic.durationHours != null && topic.durationHours !== '' ? Number(topic.durationHours) : null,
       })
       toast.success(`Topic marked as ${newStatus}`)
     } catch (err) {
@@ -1892,45 +1902,59 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
 
       {canCreateBatch && showForm && (
         <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-          <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Batch name *"
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          <select
-            value={form.trainerId}
-            onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
-            disabled={loadingTrainers}
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60 text-gray-800 dark:text-gray-100"
-          >
-            <option value="">{loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}</option>
-            {trainers.map(t => (
-              <option key={t.id} value={t.id}>
-                {t.name}{t.designation ? ` · ${t.designation}` : ''}
-              </option>
-            ))}
-          </select>
-          <input
-            required
-            type="date"
-            value={form.startDate}
-            onChange={e => {
-              const newStart = e.target.value
-              setForm(f => ({
-                ...f,
-                startDate: newStart,
-                endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
-              }))
-            }}
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-          />
-          <input
-            required
-            type="date"
-            min={form.startDate || undefined}
-            value={form.endDate}
-            onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-          />
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch Name *</label>
+            <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Batch A"
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+          </div>
 
-          {/* Clean Start Time & End Time */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Trainer (Optional)</label>
+            <select
+              value={form.trainerId}
+              onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
+              disabled={loadingTrainers}
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60 text-gray-800 dark:text-gray-100"
+            >
+              <option value="">{loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}</option>
+              {trainers.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.name}{t.designation ? ` · ${t.designation}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
+            <input
+              required
+              type="date"
+              value={form.startDate}
+              onChange={e => {
+                const newStart = e.target.value
+                setForm(f => ({
+                  ...f,
+                  startDate: newStart,
+                  endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
+                }))
+              }}
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
+            <input
+              required
+              type="date"
+              min={form.startDate || undefined}
+              value={form.endDate}
+              onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
             <input
@@ -1940,6 +1964,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
               className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
             <input
@@ -1950,13 +1975,21 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
             />
           </div>
 
-          <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-            <option value="ONLINE">ONLINE</option><option value="OFFLINE">OFFLINE</option><option value="HYBRID">HYBRID</option>
-          </select>
-          <input type="number" min="1" max="500" value={form.maxStudents} onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))} placeholder="Max students"
-            className="rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          <button type="submit" disabled={saving} className="sm:col-span-2 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode *</label>
+            <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+              <option value="ONLINE">ONLINE</option><option value="OFFLINE">OFFLINE</option><option value="HYBRID">HYBRID</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Students *</label>
+            <input type="number" min="1" max="500" value={form.maxStudents} onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))} placeholder="Max students"
+              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+          </div>
+
+          <button type="submit" disabled={saving} className="sm:col-span-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60 transition-all shadow-md">
             {saving ? 'Creating...' : 'Create Batch'}
           </button>
         </form>

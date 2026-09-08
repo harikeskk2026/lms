@@ -141,10 +141,12 @@ public class CourseServiceImpl implements CourseService {
             return;
         }
         boolean allowed = (current == CourseStatus.DRAFT && requested == CourseStatus.PUBLISHED)
-                || (current == CourseStatus.PUBLISHED && requested == CourseStatus.ARCHIVED);
+                || (current == CourseStatus.PUBLISHED && requested == CourseStatus.ARCHIVED)
+                || (current == CourseStatus.ARCHIVED && requested == CourseStatus.PUBLISHED)
+                || (current == CourseStatus.ARCHIVED && requested == CourseStatus.DRAFT);
         if (!allowed) {
             throw new BadRequestException(
-                    String.format("Invalid status transition from %s to %s. Allowed transitions are DRAFT -> PUBLISHED and PUBLISHED -> ARCHIVED. ARCHIVED is terminal and DRAFT cannot be skipped to ARCHIVED.", current, requested));
+                    String.format("Invalid status transition from %s to %s. Allowed transitions are DRAFT -> PUBLISHED, PUBLISHED -> ARCHIVED, and ARCHIVED -> PUBLISHED or DRAFT. DRAFT cannot be skipped directly to ARCHIVED.", current, requested));
         }
     }
 

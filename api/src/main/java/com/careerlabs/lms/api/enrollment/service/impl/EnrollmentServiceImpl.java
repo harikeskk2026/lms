@@ -8,6 +8,7 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.enrollment.dto.request.BulkEnrollStudentsRequest;
 import com.careerlabs.lms.api.enrollment.dto.request.EnrollStudentRequest;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPageResponse;
@@ -135,7 +136,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 Predicate directBatch = cb.equal(root.get("batch").get("id"), batchId);
                 Predicate studentBatch = cb.and(
                         cb.isNull(root.get("batch")),
-                        cb.equal(root.get("student").get("batch").get("id"), batchId)
+                        cb.equal(root.get("student").get("batch").get("id"), batchId),
+                        cb.equal(root.get("student").get("batch").get("course").get("id"), courseId)
                 );
                 predicates.add(cb.or(directBatch, studentBatch));
             }
@@ -248,6 +250,26 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("Student is already enrolled in this course");
         }
+    }
+
+    @Override
+    @Transactional
+    public List<CourseEnrolledStudentResponse> bulkEnrollStudentsByAdmin(Long courseId, BulkEnrollStudentsRequest request) {
+        if (request.studentIds() == null || request.studentIds().isEmpty()) {
+            throw new BadRequestException("At least one student must be selected for enrollment");
+        }
+
+        List<CourseEnrolledStudentResponse> responses = new ArrayList<>();
+        for (Long studentId : request.studentIds()) {
+            try {
+                EnrollStudentRequest singleReq = new EnrollStudentRequest(studentId, request.batchId());
+                CourseEnrolledStudentResponse response = enrollStudentByAdmin(courseId, singleReq);
+                responses.add(response);
+            } catch (ConflictException e) {
+                // If student is already enrolled, continue processing remaining students
+            }
+        }
+        return responses;
     }
 
     @Override

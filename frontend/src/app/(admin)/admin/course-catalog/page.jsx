@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search, Archive, X, Upload, BookOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, BarChart2, FolderOpen, Eye, EyeOff, Search, Archive, RotateCcw, X, Upload, BookOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
@@ -284,7 +284,10 @@ export default function CourseCatalogPage() {
                       </button>
                     )}
                     {c.status === 'ARCHIVED' && (
-                      <span className="flex-1 text-center py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs font-semibold">Archived — terminal</span>
+                      <button onClick={() => handleStatusChange(c, 'PUBLISHED')} disabled={statusUpdatingId === c.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition-colors disabled:opacity-60 border border-emerald-200/60 dark:border-emerald-800/40">
+                        <RotateCcw size={12} /> Unarchive
+                      </button>
                     )}
                   </div>
                   <div className="flex gap-2 pt-1">
@@ -361,39 +364,21 @@ export default function CourseCatalogPage() {
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status *</label>
             <select {...register('status')}
-              disabled={editingCourseStatus === 'ARCHIVED'}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60">
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
               {!editingId && (
                 <>
                   <option value="DRAFT">DRAFT</option>
                   <option value="PUBLISHED">PUBLISHED</option>
                 </>
               )}
-              {editingId && editingCourseStatus === 'DRAFT' && (
+              {editingId && (
                 <>
                   <option value="DRAFT">DRAFT</option>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                </>
-              )}
-              {editingId && editingCourseStatus === 'PUBLISHED' && (
-                <>
                   <option value="PUBLISHED">PUBLISHED</option>
                   <option value="ARCHIVED">ARCHIVED</option>
                 </>
               )}
-              {editingId && editingCourseStatus === 'ARCHIVED' && (
-                <option value="ARCHIVED">ARCHIVED — terminal</option>
-              )}
             </select>
-            {editingId && editingCourseStatus === 'ARCHIVED' && (
-              <p className="text-xs text-gray-500 mt-1">Archived is terminal — status cannot be changed.</p>
-            )}
-            {editingId && editingCourseStatus === 'PUBLISHED' && (
-              <p className="text-xs text-gray-500 mt-1">PUBLISHED can only be archived. Editing content does not change status.</p>
-            )}
-            {editingId && editingCourseStatus === 'DRAFT' && (
-              <p className="text-xs text-gray-500 mt-1">DRAFT can only be published (DRAFT → PUBLISHED).</p>
-            )}
             {errors.status && <span className="text-xs text-red-500 mt-1 block">{errors.status.message}</span>}
           </div>
 

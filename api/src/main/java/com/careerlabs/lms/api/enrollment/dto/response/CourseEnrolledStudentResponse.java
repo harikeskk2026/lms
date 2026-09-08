@@ -26,7 +26,14 @@ public record CourseEnrolledStudentResponse(
     public static CourseEnrolledStudentResponse from(Enrollment enrollment) {
         Student student = enrollment.getStudent();
         User user = student != null ? student.getUser() : null;
-        Batch batch = enrollment.getBatch() != null ? enrollment.getBatch() : (student != null ? student.getBatch() : null);
+        Batch batch = enrollment.getBatch();
+        if (batch == null && student != null && student.getBatch() != null) {
+            Batch stBatch = student.getBatch();
+            if (stBatch.getCourse() != null && enrollment.getCourse() != null &&
+                    stBatch.getCourse().getId().equals(enrollment.getCourse().getId())) {
+                batch = stBatch;
+            }
+        }
 
         return new CourseEnrolledStudentResponse(
                 enrollment.getId(),

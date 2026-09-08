@@ -108,6 +108,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/admins", "/api/admin/admins/**").hasRole("SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/admin/users/*/reset-password").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/courses/*/enrollments", "/api/courses/*/enrollments/*", "/api/courses/*/enrollments/bulk").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.POST, "/api/courses", "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/courses", "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/courses", "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")

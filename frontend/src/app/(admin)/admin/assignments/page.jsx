@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Paperclip, X, RefreshCw } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Paperclip, X, RefreshCw, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
@@ -19,7 +19,7 @@ const STATUS_COLORS = {
 
 const EMPTY_FORM = {
   title: '', description: '', courseId: '', batchId: '',
-  startDate: '', dueDate: '', totalMarks: 100,
+  startDate: '', publishTime: '', dueDate: '', closeTime: '', totalMarks: 100,
   attachmentUrl: '', attachmentName: '',
 }
 
@@ -97,7 +97,9 @@ export default function AssignmentsPage() {
       courseId: String(assignment.course.id),
       batchId: String(assignment.batch.id),
       startDate: assignment.startDate || '',
+      publishTime: assignment.publishTime ? assignment.publishTime.substring(0, 5) : '',
       dueDate: assignment.dueDate,
+      closeTime: assignment.closeTime ? assignment.closeTime.substring(0, 5) : '',
       totalMarks: assignment.totalMarks,
       attachmentUrl: assignment.attachmentUrl || '',
       attachmentName: assignment.attachmentName || '',
@@ -127,7 +129,9 @@ export default function AssignmentsPage() {
     courseId: Number(form.courseId),
     batchId: Number(form.batchId),
     startDate: form.startDate || null,
+    publishTime: form.publishTime || null,
     dueDate: form.dueDate,
+    closeTime: form.closeTime || null,
     totalMarks: Number(form.totalMarks),
     attachmentUrl: form.attachmentUrl || null,
     attachmentName: form.attachmentName || null,
@@ -139,9 +143,13 @@ export default function AssignmentsPage() {
       toast.error('Please fill in all required fields')
       return
     }
-    if (form.startDate && form.dueDate && new Date(form.dueDate) < new Date(form.startDate)) {
-      toast.error('Due date (end date) must be after start date')
-      return
+    if (form.startDate && form.dueDate) {
+      const startDT = new Date(`${form.startDate}T${form.publishTime || '00:00'}`)
+      const dueDT = new Date(`${form.dueDate}T${form.closeTime || '23:59'}`)
+      if (dueDT < startDT) {
+        toast.error('Due date & close time must be after publish date & time')
+        return
+      }
     }
     setSaving(true)
     try {
@@ -222,7 +230,7 @@ export default function AssignmentsPage() {
       </div>
 
       {/* Filters */}
-      <div className="glass-card p-4 flex flex-wrap gap-3">
+      <div className="glass-card p-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 flex-1 min-w-[200px]">
           <Search size={15} className="text-purple-400 flex-shrink-0" />
           <input
@@ -232,21 +240,21 @@ export default function AssignmentsPage() {
           />
         </div>
         <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
           value={courseFilter} onChange={e => { setCourseFilter(e.target.value); setPage(1) }}
         >
           <option value="">All Courses</option>
           {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
         </select>
         <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
           value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1) }}
         >
           <option value="">All Batches</option>
           {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
         <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
+          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
           value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
         >
           <option value="">All Status</option>
@@ -254,18 +262,35 @@ export default function AssignmentsPage() {
           <option value="PUBLISHED">Published</option>
           <option value="CLOSED">Closed</option>
         </select>
-        <input
-          type="date" value={dueDateFrom} onChange={e => { setDueDateFrom(e.target.value); setPage(1) }}
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-          title="Due date from"
-        />
-        <input
-          type="date" value={dueDateTo} onChange={e => { setDueDateTo(e.target.value); setPage(1) }}
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-          title="Due date to"
-        />
-        <button onClick={load} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-          <RefreshCw size={15} />
+        <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
+          <Calendar size={14} className="text-purple-400 flex-shrink-0" />
+          <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">From:</span>
+          <input
+            type="date"
+            value={dueDateFrom}
+            onChange={e => { setDueDateFrom(e.target.value); setPage(1) }}
+            className="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 cursor-pointer"
+            title="Due date from"
+          />
+        </div>
+        <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
+          <Calendar size={14} className="text-purple-400 flex-shrink-0" />
+          <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">To:</span>
+          <input
+            type="date"
+            value={dueDateTo}
+            onChange={e => { setDueDateTo(e.target.value); setPage(1) }}
+            className="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 cursor-pointer"
+            title="Due date to"
+          />
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="w-9 h-9 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50"
+          title="Refresh List"
+        >
+          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
 
@@ -415,7 +440,7 @@ export default function AssignmentsPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish / Start Date</label>
               <input
                 type="date"
                 value={form.startDate}
@@ -424,12 +449,33 @@ export default function AssignmentsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due Date *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish Time</label>
+              <input
+                type="time"
+                value={form.publishTime}
+                onChange={e => setForm(f => ({ ...f, publishTime: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due / Close Date *</label>
               <input
                 type="date"
                 value={form.dueDate}
                 min={form.startDate || undefined}
                 onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Close Time</label>
+              <input
+                type="time"
+                value={form.closeTime}
+                onChange={e => setForm(f => ({ ...f, closeTime: e.target.value }))}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>

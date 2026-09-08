@@ -34,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -116,7 +118,11 @@ public class AssignmentServiceImpl implements AssignmentService {
     private StudentAssignmentResponse toStudentResponse(Assignment assignment, AssignmentSubmission submissionEntity) {
         Optional<AssignmentSubmission> submission = Optional.ofNullable(submissionEntity);
 
-        boolean isOverdue = submission.isEmpty() && LocalDate.now().isAfter(assignment.getDueDate());
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime closeDateTime = assignment.getDueDate() != null
+                ? (assignment.getCloseTime() != null ? LocalDateTime.of(assignment.getDueDate(), assignment.getCloseTime()) : assignment.getDueDate().atTime(23, 59, 59))
+                : null;
+        boolean isOverdue = submission.isEmpty() && closeDateTime != null && now.isAfter(closeDateTime);
 
         StudentAssignmentResponse.SubmissionInfo submissionInfo = submission.map(s -> {
             String status = s.isReviewed() ? "GRADED" : s.isLate() ? "LATE" : "SUBMITTED";
@@ -127,7 +133,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         return new StudentAssignmentResponse(
                 assignment.getId(), assignment.getTitle(), assignment.getDescription(),
-                assignment.getBatch().getName(), assignment.getDueDate(), assignment.getTotalMarks(),
+                assignment.getBatch().getName(), assignment.getStartDate(), assignment.getPublishTime(),
+                assignment.getDueDate(), assignment.getCloseTime(), assignment.getTotalMarks(),
                 assignment.getAttachmentUrl(), assignment.getAttachmentName(), isOverdue, submissionInfo);
     }
 
@@ -214,8 +221,17 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     private void applyRequest(Assignment assignment, AssignmentRequest request) {
-        if (request.getStartDate() != null && request.getDueDate() != null && request.getDueDate().isBefore(request.getStartDate())) {
-            throw new BadRequestException("Due date (end date) must be after start date");
+        if (request.getStartDate() != null && request.getDueDate() != null) {
+            LocalDateTime startDateTime = request.getPublishTime() != null
+                    ? LocalDateTime.of(request.getStartDate(), request.getPublishTime())
+                    : request.getStartDate().atStartOfDay();
+            LocalDateTime dueDateTime = request.getCloseTime() != null
+                    ? LocalDateTime.of(request.getDueDate(), request.getCloseTime())
+                    : request.getDueDate().atTime(23, 59, 59);
+
+            if (dueDateTime.isBefore(startDateTime)) {
+                throw new BadRequestException("Due date & close time must be after publish date & time");
+            }
         }
 
         Course course = courseRepository.findById(request.getCourseId())
@@ -228,7 +244,9 @@ public class AssignmentServiceImpl implements AssignmentService {
         assignment.setCourse(course);
         assignment.setBatch(batch);
         assignment.setStartDate(request.getStartDate());
+        assignment.setPublishTime(request.getPublishTime());
         assignment.setDueDate(request.getDueDate());
+        assignment.setCloseTime(request.getCloseTime());
         assignment.setTotalMarks(request.getTotalMarks());
         assignment.setAttachmentUrl(request.getAttachmentUrl());
         assignment.setAttachmentName(request.getAttachmentName());
