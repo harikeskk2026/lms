@@ -15,6 +15,8 @@ const assignmentService = {
 
   close: (id) => apiCall({ method: 'PATCH', url: `/assignments/${id}/close` }),
 
+  reopen: (id) => apiCall({ method: 'PATCH', url: `/assignments/${id}/reopen` }),
+
   upload: (file) => {
     const formData = new FormData()
     formData.append('file', file)
