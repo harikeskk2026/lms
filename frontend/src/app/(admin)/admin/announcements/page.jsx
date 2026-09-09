@@ -11,6 +11,7 @@ import toast from 'react-hot-toast'
 import { adminApi, resolveFileUrl } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
+import assignmentService from '@/services/assignmentService'
 import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
@@ -48,6 +49,7 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState([])
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
+  const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -67,6 +69,10 @@ export default function AnnouncementsPage() {
     load()
     adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
+    assignmentService.list({ limit: 100 }).then(r => {
+      const list = r.data?.assignments || r.data?.data?.assignments || []
+      setAssignments(list)
+    }).catch(() => {})
   }, [])
 
   const buildPayload = (status) => ({
@@ -175,7 +181,7 @@ export default function AnnouncementsPage() {
   }
   const activeTabData = sections.find(s => s.key === activeSection) || sections[0]
 
-  const cardProps = { batches, courses, onEdit: handleEdit, onDelete: handleDelete,
+  const cardProps = { batches, courses, assignments, onEdit: handleEdit, onDelete: handleDelete,
     onPublish: handlePublish, onApprove: handleApprove, onReject: handleReject, onDuplicate: handleDuplicate,
     onDetails: setDetailsFor, onView: setViewingAnnouncement }
 
@@ -202,7 +208,7 @@ export default function AnnouncementsPage() {
         <AnnouncementForm
           form={form} setForm={setForm} editId={editId} saving={saving} onSave={handleSave}
           onCancel={() => { setFormOpen(false); setEditId(null) }}
-          batches={batches} courses={courses}
+          batches={batches} courses={courses} assignments={assignments}
         />
       ) : (
         <>
@@ -237,7 +243,7 @@ export default function AnnouncementsPage() {
 
       {viewingAnnouncement && (
         <ViewAnnouncementModal a={viewingAnnouncement} batches={batches}
-          courses={courses} onClose={() => setViewingAnnouncement(null)} />
+          courses={courses} assignments={assignments} onClose={() => setViewingAnnouncement(null)} />
       )}
     </div>
   )
@@ -245,7 +251,7 @@ export default function AnnouncementsPage() {
 
 const PLACEHOLDER_TOKENS = ['{{studentName}}', '{{batchName}}', '{{courseName}}', '{{attendancePercentage}}', '{{date}}']
 
-function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, courses }) {
+function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, courses, assignments = [] }) {
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
   const toggle = (key) => () => setForm(f => ({ ...f, [key]: !f[key] }))
   const bodyRef = useRef(null)
@@ -253,6 +259,12 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
   const [audienceCount, setAudienceCount] = useState(null)
 
   const usesPlaceholders = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(`${form.title} ${form.body}`)
+
+  const filteredAssignments = assignments.filter(asg => {
+    if (form.batchId && asg.batch?.id && asg.batch.id !== Number(form.batchId)) return false
+    if (form.courseId && asg.course?.id && asg.course.id !== Number(form.courseId)) return false
+    return true
+  })
 
   useEffect(() => {
     if (!usesPlaceholders) { setPreview(null); return }
@@ -368,10 +380,25 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
             </div>
           )}
           {form.audienceRuleType === 'ASSIGNMENT_NOT_SUBMITTED' && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assignment ID</label>
-              <input type="number" value={form.audienceRuleReferenceId} onChange={set('audienceRuleReferenceId')}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Select Assignment <span className="text-xs text-gray-400 font-normal">(targets students who have NOT submitted)</span>
+              </label>
+              <select
+                value={form.audienceRuleReferenceId}
+                onChange={set('audienceRuleReferenceId')}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
+              >
+                <option value="">-- Choose an Assignment ({filteredAssignments.length} available) --</option>
+                {filteredAssignments.map(asg => (
+                  <option key={asg.id} value={asg.id}>
+                    {asg.title} {asg.batch?.name ? `· Batch: ${asg.batch.name}` : asg.course?.title ? `· Course: ${asg.course.title}` : ''}
+                  </option>
+                ))}
+              </select>
+              {filteredAssignments.length === 0 && (
+                <p className="text-[11px] text-amber-500 mt-1">No assignments found for the chosen Batch / Course.</p>
+              )}
             </div>
           )}
         </div>
@@ -489,9 +516,12 @@ function AnnouncementSection({ title, color, items, emptyText, cardProps, hideTi
   )
 }
 
-function AnnouncementCard({ a, batches, courses, onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
+function AnnouncementCard({ a, batches, courses, assignments = [], onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
   const batch = batches.find(b => b.id === a.batchId)
   const course = courses.find(c => c.id === a.courseId)
+  const targetAssignment = a.audienceRuleType === 'ASSIGNMENT_NOT_SUBMITTED' && a.audienceRuleReferenceId
+    ? assignments.find(asg => asg.id === Number(a.audienceRuleReferenceId))
+    : null
   const isDraft = a.status === 'DRAFT'
   const isScheduled = a.status === 'SCHEDULED'
   const isPending = a.status === 'PENDING_APPROVAL'
@@ -516,7 +546,15 @@ function AnnouncementCard({ a, batches, courses, onEdit, onDelete, onPublish, on
             )}
             {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
             {course && <Badge color="cyan">{course.title}</Badge>}
-            {a.audienceRuleType && a.audienceRuleType !== 'NONE' && <Badge color="amber">{a.audienceRuleType.replaceAll('_', ' ')}</Badge>}
+            {a.audienceRuleType && a.audienceRuleType !== 'NONE' && (
+              <Badge color="amber">
+                {a.audienceRuleType === 'ASSIGNMENT_NOT_SUBMITTED'
+                  ? `Not Submitted: ${targetAssignment ? targetAssignment.title : `Assignment #${a.audienceRuleReferenceId}`}`
+                  : a.audienceRuleType === 'ATTENDANCE_BELOW' && a.audienceRuleValue
+                  ? `Attendance < ${a.audienceRuleValue}%`
+                  : a.audienceRuleType.replaceAll('_', ' ')}
+              </Badge>
+            )}
             {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
             {a.allowComments && <Badge color="gray">Comments On</Badge>}
           </div>
@@ -670,9 +708,12 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
   )
 }
 
-function ViewAnnouncementModal({ a, batches, courses, onClose }) {
+function ViewAnnouncementModal({ a, batches, courses, assignments = [], onClose }) {
   const batch = batches.find(b => b.id === a.batchId)
   const course = courses.find(c => c.id === a.courseId)
+  const targetAssignment = a.audienceRuleType === 'ASSIGNMENT_NOT_SUBMITTED' && a.audienceRuleReferenceId
+    ? assignments.find(asg => asg.id === Number(a.audienceRuleReferenceId))
+    : null
 
   return (
     <Modal title="View Announcement" onClose={onClose}>
@@ -692,7 +733,15 @@ function ViewAnnouncementModal({ a, batches, courses, onClose }) {
           )}
           {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
           {course && <Badge color="cyan">{course.title}</Badge>}
-          {a.audienceRuleType && a.audienceRuleType !== 'NONE' && <Badge color="amber">{a.audienceRuleType.replaceAll('_', ' ')}</Badge>}
+          {a.audienceRuleType && a.audienceRuleType !== 'NONE' && (
+            <Badge color="amber">
+              {a.audienceRuleType === 'ASSIGNMENT_NOT_SUBMITTED'
+                ? `Not Submitted: ${targetAssignment ? targetAssignment.title : `Assignment #${a.audienceRuleReferenceId}`}`
+                : a.audienceRuleType === 'ATTENDANCE_BELOW' && a.audienceRuleValue
+                ? `Attendance < ${a.audienceRuleValue}%`
+                : a.audienceRuleType.replaceAll('_', ' ')}
+            </Badge>
+          )}
           {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
           {a.allowComments && <Badge color="gray">Comments On</Badge>}
         </div>
