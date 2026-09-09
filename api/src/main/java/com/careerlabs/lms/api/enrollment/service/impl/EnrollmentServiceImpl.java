@@ -101,6 +101,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
 
         return enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId()).stream()
+                .filter(e -> e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
                 .map(EnrollmentResponse::from)
                 .toList();
     }

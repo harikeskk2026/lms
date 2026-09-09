@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.student.controller;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.dto.response.StudentCourseResponse;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -49,6 +50,10 @@ public class StudentCourseController {
 
         Batch batch = student.getBatch();
         Course course = batch.getCourse();
+
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            return ResponseEntity.ok(ApiResponse.of(List.of()));
+        }
 
         List<SyllabusModule> modules = moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(course.getId());
         List<Long> moduleIds = modules.stream().map(SyllabusModule::getId).toList();

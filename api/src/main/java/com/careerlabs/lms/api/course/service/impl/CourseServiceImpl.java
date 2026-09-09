@@ -17,6 +17,7 @@ import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
 import com.careerlabs.lms.api.syllabus.service.SyllabusService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,7 +68,8 @@ public class CourseServiceImpl implements CourseService {
 
         if (accessGuard.isStudent(principal)) {
             Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-            if (student != null && student.getBatch() != null && student.getBatch().getCourse() != null) {
+            if (student != null && student.getBatch() != null && student.getBatch().getCourse() != null
+                    && student.getBatch().getCourse().getStatus() == CourseStatus.PUBLISHED) {
                 return List.of(CourseResponse.from(student.getBatch().getCourse(), true));
             }
             return List.of();
@@ -86,6 +88,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public CourseResponse create(CourseRequest request) {
         if (request.getStatus() == CourseStatus.ARCHIVED) {
             throw new BadRequestException("Courses cannot be created directly as ARCHIVED. Archive is available after the course is created.");
@@ -107,6 +110,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public CourseResponse update(Long id, CourseRequest request) {
         Course course = findOrThrow(id);
         // Content edit must not bypass status lifecycle - validate any status change via PUT as well
@@ -126,6 +130,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public CourseResponse updateStatus(Long id, CourseStatus status) {
         Course course = findOrThrow(id);
         if (status == course.getStatus()) {
@@ -152,6 +157,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public void delete(Long id) {
         Course course = findOrThrow(id);
 

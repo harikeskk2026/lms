@@ -3,6 +3,8 @@ package com.careerlabs.lms.api.enrollment.service;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
+import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
@@ -11,8 +13,8 @@ import org.springframework.stereotype.Component;
 /**
  * Central place for relationship-based course access rules:
  * - Admins can view/manage all courses.
- * - Trainers can only view/access courses belonging to their assigned batches.
- * - Students can only view/access the course belonging to their currently assigned batch.
+ * - Trainers can only view/access courses belonging to their assigned batches AND that are PUBLISHED.
+ * - Students can only view/access the course belonging to their currently assigned batch AND that is PUBLISHED.
  */
 @Component
 public class CourseAccessGuard {
@@ -20,13 +22,16 @@ public class CourseAccessGuard {
     private final StudentRepository studentRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final BatchRepository batchRepository;
+    private final CourseRepository courseRepository;
 
     public CourseAccessGuard(StudentRepository studentRepository,
                              EnrollmentRepository enrollmentRepository,
-                             BatchRepository batchRepository) {
+                             BatchRepository batchRepository,
+                             CourseRepository courseRepository) {
         this.studentRepository = studentRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.batchRepository = batchRepository;
+        this.courseRepository = courseRepository;
     }
 
     public boolean isAdmin(JwtUserPrincipal principal) {
@@ -91,7 +96,7 @@ public class CourseAccessGuard {
         return false;
     }
 
-    /** Course browsing/detail visibility: strictly relationship-based. */
+    /** Course browsing/detail visibility: relationship-based AND status must be PUBLISHED. */
     public void requireVisible(JwtUserPrincipal principal, Course course) {
         if (principal == null) {
             throw new ForbiddenException("Authentication required");
@@ -101,6 +106,9 @@ public class CourseAccessGuard {
         }
         if (course == null || course.getId() == null) {
             throw new ForbiddenException("Course not found");
+        }
+        if (!isPublished(course.getId())) {
+            throw new ForbiddenException("This course is not currently available");
         }
         if (isTrainer(principal)) {
             if (isTrainerForCourse(principal, course.getId())) {
@@ -117,7 +125,7 @@ public class CourseAccessGuard {
         throw new ForbiddenException("Access denied");
     }
 
-    /** Course content (syllabus/sessions/materials) access: strictly relationship-based. */
+    /** Course content (syllabus/sessions/materials) access: relationship-based AND status must be PUBLISHED. */
     public void requireContentAccess(JwtUserPrincipal principal, Long courseId) {
         if (principal == null) {
             throw new ForbiddenException("Authentication required");
@@ -127,6 +135,9 @@ public class CourseAccessGuard {
         }
         if (courseId == null) {
             throw new ForbiddenException("Course not found");
+        }
+        if (!isPublished(courseId)) {
+            throw new ForbiddenException("This course is not currently available");
         }
         if (isTrainer(principal)) {
             if (isTrainerForCourse(principal, courseId)) {
@@ -141,6 +152,12 @@ public class CourseAccessGuard {
             throw new ForbiddenException("You are not assigned to any batch for this course");
         }
         throw new ForbiddenException("Access denied");
+    }
+
+    private boolean isPublished(Long courseId) {
+        return courseRepository.findById(courseId)
+                .map(course -> course.getStatus() == CourseStatus.PUBLISHED)
+                .orElse(false);
     }
 }
 

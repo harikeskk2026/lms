@@ -68,10 +68,12 @@ public class BatchServiceImpl implements BatchService {
     public List<BatchResponse> list(JwtUserPrincipal principal) {
         List<Batch> batches;
         if (principal != null && "TRAINER".equalsIgnoreCase(principal.role())) {
-            batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(principal.id());
+            batches = batchRepository.findPublishedByTrainerIdOrderByCreatedAtDesc(principal.id());
         } else if (principal != null && "STUDENT".equalsIgnoreCase(principal.role())) {
             Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-            if (student != null && student.getBatch() != null) {
+            if (student != null && student.getBatch() != null
+                    && student.getBatch().getCourse() != null
+                    && student.getBatch().getCourse().getStatus() == CourseStatus.PUBLISHED) {
                 batches = List.of(student.getBatch());
             } else {
                 batches = List.of();
@@ -116,12 +118,19 @@ public class BatchServiceImpl implements BatchService {
         Batch batch = findOrThrow(id);
         if (principal != null) {
             if ("TRAINER".equalsIgnoreCase(principal.role())) {
-                if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
-                    throw new ForbiddenException("You are not assigned to this batch");
+                boolean assigned = batch.getTrainerId() != null && batch.getTrainerId().equals(principal.id());
+                boolean published = batch.getCourse() != null
+                        && batch.getCourse().getStatus() == CourseStatus.PUBLISHED;
+                if (!assigned || !published) {
+                    throw new ForbiddenException("You are not assigned to any published batch for this course");
                 }
             } else if ("STUDENT".equalsIgnoreCase(principal.role())) {
                 Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-                if (student == null || student.getBatch() == null || !student.getBatch().getId().equals(batch.getId())) {
+                boolean inBatch = student != null && student.getBatch() != null
+                        && student.getBatch().getId().equals(batch.getId());
+                boolean published = batch.getCourse() != null
+                        && batch.getCourse().getStatus() == CourseStatus.PUBLISHED;
+                if (!inBatch || !published) {
                     throw new ForbiddenException("You are not enrolled in this batch");
                 }
             }

@@ -10,6 +10,7 @@ import com.careerlabs.lms.api.attendance.service.AttendanceAnalyticsService;
 import com.careerlabs.lms.api.attendance.service.AttendanceRiskService;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.dashboard.dto.response.AdminDashboardResponse;
 import com.careerlabs.lms.api.dashboard.dto.response.StudentDashboardResponse;
 import com.careerlabs.lms.api.dashboard.service.DashboardService;
@@ -232,7 +233,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public TrainerDashboardResponse getTrainerDashboard(Long userId) {
-        List<Batch> myBatchEntities = userId != null ? batchRepository.findByTrainerId(userId) : java.util.Collections.emptyList();
+        List<Batch> myBatchEntities = userId != null ? batchRepository.findPublishedBatchesByTrainerId(userId) : java.util.Collections.emptyList();
 
         // Real student count: students in trainer's batches only
         List<Long> batchIds = myBatchEntities.stream().map(Batch::getId).toList();
@@ -441,11 +442,14 @@ public class DashboardServiceImpl implements DashboardService {
                 .toList();
 
         List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdOrderByEnrolledAtDesc(student.getId());
+        List<Enrollment> publishedEnrollments = enrollments.stream()
+                .filter(e -> e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
+                .toList();
         List<StudentDashboardResponse.UpcomingClass> upcomingClasses = buildUpcomingClasses(student);
 
         return new StudentDashboardResponse(
-                buildStudentOverview(enrollments, performance, attendanceHealth, pendingAssignments, quizAnalytics, stats),
-                buildContinueLearning(enrollments),
+                buildStudentOverview(publishedEnrollments, performance, attendanceHealth, pendingAssignments, quizAnalytics, stats),
+                buildContinueLearning(publishedEnrollments),
                 buildTodaysTasks(userId, pendingAssignments, upcomingClasses),
                 new StudentDashboardResponse.Performance(quizAnalytics, performance),
                 new StudentDashboardResponse.Attendance(
