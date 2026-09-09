@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar, Upload } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
@@ -10,6 +10,7 @@ import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 const STATUS_COLORS = {
   DRAFT:     'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
@@ -21,6 +22,7 @@ const EMPTY_FORM = {
   title: '', description: '', courseId: '', batchId: '',
   startDate: '', publishTime: '', dueDate: '', closeTime: '', totalMarks: 100,
   attachmentUrl: '', attachmentName: '',
+  attachments: [],
 }
 
 const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
@@ -72,9 +74,10 @@ export default function AssignmentsPage() {
   const [editAssignment, setEditAssignment] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState(null)
   const [deletingAssignment, setDeletingAssignment] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const searchTimer = useRef(null)
 
   const dateError = validateAssignmentDates(form.startDate, form.publishTime, form.dueDate, form.closeTime)
@@ -122,6 +125,11 @@ export default function AssignmentsPage() {
 
   const openEdit = (assignment) => {
     setEditAssignment(assignment)
+    const initialAttachments = assignment.attachments && assignment.attachments.length > 0
+      ? assignment.attachments.map(a => ({ fileUrl: a.fileUrl, fileName: a.fileName }))
+      : assignment.attachmentUrl
+        ? [{ fileUrl: assignment.attachmentUrl, fileName: assignment.attachmentName }]
+        : []
     setForm({
       title: assignment.title,
       description: assignment.description,
@@ -134,40 +142,72 @@ export default function AssignmentsPage() {
       totalMarks: assignment.totalMarks,
       attachmentUrl: assignment.attachmentUrl || '',
       attachmentName: assignment.attachmentName || '',
+      attachments: initialAttachments,
     })
     setPanelOpen(true)
   }
 
   const handleFileChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const selectedFiles = Array.from(e.target.files || [])
+    if (selectedFiles.length === 0) return
     setUploading(true)
     try {
-      const r = await assignmentService.upload(file)
-      setForm(f => ({ ...f, attachmentUrl: r.data.url, attachmentName: r.data.fileName }))
-      toast.success('File uploaded')
+      let uploaded = []
+      try {
+        const r = await assignmentService.uploadMultiple(selectedFiles)
+        uploaded = r.data || []
+      } catch (batchErr) {
+        for (const file of selectedFiles) {
+          const r = await assignmentService.upload(file)
+          if (r?.data) uploaded.push(r.data)
+        }
+      }
+      const newAttachments = uploaded.map(u => ({ fileUrl: u.url, fileName: u.fileName }))
+      setForm(f => ({
+        ...f,
+        attachments: [...(f.attachments || []), ...newAttachments],
+        attachmentUrl: f.attachmentUrl || newAttachments[0]?.fileUrl || '',
+        attachmentName: f.attachmentName || newAttachments[0]?.fileName || '',
+      }))
+      toast.success(`${uploaded.length} file${uploaded.length > 1 ? 's' : ''} uploaded`)
     } catch (err) {
-      toast.error(err.message || 'Only PDF and DOC/DOCX files are allowed')
+      toast.error(err.message || 'Failed to upload attachment(s)')
     } finally {
       setUploading(false)
       e.target.value = ''
     }
   }
 
-  const buildPayload = (status) => ({
-    title: form.title,
-    description: form.description,
-    courseId: Number(form.courseId),
-    batchId: Number(form.batchId),
-    startDate: form.startDate || null,
-    publishTime: form.publishTime || null,
-    dueDate: form.dueDate,
-    closeTime: form.closeTime || null,
-    totalMarks: Number(form.totalMarks),
-    attachmentUrl: form.attachmentUrl || null,
-    attachmentName: form.attachmentName || null,
-    status,
-  })
+  const removeAttachment = (indexToRemove) => {
+    setForm(f => {
+      const next = (f.attachments || []).filter((_, i) => i !== indexToRemove)
+      return {
+        ...f,
+        attachments: next,
+        attachmentUrl: next[0]?.fileUrl || '',
+        attachmentName: next[0]?.fileName || '',
+      }
+    })
+  }
+
+  const buildPayload = (status) => {
+    const attList = (form.attachments || []).map(a => ({ fileUrl: a.fileUrl, fileName: a.fileName }))
+    return {
+      title: form.title,
+      description: form.description,
+      courseId: Number(form.courseId),
+      batchId: Number(form.batchId),
+      startDate: form.startDate || null,
+      publishTime: form.publishTime || null,
+      dueDate: form.dueDate,
+      closeTime: form.closeTime || null,
+      totalMarks: Number(form.totalMarks),
+      attachmentUrl: attList[0]?.fileUrl || null,
+      attachmentName: attList[0]?.fileName || null,
+      attachments: attList,
+      status,
+    }
+  }
 
   const handleSubmit = async (status) => {
     if (!form.title || !form.description || !form.courseId || !form.batchId || !form.dueDate || form.totalMarks === '' || form.totalMarks === null) {
@@ -233,10 +273,18 @@ export default function AssignmentsPage() {
     }
   }
 
+const getBatchCourseId = (b) => {
+  if (!b) return ''
+  if (b.course && typeof b.course === 'object' && b.course.id != null) return String(b.course.id)
+  if (b.course != null && typeof b.course !== 'object') return String(b.course)
+  if (b.courseId != null) return String(b.courseId)
+  return ''
+}
+
   const handleCourseChange = (selectedCourseId) => {
     setForm(f => {
       const isBatchValid = selectedCourseId && f.batchId
-        ? batches.some(b => String(b.id) === String(f.batchId) && (b.course?.id ? String(b.course.id) === String(selectedCourseId) : String(b.courseId || '') === String(selectedCourseId)))
+        ? batches.some(b => String(b.id) === String(f.batchId) && getBatchCourseId(b) === String(selectedCourseId))
         : false
 
       return {
@@ -249,9 +297,12 @@ export default function AssignmentsPage() {
 
   const courseOptions = toOptions(courses, c => c.title)
   const filteredBatches = form.courseId
-    ? batches.filter(b => (b.course?.id ? String(b.course.id) === String(form.courseId) : String(b.courseId || '') === String(form.courseId)))
+    ? batches.filter(b => getBatchCourseId(b) === String(form.courseId))
     : batches
   const batchOptions = toOptions(filteredBatches, b => b.name)
+  const headerFilterBatches = courseFilter
+    ? batches.filter(b => getBatchCourseId(b) === String(courseFilter))
+    : batches
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -288,7 +339,7 @@ export default function AssignmentsPage() {
           value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1) }}
         >
           <option value="">All Batches</option>
-          {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {headerFilterBatches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
         <select
           className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
@@ -355,9 +406,29 @@ export default function AssignmentsPage() {
                     <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
                       <td className="px-4 py-3">
                         <button onClick={() => router.push(`/admin/assignments/${a.id}`)}
-                          className="font-semibold text-gray-800 dark:text-white hover:text-purple-600 transition-colors text-left">
+                          className="font-semibold text-gray-800 dark:text-white hover:text-purple-600 transition-colors text-left block">
                           {a.title}
                         </button>
+                        {((a.attachments && a.attachments.length > 0) || a.attachmentUrl) && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                              <Paperclip size={11} className="text-purple-500" />
+                              {a.attachments?.length ? `${a.attachments.length} file${a.attachments.length > 1 ? 's' : ''}` : (a.attachmentName || '1 file')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const first = (a.attachments && a.attachments[0]) || { fileUrl: a.attachmentUrl, fileName: a.attachmentName }
+                                setPreviewAttachment({ url: first.fileUrl, name: first.fileName })
+                              }}
+                              className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline"
+                              title="Preview attachment"
+                            >
+                              <Eye size={11} /> Preview
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course.title}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch.name}</td>
@@ -564,27 +635,80 @@ export default function AssignmentsPage() {
             )}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF, DOCX, or XLS only)</label>
-            {form.attachmentName ? (
-              <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
-                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate">
-                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> {form.attachmentName}
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Attachments (PDF, DOCX, or XLS only)
+              </label>
+              {(form.attachments?.length || 0) > 0 && (
+                <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-2 py-0.5 rounded-full">
+                  {form.attachments.length} attached
                 </span>
-                <button type="button" onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentName: '' }))}
-                  className="text-gray-400 hover:text-red-500 flex-shrink-0">
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
+              )}
+            </div>
+
+            {/* Upload drop zone / picker */}
+            <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-purple-400 dark:hover:border-purple-600 rounded-2xl p-4 text-center transition-colors bg-gray-50/60 dark:bg-gray-800/40">
               <input
+                id="assignment-file-input"
                 type="file"
+                multiple
                 accept=".pdf,.docx,.xls,.xlsx"
                 onChange={handleFileChange}
                 disabled={uploading}
-                className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:text-sm file:font-semibold hover:file:bg-purple-100"
+                className="hidden"
               />
+              <label htmlFor="assignment-file-input" className="cursor-pointer flex flex-col items-center justify-center">
+                <Upload size={20} className="text-purple-600 dark:text-purple-400 mb-1.5" />
+                <span className="text-xs font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400">
+                  {uploading ? 'Uploading files...' : 'Click to browse or drop multiple files'}
+                </span>
+                <span className="text-[11px] text-gray-400 mt-0.5">Upload single or multiple files (PDF, DOCX, XLS, XLSX)</span>
+              </label>
+            </div>
+
+            {uploading && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-purple-600 font-medium">
+                <RefreshCw size={12} className="animate-spin" /> Uploading attachment(s)...
+              </div>
             )}
-            {uploading && <p className="text-xs text-purple-500 mt-1">Uploading...</p>}
+
+            {/* List of uploaded attachments */}
+            {(form.attachments || []).length > 0 && (
+              <div className="space-y-1.5 mt-3 max-h-48 overflow-y-auto pr-1">
+                {form.attachments.map((att, idx) => (
+                  <div
+                    key={`${att.fileName}-${idx}`}
+                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-xs shadow-sm hover:border-purple-200 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 mr-2">
+                      <Paperclip size={14} className="text-purple-500 flex-shrink-0" />
+                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate" title={att.fileName}>
+                        {att.fileName}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewAttachment({ url: att.fileUrl, name: att.fileName })}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
+                        title="Preview attachment"
+                      >
+                        <Eye size={12} />
+                        <span>Preview</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(idx)}
+                        className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="Remove file"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -621,6 +745,14 @@ export default function AssignmentsPage() {
         itemName={deletingAssignment?.title}
         loading={isDeleting}
       />
+
+      {previewAttachment && (
+        <ViewAttachmentModal
+          url={previewAttachment.url}
+          name={previewAttachment.name}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
     </div>
   )
 }

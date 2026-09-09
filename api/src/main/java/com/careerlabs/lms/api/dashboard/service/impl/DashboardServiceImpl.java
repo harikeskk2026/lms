@@ -441,9 +441,9 @@ public class DashboardServiceImpl implements DashboardService {
                 .sorted(Comparator.comparing(StudentAssignmentResponse::dueDate))
                 .toList();
 
-        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdOrderByEnrolledAtDesc(student.getId());
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
         List<Enrollment> publishedEnrollments = enrollments.stream()
-                .filter(e -> e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
+                .filter(e -> e.isActive() && e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
                 .toList();
         List<StudentDashboardResponse.UpcomingClass> upcomingClasses = buildUpcomingClasses(student);
 
@@ -503,6 +503,7 @@ public class DashboardServiceImpl implements DashboardService {
                         .collect(Collectors.toMap(s -> s.getTopic().getId(), s -> s, (a, b) -> a));
 
         return enrollments.stream()
+                .filter(e -> e.isActive() && e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
                 .map(e -> {
                     Long courseId = e.getCourse().getId();
                     SyllabusModule firstModule = firstModuleByCourseId.get(courseId);

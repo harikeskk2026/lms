@@ -8,6 +8,12 @@ const submissionService = {
     url: `/assignments/${assignmentId}/submissions/${submissionId}`,
     data,
   }),
+
+  approveOrReject: (assignmentId, submissionId, data) => apiCall({
+    method: 'POST',
+    url: `/assignments/${assignmentId}/submissions/${submissionId}/approval`,
+    data,
+  }),
 }
 
 export default submissionService

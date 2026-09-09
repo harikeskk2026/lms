@@ -33,4 +33,6 @@ public interface AssignmentService {
     AssignmentResponse reopen(Long id);
 
     UploadResponse uploadAttachment(MultipartFile file);
+
+    List<UploadResponse> uploadAttachments(MultipartFile[] files);
 }

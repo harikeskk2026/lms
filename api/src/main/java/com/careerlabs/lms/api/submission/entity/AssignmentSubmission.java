@@ -2,8 +2,13 @@ package com.careerlabs.lms.api.submission.entity;
 
 import com.careerlabs.lms.api.assignment.entity.Assignment;
 import com.careerlabs.lms.api.student.entity.Student;
+import com.careerlabs.lms.api.submission.dto.response.SubmissionStatus;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -16,6 +21,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "assignment_submissions",
@@ -40,6 +47,10 @@ public class AssignmentSubmission {
     @Column(name = "file_name")
     private String fileName;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "assignment_submission_attachments", joinColumns = @JoinColumn(name = "submission_id"))
+    private List<SubmissionAttachment> attachments = new ArrayList<>();
+
     private String notes;
 
     @Column(name = "submitted_at", nullable = false)
@@ -55,6 +66,19 @@ public class AssignmentSubmission {
 
     @Column(nullable = false)
     private boolean reviewed = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private SubmissionStatus status = SubmissionStatus.PENDING_APPROVAL;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
+    @Column(name = "approved_by")
+    private String approvedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -164,5 +188,48 @@ public class AssignmentSubmission {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public List<SubmissionAttachment> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(List<SubmissionAttachment> attachments) {
+        this.attachments = attachments;
+    }
+
+    public SubmissionStatus getStatus() {
+        if (status == null) {
+            return late ? SubmissionStatus.LATE : SubmissionStatus.SUBMITTED;
+        }
+        return status;
+    }
+
+    public void setStatus(SubmissionStatus status) {
+        this.status = status;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public Instant getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(Instant approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public String getApprovedBy() {
+        return approvedBy;
+    }
+
+    public void setApprovedBy(String approvedBy) {
+        this.approvedBy = approvedBy;
     }
 }

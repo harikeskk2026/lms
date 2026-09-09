@@ -24,6 +24,14 @@ const assignmentService = {
     // boundary itself from the FormData instance.
     return apiCall({ method: 'POST', url: '/assignments/upload', data: formData })
   },
+
+  uploadMultiple: (files) => {
+    const formData = new FormData()
+    files.forEach(f => {
+      formData.append('files', f)
+    })
+    return apiCall({ method: 'POST', url: '/assignments/upload-multiple', data: formData })
+  },
 }
 
 export default assignmentService

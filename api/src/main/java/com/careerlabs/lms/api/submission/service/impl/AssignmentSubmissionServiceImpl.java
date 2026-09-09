@@ -11,12 +11,15 @@ import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.submission.dto.request.ApproveRejectSubmissionRequest;
 import com.careerlabs.lms.api.submission.dto.request.GradeSubmissionRequest;
+import com.careerlabs.lms.api.submission.dto.response.SubmissionAttachmentResponse;
 import com.careerlabs.lms.api.submission.dto.response.SubmissionListResponse;
 import com.careerlabs.lms.api.submission.dto.response.SubmissionRowResponse;
 import com.careerlabs.lms.api.submission.dto.response.SubmissionStatus;
 import com.careerlabs.lms.api.submission.dto.response.SubmissionSummaryResponse;
 import com.careerlabs.lms.api.submission.entity.AssignmentSubmission;
+import com.careerlabs.lms.api.submission.entity.SubmissionAttachment;
 import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
 import com.careerlabs.lms.api.submission.service.AssignmentSubmissionService;
 import org.springframework.stereotype.Service;
@@ -28,9 +31,11 @@ import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -78,8 +83,9 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         int submitted = (int) rows.stream().filter(r -> r.status() == SubmissionStatus.SUBMITTED).count();
         int late = (int) rows.stream().filter(r -> r.status() == SubmissionStatus.LATE).count();
         int total = rows.size();
+        int pending = (int) rows.stream().filter(r -> r.status() == SubmissionStatus.PENDING || r.status() == SubmissionStatus.PENDING_APPROVAL).count();
 
-        return new SubmissionListResponse(rows, new SubmissionSummaryResponse(total, submitted, total - submitted - late, late));
+        return new SubmissionListResponse(rows, new SubmissionSummaryResponse(total, submitted, pending, late));
     }
 
     @Override
@@ -126,7 +132,59 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
 
     @Override
     @Transactional
-    public SubmissionRowResponse submit(Long assignmentId, Long userId, MultipartFile file, String notes) {
+    public SubmissionRowResponse approveOrReject(Long assignmentId, Long submissionId, ApproveRejectSubmissionRequest request, String reviewerEmail) {
+        AssignmentSubmission submission = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Submission not found: " + submissionId));
+        if (!submission.getAssignment().getId().equals(assignmentId)) {
+            throw new ResourceNotFoundException("Submission not found: " + submissionId);
+        }
+
+        String action = request.getAction() != null ? request.getAction().trim().toUpperCase() : "";
+        if (!"APPROVE".equals(action) && !"REJECT".equals(action)) {
+            throw new BadRequestException("Action must be either APPROVE or REJECT");
+        }
+
+        Long studentUserId = submission.getStudent().getUser().getId();
+        String assignmentTitle = submission.getAssignment().getTitle();
+
+        if ("APPROVE".equals(action)) {
+            submission.setStatus(submission.isLate() ? SubmissionStatus.LATE : SubmissionStatus.SUBMITTED);
+            submission.setApprovedAt(Instant.now());
+            submission.setApprovedBy(reviewerEmail != null ? reviewerEmail : "Admin");
+            submission.setRejectionReason(null);
+
+            notificationService.notifyUser(
+                    studentUserId,
+                    "✅ Assignment Approved: " + assignmentTitle,
+                    "Your submission for \"" + assignmentTitle + "\" has been approved by the admin.",
+                    NotificationType.SUCCESS,
+                    "/student/assignments"
+            );
+        } else {
+            submission.setStatus(SubmissionStatus.REJECTED);
+            submission.setRejectionReason(request.getReason() != null ? request.getReason().trim() : null);
+            submission.setApprovedAt(null);
+            submission.setApprovedBy(null);
+
+            String reasonMsg = (submission.getRejectionReason() != null && !submission.getRejectionReason().isEmpty())
+                    ? " Reason: " + submission.getRejectionReason()
+                    : "";
+            notificationService.notifyUser(
+                    studentUserId,
+                    "❌ Assignment Rejected: " + assignmentTitle,
+                    "Your submission for \"" + assignmentTitle + "\" was rejected." + reasonMsg + " You may resubmit your assignment.",
+                    NotificationType.WARNING,
+                    "/student/assignments"
+            );
+        }
+
+        AssignmentSubmission saved = submissionRepository.save(submission);
+        return toRow(saved);
+    }
+
+    @Override
+    @Transactional
+    public SubmissionRowResponse submit(Long assignmentId, Long userId, List<MultipartFile> files, String notes) {
         Assignment assignment = findAssignmentOrThrow(assignmentId);
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
@@ -138,28 +196,63 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         if (!isEnrolledInBatch) {
             throw new BadRequestException("You are not enrolled in this assignment's batch");
         }
-        if (submissionRepository.findByAssignmentIdAndStudentId(assignmentId, student.getId()).isPresent()) {
-            throw new ConflictException("You have already submitted this assignment");
+
+        Optional<AssignmentSubmission> existingOpt = submissionRepository.findByAssignmentIdAndStudentId(assignmentId, student.getId());
+        AssignmentSubmission submission;
+        if (existingOpt.isPresent()) {
+            AssignmentSubmission existing = existingOpt.get();
+            if (existing.getStatus() == SubmissionStatus.REJECTED) {
+                // Student resubmitting after rejection
+                submission = existing;
+                submission.setMarks(null);
+                submission.setFeedback(null);
+                submission.setReviewed(false);
+                submission.setRejectionReason(null);
+                submission.setApprovedAt(null);
+                submission.setApprovedBy(null);
+            } else {
+                throw new ConflictException("You have already submitted this assignment");
+            }
+        } else {
+            submission = new AssignmentSubmission();
+            submission.setAssignment(assignment);
+            submission.setStudent(student);
         }
 
-        StoredFile stored = fileStorageService.store(file, "submissions");
+        if (files == null || files.stream().noneMatch(f -> f != null && !f.isEmpty())) {
+            throw new BadRequestException("Please select at least one file to upload");
+        }
 
-        AssignmentSubmission submission = new AssignmentSubmission();
-        submission.setAssignment(assignment);
-        submission.setStudent(student);
-        submission.setFileUrl(stored.url());
-        submission.setFileName(stored.originalName());
+        List<MultipartFile> validFiles = files.stream().filter(f -> f != null && !f.isEmpty()).toList();
+        List<SubmissionAttachment> attachments = new ArrayList<>();
+        String primaryFileUrl = null;
+        String primaryFileName = null;
+
+        for (MultipartFile file : validFiles) {
+            StoredFile stored = fileStorageService.store(file, "submissions");
+            SubmissionAttachment att = new SubmissionAttachment(stored.url(), stored.originalName());
+            attachments.add(att);
+            if (primaryFileUrl == null) {
+                primaryFileUrl = stored.url();
+                primaryFileName = stored.originalName();
+            }
+        }
+
+        submission.setFileUrl(primaryFileUrl);
+        submission.setFileName(primaryFileName);
+        submission.setAttachments(attachments);
         submission.setNotes(notes);
         submission.setSubmittedAt(Instant.now());
         submission.setLate(LocalDate.now().isAfter(assignment.getDueDate()));
+        submission.setStatus(SubmissionStatus.PENDING_APPROVAL);
 
         AssignmentSubmission saved = submissionRepository.save(submission);
 
-        // Notify all admins about the new student submission
+        // Notify all admins about the new student submission awaiting approval
         notificationService.notifyAdmins(
                 "\uD83D\uDCE9 New Submission: " + assignment.getTitle(),
                 student.getUser().getName() + " submitted " + assignment.getTitle()
-                        + (saved.isLate() ? " (late)" : "") + ".",
+                        + " (awaiting approval)" + (saved.isLate() ? " (late)" : "") + ".",
                 NotificationType.INFO,
                 "/admin/assignments"
         );
@@ -174,19 +267,31 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
 
     private SubmissionRowResponse toRow(AssignmentSubmission submission) {
         Student student = submission.getStudent();
+        List<SubmissionAttachmentResponse> files = submission.getAttachments() != null && !submission.getAttachments().isEmpty()
+                ? submission.getAttachments().stream().map(a -> new SubmissionAttachmentResponse(a.getFileUrl(), a.getFileName())).toList()
+                : (submission.getFileUrl() != null ? List.of(new SubmissionAttachmentResponse(submission.getFileUrl(), submission.getFileName())) : List.of());
+
+        SubmissionStatus status = submission.getStatus() != null
+                ? submission.getStatus()
+                : (submission.isLate() ? SubmissionStatus.LATE : SubmissionStatus.SUBMITTED);
+
         return new SubmissionRowResponse(
                 submission.getId(),
                 student.getId(),
                 student.getUser().getName(),
                 student.getUser().getEmail(),
-                submission.isLate() ? SubmissionStatus.LATE : SubmissionStatus.SUBMITTED,
+                status,
                 submission.getSubmittedAt(),
                 submission.getMarks(),
                 submission.getFeedback(),
                 submission.isReviewed(),
                 submission.getFileUrl(),
                 submission.getFileName(),
-                submission.getNotes());
+                submission.getNotes(),
+                files,
+                submission.getRejectionReason(),
+                submission.getApprovedAt(),
+                submission.getApprovedBy());
     }
 
     private SubmissionRowResponse pendingRow(Student student) {
@@ -196,6 +301,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
                 student.getUser().getName(),
                 student.getUser().getEmail(),
                 SubmissionStatus.PENDING,
-                null, null, null, false, null, null, null);
+                null, null, null, false, null, null, null,
+                List.of(), null, null, null);
     }
 }

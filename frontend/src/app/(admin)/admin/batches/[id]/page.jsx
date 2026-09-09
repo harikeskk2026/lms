@@ -1,14 +1,16 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search } from 'lucide-react'
+import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search, Download, Paperclip, Eye, FileText, Check, X } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
-import { adminApi } from '@/lib/api'
+import { adminApi, resolveFileUrl } from '@/lib/api'
 import studentService from '@/services/studentService'
 import reportService from '@/services/reportService'
 import courseService from '@/services/courseService'
+import assignmentService from '@/services/assignmentService'
+import submissionService from '@/services/submissionService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
@@ -29,7 +31,15 @@ export default function BatchDetailPage() {
   const [classes, setClasses] = useState([])
   const [roster, setRoster] = useState([])
   const [trainers, setTrainers] = useState([])
+  const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedAssignment, setSelectedAssignment] = useState(null)
+  const [submissionsPanel, setSubmissionsPanel] = useState(false)
+  const [submissionsLoading, setSubmissionsLoading] = useState(false)
+  const [panelActionLoading, setPanelActionLoading] = useState({})
+  const [submissionsList, setSubmissionsList] = useState([])
+  const [submissionsSummary, setSubmissionsSummary] = useState(null)
+  const [submissionsFilter, setSubmissionsFilter] = useState('SUBMITTED')
   const [tab, setTab] = useState('Overview')
   const [attPanel, setAttPanel] = useState(false)
   const [attClass, setAttClass] = useState(null)
@@ -55,6 +65,63 @@ export default function BatchDetailPage() {
       s.enrollmentNo?.toLowerCase().includes(q)
     )
   })
+
+  const handleViewSubmissions = async (a) => {
+    setSelectedAssignment(a)
+    setSubmissionsPanel(true)
+    setSubmissionsLoading(true)
+    setSubmissionsFilter('SUBMITTED')
+    try {
+      const res = await submissionService.list(a.id)
+      const data = res.data?.data || res.data || {}
+      setSubmissionsList(data.submissions || [])
+      setSubmissionsSummary(data.summary || null)
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to load submissions')
+      setSubmissionsList([])
+    } finally {
+      setSubmissionsLoading(false)
+    }
+  }
+
+  const handlePanelApprove = async (s) => {
+    if (!selectedAssignment || !s.submissionId) return
+    setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: true }))
+    try {
+      await submissionService.approveOrReject(selectedAssignment.id, s.submissionId, { action: 'APPROVE' })
+      toast.success(`Submission approved for ${s.studentName}`)
+      const res = await submissionService.list(selectedAssignment.id)
+      const data = res.data?.data || res.data || {}
+      setSubmissionsList(data.submissions || [])
+      setSubmissionsSummary(data.summary || null)
+    } catch (err) {
+      toast.error(err.message || 'Failed to approve submission')
+    } finally {
+      setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: false }))
+    }
+  }
+
+  const handlePanelReject = async (s) => {
+    if (!selectedAssignment || !s.submissionId) return
+    const reason = window.prompt(`Enter rejection reason for ${s.studentName} (optional):`)
+    if (reason === null) return
+    setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: true }))
+    try {
+      await submissionService.approveOrReject(selectedAssignment.id, s.submissionId, {
+        action: 'REJECT',
+        reason: reason.trim() || undefined,
+      })
+      toast.success(`Submission rejected for ${s.studentName}`)
+      const res = await submissionService.list(selectedAssignment.id)
+      const data = res.data?.data || res.data || {}
+      setSubmissionsList(data.submissions || [])
+      setSubmissionsSummary(data.summary || null)
+    } catch (err) {
+      toast.error(err.message || 'Failed to reject submission')
+    } finally {
+      setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: false }))
+    }
+  }
 
   const handleAssignTrainer = async (newTrainerId) => {
     const errMsg = validateBatchDates(batch.startDate, batch.endDate, batch.course?.duration)
@@ -133,14 +200,20 @@ export default function BatchDetailPage() {
       const batchRes = await adminApi.getBatchDetail(id)
       setBatch(batchRes.data.data)
 
-      const [classesRes, studentsRes, perfRes] = await Promise.allSettled([
+      const [classesRes, studentsRes, perfRes, assignmentsRes] = await Promise.allSettled([
         adminApi.getClasses({ batchId: id }),
         studentService.list({ batchId: id, limit: 500 }),
         reportService.getPerformance({ batchId: id }),
+        assignmentService.list({ batchId: id, limit: 100 }),
       ])
 
       if (classesRes.status === 'fulfilled') {
         setClasses(classesRes.value.data?.data || [])
+      }
+      if (assignmentsRes.status === 'fulfilled') {
+        const rawAssignments = assignmentsRes.value?.data?.assignments || assignmentsRes.value?.data?.data?.assignments || []
+        setAssignments(rawAssignments)
+        setBatch(prev => prev ? { ...prev, assignments: rawAssignments } : prev)
       }
       const students = studentsRes.status === 'fulfilled' ? (studentsRes.value.data?.students || []) : []
       const perfById = perfRes.status === 'fulfilled' ? Object.fromEntries((perfRes.value.data?.students || []).map(p => [p.studentId, p])) : {}
@@ -565,16 +638,37 @@ export default function BatchDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {(batch.assignments || []).length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No assignments</td></tr>
+                {(assignments || batch?.assignments || []).length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No assignments assigned to this batch</td></tr>
                 ) : (
-                  batch.assignments.map(a => (
-                    <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
-                      <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{a.title}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{format(new Date(a.dueDate), 'dd MMM yyyy')}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{a.maxMarks}</td>
+                  (assignments.length > 0 ? assignments : (batch?.assignments || [])).map(a => (
+                    <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">
+                        <button
+                          type="button"
+                          onClick={() => handleViewSubmissions(a)}
+                          className="hover:text-purple-600 hover:underline font-semibold text-left text-gray-800 dark:text-white transition-colors"
+                          title="Click to view submitted persons details"
+                        >
+                          {a.title}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {a.dueDate ? format(new Date(a.dueDate), 'dd MMM yyyy') : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {a.totalMarks ?? a.maxMarks ?? '—'}
+                      </td>
                       <td className="px-4 py-3">
-                        <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-2 py-0.5 rounded-full">{a._count?.submissions || 0}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleViewSubmissions(a)}
+                          className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1.5 shadow-xs"
+                          title="Click to view submitted persons details"
+                        >
+                          <span>{a.submissionCount ?? a._count?.submissions ?? 0}</span>
+                          <span className="text-[10px] text-purple-600 font-normal">view</span>
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -584,6 +678,221 @@ export default function BatchDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Submissions Details SlidePanel */}
+      <SlidePanel
+        open={submissionsPanel}
+        onClose={() => setSubmissionsPanel(false)}
+        title={selectedAssignment ? `Submissions: ${selectedAssignment.title}` : 'Submissions'}
+        subtitle={selectedAssignment ? `Max Marks: ${selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? '—'} · Due: ${selectedAssignment.dueDate ? format(new Date(selectedAssignment.dueDate), 'dd MMM yyyy') : '—'}` : ''}
+        width="w-[660px]"
+      >
+        {selectedAssignment && (
+          <div className="space-y-4">
+            {/* Quick Stats */}
+            <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/30 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-600 dark:text-gray-300">
+                  Total Students: <strong className="text-gray-900 dark:text-white">{submissionsList.length}</strong>
+                </span>
+                <span className="text-gray-300 dark:text-gray-600">|</span>
+                <span className="text-purple-700 dark:text-purple-300 font-semibold">
+                  Submitted: {submissionsList.filter(s => s.status !== 'PENDING').length}
+                </span>
+                <span className="text-gray-300 dark:text-gray-600">|</span>
+                <span className="text-amber-600 font-medium">
+                  Pending: {submissionsList.filter(s => s.status === 'PENDING').length}
+                </span>
+              </div>
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
+              <button
+                type="button"
+                onClick={() => setSubmissionsFilter('SUBMITTED')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  submissionsFilter === 'SUBMITTED'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                }`}
+              >
+                Submitted Students ({submissionsList.filter(s => s.status !== 'PENDING').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubmissionsFilter('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  submissionsFilter === 'ALL'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                }`}
+              >
+                All Students ({submissionsList.length})
+              </button>
+            </div>
+
+            {/* Submissions List */}
+            {submissionsLoading ? (
+              <div className="py-12 text-center text-sm text-gray-400">Loading submitted persons details...</div>
+            ) : (() => {
+              const displayed = submissionsFilter === 'SUBMITTED'
+                ? submissionsList.filter(s => s.status !== 'PENDING')
+                : submissionsList
+
+              if (displayed.length === 0) {
+                return (
+                  <div className="py-12 text-center text-gray-400 text-sm">
+                    {submissionsFilter === 'SUBMITTED' ? 'No students have submitted this assignment yet.' : 'No students found in this batch.'}
+                  </div>
+                )
+              }
+
+              return (
+                <div className="space-y-3 max-h-[62vh] overflow-y-auto pr-1">
+                  {displayed.map(s => {
+                    const statusBadgeColors = {
+                      SUBMITTED: 'bg-blue-100 text-blue-700',
+                      GRADED: 'bg-green-100 text-green-700',
+                      LATE: 'bg-orange-100 text-orange-700',
+                      PENDING_APPROVAL: 'bg-amber-100 text-amber-800 border border-amber-200',
+                      REJECTED: 'bg-red-100 text-red-700',
+                      PENDING: 'bg-gray-100 text-gray-500',
+                    }
+                    const files = s.files && s.files.length > 0
+                      ? s.files
+                      : (s.fileUrl ? [{ fileUrl: s.fileUrl, fileName: s.fileName }] : [])
+
+                    return (
+                      <div
+                        key={s.studentId}
+                        className="p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 hover:bg-white dark:hover:bg-gray-900 transition-all shadow-xs space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                              {s.studentName?.[0]?.toUpperCase() || 'S'}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{s.studentName}</p>
+                              <p className="text-xs text-gray-400">{s.studentEmail}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${statusBadgeColors[s.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {s.status}
+                            </span>
+                            {s.submittedAt && (
+                              <span className="text-[11px] text-gray-400">
+                                {format(new Date(s.submittedAt), 'dd MMM yyyy, hh:mm a')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Files Submitted */}
+                        {files.length > 0 ? (
+                          <div className="pt-2 border-t border-gray-100 dark:border-gray-800/80">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Submitted Files ({files.length}):</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {files.map((f, fIdx) => (
+                                <a
+                                  key={fIdx}
+                                  href={resolveFileUrl(f.fileUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-50 transition-colors shadow-2xs"
+                                >
+                                  <Paperclip size={12} className="text-purple-500" />
+                                  <span className="truncate max-w-[180px]">{f.fileName || `File ${fIdx + 1}`}</span>
+                                  <Download size={11} className="text-gray-400 ml-0.5" />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : s.status !== 'PENDING' ? (
+                          <p className="text-xs text-gray-400 italic">No files attached</p>
+                        ) : null}
+
+                        {/* Notes */}
+                        {s.notes && (
+                          <div className="p-2 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100/60 dark:border-purple-900/20 text-xs text-gray-600 dark:text-gray-300">
+                            <span className="font-semibold text-purple-700 dark:text-purple-300">Student Notes: </span>
+                            {s.notes}
+                          </div>
+                        )}
+
+                        {/* Marks & Feedback */}
+                        {(s.marks != null || s.feedback) && (
+                          <div className="flex items-center justify-between text-xs pt-1 text-gray-500">
+                            {s.marks != null && (
+                              <span>
+                                Score: <strong className="text-green-600">{s.marks}</strong> / {selectedAssignment.totalMarks ?? selectedAssignment.maxMarks}
+                              </span>
+                            )}
+                            {s.feedback && (
+                              <span className="italic text-gray-400 truncate max-w-[250px]">
+                                Feedback: {s.feedback}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Rejection reason if any */}
+                        {s.status === 'REJECTED' && s.rejectionReason && (
+                          <div className="p-2 rounded-xl bg-red-50 border border-red-100 text-xs text-red-700">
+                            <span className="font-semibold">Rejection Reason: </span>
+                            {s.rejectionReason}
+                          </div>
+                        )}
+
+                        {/* Approve & Reject buttons for Pending Approval */}
+                        {s.status === 'PENDING_APPROVAL' && s.submissionId && (
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                            <span className="text-xs text-amber-700 font-semibold">Review Submission:</span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handlePanelApprove(s)}
+                                disabled={panelActionLoading[s.submissionId]}
+                                className="inline-flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded-lg shadow-xs transition-colors disabled:opacity-60"
+                                title="Approve submission"
+                              >
+                                <Check size={12} />
+                                <span>Approve</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePanelReject(s)}
+                                disabled={panelActionLoading[s.submissionId]}
+                                className="inline-flex items-center gap-1 text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold px-2 py-1 rounded-lg transition-colors disabled:opacity-60"
+                                title="Reject submission"
+                              >
+                                <X size={12} />
+                                <span>Reject</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            <div className="pt-2 sticky bottom-0 bg-white dark:bg-gray-900">
+              <button
+                type="button"
+                onClick={() => setSubmissionsPanel(false)}
+                className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </SlidePanel>
 
       {/* Attendance Mark Panel */}
       <SlidePanel open={attPanel} onClose={() => setAttPanel(false)} title="Mark Attendance" width="w-[560px]">

@@ -199,7 +199,8 @@ public class CourseServiceImpl implements CourseService {
             return Set.of();
         }
         return studentRepository.findByUserId(principal.id())
-                .map(student -> enrollmentRepository.findAllByStudentIdOrderByEnrolledAtDesc(student.getId()).stream()
+                .map(student -> enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId()).stream()
+                        .filter(enrollment -> enrollment.isActive() && enrollment.getCourse() != null && enrollment.getCourse().getStatus() == CourseStatus.PUBLISHED)
                         .map(enrollment -> enrollment.getCourse().getId())
                         .collect(Collectors.toSet()))
                 .orElseGet(Set::of);
