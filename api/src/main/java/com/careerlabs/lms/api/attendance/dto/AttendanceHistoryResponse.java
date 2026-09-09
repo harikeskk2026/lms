@@ -16,7 +16,8 @@ public record AttendanceHistoryResponse(
         int streak,
         List<BatchAttendanceHistoryDto> batches,
         List<MonthlyBreakdownDto> monthly,
-        List<RecentRecordDto> recentRecords
+        List<RecentRecordDto> recentRecords,
+        List<AttendanceAuditLogResponse> auditLogs
 ) {
     public record StudentInfoDto(
             Long id,
@@ -56,10 +57,16 @@ public record AttendanceHistoryResponse(
     ) {}
 
     public record RecentRecordDto(
+            Long attendanceId,
+            Long classId,
             LocalDateTime date,
             String classTitle,
             String batchName,
+            String courseTitle,
             AttendStatus status,
+            String remarks,
+            Long markedBy,
+            String markedByName,
             Instant markedAt
     ) {}
 }

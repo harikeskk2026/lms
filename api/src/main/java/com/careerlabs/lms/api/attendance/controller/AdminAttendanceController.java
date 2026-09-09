@@ -170,9 +170,11 @@ public class AdminAttendanceController {
     public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> markAttendance(
             @PathVariable Long classId,
             @RequestParam(defaultValue = "true") boolean submit,
-            @RequestBody MarkAttendanceRequest request) {
+            @RequestBody MarkAttendanceRequest request,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        Long markerId = principal != null ? principal.id() : null;
         List<AttendanceSheetItemResponse> response = attendanceService.markAttendance(
-                classId, request.records() != null ? request.records() : List.of(), submit);
+                classId, request.records() != null ? request.records() : List.of(), submit, markerId);
         return ResponseEntity.ok(ApiResponse.of(submit ? "Attendance saved" : "Draft saved", response));
     }
 
@@ -180,10 +182,12 @@ public class AdminAttendanceController {
     public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> markSingleAttendance(
             @PathVariable Long classId,
             @PathVariable Long studentId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
         AttendStatus status = AttendStatus.valueOf(body.getOrDefault("status", "PRESENT"));
+        Long markerId = principal != null ? principal.id() : null;
         List<AttendanceSheetItemResponse> response = attendanceService.markAttendance(
-                classId, List.of(new AttendanceRecordRequest(studentId, status)));
+                classId, List.of(new AttendanceRecordRequest(studentId, status)), true, markerId);
         return ResponseEntity.ok(ApiResponse.of("Attendance updated", response));
     }
 
@@ -270,5 +274,21 @@ public class AdminAttendanceController {
     public ResponseEntity<ApiResponse<AttendancePolicyResponse>> upsertPolicy(@Valid @RequestBody AttendancePolicyRequest request) {
         AttendancePolicyResponse response = attendancePolicyService.upsertPolicy(request);
         return ResponseEntity.ok(ApiResponse.of("Policy saved", response));
+    }
+
+    // ─── Audit Logs ─────────────────────────────────────────────────────────────
+
+    @GetMapping("/attendance/audit-logs")
+    public ResponseEntity<ApiResponse<List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse>>> getAuditLogs(
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false) Long classId) {
+        List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse> logs = attendanceService.getAuditLogs(studentId, classId);
+        return ResponseEntity.ok(ApiResponse.of(logs));
+    }
+
+    @GetMapping("/attendance/student/{studentId}/audit-logs")
+    public ResponseEntity<ApiResponse<List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse>>> getStudentAuditLogs(@PathVariable Long studentId) {
+        List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse> logs = attendanceService.getStudentAuditLogs(studentId);
+        return ResponseEntity.ok(ApiResponse.of(logs));
     }
 }

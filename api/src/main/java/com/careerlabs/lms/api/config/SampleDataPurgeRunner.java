@@ -76,6 +76,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
     private boolean purgeEnabled;
 
     private final AttendanceCorrectionRepository attendanceCorrectionRepository;
+    private final com.careerlabs.lms.api.attendance.repository.AttendanceAuditLogRepository attendanceAuditLogRepository;
     private final AttendanceAlertRepository attendanceAlertRepository;
     private final AttendanceGoalRepository attendanceGoalRepository;
     private final AttendanceRepository attendanceRepository;
@@ -135,6 +136,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
 
     public SampleDataPurgeRunner(
             AttendanceCorrectionRepository attendanceCorrectionRepository,
+            com.careerlabs.lms.api.attendance.repository.AttendanceAuditLogRepository attendanceAuditLogRepository,
             AttendanceAlertRepository attendanceAlertRepository,
             AttendanceGoalRepository attendanceGoalRepository,
             AttendanceRepository attendanceRepository,
@@ -183,6 +185,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
             UserRepository userRepository,
             PasswordEncoder passwordEncoder) {
         this.attendanceCorrectionRepository = attendanceCorrectionRepository;
+        this.attendanceAuditLogRepository = attendanceAuditLogRepository;
         this.attendanceAlertRepository = attendanceAlertRepository;
         this.attendanceGoalRepository = attendanceGoalRepository;
         this.attendanceRepository = attendanceRepository;
@@ -235,8 +238,8 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("Sample data purge enabled: {}", purgeEnabled);
         if (!purgeEnabled) {
+            log.debug("SampleDataPurgeRunner: app.purge-sample-data is false - skipping purge.");
             return;
         }
 
@@ -244,6 +247,7 @@ public class SampleDataPurgeRunner implements CommandLineRunner {
 
         try {
             attendanceCorrectionRepository.deleteAllInBatch();
+            attendanceAuditLogRepository.deleteAllInBatch();
             attendanceAlertRepository.deleteAllInBatch();
             attendanceGoalRepository.deleteAllInBatch();
             attendanceRepository.deleteAllInBatch();

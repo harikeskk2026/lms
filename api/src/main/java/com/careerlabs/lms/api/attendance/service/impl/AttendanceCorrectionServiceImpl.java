@@ -8,6 +8,8 @@ import com.careerlabs.lms.api.attendance.entity.AttendanceCorrection;
 import com.careerlabs.lms.api.attendance.entity.CorrectionStatus;
 import com.careerlabs.lms.api.attendance.entity.DailyClass;
 import com.careerlabs.lms.api.attendance.entity.ClassStatus;
+import com.careerlabs.lms.api.attendance.entity.AttendanceAuditLog;
+import com.careerlabs.lms.api.attendance.repository.AttendanceAuditLogRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceCorrectionRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
@@ -41,6 +43,7 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
     private final StudentRepository studentRepository;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final AttendanceAuditLogRepository attendanceAuditLogRepository;
 
     public AttendanceCorrectionServiceImpl(
             AttendanceCorrectionRepository attendanceCorrectionRepository,
@@ -49,7 +52,8 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
             MeetingLinkRepository meetingLinkRepository,
             StudentRepository studentRepository,
             NotificationService notificationService,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            AttendanceAuditLogRepository attendanceAuditLogRepository) {
         this.attendanceCorrectionRepository = attendanceCorrectionRepository;
         this.attendanceRepository = attendanceRepository;
         this.dailyClassRepository = dailyClassRepository;
@@ -57,6 +61,7 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
         this.studentRepository = studentRepository;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
+        this.attendanceAuditLogRepository = attendanceAuditLogRepository;
     }
 
     @Override
@@ -226,10 +231,30 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
 
         if (decision == CorrectionStatus.APPROVED) {
             Attendance attendance = correction.getAttendance();
+            AttendStatus previousStatus = attendance.getStatus();
             attendance.setStatus(correction.getRequestedStatus());
             attendance.setMarkedBy(reviewerUserId);
             attendance.setMarkedAt(Instant.now());
-            attendanceRepository.save(attendance);
+            Attendance saved = attendanceRepository.save(attendance);
+
+            try {
+                AttendanceAuditLog auditLog = new AttendanceAuditLog();
+                auditLog.setDailyClass(attendance.getDailyClass());
+                auditLog.setStudent(attendance.getStudent());
+                auditLog.setAttendanceId(saved.getId());
+                auditLog.setPreviousStatus(previousStatus);
+                auditLog.setNewStatus(correction.getRequestedStatus());
+                auditLog.setChangedBy(reviewerUserId);
+                auditLog.setActionType("CORRECTION_APPROVED");
+                auditLog.setRemarks("Correction approved: " + (comment != null ? comment : correction.getReason()));
+                if (reviewerUserId != null) {
+                    userRepository.findById(reviewerUserId).ifPresent(u -> {
+                        auditLog.setChangedByName(u.getName());
+                        if (u.getRole() != null) auditLog.setChangedByRole(u.getRole().name());
+                    });
+                }
+                attendanceAuditLogRepository.save(auditLog);
+            } catch (Exception ignored) {}
 
             notificationService.notifyUser(studentUserId, "Correction Approved",
                     "Your attendance correction request for \"" + className + "\" was approved.",

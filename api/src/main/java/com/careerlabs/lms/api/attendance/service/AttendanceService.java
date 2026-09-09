@@ -35,6 +35,8 @@ public interface AttendanceService {
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit);
 
+    List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, Long markerUserId);
+
     List<AttendanceSheetItemResponse> getPreviousAttendanceSheet(Long classId);
 
     AttendanceRecordResponse editAttendanceRecord(Long attendanceId, Long reviewerUserId, AttendStatus status, String remarks);
@@ -66,4 +68,8 @@ public interface AttendanceService {
     AttendanceHistoryPageResponse getAttendanceHistory(
             LocalDate from, LocalDate to, Long batchId, Long courseId, Long classId, Long studentId,
             AttendStatus status, String search, int page, int limit);
+
+    List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse> getStudentAuditLogs(Long studentIdOrUserId);
+
+    List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse> getAuditLogs(Long studentId, Long classId);
 }

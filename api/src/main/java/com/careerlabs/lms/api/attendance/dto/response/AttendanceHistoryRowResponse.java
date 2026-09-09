@@ -19,10 +19,11 @@ public record AttendanceHistoryRowResponse(
         AttendStatus status,
         String remarks,
         Long markedBy,
+        String markedByName,
         Instant markedAt
 ) {
 
-    public static AttendanceHistoryRowResponse from(Attendance attendance) {
+    public static AttendanceHistoryRowResponse from(Attendance attendance, String markedByName) {
         return new AttendanceHistoryRowResponse(
                 attendance.getId(),
                 attendance.getStudent().getId(),
@@ -36,6 +37,11 @@ public record AttendanceHistoryRowResponse(
                 attendance.getStatus(),
                 attendance.getRemarks(),
                 attendance.getMarkedBy(),
+                markedByName != null ? markedByName : (attendance.getMarkedBy() != null ? "User #" + attendance.getMarkedBy() : null),
                 attendance.getMarkedAt());
+    }
+
+    public static AttendanceHistoryRowResponse from(Attendance attendance) {
+        return from(attendance, null);
     }
 }

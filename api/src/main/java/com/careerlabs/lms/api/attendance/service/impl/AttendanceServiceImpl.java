@@ -15,12 +15,15 @@ import com.careerlabs.lms.api.attendance.dto.response.AttendanceCalendarDayRespo
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceHistoryPageResponse;
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceHistoryRowResponse;
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceRecordResponse;
+import com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse;
 import com.careerlabs.lms.api.attendance.entity.Attendance;
 import com.careerlabs.lms.api.attendance.entity.AttendanceAlert;
+import com.careerlabs.lms.api.attendance.entity.AttendanceAuditLog;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import com.careerlabs.lms.api.attendance.entity.ClassStatus;
 import com.careerlabs.lms.api.attendance.entity.DailyClass;
 import com.careerlabs.lms.api.attendance.repository.AttendanceAlertRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceAuditLogRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.attendance.service.AttendanceService;
@@ -73,6 +76,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final MeetingLinkRepository meetingLinkRepository;
+    private final AttendanceAuditLogRepository attendanceAuditLogRepository;
 
     public AttendanceServiceImpl(
             DailyClassRepository dailyClassRepository,
@@ -82,7 +86,8 @@ public class AttendanceServiceImpl implements AttendanceService {
             StudentRepository studentRepository,
             NotificationRepository notificationRepository,
             UserRepository userRepository,
-            MeetingLinkRepository meetingLinkRepository) {
+            MeetingLinkRepository meetingLinkRepository,
+            AttendanceAuditLogRepository attendanceAuditLogRepository) {
         this.dailyClassRepository = dailyClassRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendanceAlertRepository = attendanceAlertRepository;
@@ -91,6 +96,33 @@ public class AttendanceServiceImpl implements AttendanceService {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.meetingLinkRepository = meetingLinkRepository;
+        this.attendanceAuditLogRepository = attendanceAuditLogRepository;
+    }
+
+    private void recordAuditLog(DailyClass dailyClass, Student student, Long attendanceId,
+                                AttendStatus previousStatus, AttendStatus newStatus,
+                                Long markerUserId, String remarks, String actionType) {
+        try {
+            AttendanceAuditLog log = new AttendanceAuditLog();
+            log.setDailyClass(dailyClass);
+            log.setStudent(student);
+            log.setAttendanceId(attendanceId);
+            log.setPreviousStatus(previousStatus);
+            log.setNewStatus(newStatus);
+            log.setChangedBy(markerUserId);
+            log.setRemarks(remarks);
+            log.setActionType(actionType);
+
+            if (markerUserId != null) {
+                userRepository.findById(markerUserId).ifPresent(u -> {
+                    log.setChangedByName(u.getName());
+                    if (u.getRole() != null) {
+                        log.setChangedByRole(u.getRole().name());
+                    }
+                });
+            }
+            attendanceAuditLogRepository.save(log);
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -184,12 +216,18 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @Transactional
     public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records) {
-        return markAttendance(classId, records, true);
+        return markAttendance(classId, records, true, null);
     }
 
     @Override
     @Transactional
     public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit) {
+        return markAttendance(classId, records, submit, null);
+    }
+
+    @Override
+    @Transactional
+    public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, Long markerUserId) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
 
@@ -209,21 +247,35 @@ public class AttendanceServiceImpl implements AttendanceService {
 
             Optional<Attendance> existing = attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), classId);
             Attendance attendance;
+            AttendStatus previousStatus = null;
+            boolean isNew = !existing.isPresent();
+
             if (existing.isPresent()) {
                 attendance = existing.get();
+                previousStatus = attendance.getStatus();
                 attendance.setStatus(rec.status());
                 attendance.setMarkedAt(Instant.now());
+                if (markerUserId != null) {
+                    attendance.setMarkedBy(markerUserId);
+                }
             } else {
                 attendance = new Attendance();
                 attendance.setDailyClass(dailyClass);
                 attendance.setStudent(student);
                 attendance.setStatus(rec.status());
                 attendance.setMarkedAt(Instant.now());
+                if (markerUserId != null) {
+                    attendance.setMarkedBy(markerUserId);
+                }
             }
             if (rec.remarks() != null) {
                 attendance.setRemarks(rec.remarks());
             }
-            attendanceRepository.save(attendance);
+            Attendance saved = attendanceRepository.save(attendance);
+
+            // Record audit log entry
+            String actionType = isNew ? "INITIAL_MARK" : (previousStatus != rec.status() ? "STATUS_CHANGE" : "MARK_UPDATE");
+            recordAuditLog(dailyClass, student, saved.getId(), previousStatus, rec.status(), markerUserId, rec.remarks(), actionType);
         }
 
         if (submit) {
@@ -253,12 +305,16 @@ public class AttendanceServiceImpl implements AttendanceService {
         Attendance attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attendance record not found with id: " + attendanceId));
 
+        AttendStatus previousStatus = attendance.getStatus();
         attendance.setStatus(status);
         attendance.setRemarks(remarks);
         attendance.setMarkedBy(reviewerUserId);
         attendance.setMarkedAt(Instant.now());
 
         Attendance saved = attendanceRepository.save(attendance);
+
+        recordAuditLog(saved.getDailyClass(), saved.getStudent(), saved.getId(), previousStatus, status, reviewerUserId, remarks, "ADMIN_EDIT");
+
         return AttendanceRecordResponse.from(saved);
     }
 
@@ -599,18 +655,37 @@ public class AttendanceServiceImpl implements AttendanceService {
             ));
         }
 
-        List<AttendanceHistoryResponse.RecentRecordDto> recent = attendances.stream().limit(20).map(a -> new AttendanceHistoryResponse.RecentRecordDto(
-                a.getDailyClass().getDate(),
-                a.getDailyClass().getTitle(),
-                a.getDailyClass().getBatch().getName(),
-                a.getStatus(),
-                a.getMarkedAt()
-        )).toList();
+        List<AttendanceHistoryResponse.RecentRecordDto> recent = attendances.stream().limit(50).map(a -> {
+            String markerName = null;
+            if (a.getMarkedBy() != null) {
+                markerName = userRepository.findById(a.getMarkedBy())
+                        .map(User::getName)
+                        .orElse("User #" + a.getMarkedBy());
+            }
+            String courseTitle = (a.getDailyClass().getBatch() != null && a.getDailyClass().getBatch().getCourse() != null)
+                    ? a.getDailyClass().getBatch().getCourse().getTitle() : null;
+            return new AttendanceHistoryResponse.RecentRecordDto(
+                    a.getId(),
+                    a.getDailyClass().getId(),
+                    a.getDailyClass().getDate(),
+                    a.getDailyClass().getTitle(),
+                    a.getDailyClass().getBatch() != null ? a.getDailyClass().getBatch().getName() : "—",
+                    courseTitle,
+                    a.getStatus(),
+                    a.getRemarks(),
+                    a.getMarkedBy(),
+                    markerName,
+                    a.getMarkedAt()
+            );
+        }).toList();
+
+        List<AttendanceAuditLogResponse> auditLogs = attendanceAuditLogRepository.findByStudentIdOrderByCreatedAtDesc(student.getId())
+                .stream().map(AttendanceAuditLogResponse::from).toList();
 
         return new AttendanceHistoryResponse(
                 new AttendanceHistoryResponse.StudentInfoDto(student.getId(), student.getUser().getId(), student.getUser().getName(), student.getUser().getEmail(), student.getEnrollmentNo()),
                 overallPct, totalPresent, totalAbsent, totalLate, totalAll, streak,
-                batchHistories, List.of(), recent
+                batchHistories, List.of(), recent, auditLogs
         );
     }
 
@@ -844,13 +919,29 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .toList();
         }
 
-        return attendances.stream().map(a -> new AttendanceHistoryResponse.RecentRecordDto(
-                a.getDailyClass().getDate(),
-                a.getDailyClass().getTitle(),
-                a.getDailyClass().getBatch() != null ? a.getDailyClass().getBatch().getName() : "General",
-                a.getStatus(),
-                a.getMarkedAt()
-        )).toList();
+        return attendances.stream().map(a -> {
+            String markerName = null;
+            if (a.getMarkedBy() != null) {
+                markerName = userRepository.findById(a.getMarkedBy())
+                        .map(User::getName)
+                        .orElse("User #" + a.getMarkedBy());
+            }
+            String courseTitle = (a.getDailyClass().getBatch() != null && a.getDailyClass().getBatch().getCourse() != null)
+                    ? a.getDailyClass().getBatch().getCourse().getTitle() : null;
+            return new AttendanceHistoryResponse.RecentRecordDto(
+                    a.getId(),
+                    a.getDailyClass().getId(),
+                    a.getDailyClass().getDate(),
+                    a.getDailyClass().getTitle(),
+                    a.getDailyClass().getBatch() != null ? a.getDailyClass().getBatch().getName() : "General",
+                    courseTitle,
+                    a.getStatus(),
+                    a.getRemarks(),
+                    a.getMarkedBy(),
+                    markerName,
+                    a.getMarkedAt()
+            );
+        }).toList();
     }
 
     private Student resolveStudent(Long userId) {
@@ -871,11 +962,19 @@ public class AttendanceServiceImpl implements AttendanceService {
             LocalDate from, LocalDate to, Long batchId, Long courseId, Long classId, Long studentId,
             AttendStatus status, String search, int page, int limit) {
         Specification<Attendance> spec = buildAttendanceHistorySpecification(from, to, batchId, courseId, classId, studentId, status, search);
-        PageRequest pageRequest = PageRequest.of(Math.max(0, page - 1), limit, Sort.by(Sort.Direction.DESC, "markedAt"));
+        PageRequest pageRequest = PageRequest.of(Math.max(0, page - 1), limit, Sort.by(Sort.Direction.DESC, "dailyClass.date", "id"));
         Page<Attendance> result = attendanceRepository.findAll(spec, pageRequest);
 
         List<AttendanceHistoryRowResponse> rows = result.getContent().stream()
-                .map(AttendanceHistoryRowResponse::from)
+                .map(att -> {
+                    String markerName = null;
+                    if (att.getMarkedBy() != null) {
+                        markerName = userRepository.findById(att.getMarkedBy())
+                                .map(User::getName)
+                                .orElse("User #" + att.getMarkedBy());
+                    }
+                    return AttendanceHistoryRowResponse.from(att, markerName);
+                })
                 .toList();
 
         return new AttendanceHistoryPageResponse(rows, result.getTotalElements(), page, result.getTotalPages());
@@ -963,5 +1062,26 @@ public class AttendanceServiceImpl implements AttendanceService {
                 alert.getCreatedAt(),
                 alert.getResolvedAt()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AttendanceAuditLogResponse> getStudentAuditLogs(Long studentIdOrUserId) {
+        Student student = studentRepository.findById(studentIdOrUserId)
+                .orElseGet(() -> studentRepository.findByUserId(studentIdOrUserId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Student not found for ID: " + studentIdOrUserId)));
+        return attendanceAuditLogRepository.findByStudentIdOrderByCreatedAtDesc(student.getId())
+                .stream().map(AttendanceAuditLogResponse::from).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AttendanceAuditLogResponse> getAuditLogs(Long studentId, Long classId) {
+        if (studentId != null || classId != null) {
+            return attendanceAuditLogRepository.searchAuditLogs(studentId, classId)
+                    .stream().map(AttendanceAuditLogResponse::from).toList();
+        }
+        return attendanceAuditLogRepository.findTop100ByOrderByCreatedAtDesc()
+                .stream().map(AttendanceAuditLogResponse::from).toList();
     }
 }

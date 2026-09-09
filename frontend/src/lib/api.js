@@ -175,6 +175,8 @@ export const adminApi = {
   getAttendancePolicy: (params) => api.get('/admin/attendance/policy', { params }),
   saveAttendancePolicy: (data) => api.put('/admin/attendance/policy', data),
   getAttendanceHistory: (params) => api.get('/admin/attendance/history', { params }),
+  getAttendanceAuditLogs: (params) => api.get('/admin/attendance/audit-logs', { params }),
+  getStudentAuditLogs: (id) => api.get(`/admin/attendance/student/${id}/audit-logs`),
   exportCSV: (params) => api.get('/reports/export', { params }),
 
   // Quizzes
