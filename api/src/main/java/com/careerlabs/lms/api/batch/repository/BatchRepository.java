@@ -32,6 +32,8 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @EntityGraph(attributePaths = {"course"})
     List<Batch> findByNameIgnoreCase(String name);
 
+    boolean existsByCourseId(Long courseId);
+
     @EntityGraph(attributePaths = {"course"})
     Optional<Batch> findWithCourseById(Long id);
 

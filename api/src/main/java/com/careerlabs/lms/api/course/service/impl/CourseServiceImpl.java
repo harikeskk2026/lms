@@ -1,6 +1,8 @@
 package com.careerlabs.lms.api.course.service.impl;
 
+import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.dto.request.CourseRequest;
 import com.careerlabs.lms.api.course.dto.response.CourseResponse;
@@ -36,11 +38,13 @@ public class CourseServiceImpl implements CourseService {
     private final SyllabusModuleRepository moduleRepository;
     private final SyllabusService syllabusService;
     private final MaterialRepository materialRepository;
+    private final BatchRepository batchRepository;
 
     public CourseServiceImpl(CourseRepository courseRepository, SlugGenerator slugGenerator,
                               CourseAccessGuard accessGuard, StudentRepository studentRepository,
                               EnrollmentRepository enrollmentRepository, SyllabusModuleRepository moduleRepository,
-                              SyllabusService syllabusService, MaterialRepository materialRepository) {
+                              SyllabusService syllabusService, MaterialRepository materialRepository,
+                              BatchRepository batchRepository) {
         this.courseRepository = courseRepository;
         this.slugGenerator = slugGenerator;
         this.accessGuard = accessGuard;
@@ -49,6 +53,7 @@ public class CourseServiceImpl implements CourseService {
         this.moduleRepository = moduleRepository;
         this.syllabusService = syllabusService;
         this.materialRepository = materialRepository;
+        this.batchRepository = batchRepository;
     }
 
     @Override
@@ -160,6 +165,10 @@ public class CourseServiceImpl implements CourseService {
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public void delete(Long id) {
         Course course = findOrThrow(id);
+
+        if (batchRepository.existsByCourseId(id)) {
+            throw new ConflictException("Course cannot be deleted while batches reference it");
+        }
 
         for (SyllabusModule module : moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(id)) {
             syllabusService.deleteModule(module.getId());
