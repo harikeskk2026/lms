@@ -9,6 +9,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/announcement-templates")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
 public class AdminAnnouncementTemplateController {
 
     private final AnnouncementTemplateService templateService;

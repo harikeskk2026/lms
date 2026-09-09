@@ -12,4 +12,14 @@ public interface AnnouncementAudienceService {
 
     /** Whether a specific student falls within the announcement's audience (used for the student-facing feed). */
     boolean isEligible(Announcement announcement, Student student);
+
+    /**
+     * Whether the user (identified by user id) falls within the announcement's audience.
+     * Users without a student profile are never eligible. Fails closed: any internal
+     * failure resolves to {@code false} (deny).
+     */
+    boolean isUserEligible(Announcement announcement, Long userId);
+
+    /** Number of students that fall within the announcement's audience (admin audience preview/analytics). */
+    long countEligibleStudents(Announcement announcement);
 }

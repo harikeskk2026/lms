@@ -21,6 +21,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -155,6 +156,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/sessions/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.PUT, "/api/sessions/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.DELETE, "/api/sessions/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        // Announcement endpoints: creation/management is restricted to ADMIN/SUPERADMIN only,
+                        // and student-facing announcement endpoints are restricted to the STUDENT role.
+                        .requestMatchers("/api/admin/announcements/**", "/api/admin/announcement-templates/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers("/api/student/announcements/**").hasRole("STUDENT")
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/**").authenticated()
                         .anyRequest().authenticated()
@@ -167,7 +172,11 @@ public class SecurityConfig {
 
     private CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

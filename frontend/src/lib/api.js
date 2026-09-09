@@ -2,21 +2,41 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import tokenStorage from '@/utilities/tokenStorage'
 
-// The API base URL is configured exclusively via the environment variable NEXT_PUBLIC_JAVA_API_URL.
-const BASE_URL = process.env.NEXT_PUBLIC_JAVA_API_URL
-
-if (!BASE_URL && typeof window !== 'undefined') {
-  console.error('[api.js] Configuration error: NEXT_PUBLIC_JAVA_API_URL is not defined in the environment.')
+export function getApiBaseUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_JAVA_API_URL
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname
+    // When accessed from another device via IP or non-localhost host,
+    // adapt the API base URL to use that same host.
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      if (envUrl) {
+        try {
+          const parsed = new URL(envUrl)
+          if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+            return `${parsed.protocol}//${hostname}:${parsed.port || '7000'}${parsed.pathname}`
+          }
+        } catch (e) {
+          // ignore URL parsing error
+        }
+      }
+      return `${window.location.protocol}//${hostname}:7000/api`
+    }
+  }
+  return envUrl || 'http://192.168.1.5:7000/api'
 }
 
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
   timeout: 15000,
 })
 
 // ─── Request: attach access token ─────────────────────────────────────────────
 api.interceptors.request.use(config => {
+  const currentBase = getApiBaseUrl()
+  if (currentBase) {
+    config.baseURL = currentBase
+  }
   if (!config.baseURL) {
     throw new Error('API configuration error: NEXT_PUBLIC_JAVA_API_URL environment variable is not configured.')
   }
@@ -74,19 +94,12 @@ api.interceptors.response.use(
 
 export default api
 
-// Files (e.g. assignment attachments, submissions) come back from the API as
-// paths relative to the API origin (e.g. "/uploads/assignments/x.pdf"), not
-// the frontend origin — resolve them to an absolute URL before linking.
-const API_ORIGIN = (BASE_URL || '').replace(/\/api\/?$/, '')
-
 export function resolveFileUrl(path) {
   if (!path) return path
   if (/^https?:\/\//i.test(path)) return path
   const normalized = path.startsWith('/') ? path : `/${path}`
-  if (typeof window !== 'undefined') {
-    return normalized
-  }
-  return `${API_ORIGIN}${normalized}`
+  const apiOrigin = getApiBaseUrl().replace(/\/api\/?$/, '')
+  return `${apiOrigin}${normalized}`
 }
 
 export const adminApi = {
@@ -218,6 +231,7 @@ export const adminApi = {
   getAnnouncementComments: (id) => api.get(`/admin/announcements/${id}/comments`),
   addAnnouncementComment: (id, data) => api.post(`/admin/announcements/${id}/comments`, data),
   previewAnnouncementPlaceholders: (title, body) => api.post('/admin/announcements/preview-placeholders', { title, body }),
+  getAnnouncementAudienceCount: (data) => api.post('/admin/announcements/audience-count', data),
 
   // Announcement Templates
   getAnnouncementTemplates: () => api.get('/admin/announcement-templates'),

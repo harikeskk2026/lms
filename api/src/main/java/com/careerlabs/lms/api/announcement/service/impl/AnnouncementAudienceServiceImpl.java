@@ -61,14 +61,44 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                 }
             }
             if (announcement.getCourse() != null) {
-                if (student.getCourse() == null || !student.getCourse().getId().equals(announcement.getCourse().getId())) {
+                Long targetCourseId = announcement.getCourse().getId();
+                boolean directMatch = student.getCourse() != null && targetCourseId.equals(student.getCourse().getId());
+                boolean batchMatch = student.getBatch() != null && student.getBatch().getCourse() != null
+                        && targetCourseId.equals(student.getBatch().getCourse().getId());
+                if (!directMatch && !batchMatch) {
                     return false;
                 }
             }
             return matchesRule(announcement, student);
         } catch (Exception e) {
-            return true;
+            // Fail closed: an audience-resolution failure must deny access, never grant it.
+            return false;
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isUserEligible(Announcement announcement, Long userId) {
+        try {
+            if (userId == null) {
+                return false;
+            }
+            return studentRepository.findByUserId(userId)
+                    .map(student -> isEligible(announcement, student))
+                    .orElse(false);
+        } catch (Exception e) {
+            // Fail closed: an audience-resolution failure must deny access, never grant it.
+            return false;
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countEligibleStudents(Announcement announcement) {
+        if (announcement == null) {
+            return 0;
+        }
+        return resolveEligibleStudents(announcement).size();
     }
 
     private Specification<Student> buildStructuralSpec(Announcement a) {
@@ -81,7 +111,14 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                 predicates.add(cb.equal(root.get("college").get("id"), a.getCollege().getId()));
             }
             if (a.getCourse() != null) {
-                predicates.add(cb.equal(root.get("course").get("id"), a.getCourse().getId()));
+                Long targetCourseId = a.getCourse().getId();
+                Predicate directCourse = cb.equal(root.get("course").get("id"), targetCourseId);
+                Predicate batchCourse = cb.and(
+                        cb.isNotNull(root.get("batch")),
+                        cb.isNotNull(root.get("batch").get("course")),
+                        cb.equal(root.get("batch").get("course").get("id"), targetCourseId)
+                );
+                predicates.add(cb.or(directCourse, batchCourse));
             }
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };

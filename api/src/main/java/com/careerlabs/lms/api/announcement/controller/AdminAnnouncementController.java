@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.announcement.controller;
 
 import com.careerlabs.lms.api.announcement.dto.request.AnnouncementCommentRequest;
 import com.careerlabs.lms.api.announcement.dto.request.AnnouncementRequest;
+import com.careerlabs.lms.api.announcement.dto.request.AudiencePreviewRequest;
 import com.careerlabs.lms.api.announcement.dto.request.PlaceholderPreviewRequest;
 import com.careerlabs.lms.api.announcement.dto.request.ScheduleRequest;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementAnalyticsResponse;
@@ -9,6 +10,7 @@ import com.careerlabs.lms.api.announcement.dto.response.AnnouncementCommentRespo
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementSuggestionResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementVersionResponse;
+import com.careerlabs.lms.api.announcement.dto.response.AudiencePreviewResponse;
 import com.careerlabs.lms.api.announcement.dto.response.PlaceholderPreviewResponse;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementStatus;
 import com.careerlabs.lms.api.announcement.service.AnnouncementCommentService;
@@ -18,6 +20,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +36,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/announcements")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
 public class AdminAnnouncementController {
 
     private final AnnouncementService announcementService;
@@ -65,6 +69,13 @@ public class AdminAnnouncementController {
     @GetMapping("/suggestions")
     public ResponseEntity<ApiResponse<List<AnnouncementSuggestionResponse>>> suggestions() {
         return ResponseEntity.ok(ApiResponse.of(announcementService.suggestions()));
+    }
+
+    @PostMapping("/audience-count")
+    public ResponseEntity<ApiResponse<AudiencePreviewResponse>> audienceCount(
+            @RequestBody AudiencePreviewRequest request) {
+        long count = announcementService.estimateAudience(request);
+        return ResponseEntity.ok(ApiResponse.of(new AudiencePreviewResponse(count)));
     }
 
     @PostMapping

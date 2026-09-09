@@ -9,6 +9,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/student/announcements")
+@PreAuthorize("hasRole('STUDENT')")
 public class StudentAnnouncementController {
 
     private final AnnouncementService announcementService;
@@ -54,7 +56,9 @@ public class StudentAnnouncementController {
 
 
     @GetMapping("/{id}/comments")
-    public ResponseEntity<ApiResponse<List<AnnouncementCommentResponse>>> comments(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<List<AnnouncementCommentResponse>>> comments(
+            @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {
+        announcementService.requireRecipientAccess(id, principal.id());
         return ResponseEntity.ok(ApiResponse.of(commentService.list(id)));
     }
 
@@ -62,6 +66,7 @@ public class StudentAnnouncementController {
     public ResponseEntity<ApiResponse<AnnouncementCommentResponse>> addComment(
             @PathVariable Long id, @Valid @RequestBody AnnouncementCommentRequest request,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        announcementService.requireRecipientAccess(id, principal.id());
         return ResponseEntity.ok(ApiResponse.of(commentService.add(id, request, principal.id())));
     }
 }

@@ -4,18 +4,17 @@ import { createPortal } from 'react-dom'
 
 import {
   Pin, Trash2, Pencil, Plus, Send, Copy, ArrowLeft,
-  BarChart3, History, MessageSquare, CalendarDays, Check, X as XIcon,
+  BarChart3, History, MessageSquare, CalendarDays, Check, X as XIcon, Paperclip,
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
-import { adminApi } from '@/lib/api'
-import collegeService from '@/services/collegeService'
+import { adminApi, resolveFileUrl } from '@/lib/api'
+import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL']
-const ACTION_TYPES = ['', 'ASSIGNMENT', 'QUIZ', 'COURSE', 'PLACEMENT_DRIVE', 'ATTENDANCE', 'COURSE_MATERIAL', 'CUSTOM']
 const AUDIENCE_RULES = ['NONE', 'ATTENDANCE_BELOW', 'ASSIGNMENT_NOT_SUBMITTED', 'PLACEMENT_ELIGIBLE']
 
 const CATEGORY_STYLES = {
@@ -36,18 +35,18 @@ const PRIORITY_STYLES = {
 
 const emptyForm = {
   title: '', body: '',
-  batchId: '', collegeId: '', courseId: '',
+  batchId: '', courseId: '',
   isPinned: false, expiresAt: '', category: 'GENERAL', priority: 'NORMAL',
   requiresAcknowledgment: false, allowComments: false,
-  actionType: '', actionReferenceId: '', actionLabel: '', actionUrl: '',
   audienceRuleType: 'NONE', audienceRuleValue: '', audienceRuleReferenceId: '',
   scheduledAt: '',
 }
 
 export default function AnnouncementsPage() {
+  const { user } = useAuth()
+  const canCreate = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN'
   const [announcements, setAnnouncements] = useState([])
   const [batches, setBatches] = useState([])
-  const [colleges, setColleges] = useState([])
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
@@ -67,7 +66,6 @@ export default function AnnouncementsPage() {
   useEffect(() => {
     load()
     adminApi.getBatches().then(r => setBatches(r.data.data || [])).catch(() => {})
-    collegeService.list().then(r => setColleges(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
   }, [])
 
@@ -83,11 +81,11 @@ export default function AnnouncementsPage() {
     scheduledAt: status === 'SCHEDULED' && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
     requiresAcknowledgment: form.requiresAcknowledgment,
     allowComments: form.allowComments,
-    actionType: form.actionType || null,
-    actionReferenceId: form.actionReferenceId ? Number(form.actionReferenceId) : null,
-    actionLabel: form.actionLabel || null,
-    actionUrl: form.actionUrl || null,
-    collegeId: form.collegeId || null,
+    actionType: null,
+    actionReferenceId: null,
+    actionLabel: null,
+    actionUrl: null,
+    collegeId: null,
     courseId: form.courseId || null,
     audienceRuleType: form.audienceRuleType || 'NONE',
     audienceRuleValue: form.audienceRuleValue !== '' ? Number(form.audienceRuleValue) : null,
@@ -96,9 +94,16 @@ export default function AnnouncementsPage() {
 
   const handleSave = async (e, status) => {
     e.preventDefault()
-    if (status === 'SCHEDULED' && !form.scheduledAt) {
-      toast.error('Pick a schedule date/time first')
-      return
+    if (status === 'SCHEDULED') {
+      if (!form.scheduledAt) {
+        toast.error('Pick a schedule date/time first')
+        return
+      }
+      const scheduledDate = new Date(form.scheduledAt)
+      if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+        toast.error('Scheduled time must be in the future')
+        return
+      }
     }
     setSaving(true)
     try {
@@ -148,11 +153,10 @@ export default function AnnouncementsPage() {
     setEditId(a.id)
     setForm({
       title: a.title, body: a.body,
-      batchId: a.batchId || '', collegeId: a.collegeId || '', courseId: a.courseId || '',
+      batchId: a.batchId || '', courseId: a.courseId || '',
       isPinned: a.isPinned, expiresAt: a.expiresAt ? a.expiresAt.split('T')[0] : '',
       category: a.category || 'GENERAL', priority: a.priority || 'NORMAL',
       requiresAcknowledgment: !!a.requiresAcknowledgment, allowComments: !!a.allowComments,
-      actionType: a.actionType || '', actionReferenceId: a.actionReferenceId ?? '', actionLabel: a.actionLabel || '', actionUrl: a.actionUrl || '',
       audienceRuleType: a.audienceRuleType || 'NONE', audienceRuleValue: a.audienceRuleValue ?? '', audienceRuleReferenceId: a.audienceRuleReferenceId ?? '',
       scheduledAt: a.scheduledAt ? a.scheduledAt.slice(0, 16) : '',
     })
@@ -171,24 +175,26 @@ export default function AnnouncementsPage() {
   }
   const activeTabData = sections.find(s => s.key === activeSection) || sections[0]
 
-  const cardProps = { batches, colleges, courses, onEdit: handleEdit, onDelete: handleDelete,
+  const cardProps = { batches, courses, onEdit: handleEdit, onDelete: handleDelete,
     onPublish: handlePublish, onApprove: handleApprove, onReject: handleReject, onDuplicate: handleDuplicate,
     onDetails: setDetailsFor, onView: setViewingAnnouncement }
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h1 className="font-display text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
           <button onClick={() => setView(v => v === 'list' ? 'calendar' : 'list')}
-            className="flex items-center gap-1.5 border border-gray-200 text-gray-600 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-gray-50">
+            className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 border border-gray-200 text-gray-600 dark:text-gray-300 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             <CalendarDays size={14} /> {view === 'list' ? 'Calendar' : 'List'}
           </button>
-          <button onClick={() => { setFormOpen(f => !f); setEditId(null); setForm(emptyForm) }}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
-            <Plus size={16} />
-            {formOpen ? 'Close' : 'Create Announcement'}
-          </button>
+          {canCreate && (
+            <button onClick={() => { setFormOpen(f => !f); setEditId(null); setForm(emptyForm) }}
+              className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold shadow-md shadow-purple-500/20 active:scale-95 transition-all">
+              <Plus size={16} />
+              {formOpen ? 'Close' : 'Create Announcement'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -196,15 +202,15 @@ export default function AnnouncementsPage() {
         <AnnouncementForm
           form={form} setForm={setForm} editId={editId} saving={saving} onSave={handleSave}
           onCancel={() => { setFormOpen(false); setEditId(null) }}
-          batches={batches} colleges={colleges} courses={courses}
+          batches={batches} courses={courses}
         />
       ) : (
         <>
           {view !== 'calendar' && (
-            <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+            <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto pb-1 -mx-1 px-1">
               {sections.map(s => (
                 <button key={s.key} onClick={() => setActiveSection(s.key)}
-                  className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors ${activeSection === s.key ? `border-current ${s.color}` : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                  className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors flex-shrink-0 ${activeSection === s.key ? `border-current ${s.color}` : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
                   {s.label} ({s.items.length})
                 </button>
               ))}
@@ -231,7 +237,7 @@ export default function AnnouncementsPage() {
 
       {viewingAnnouncement && (
         <ViewAnnouncementModal a={viewingAnnouncement} batches={batches}
-          colleges={colleges} courses={courses} onClose={() => setViewingAnnouncement(null)} />
+          courses={courses} onClose={() => setViewingAnnouncement(null)} />
       )}
     </div>
   )
@@ -239,11 +245,12 @@ export default function AnnouncementsPage() {
 
 const PLACEHOLDER_TOKENS = ['{{studentName}}', '{{batchName}}', '{{courseName}}', '{{attendancePercentage}}', '{{date}}']
 
-function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, colleges, courses }) {
+function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, courses }) {
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
   const toggle = (key) => () => setForm(f => ({ ...f, [key]: !f[key] }))
   const bodyRef = useRef(null)
   const [preview, setPreview] = useState(null)
+  const [audienceCount, setAudienceCount] = useState(null)
 
   const usesPlaceholders = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(`${form.title} ${form.body}`)
 
@@ -256,6 +263,22 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
     }, 400)
     return () => clearTimeout(timer)
   }, [form.title, form.body, usesPlaceholders])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      adminApi.getAnnouncementAudienceCount({
+        batchId: form.batchId || null,
+        collegeId: null,
+        courseId: form.courseId || null,
+        audienceRuleType: form.audienceRuleType || 'NONE',
+        audienceRuleValue: form.audienceRuleValue !== '' ? Number(form.audienceRuleValue) : null,
+        audienceRuleReferenceId: form.audienceRuleReferenceId !== '' ? Number(form.audienceRuleReferenceId) : null,
+      })
+        .then(r => setAudienceCount(r.data.data?.count ?? null))
+        .catch(() => setAudienceCount(null))
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [form.batchId, form.courseId, form.audienceRuleType, form.audienceRuleValue, form.audienceRuleReferenceId])
 
   const insertPlaceholder = (token) => {
     const el = bodyRef.current
@@ -272,7 +295,7 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="glass-card p-4 sm:p-6">
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3">
           <button type="button" onClick={onCancel} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 transition-colors">
@@ -316,13 +339,20 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           )}
         </div>
 
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Audience</p>
-        <div className="grid sm:grid-cols-3 gap-4">
-          <Select label="Batch" value={form.batchId} onChange={set('batchId')} options={batches.map(b => [b.id, b.name])} allLabel="All Students" />
-          <Select label="College" value={form.collegeId} onChange={set('collegeId')} options={colleges.map(c => [c.id, c.name])} allLabel="Any" />
-          <Select label="Course" value={form.courseId} onChange={set('courseId')} options={courses.map(c => [c.id, c.title])} allLabel="Any" />
+        <div>
+          <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Audience Targeting</p>
+            <span className="text-[11px] text-gray-400 font-normal">Leave as &quot;All&quot; to target everyone, or filter by Batch and Course</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <Select label="Batch" value={form.batchId} onChange={set('batchId')} options={batches.map(b => [b.id, b.name])} allLabel="All Batches (Anyone in any batch)" />
+            <Select label="Course" value={form.courseId} onChange={set('courseId')} options={courses.map(c => [c.id, c.title])} allLabel="All Courses (Anyone in any course)" />
+          </div>
+          <p className="text-[11px] text-purple-600/90 dark:text-purple-400/90 mt-1.5 italic">
+            * Note: If both Batch and Course are selected, only students who belong to that Batch <u>and</u> are enrolled in that Course will receive this announcement.
+          </p>
         </div>
-        <div className="grid sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Data-based rule</label>
             <select value={form.audienceRuleType} onChange={set('audienceRuleType')}
@@ -345,9 +375,17 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
             </div>
           )}
         </div>
+        <div className="flex items-center gap-2 text-xs flex-wrap">
+          {audienceCount !== null ? (
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Estimated recipients: {audienceCount} student(s)</span>
+          ) : (
+            <span className="text-gray-400">Estimating audience...</span>
+          )}
+          <span className="text-gray-400">— confirmed for ALL targeted students, regardless of who is logged in</span>
+        </div>
 
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Details</p>
-        <div className="grid sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Category</label>
             <select value={form.category} onChange={set('category')}
@@ -365,15 +403,22 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Expires (optional)</label>
             <input type="date" value={form.expiresAt} onChange={set('expiresAt')}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Schedule for (optional)</label>
+        </div>
+
+        {/* Dedicated spacious row for Schedule for so Date and Time are never squished */}
+        <div className="pt-1">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Schedule for (optional)</label>
+          <div className="w-full max-w-md">
             <DateTimePicker12h
+              disablePast
+              minDate={new Date().toISOString().split('T')[0]}
               value={form.scheduledAt}
               onChange={val => setForm(f => ({ ...f, scheduledAt: val }))}
             />
           </div>
+          <p className="text-[11px] text-gray-400 mt-1">Leave blank to publish immediately, or choose a future date & time to auto-publish.</p>
         </div>
 
         <div className="flex flex-wrap gap-4">
@@ -382,55 +427,25 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           <ToggleField label="Allow Comments" checked={form.allowComments} onClick={toggle('allowComments')} />
         </div>
 
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Action Button (optional)</p>
-        <div className="grid sm:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Type</label>
-            <select value={form.actionType} onChange={set('actionType')}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200">
-              {ACTION_TYPES.map(t => <option key={t} value={t}>{t ? t.replaceAll('_', ' ') : 'None'}</option>)}
-            </select>
-          </div>
-          {form.actionType && form.actionType !== 'CUSTOM' && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Reference ID</label>
-              <input type="number" value={form.actionReferenceId} onChange={set('actionReferenceId')}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
-            </div>
-          )}
-          {form.actionType === 'CUSTOM' && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">URL</label>
-              <input value={form.actionUrl} onChange={set('actionUrl')}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
-            </div>
-          )}
-          {form.actionType && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Button Label</label>
-              <input value={form.actionLabel} onChange={set('actionLabel')} placeholder="View Assignment"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 sm:gap-3 pt-2">
           <button type="button" onClick={onCancel}
-            className="flex-1 min-w-[100px] py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 inline-flex items-center justify-center gap-1.5">
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center justify-center gap-1.5 transition-colors">
             <ArrowLeft size={14} /> Back
           </button>
-          <button type="button" disabled={saving} onClick={e => onSave(e, 'DRAFT')}
-            className="flex-1 min-w-[100px] py-2.5 rounded-xl border border-purple-300 text-sm font-semibold text-purple-600 hover:bg-purple-50 disabled:opacity-60">
-            Save as Draft
-          </button>
-          <button type="button" disabled={saving} onClick={e => onSave(e, 'SCHEDULED')}
-            className="flex-1 min-w-[100px] py-2.5 rounded-xl border border-sky-300 text-sm font-semibold text-sky-600 hover:bg-sky-50 disabled:opacity-60">
-            Schedule
-          </button>
-          <button type="button" disabled={saving} onClick={e => onSave(e, 'PUBLISHED')}
-            className="flex-1 min-w-[100px] py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-            {saving ? 'Saving...' : (editId ? 'Update & Publish' : 'Publish')}
-          </button>
+          <div className="flex flex-col sm:flex-row flex-1 gap-2.5 sm:gap-3 sm:justify-end">
+            <button type="button" disabled={saving} onClick={e => onSave(e, 'DRAFT')}
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl border border-purple-300 dark:border-purple-700 text-sm font-semibold text-purple-600 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60 transition-colors">
+              Save as Draft
+            </button>
+            <button type="button" disabled={saving} onClick={e => onSave(e, 'SCHEDULED')}
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl border border-sky-300 dark:border-sky-700 text-sm font-semibold text-sky-600 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 disabled:opacity-60 transition-colors">
+              Schedule
+            </button>
+            <button type="button" disabled={saving} onClick={e => onSave(e, 'PUBLISHED')}
+              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60 shadow-sm hover:shadow transition-all">
+              {saving ? 'Saving...' : (editId ? 'Update & Publish' : 'Publish')}
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -474,9 +489,8 @@ function AnnouncementSection({ title, color, items, emptyText, cardProps, hideTi
   )
 }
 
-function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
+function AnnouncementCard({ a, batches, courses, onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
   const batch = batches.find(b => b.id === a.batchId)
-  const college = colleges.find(c => c.id === a.collegeId)
   const course = courses.find(c => c.id === a.courseId)
   const isDraft = a.status === 'DRAFT'
   const isScheduled = a.status === 'SCHEDULED'
@@ -486,7 +500,7 @@ function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onP
 
   return (
     <div className={`glass-card p-5 ${a.isPinned ? 'border-purple-300 dark:border-purple-700' : ''} ${isDraft || isExpired ? 'opacity-70' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onView(a)} title="Click to view details">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             {a.isPinned && <Pin size={12} className="text-purple-500 flex-shrink-0" />}
@@ -501,7 +515,6 @@ function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onP
               </span>
             )}
             {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-            {college && <Badge color="pink">{college.name}</Badge>}
             {course && <Badge color="cyan">{course.title}</Badge>}
             {a.audienceRuleType && a.audienceRuleType !== 'NONE' && <Badge color="amber">{a.audienceRuleType.replaceAll('_', ' ')}</Badge>}
             {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
@@ -518,26 +531,25 @@ function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onP
           )}
           <p className="text-xs text-gray-400 mt-2">{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
           {isScheduled && a.scheduledAt && <p className="text-[10px] text-sky-500 mt-0.5">Scheduled for {format(new Date(a.scheduledAt), 'dd MMM yyyy, HH:mm')}</p>}
-          {a.expiresAt && <p className="text-[10px] text-amber-500 mt-0.5">Expires {format(new Date(a.expiresAt), 'dd MMM yyyy')}</p>}
         </div>
-        <div className="flex items-center justify-end gap-1 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-800/80 sm:justify-end w-full sm:w-auto">
           {isPending && (
             <>
-              <IconButton title="Approve" onClick={() => onApprove(a.id)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100"><Check size={12} /></IconButton>
-              <IconButton title="Reject" onClick={() => onReject(a.id)} className="bg-red-50 text-red-500 hover:bg-red-100"><XIcon size={12} /></IconButton>
+              <IconButton title="Approve" onClick={() => onApprove(a.id)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100"><Check size={13} /></IconButton>
+              <IconButton title="Reject" onClick={() => onReject(a.id)} className="bg-red-50 text-red-500 hover:bg-red-100"><XIcon size={13} /></IconButton>
             </>
           )}
           {(isDraft || isScheduled) && (
-            <IconButton title="Publish Now" onClick={() => onPublish(a.id)} className="bg-purple-50 text-purple-600 hover:bg-purple-100"><Send size={12} /></IconButton>
+            <IconButton title="Publish Now" onClick={() => onPublish(a.id)} className="bg-purple-50 text-purple-600 hover:bg-purple-100"><Send size={13} /></IconButton>
           )}
-          <IconButton title="Analytics" onClick={() => onDetails({ id: a.id, tab: 'analytics' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><BarChart3 size={12} /></IconButton>
-          <IconButton title="History" onClick={() => onDetails({ id: a.id, tab: 'history' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><History size={12} /></IconButton>
+          <IconButton title="Analytics" onClick={() => onDetails({ id: a.id, tab: 'analytics' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><BarChart3 size={13} /></IconButton>
+          <IconButton title="History" onClick={() => onDetails({ id: a.id, tab: 'history' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><History size={13} /></IconButton>
           {a.allowComments && (
-            <IconButton title="Comments" onClick={() => onDetails({ id: a.id, tab: 'comments' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><MessageSquare size={12} /></IconButton>
+            <IconButton title="Comments" onClick={() => onDetails({ id: a.id, tab: 'comments' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><MessageSquare size={13} /></IconButton>
           )}
-          <IconButton title="Duplicate" onClick={() => onDuplicate(a.id)} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><Copy size={12} /></IconButton>
-          <IconButton title="Edit" onClick={() => onEdit(a)} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><Pencil size={12} /></IconButton>
-          <IconButton title="Delete" onClick={() => onDelete(a.id)} className="bg-red-50 text-red-500 hover:bg-red-100"><Trash2 size={12} /></IconButton>
+          <IconButton title="Duplicate" onClick={() => onDuplicate(a.id)} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><Copy size={13} /></IconButton>
+          <IconButton title="Edit" onClick={() => onEdit(a)} className="bg-gray-100 text-gray-500 hover:bg-gray-200"><Pencil size={13} /></IconButton>
+          <IconButton title="Delete" onClick={() => onDelete(a.id)} className="bg-red-50 text-red-500 hover:bg-red-100"><Trash2 size={13} /></IconButton>
         </div>
       </div>
     </div>
@@ -546,7 +558,7 @@ function AnnouncementCard({ a, batches, colleges, courses, onEdit, onDelete, onP
 
 function IconButton({ title, onClick, className, children }) {
   return (
-    <button title={title} onClick={onClick} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${className}`}>
+    <button title={title} onClick={onClick} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${className}`}>
       {children}
     </button>
   )
@@ -567,10 +579,10 @@ function Modal({ title, onClose, children }) {
   useEffect(() => { setMounted(true) }, [])
   if (!mounted) return null
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fadeIn" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-3 sm:p-4 animate-fadeIn" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[90vh] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
-          <h3 className="font-display font-bold text-gray-800 dark:text-white text-base">{title}</h3>
+          <h3 className="font-display font-bold text-gray-800 dark:text-white text-base sm:text-lg">{title}</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"><XIcon size={16} /></button>
         </div>
         {children}
@@ -579,8 +591,6 @@ function Modal({ title, onClose, children }) {
     document.body
   )
 }
-
-
 
 function DetailsModal({ announcementId, initialTab, onClose }) {
   const [tab, setTab] = useState(initialTab)
@@ -602,7 +612,7 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
 
   return (
     <Modal title="Announcement Details" onClose={onClose}>
-      <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap gap-x-2 gap-y-1 mb-4 border-b border-gray-200 dark:border-gray-700">
         {['analytics', 'history', 'comments'].map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px capitalize ${tab === t ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-400'}`}>
@@ -613,7 +623,7 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
 
       {tab === 'analytics' && (
         analytics ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
             <Stat label="Targeted" value={analytics.targeted} />
             <Stat label="Viewed" value={analytics.viewed} />
             <Stat label="Unread" value={analytics.unread} />
@@ -660,9 +670,8 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
   )
 }
 
-function ViewAnnouncementModal({ a, batches, colleges, courses, onClose }) {
+function ViewAnnouncementModal({ a, batches, courses, onClose }) {
   const batch = batches.find(b => b.id === a.batchId)
-  const college = colleges.find(c => c.id === a.collegeId)
   const course = courses.find(c => c.id === a.courseId)
 
   return (
@@ -682,7 +691,6 @@ function ViewAnnouncementModal({ a, batches, colleges, courses, onClose }) {
             </span>
           )}
           {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-          {college && <Badge color="pink">{college.name}</Badge>}
           {course && <Badge color="cyan">{course.title}</Badge>}
           {a.audienceRuleType && a.audienceRuleType !== 'NONE' && <Badge color="amber">{a.audienceRuleType.replaceAll('_', ' ')}</Badge>}
           {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
@@ -714,7 +722,7 @@ function ViewAnnouncementModal({ a, batches, colleges, courses, onClose }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="grid sm:grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created</p>
             <p className="text-gray-700 dark:text-gray-300">{format(new Date(a.createdAt), 'dd MMM yyyy, HH:mm')}</p>
@@ -779,27 +787,27 @@ function CalendarView({ announcements }) {
   const selectedItems = selectedDay ? (dayItems[selectedDay] || []) : []
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 items-start">
-      <div className="glass-card p-5 flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-4">
-          <p className="font-display font-bold text-gray-800 dark:text-white">{format(today, 'MMMM yyyy')}</p>
-          <div className="flex gap-3 text-[10px] text-gray-400">
+    <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 items-start">
+      <div className="glass-card p-4 sm:p-5 flex-1 min-w-0 w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <p className="font-display font-bold text-gray-800 dark:text-white text-base sm:text-lg">{format(today, 'MMMM yyyy')}</p>
+          <div className="flex gap-2.5 sm:gap-3 text-[10px] text-gray-400 flex-wrap">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-500 inline-block" /> Scheduled</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Published</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Expiring</span>
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-1">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1 text-center text-[10px] font-bold text-gray-400 mb-1.5">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
           {cells.map((d, i) => (
             <button key={i} type="button" disabled={!d} onClick={() => setSelectedDay(d)}
-              className={`h-11 sm:h-12 rounded-lg border p-1 text-xs text-left ${!d ? 'border-transparent cursor-default' : selectedDay === d ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-gray-800 hover:border-purple-200'}`}>
+              className={`min-h-[42px] sm:min-h-[48px] rounded-lg border p-0.5 sm:p-1.5 text-xs text-left transition-all ${!d ? 'border-transparent cursor-default' : selectedDay === d ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-100 dark:border-gray-800 hover:border-purple-200'}`}>
               {d && (
                 <>
-                  <span className={selectedDay === d ? 'text-purple-600 font-bold' : 'text-gray-500'}>{d}</span>
-                  <div className="flex gap-0.5 mt-1 flex-wrap">
+                  <span className={selectedDay === d ? 'text-purple-600 font-bold text-[11px] sm:text-xs' : 'text-gray-500 text-[11px] sm:text-xs'}>{d}</span>
+                  <div className="flex gap-0.5 mt-0.5 sm:mt-1 flex-wrap">
                     {(dayItems[d] || []).slice(0, 4).map((item, idx) => (
                       <span key={idx} className={`w-1.5 h-1.5 rounded-full inline-block ${TYPE_DOT[item.type]}`} title={`${item.type}: ${item.a.title}`} />
                     ))}
@@ -824,7 +832,7 @@ function CalendarView({ announcements }) {
           {selectedItems.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">No announcements on this day.</p>
           ) : (
-            <div className="space-y-3 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#a78bfa #f3f4f6' }}>
+            <div className="space-y-3 overflow-y-auto pr-1 flex-1 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: '#a78bfa #f3f4f6' }}>
               {selectedItems.map((item, idx) => (
                 <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3">
                   <div className="flex items-center gap-1.5 flex-wrap mb-1">

@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.announcement.service;
 
 import com.careerlabs.lms.api.announcement.dto.request.AnnouncementRequest;
+import com.careerlabs.lms.api.announcement.dto.request.AudiencePreviewRequest;
 import com.careerlabs.lms.api.announcement.dto.request.ScheduleRequest;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementAnalyticsResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
@@ -17,6 +18,16 @@ public interface AnnouncementService {
 
     /** Announcements visible to a given student: matches their targeting + not expired, personalized. */
     List<AnnouncementResponse> listForStudent(Long userId);
+
+    /**
+     * Throws {@link com.careerlabs.lms.api.common.exception.ForbiddenException} unless the given
+     * user is an eligible recipient of a published, unexpired announcement. Used to gate every
+     * student-facing per-announcement operation (view, acknowledge, comments). Fail-closed.
+     */
+    void requireRecipientAccess(Long announcementId, Long userId);
+
+    /** Number of students the given targeting selection would reach (admin audience preview). */
+    long estimateAudience(AudiencePreviewRequest request);
 
     AnnouncementResponse create(AnnouncementRequest request, Long createdByUserId);
 

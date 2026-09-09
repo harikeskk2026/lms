@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.announcement.service.impl;
 
 import com.careerlabs.lms.api.announcement.dto.request.AnnouncementRequest;
+import com.careerlabs.lms.api.announcement.dto.request.AudiencePreviewRequest;
 import com.careerlabs.lms.api.announcement.dto.request.ScheduleRequest;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementAnalyticsResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
@@ -29,6 +30,7 @@ import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
@@ -118,78 +120,61 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<AnnouncementResponse> listForStudent(Long userId) {
-        try {
-            LocalDate today = LocalDate.now();
-            Student student = null;
-            try {
-                student = studentRepository.findByUserId(userId).orElse(null);
-            } catch (Exception ignored) {}
+        LocalDate today = LocalDate.now();
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user " + userId));
+        Map<String, String> vars = placeholderResolver.variablesFor(student);
 
-            Map<String, String> vars = Map.of();
-            if (student != null) {
-                try {
-                    vars = placeholderResolver.variablesFor(student);
-                } catch (Exception ignored) {}
+        List<AnnouncementResponse> result = new ArrayList<>();
+        List<Announcement> published = announcementRepository.findByStatus(AnnouncementStatus.PUBLISHED);
+
+        for (Announcement a : published) {
+            if (a.getExpiresAt() != null && a.getExpiresAt().isBefore(today)) {
+                continue;
             }
-
-            List<AnnouncementResponse> result = new ArrayList<>();
-            List<Announcement> published = List.of();
-            try {
-                published = announcementRepository.findByStatus(AnnouncementStatus.PUBLISHED);
-            } catch (Exception e) {
-                try {
-                    published = announcementRepository.findAll();
-                } catch (Exception ex) {
-                    return List.of();
-                }
+            if (!audienceService.isEligible(a, student)) {
+                continue;
             }
+            String title = placeholderResolver.resolve(a.getTitle(), vars);
+            String body = placeholderResolver.resolve(a.getBody(), vars);
+            boolean viewed = viewRepository.existsByAnnouncementIdAndStudentId(a.getId(), student.getId());
+            boolean acknowledged = acknowledgmentRepository.existsByAnnouncementIdAndStudentId(a.getId(), student.getId());
+            result.add(AnnouncementResponse.from(a, title, body, viewed, acknowledged));
+        }
 
-            for (Announcement a : published) {
-                try {
-                    if (a.getStatus() != null && a.getStatus() != AnnouncementStatus.PUBLISHED) {
-                        continue;
-                    }
-                    if (a.getExpiresAt() != null && a.getExpiresAt().isBefore(today)) {
-                        continue;
-                    }
-                    if (student == null) {
-                        result.add(AnnouncementResponse.from(a));
-                        continue;
-                    }
-                    if (!audienceService.isEligible(a, student)) {
-                        continue;
-                    }
-                    String title = placeholderResolver.resolve(a.getTitle(), vars);
-                    String body = placeholderResolver.resolve(a.getBody(), vars);
-                    boolean viewed = safeExistsView(a.getId(), student.getId());
-                    boolean acknowledged = safeExistsAck(a.getId(), student.getId());
-                    result.add(AnnouncementResponse.from(a, title, body, viewed, acknowledged));
-                } catch (Exception e) {
-                    try {
-                        result.add(AnnouncementResponse.from(a));
-                    } catch (Exception ignored) {}
-                }
-            }
+        result.sort(Comparator.comparing(AnnouncementResponse::isPinned).reversed()
+                .thenComparing(AnnouncementResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        return result;
+    }
 
-            try {
-                result.sort(Comparator.comparing(AnnouncementResponse::isPinned).reversed()
-                        .thenComparing(AnnouncementResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder())));
-            } catch (Exception ignored) {}
-
-            return result;
-        } catch (Exception e) {
-            return List.of();
+    @Override
+    @Transactional(readOnly = true)
+    public void requireRecipientAccess(Long announcementId, Long userId) {
+        Announcement announcement = findOrThrow(announcementId);
+        if (announcement.getStatus() != AnnouncementStatus.PUBLISHED) {
+            throw new ForbiddenException("Announcement is not available to students");
+        }
+        if (announcement.getExpiresAt() != null && announcement.getExpiresAt().isBefore(LocalDate.now())) {
+            throw new ForbiddenException("Announcement has expired");
+        }
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new ForbiddenException("Not authorized to access this announcement"));
+        if (!audienceService.isEligible(announcement, student)) {
+            throw new ForbiddenException("You are not in the audience for this announcement");
         }
     }
 
-    private boolean safeExistsView(Long announcementId, Long studentId) {
-        try { return viewRepository.existsByAnnouncementIdAndStudentId(announcementId, studentId); }
-        catch (Exception e) { return false; }
-    }
-
-    private boolean safeExistsAck(Long announcementId, Long studentId) {
-        try { return acknowledgmentRepository.existsByAnnouncementIdAndStudentId(announcementId, studentId); }
-        catch (Exception e) { return false; }
+    @Override
+    @Transactional(readOnly = true)
+    public long estimateAudience(AudiencePreviewRequest request) {
+        Announcement preview = new Announcement();
+        preview.setBatch(request.batchId() != null ? findBatch(request.batchId()) : null);
+        preview.setCollege(request.collegeId() != null ? findCollege(request.collegeId()) : null);
+        preview.setCourse(request.courseId() != null ? findCourse(request.courseId()) : null);
+        preview.setAudienceRuleType(request.audienceRuleType() != null ? request.audienceRuleType() : AudienceRuleType.NONE);
+        preview.setAudienceRuleValue(request.audienceRuleValue());
+        preview.setAudienceRuleReferenceId(request.audienceRuleReferenceId());
+        return audienceService.countEligibleStudents(preview);
     }
 
     private boolean isPureGlobal(Announcement a) {
@@ -246,8 +231,13 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     }
 
     private void validateScheduling(AnnouncementStatus status, Instant scheduledAt) {
-        if (status == AnnouncementStatus.SCHEDULED && scheduledAt == null) {
-            throw new BadRequestException("scheduledAt is required when status is SCHEDULED");
+        if (status == AnnouncementStatus.SCHEDULED) {
+            if (scheduledAt == null) {
+                throw new BadRequestException("scheduledAt is required when status is SCHEDULED");
+            }
+            if (scheduledAt.isBefore(Instant.now().minusSeconds(60))) {
+                throw new BadRequestException("Scheduled time must be in the future");
+            }
         }
     }
 
@@ -272,6 +262,12 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         Announcement announcement = findOrThrow(id);
         if (announcement.getStatus() == AnnouncementStatus.PUBLISHED) {
             throw new BadRequestException("Cannot schedule an already-published announcement");
+        }
+        if (request.scheduledAt() == null) {
+            throw new BadRequestException("scheduledAt is required when status is SCHEDULED");
+        }
+        if (request.scheduledAt().isBefore(Instant.now().minusSeconds(60))) {
+            throw new BadRequestException("Scheduled time must be in the future");
         }
         announcement.setScheduledAt(request.scheduledAt());
         announcement.setStatus(AnnouncementStatus.SCHEDULED);
@@ -387,10 +383,9 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     @Override
     @Transactional
     public void recordView(Long announcementId, Long userId) {
-        Student student = studentRepository.findByUserId(userId).orElse(null);
-        if (student == null) {
-            return;
-        }
+        requireRecipientAccess(announcementId, userId);
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user " + userId));
         if (viewRepository.existsByAnnouncementIdAndStudentId(announcementId, student.getId())) {
             return;
         }
@@ -404,6 +399,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     @Override
     @Transactional
     public AnnouncementResponse acknowledge(Long announcementId, Long userId) {
+        requireRecipientAccess(announcementId, userId);
         Announcement announcement = findOrThrow(announcementId);
         if (!announcement.isRequiresAcknowledgment()) {
             throw new BadRequestException("This announcement does not require acknowledgment");
