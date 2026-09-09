@@ -231,6 +231,14 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     @Override
+    @Transactional
+    public AssignmentResponse reopen(Long id) {
+        Assignment assignment = findOrThrow(id);
+        assignment.setStatus(AssignmentStatus.PUBLISHED);
+        return AssignmentResponse.from(assignmentRepository.save(assignment));
+    }
+
+    @Override
     public UploadResponse uploadAttachment(MultipartFile file) {
         StoredFile stored = fileStorageService.store(file, "assignments");
         return new UploadResponse(stored.url(), stored.originalName());

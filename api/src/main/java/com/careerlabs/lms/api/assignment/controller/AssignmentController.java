@@ -85,6 +85,11 @@ public class AssignmentController {
         return ResponseEntity.ok(ApiResponse.of("Assignment closed", assignmentService.close(id)));
     }
 
+    @PatchMapping("/{id}/reopen")
+    public ResponseEntity<ApiResponse<AssignmentResponse>> reopen(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.of("Assignment reopened", assignmentService.reopen(id)));
+    }
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<UploadResponse>> upload(@RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.of(assignmentService.uploadAttachment(file)));

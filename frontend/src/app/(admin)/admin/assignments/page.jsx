@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Paperclip, X, RefreshCw, Calendar } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
@@ -217,6 +217,12 @@ export default function AssignmentsPage() {
     catch (err) { toast.error(err.message || 'Failed to close') }
   }
 
+  const handleReopen = async (id) => {
+    if (!confirm('Reopen this assignment? Students will be able to submit again.')) return
+    try { await assignmentService.reopen(id); toast.success('Assignment reopened'); load() }
+    catch (err) { toast.error(err.message || 'Failed to reopen') }
+  }
+
   const handleConfirmDelete = async () => {
     if (!deletingAssignment) return
     setIsDeleting(true)
@@ -385,6 +391,12 @@ export default function AssignmentsPage() {
                             <button onClick={() => handleClose(a.id)}
                               className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/60 flex items-center justify-center transition-colors" title="Close">
                               <Lock size={14} />
+                            </button>
+                          )}
+                          {a.status === 'CLOSED' && (
+                            <button onClick={() => handleReopen(a.id)}
+                              className="w-7 h-7 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/60 flex items-center justify-center transition-colors" title="Reopen">
+                              <Unlock size={14} />
                             </button>
                           )}
                           <button onClick={() => setDeletingAssignment(a)}
@@ -585,14 +597,23 @@ export default function AssignmentsPage() {
               className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
               Cancel
             </button>
-            <button type="button" disabled={saving} onClick={() => handleSubmit('DRAFT')}
-              className="flex-1 py-2.5 rounded-xl border border-purple-200 text-purple-600 text-sm font-semibold hover:bg-purple-50 transition-colors disabled:opacity-60">
-              Save as Draft
-            </button>
-            <button type="button" disabled={saving} onClick={() => handleSubmit('PUBLISHED')}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
-              {saving ? 'Saving...' : 'Publish'}
-            </button>
+            {editAssignment ? (
+              <button type="button" disabled={saving} onClick={() => handleSubmit(editAssignment.status)}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
+                {saving ? 'Updating...' : 'Update Assignment'}
+              </button>
+            ) : (
+              <>
+                <button type="button" disabled={saving} onClick={() => handleSubmit('DRAFT')}
+                  className="flex-1 py-2.5 rounded-xl border border-purple-200 text-purple-600 text-sm font-semibold hover:bg-purple-50 transition-colors disabled:opacity-60">
+                  Save as Draft
+                </button>
+                <button type="button" disabled={saving} onClick={() => handleSubmit('PUBLISHED')}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
+                  {saving ? 'Saving...' : 'Publish'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </SlidePanel>

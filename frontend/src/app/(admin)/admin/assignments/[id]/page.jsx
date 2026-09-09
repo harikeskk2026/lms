@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Download,
-  Send, Lock, Trash2, CheckCircle2, Search, RefreshCw,
+  Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -139,6 +139,12 @@ export default function AssignmentDetailPage() {
     catch (err) { toast.error(err.message || 'Failed to close') }
   }
 
+  const handleReopen = async () => {
+    if (!confirm('Reopen this assignment? Students will be able to submit again.')) return
+    try { await assignmentService.reopen(id); toast.success('Assignment reopened'); loadAssignment() }
+    catch (err) { toast.error(err.message || 'Failed to reopen') }
+  }
+
   const handleDelete = async () => {
     if (!confirm(`Delete "${assignment.title}"? This cannot be undone.`)) return
     try {
@@ -206,6 +212,12 @@ export default function AssignmentDetailPage() {
               <button onClick={handleClose}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 text-amber-700 text-sm font-semibold hover:bg-amber-100 transition-colors">
                 <Lock size={14} /> Close
+              </button>
+            )}
+            {assignment.status === 'CLOSED' && (
+              <button onClick={handleReopen}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 text-green-700 text-sm font-semibold hover:bg-green-100 transition-colors">
+                <Unlock size={14} /> Reopen
               </button>
             )}
             <button onClick={handleDelete}
