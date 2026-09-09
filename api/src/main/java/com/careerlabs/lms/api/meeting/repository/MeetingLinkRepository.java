@@ -46,10 +46,23 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
     List<MeetingLink> findDueForAutoComplete(@Param("statuses") List<MeetingStatus> statuses,
                                               @Param("now") LocalDateTime now);
 
+    /** SCHEDULED meetings whose scheduled start time has arrived and end time hasn't passed. */
+    @Query("SELECT m FROM MeetingLink m WHERE m.status = 'SCHEDULED' " +
+            "AND m.scheduledStart IS NOT NULL AND m.scheduledStart <= :now " +
+            "AND (m.scheduledEnd IS NULL OR m.scheduledEnd > :now)")
+    List<MeetingLink> findDueForAutoStart(@Param("now") LocalDateTime now);
+
     /** Scheduled classes for a batch that fall within a given time window — used to match a
      *  manually-marked attendance session (DailyClass) against any Zoom link created for it. */
     List<MeetingLink> findByBatchIdAndScheduledStartBetweenOrderByScheduledStartAsc(
             Long batchId, LocalDateTime from, LocalDateTime to);
+
+    /** All scheduled classes across all batches/courses that fall within a given date window. */
+    List<MeetingLink> findByScheduledStartBetweenOrderByScheduledStartAsc(
+            LocalDateTime from, LocalDateTime to);
+
+    /** Scheduled classes that belong to a batch but don't yet have a DailyClass linked. */
+    List<MeetingLink> findByDailyClassIsNullAndBatchIsNotNull();
 
     /** Same visibility rule as {@link #findVisibleToStudent}, narrowed to a single day —
      *  used to surface Scheduled Class sessions on the student's attendance calendar even

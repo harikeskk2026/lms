@@ -9,6 +9,7 @@ import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
@@ -574,43 +575,14 @@ export default function BatchesPage() {
       )}
 
       {/* Delete Batch Confirmation Modal */}
-      {showDeleteModal && deletingBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scaleUp border border-gray-100 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center font-bold flex-shrink-0">
-                <Trash2 size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-lg text-gray-900 dark:text-white">Delete Batch</h3>
-                <p className="text-xs text-gray-500">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Are you sure you want to delete <strong className="text-gray-900 dark:text-white">{deletingBatch.name}</strong>?
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => { setShowDeleteModal(false); setDeletingBatch(null); }}
-                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all shadow-md shadow-red-500/20 disabled:opacity-60"
-              >
-                {saving ? 'Deleting...' : 'Delete Batch'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmModal
+        isOpen={showDeleteModal && Boolean(deletingBatch)}
+        onClose={() => { setShowDeleteModal(false); setDeletingBatch(null) }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Batch?"
+        itemName={deletingBatch?.name}
+        loading={saving}
+      />
     </div>
   )
 }

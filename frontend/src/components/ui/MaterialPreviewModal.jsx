@@ -143,7 +143,7 @@ export default function MaterialPreviewModal({ material, onClose }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-gray-950/90 backdrop-blur-xs w-screen h-screen flex flex-col overflow-hidden animate-fadeIn select-none"
+      className="fixed inset-0 z-[100] bg-gray-950/90 backdrop-blur-sm w-screen h-screen flex flex-col overflow-hidden animate-fadeIn select-none"
       onClick={onClose}
       onContextMenu={e => e.preventDefault()}
     >

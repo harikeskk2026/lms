@@ -12,15 +12,26 @@ export default function StudentMeetingLinksPage() {
   const [liveMeetings, setLiveMeetings] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const extractList = (r) => {
+    if (Array.isArray(r)) return r
+    if (Array.isArray(r?.data)) return r.data
+    if (Array.isArray(r?.data?.data)) return r.data.data
+    return []
+  }
+
   const loadMeetings = async () => {
     setLoading(true)
     try {
-      const [allRes, liveRes] = await Promise.all([
+      const [allRes, liveRes] = await Promise.allSettled([
         studentApi.getMeetings(),
         studentApi.getLiveMeetings(),
       ])
-      setMeetings(allRes.data?.data || [])
-      setLiveMeetings(liveRes.data?.data || [])
+      if (allRes.status === 'fulfilled') {
+        setMeetings(extractList(allRes.value?.data) || extractList(allRes.value) || [])
+      }
+      if (liveRes.status === 'fulfilled') {
+        setLiveMeetings(extractList(liveRes.value?.data) || extractList(liveRes.value) || [])
+      }
     } catch {
       toast.error('Failed to load meeting links')
     } finally {
@@ -30,6 +41,20 @@ export default function StudentMeetingLinksPage() {
 
   useEffect(() => {
     loadMeetings()
+    const interval = setInterval(() => {
+      Promise.allSettled([
+        studentApi.getMeetings(),
+        studentApi.getLiveMeetings(),
+      ]).then(([allRes, liveRes]) => {
+        if (allRes.status === 'fulfilled') {
+          setMeetings(extractList(allRes.value?.data) || extractList(allRes.value) || [])
+        }
+        if (liveRes.status === 'fulfilled') {
+          setLiveMeetings(extractList(liveRes.value?.data) || extractList(liveRes.value) || [])
+        }
+      }).catch(() => {})
+    }, 15000)
+    return () => clearInterval(interval)
   }, [])
 
   const copyToClipboard = (url) => {

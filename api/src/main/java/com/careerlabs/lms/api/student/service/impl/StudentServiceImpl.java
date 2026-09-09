@@ -209,6 +209,9 @@ public class StudentServiceImpl implements StudentService {
         student.setUser(user);
         student.setPhone(request.getPhone());
         student.setEnrollmentNo(generateEnrollmentNo(user.getId()));
+        if (request.getCollegeName() != null && !request.getCollegeName().isBlank()) {
+            student.setCollege(findOrCreateCollege(request.getCollegeName()));
+        }
         assignBatch(student, request.getBatchId());
         if (request.getCourseId() != null) {
             Course course = findCourseOrThrow(request.getCourseId());
@@ -333,6 +336,7 @@ public class StudentServiceImpl implements StudentService {
 
     private Student findOrThrow(Long id) {
         return studentRepository.findById(id)
+                .or(() -> studentRepository.findByUserId(id))
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + id));
     }
 
@@ -385,6 +389,11 @@ public class StudentServiceImpl implements StudentService {
         student.getUser().setName(request.getName());
         student.setPhone(request.getPhone());
         student.setPlacementStatus(request.getPlacementStatus());
+        if (request.getCollegeName() != null && !request.getCollegeName().isBlank()) {
+            student.setCollege(findOrCreateCollege(request.getCollegeName()));
+        } else if (request.getCollegeName() != null && request.getCollegeName().isBlank()) {
+            student.setCollege(null);
+        }
         assignBatch(student, request.getBatchId());
         if (request.getCourseId() != null) {
             Course course = findCourseOrThrow(request.getCourseId());
