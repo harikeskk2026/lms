@@ -13,8 +13,11 @@ import org.springframework.stereotype.Component;
 /**
  * Central place for relationship-based course access rules:
  * - Admins can view/manage all courses.
- * - Trainers can only view/access courses belonging to their assigned batches AND that are PUBLISHED.
- * - Students can only view/access the course belonging to their currently assigned batch AND that is PUBLISHED.
+ * - Trainers can only view/access courses belonging to their assigned batches. Courses must be
+ *   PUBLISHED or ARCHIVED; DRAFT is never visible to non-admins. ARCHIVED remains accessible so
+ *   trainers/students already taking the course don't lose access.
+ * - Students can only view/access the course belonging to their currently assigned batch or an
+ *   active enrollment. Courses must be PUBLISHED or ARCHIVED; DRAFT is never visible to non-admins.
  */
 @Component
 public class CourseAccessGuard {
@@ -116,7 +119,7 @@ public class CourseAccessGuard {
         if (course == null || course.getId() == null) {
             throw new ForbiddenException("Course not found");
         }
-        if (!isPublished(course.getId())) {
+        if (!isReadableStatus(course.getId())) {
             throw new ForbiddenException("This course is not currently available");
         }
         if (isTrainer(principal)) {
@@ -134,7 +137,7 @@ public class CourseAccessGuard {
         throw new ForbiddenException("Access denied");
     }
 
-    /** Course content (syllabus/sessions/materials) access: relationship-based AND status must be PUBLISHED. */
+    /** Course content (syllabus/sessions/materials) access: relationship-based AND status must be PUBLISHED or ARCHIVED (DRAFT blocked). */
     public void requireContentAccess(JwtUserPrincipal principal, Long courseId) {
         if (principal == null) {
             throw new ForbiddenException("Authentication required");
@@ -145,7 +148,7 @@ public class CourseAccessGuard {
         if (courseId == null) {
             throw new ForbiddenException("Course not found");
         }
-        if (!isPublished(courseId)) {
+        if (!isReadableStatus(courseId)) {
             throw new ForbiddenException("This course is not currently available");
         }
         if (isTrainer(principal)) {
@@ -163,10 +166,27 @@ public class CourseAccessGuard {
         throw new ForbiddenException("Access denied");
     }
 
-    private boolean isPublished(Long courseId) {
+    /** Central status rule: PUBLISHED and ARCHIVED are readable; DRAFT is never readable to non-admins. */
+    public boolean isReadableCourseStatus(CourseStatus status) {
+        return status == CourseStatus.PUBLISHED || status == CourseStatus.ARCHIVED;
+    }
+
+    public boolean isReadableCourse(Long courseId) {
+        if (courseId == null) {
+            return false;
+        }
         return courseRepository.findById(courseId)
-                .map(course -> course.getStatus() == CourseStatus.PUBLISHED)
+                .map(course -> isReadableCourseStatus(course.getStatus()))
                 .orElse(false);
+    }
+
+    private boolean isReadableStatus(Long courseId) {
+        return isReadableCourse(courseId);
+    }
+
+    /** Central rule for new enrollments/assignments: only PUBLISHED courses are open. */
+    public boolean isAcceptingNewParticipant(CourseStatus status) {
+        return status == CourseStatus.PUBLISHED;
     }
 }
 

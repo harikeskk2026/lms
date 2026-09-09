@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import toast from 'react-hot-toast'
-import { BookOpen, Clock, CheckCircle2 } from 'lucide-react'
+import { BookOpen, Clock, CheckCircle2, Lock, Mail, Phone, X } from 'lucide-react'
 import courseService from '@/services/courseService'
 import { resolveFileUrl } from '@/lib/api'
 import SkeletonCard from '@/components/student/SkeletonCard'
@@ -23,7 +22,8 @@ const COURSE_GRADIENTS = [
 export default function CourseCatalogPage() {
   const [courses, setCourses] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [enrollingId, setEnrollingId] = useState(null)
+  const [contact, setContact] = useState(null)
+  const [modalCourse, setModalCourse] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -35,24 +35,21 @@ export default function CourseCatalogPage() {
 
   useEffect(() => { load() }, [])
 
-  async function handleEnroll(course) {
-    setEnrollingId(course.id)
-    try {
-      await courseService.enroll(course.id)
-      toast.success(`Enrolled in ${course.title}`)
-      load()
-    } catch (err) {
-      toast.error(err.message || 'Failed to enroll')
-    } finally {
-      setEnrollingId(null)
-    }
-  }
+  useEffect(() => {
+    courseService.getEnrollmentContact()
+      .then(r => setContact(r?.data || null))
+      .catch(() => setContact(null))
+  }, [])
+
+  const hasContact = contact && (contact.name || contact.email || contact.phone)
 
   return (
     <div className="page-wrapper">
       <div className="mb-2">
         <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Courses</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Browse available courses and enroll to start learning.</p>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Browse available courses. Enrollment is arranged by your Admin / Training Coordinator.
+        </p>
       </div>
 
       {loading ? (
@@ -108,16 +105,85 @@ export default function CourseCatalogPage() {
                   </Link>
                 ) : (
                   <button
-                    onClick={() => handleEnroll(c)}
-                    disabled={enrollingId === c.id}
-                    className="btn-primary w-full text-center text-sm py-2.5 disabled:opacity-60"
+                    onClick={() => setModalCourse(c)}
+                    className="btn-secondary w-full text-center text-sm py-2.5"
                   >
-                    {enrollingId === c.id ? 'Enrolling...' : 'Enroll'}
+                    Request Enrollment
                   </button>
                 )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Enrollment Required Modal */}
+      {modalCourse && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setModalCourse(null)}
+        >
+          <div
+            className="w-full max-w-md glass-card rounded-2xl p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center flex-shrink-0">
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h3 className="font-display text-lg font-bold text-gray-900 dark:text-white">Enrollment Required</h3>
+                  {modalCourse.title && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{modalCourse.title}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setModalCourse(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors flex-shrink-0"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-5">
+              You cannot enroll yourself in this course. Please contact your
+              <span className="font-semibold text-gray-800 dark:text-white"> Admin / Training Coordinator </span>
+              to request enrollment.
+            </p>
+
+            {hasContact && (
+              <div className="rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/40 p-4 mb-5 space-y-2">
+                {contact.name && (
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {contact.name}
+                    {contact.designation && (
+                      <span className="block text-[11px] font-medium text-purple-600 dark:text-purple-300">{contact.designation}</span>
+                    )}
+                  </div>
+                )}
+                {contact.email && (
+                  <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 hover:text-purple-600 transition-colors">
+                    <Mail size={13} className="text-purple-500 flex-shrink-0" /> {contact.email}
+                  </a>
+                )}
+                {contact.phone && (
+                  <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 hover:text-purple-600 transition-colors">
+                    <Phone size={13} className="text-purple-500 flex-shrink-0" /> {contact.phone}
+                  </a>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => setModalCourse(null)}
+              className="btn-primary w-full text-center text-sm py-2.5"
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
     </div>

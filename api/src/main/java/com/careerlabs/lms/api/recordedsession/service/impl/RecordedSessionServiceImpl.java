@@ -2,10 +2,12 @@ package com.careerlabs.lms.api.recordedsession.service.impl;
 
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.recordedsession.dto.request.CreateRecordedSessionRequest;
 import com.careerlabs.lms.api.recordedsession.dto.request.UpdateRecordedSessionRequest;
 import com.careerlabs.lms.api.recordedsession.dto.response.ProcessingStatusResponse;
@@ -51,6 +53,7 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
     private final VideoTranscodingService transcodingService;
     private final RecordedSessionAvailabilityService availabilityService;
     private final GoogleDriveService googleDriveService;
+    private final CourseAccessGuard accessGuard;
 
     public RecordedSessionServiceImpl(RecordedSessionRepository recordedSessionRepository,
                                        RecordedSessionAssetRepository recordedSessionAssetRepository,
@@ -61,7 +64,8 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
                                        VideoStorageService storageService,
                                        VideoTranscodingService transcodingService,
                                        RecordedSessionAvailabilityService availabilityService,
-                                       GoogleDriveService googleDriveService) {
+                                       GoogleDriveService googleDriveService,
+                                       CourseAccessGuard accessGuard) {
         this.recordedSessionRepository = recordedSessionRepository;
         this.recordedSessionAssetRepository = recordedSessionAssetRepository;
         this.playbackSessionRepository = playbackSessionRepository;
@@ -72,6 +76,7 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
         this.transcodingService = transcodingService;
         this.availabilityService = availabilityService;
         this.googleDriveService = googleDriveService;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -206,6 +211,8 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
     public List<StudentRecordedSessionResponse> listForStudent(Long studentUserId) {
         Student student = resolveStudent(studentUserId);
         return recordedSessionRepository.findByStatusOrderByCreatedAtDesc(RecordedSessionStatus.PUBLISHED).stream()
+                .filter(session -> session.getCourse() != null
+                        && accessGuard.isReadableCourseStatus(session.getCourse().getStatus()))
                 .filter(session -> enrollmentRepository.existsByStudentIdAndCourseId(student.getId(), session.getCourse().getId()))
                 .map(session -> toStudentResponse(session, studentUserId))
                 .toList();
@@ -218,6 +225,9 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
         RecordedSession session = findOrThrow(id);
         if (session.getStatus() != RecordedSessionStatus.PUBLISHED) {
             throw new ResourceNotFoundException("Recorded session not found: " + id);
+        }
+        if (session.getCourse() == null || !accessGuard.isReadableCourseStatus(session.getCourse().getStatus())) {
+            throw new ForbiddenException("This course is not currently available");
         }
         if (!enrollmentRepository.existsByStudentIdAndCourseId(student.getId(), session.getCourse().getId())) {
             throw new ResourceNotFoundException("Recorded session not found: " + id);

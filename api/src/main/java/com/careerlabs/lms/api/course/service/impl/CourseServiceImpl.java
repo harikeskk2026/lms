@@ -14,7 +14,6 @@ import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
-import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.syllabus.entity.SyllabusModule;
 import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
@@ -23,9 +22,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class CourseServiceImpl implements CourseService {
@@ -72,12 +71,10 @@ public class CourseServiceImpl implements CourseService {
         }
 
         if (accessGuard.isStudent(principal)) {
-            Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-            if (student != null && student.getBatch() != null && student.getBatch().getCourse() != null
-                    && student.getBatch().getCourse().getStatus() == CourseStatus.PUBLISHED) {
-                return List.of(CourseResponse.from(student.getBatch().getCourse(), true));
-            }
-            return List.of();
+            Set<Long> enrolledIds = enrolledCourseIds(principal);
+            return courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED).stream()
+                    .map(c -> CourseResponse.from(c, enrolledIds.contains(c.getId())))
+                    .toList();
         }
 
         return List.of();
@@ -199,10 +196,17 @@ public class CourseServiceImpl implements CourseService {
             return Set.of();
         }
         return studentRepository.findByUserId(principal.id())
-                .map(student -> enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId()).stream()
-                        .filter(enrollment -> enrollment.isActive() && enrollment.getCourse() != null && enrollment.getCourse().getStatus() == CourseStatus.PUBLISHED)
-                        .map(enrollment -> enrollment.getCourse().getId())
-                        .collect(Collectors.toSet()))
+                .map(student -> {
+                    Set<Long> ids = new HashSet<>();
+                    if (student.getBatch() != null && student.getBatch().getCourse() != null) {
+                        ids.add(student.getBatch().getCourse().getId());
+                    }
+                    if (student.getId() != null) {
+                        enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId())
+                                .forEach(enrollment -> ids.add(enrollment.getCourse().getId()));
+                    }
+                    return ids;
+                })
                 .orElseGet(Set::of);
     }
 }

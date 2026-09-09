@@ -21,8 +21,11 @@ import toast from 'react-hot-toast'
 import courseService from '@/services/courseService'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
+import { useAuth } from '@/context/AuthContext'
 
 export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatus }) {
+  const { user } = useAuth()
+  const canManage = user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN')
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
@@ -296,12 +299,14 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={openEnrollModal}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-3.5 py-2 text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm shadow-purple-500/20"
-          >
-            <Plus size={15} /> Enroll Student
-          </button>
+          {canManage && (
+            <button
+              onClick={openEnrollModal}
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-3.5 py-2 text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm shadow-purple-500/20"
+            >
+              <Plus size={15} /> Enroll Student
+            </button>
+          )}
           <button
             onClick={handleExportCSV}
             disabled={exporting || total === 0}
@@ -417,12 +422,14 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                 Start building this course roster by enrolling registered students into this course and its batches.
               </p>
             </div>
-            <button
-              onClick={openEnrollModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-semibold hover:bg-purple-700 transition-all shadow-sm"
-            >
-              <Plus size={14} /> Enroll First Student
-            </button>
+            {canManage && (
+              <button
+                onClick={openEnrollModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-semibold hover:bg-purple-700 transition-all shadow-sm"
+              >
+                <Plus size={14} /> Enroll First Student
+              </button>
+            )}
           </div>
         )
       ) : (
@@ -438,7 +445,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                   <th className="px-4 py-3">Assigned Batch</th>
                   <th className="px-4 py-3">Enrolled Date</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
@@ -490,26 +497,28 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {item.active ? (
-                          <button
-                            onClick={() => setUnenrollModalData(item)}
-                            title="Unenroll student from this course"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
-                          >
-                            <UserMinus size={13} /> Unenroll
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setSelectedStudentId(String(item.studentId))
-                              setSelectedBatchId(item.batch?.id ? String(item.batch.id) : '')
-                              setEnrollModalOpen(true)
-                            }}
-                            title="Re-enroll student"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                          >
-                            Re-enroll
-                          </button>
+                        {canManage && (
+                          item.active ? (
+                            <button
+                              onClick={() => setUnenrollModalData(item)}
+                              title="Unenroll student from this course"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                            >
+                              <UserMinus size={13} /> Unenroll
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedStudentId(String(item.studentId))
+                                setSelectedBatchId(item.batch?.id ? String(item.batch.id) : '')
+                                setEnrollModalOpen(true)
+                              }}
+                              title="Re-enroll student"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            >
+                              Re-enroll
+                            </button>
+                          )
                         )}
                       </td>
                     </tr>

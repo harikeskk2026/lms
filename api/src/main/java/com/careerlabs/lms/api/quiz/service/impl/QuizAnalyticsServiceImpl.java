@@ -11,6 +11,7 @@ import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.service.GamificationService;
 import com.careerlabs.lms.api.quiz.service.QuizAnalyticsService;
 import com.careerlabs.lms.api.quiz.service.WeakAreaService;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,12 +27,14 @@ public class QuizAnalyticsServiceImpl implements QuizAnalyticsService {
     private final QuizAttemptRepository quizAttemptRepository;
     private final WeakAreaService weakAreaService;
     private final GamificationService gamificationService;
+    private final CourseAccessGuard accessGuard;
 
     public QuizAnalyticsServiceImpl(QuizAttemptRepository quizAttemptRepository, WeakAreaService weakAreaService,
-                                     GamificationService gamificationService) {
+                                     GamificationService gamificationService, CourseAccessGuard accessGuard) {
         this.quizAttemptRepository = quizAttemptRepository;
         this.weakAreaService = weakAreaService;
         this.gamificationService = gamificationService;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -39,6 +42,7 @@ public class QuizAnalyticsServiceImpl implements QuizAnalyticsService {
     public QuizAnalyticsResponse getAnalytics(Long studentId) {
         List<QuizAttempt> submitted = quizAttemptRepository.findByStudentIdOrderByStartedAtDesc(studentId).stream()
                 .filter(attempt -> attempt.getStatus() == AttemptStatus.SUBMITTED)
+                .filter(this::isCourseReadable)
                 .toList();
 
         double overallSkill = submitted.stream().mapToDouble(this::scorePercentage).average().orElse(0);
@@ -74,6 +78,12 @@ public class QuizAnalyticsServiceImpl implements QuizAnalyticsService {
             return 0;
         }
         return (attempt.getScore() * 100.0) / attempt.getTotalScore();
+    }
+
+    /** Historical attempts stay visible for PUBLISHED and ARCHIVED courses; DRAFT courses are excluded. Quizzes without a linked course are unaffected. */
+    private boolean isCourseReadable(QuizAttempt attempt) {
+        com.careerlabs.lms.api.quiz.entity.Quiz quiz = attempt.getQuiz();
+        return quiz.getCourseId() == null || accessGuard.isReadableCourse(quiz.getCourseId());
     }
 
     private List<QuizAnalyticsResponse.ImprovementItem> buildImprovementHistory(List<QuizAttempt> submitted) {

@@ -26,7 +26,7 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @EntityGraph(attributePaths = {"course"})
     List<Batch> findByTrainerIdOrderByCreatedAtDesc(Long trainerId);
 
-    @Query("SELECT b FROM Batch b WHERE b.trainerId = :trainerId AND b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED ORDER BY b.createdAt DESC")
+    @Query("SELECT b FROM Batch b WHERE b.trainerId = :trainerId AND (b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED OR b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.ARCHIVED) ORDER BY b.createdAt DESC")
     List<Batch> findPublishedByTrainerIdOrderByCreatedAtDesc(@Param("trainerId") Long trainerId);
 
     @EntityGraph(attributePaths = {"course"})
@@ -40,6 +40,6 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @Query("SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END FROM Batch b WHERE b.trainerId = :trainerId AND b.course.id = :courseId")
     boolean existsByTrainerIdAndCourseId(@Param("trainerId") Long trainerId, @Param("courseId") Long courseId);
 
-    @Query("SELECT b FROM Batch b WHERE b.trainerId = :trainerId AND b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED")
+    @Query("SELECT b FROM Batch b WHERE b.trainerId = :trainerId AND (b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED OR b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.ARCHIVED)")
     List<Batch> findPublishedBatchesByTrainerId(@Param("trainerId") Long trainerId);
 }

@@ -8,8 +8,10 @@ import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPage
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.service.EnrollmentService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
+import com.careerlabs.lms.api.user.entity.Role;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,10 +34,11 @@ public class EnrollmentController {
         this.enrollmentService = enrollmentService;
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     @PostMapping("/{id}/enroll")
     public ResponseEntity<ApiResponse<EnrollmentResponse>> enroll(@PathVariable Long id,
                                                                    @AuthenticationPrincipal JwtUserPrincipal principal) {
-        EnrollmentResponse response = enrollmentService.enroll(id, principal.id());
+        EnrollmentResponse response = enrollmentService.enroll(id, principal.id(), Role.valueOf(principal.role()));
         return ResponseEntity.status(201).body(ApiResponse.of("Enrolled successfully", response));
     }
 

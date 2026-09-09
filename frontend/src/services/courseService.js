@@ -13,7 +13,7 @@ const courseService = {
 
   remove: (id) => apiCall({ method: 'DELETE', url: `/courses/${id}` }),
 
-  enroll: (id) => apiCall({ method: 'POST', url: `/courses/${id}/enroll` }),
+  getEnrollmentContact: () => apiCall({ method: 'GET', url: '/student/enrollment-contact' }),
 
   mine: () => apiCall({ method: 'GET', url: '/courses/mine' }),
 

@@ -77,11 +77,11 @@ class TrainerStudentAccessModelTest {
     @BeforeEach
     void setUp() {
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
-        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository);
+        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard);
         courseService = new CourseServiceImpl(
                 courseRepository, slugGenerator, accessGuard,
                 studentRepository, enrollmentRepository,
-                moduleRepository, syllabusService, materialRepository
+                moduleRepository, syllabusService, materialRepository, batchRepository
         );
 
         // Course A
@@ -293,15 +293,22 @@ class TrainerStudentAccessModelTest {
     // ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Student list courses: returns ONLY course of assigned batch")
-    void studentListCourses_returnsAssignedBatchCourseOnly() {
+    @DisplayName("Student list courses: sees ALL PUBLISHED courses, enrolled flag marks the assigned batch course")
+    void studentListCourses_seesAllPublishedWithBatchCourseEnrolled() {
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(studentEntity.getId()))
+                .thenReturn(List.of());
+        when(courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED))
+                .thenReturn(List.of(courseA, courseB));
 
         List<CourseResponse> result = courseService.list(studentPrincipal);
 
-        assertEquals(1, result.size());
-        assertEquals("Course A", result.get(0).title());
+        assertEquals(2, result.size());
+        CourseResponse courseAResponse = result.stream().filter(c -> c.id().equals(courseA.getId())).findFirst().orElseThrow();
+        CourseResponse courseBResponse = result.stream().filter(c -> c.id().equals(courseB.getId())).findFirst().orElseThrow();
+        assertTrue(courseAResponse.enrolled());
+        assertFalse(courseBResponse.enrolled());
         verify(courseRepository, never()).findAllByOrderByCreatedAtDesc();
     }
 
@@ -421,7 +428,7 @@ class TrainerStudentAccessModelTest {
     // ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Visibility matrix: DRAFT/ARCHIVED course hidden from assigned trainer even when assigned")
+    @DisplayName("Visibility matrix: DRAFT hidden from assigned trainer; ARCHIVED remains accessible to assigned trainer")
     void visibilityMatrix_trainer_nonPublished_forbidden() {
         Course draft = new Course();
         setId(draft, 301L);
@@ -438,10 +445,12 @@ class TrainerStudentAccessModelTest {
         assertThrows(ForbiddenException.class, () -> accessGuard.requireVisible(trainerAPrincipal, draft));
         assertThrows(ForbiddenException.class, () -> accessGuard.requireContentAccess(trainerAPrincipal, draft.getId()));
 
-        // ARCHIVED => content access denied despite assignment
+        // ARCHIVED => still accessible to assigned trainer (existing access preserved)
         when(courseRepository.findById(archived.getId())).thenReturn(Optional.of(archived));
-        assertThrows(ForbiddenException.class, () -> accessGuard.requireVisible(trainerAPrincipal, archived));
-        assertThrows(ForbiddenException.class, () -> accessGuard.requireContentAccess(trainerAPrincipal, archived.getId()));
+        when(batchRepository.existsByTrainerIdAndCourseId(trainerAPrincipal.id(), archived.getId()))
+                .thenReturn(true);
+        assertDoesNotThrow(() -> accessGuard.requireVisible(trainerAPrincipal, archived));
+        assertDoesNotThrow(() -> accessGuard.requireContentAccess(trainerAPrincipal, archived.getId()));
 
         // PUBLISHED still assigned => content access allowed
         when(courseRepository.findById(courseA.getId())).thenReturn(Optional.of(courseA));
@@ -451,14 +460,14 @@ class TrainerStudentAccessModelTest {
     }
 
     @Test
-    @DisplayName("Visibility matrix: DRAFT/ARCHIVED course hidden from enrolled student even when in batch")
+    @DisplayName("Visibility matrix: DRAFT hidden from enrolled student; ARCHIVED remains accessible to student in batch")
     void visibilityMatrix_student_nonPublished_forbidden() {
         Course archived = new Course();
         setId(archived, 302L);
         archived.setTitle("Archived Course");
         archived.setStatus(CourseStatus.ARCHIVED);
 
-        // Student assigned to a batch whose course is non-published => hidden
+        // Student assigned to a batch whose course is ARCHIVED => still accessible
         when(courseRepository.findById(archived.getId())).thenReturn(Optional.of(archived));
         when(studentRepository.findByUserId(studentPrincipal.id())).thenReturn(Optional.of(studentEntity));
 
@@ -468,12 +477,89 @@ class TrainerStudentAccessModelTest {
         archivedBatch.setCourse(archived);
         studentEntity.setBatch(archivedBatch);
 
-        assertThrows(ForbiddenException.class, () -> accessGuard.requireContentAccess(studentPrincipal, archived.getId()));
+        assertDoesNotThrow(() -> accessGuard.requireContentAccess(studentPrincipal, archived.getId()));
+        assertDoesNotThrow(() -> accessGuard.requireVisible(studentPrincipal, archived));
 
         // PUBLISHED course for the student => allowed
         studentEntity.setBatch(batchA);
         when(courseRepository.findById(courseA.getId())).thenReturn(Optional.of(courseA));
         assertDoesNotThrow(() -> accessGuard.requireContentAccess(studentPrincipal, courseA.getId()));
         assertDoesNotThrow(() -> accessGuard.requireVisible(studentPrincipal, courseA));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 8. ARCHIVED VISIBILITY IN LISTS (trainer + student)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Student list courses: ARCHIVED course is excluded from the general catalog")
+    void studentListCourses_archivedCourse_notReturned() {
+        courseA.setStatus(CourseStatus.ARCHIVED);
+        when(studentRepository.findByUserId(studentPrincipal.id()))
+                .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(studentEntity.getId()))
+                .thenReturn(List.of());
+        when(courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED))
+                .thenReturn(List.of());
+
+        List<CourseResponse> result = courseService.list(studentPrincipal);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Student list courses: DRAFT course of assigned batch stays hidden")
+    void studentListCourses_draftCourse_hidden() {
+        courseA.setStatus(CourseStatus.DRAFT);
+        when(studentRepository.findByUserId(studentPrincipal.id()))
+                .thenReturn(Optional.of(studentEntity));
+
+        List<CourseResponse> result = courseService.list(studentPrincipal);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Student list batches: ARCHIVED course batch is returned; DRAFT course batch is hidden")
+    void studentListBatches_archivedAndDraft() {
+        when(studentRepository.findByUserId(studentPrincipal.id()))
+                .thenReturn(Optional.of(studentEntity));
+
+        courseA.setStatus(CourseStatus.ARCHIVED);
+        List<BatchResponse> archivedResult = batchService.list(studentPrincipal);
+        assertEquals(1, archivedResult.size());
+        assertEquals("Batch A", archivedResult.get(0).name());
+
+        courseA.setStatus(CourseStatus.DRAFT);
+        List<BatchResponse> draftResult = batchService.list(studentPrincipal);
+        assertTrue(draftResult.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Trainer direct batch access: ARCHIVED course batch allowed; DRAFT course batch forbidden")
+    void trainerBatchGet_archivedAllowed_draftForbidden() {
+        when(batchRepository.findById(batchA.getId())).thenReturn(Optional.of(batchA));
+
+        courseA.setStatus(CourseStatus.ARCHIVED);
+        assertNotNull(batchService.get(batchA.getId(), trainerAPrincipal));
+
+        courseA.setStatus(CourseStatus.DRAFT);
+        assertThrows(ForbiddenException.class, () -> batchService.get(batchA.getId(), trainerAPrincipal));
+    }
+
+    @Test
+    @DisplayName("Guard helpers: readable statuses are PUBLISHED and ARCHIVED only; only PUBLISHED accepts new participants")
+    void guardStatusHelpers() {
+        assertTrue(accessGuard.isReadableCourseStatus(CourseStatus.PUBLISHED));
+        assertTrue(accessGuard.isReadableCourseStatus(CourseStatus.ARCHIVED));
+        assertFalse(accessGuard.isReadableCourseStatus(CourseStatus.DRAFT));
+
+        assertTrue(accessGuard.isAcceptingNewParticipant(CourseStatus.PUBLISHED));
+        assertFalse(accessGuard.isAcceptingNewParticipant(CourseStatus.ARCHIVED));
+        assertFalse(accessGuard.isAcceptingNewParticipant(CourseStatus.DRAFT));
+
+        courseA.setStatus(CourseStatus.ARCHIVED);
+        when(courseRepository.findById(courseA.getId())).thenReturn(Optional.of(courseA));
+        assertTrue(accessGuard.isReadableCourse(courseA.getId()));
     }
 }

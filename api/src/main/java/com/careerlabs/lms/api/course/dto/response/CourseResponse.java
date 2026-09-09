@@ -16,7 +16,6 @@ public record CourseResponse(
         String duration,
         Level level,
         CourseStatus status,
-        boolean active,
         boolean enrolled,
         Instant createdAt,
         Instant updatedAt
@@ -37,7 +36,6 @@ public record CourseResponse(
                 course.getDuration(),
                 course.getLevel(),
                 course.getStatus(),
-                course.isActive(),
                 enrolled,
                 course.getCreatedAt(),
                 course.getUpdatedAt());

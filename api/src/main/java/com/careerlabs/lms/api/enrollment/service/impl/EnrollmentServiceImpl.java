@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
@@ -16,9 +17,11 @@ import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.BatchScheduleConflictValidator;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.enrollment.service.EnrollmentService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.user.entity.Role;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -43,20 +46,27 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
     private final BatchScheduleConflictValidator batchScheduleConflictValidator;
+    private final CourseAccessGuard accessGuard;
 
     public EnrollmentServiceImpl(EnrollmentRepository enrollmentRepository, StudentRepository studentRepository,
                                   CourseRepository courseRepository, BatchRepository batchRepository,
-                                  BatchScheduleConflictValidator batchScheduleConflictValidator) {
+                                  BatchScheduleConflictValidator batchScheduleConflictValidator,
+                                  CourseAccessGuard accessGuard) {
         this.enrollmentRepository = enrollmentRepository;
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.batchScheduleConflictValidator = batchScheduleConflictValidator;
+        this.accessGuard = accessGuard;
     }
 
     @Override
     @Transactional
-    public EnrollmentResponse enroll(Long courseId, Long userId) {
+    public EnrollmentResponse enroll(Long courseId, Long userId, Role requesterRole) {
+        if (requesterRole != Role.ADMIN && requesterRole != Role.SUPERADMIN) {
+            throw new ForbiddenException("You are not allowed to enroll in courses. Please contact your Admin / Training Coordinator to request enrollment.");
+        }
+
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
 
@@ -101,7 +111,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
 
         return enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId()).stream()
-                .filter(e -> e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
+                .filter(e -> e.getCourse() != null && accessGuard.isReadableCourseStatus(e.getCourse().getStatus()))
                 .map(EnrollmentResponse::from)
                 .toList();
     }

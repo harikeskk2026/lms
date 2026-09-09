@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.recordedsession.dto.request.PlaybackStartRequest;
 import com.careerlabs.lms.api.recordedsession.dto.response.AuditLogResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.BlockedStudentResponse;
@@ -64,6 +65,7 @@ public class PlaybackAuthorizationServiceImpl implements PlaybackAuthorizationSe
     private final UserRepository userRepository;
     private final RecordedSessionAvailabilityService availabilityService;
     private final PlaybackTokenService playbackTokenService;
+    private final CourseAccessGuard accessGuard;
 
     public PlaybackAuthorizationServiceImpl(RecordedSessionRepository recordedSessionRepository,
                                              RecordedSessionAssetRepository recordedSessionAssetRepository,
@@ -75,7 +77,8 @@ public class PlaybackAuthorizationServiceImpl implements PlaybackAuthorizationSe
                                              StudentRepository studentRepository,
                                              UserRepository userRepository,
                                              RecordedSessionAvailabilityService availabilityService,
-                                             PlaybackTokenService playbackTokenService) {
+                                             PlaybackTokenService playbackTokenService,
+                                             CourseAccessGuard accessGuard) {
         this.recordedSessionRepository = recordedSessionRepository;
         this.recordedSessionAssetRepository = recordedSessionAssetRepository;
         this.playbackSessionRepository = playbackSessionRepository;
@@ -87,6 +90,7 @@ public class PlaybackAuthorizationServiceImpl implements PlaybackAuthorizationSe
         this.userRepository = userRepository;
         this.availabilityService = availabilityService;
         this.playbackTokenService = playbackTokenService;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -103,6 +107,10 @@ public class PlaybackAuthorizationServiceImpl implements PlaybackAuthorizationSe
         if (!enrollmentRepository.existsByStudentIdAndCourseId(student.getId(), session.getCourse().getId())) {
             audit(studentUserId, recordedSessionId, deviceId, ipAddress, "PLAYBACK_DENIED", "NOT_ENROLLED");
             throw new ForbiddenException("You are not enrolled in this course");
+        }
+        if (session.getCourse() == null || !accessGuard.isReadableCourseStatus(session.getCourse().getStatus())) {
+            audit(studentUserId, recordedSessionId, deviceId, ipAddress, "PLAYBACK_DENIED", "COURSE_NOT_AVAILABLE");
+            throw new ForbiddenException("This course is not currently available");
         }
         if (accessBlockRepository.existsByRecordedSessionIdAndStudentUserId(recordedSessionId, studentUserId)) {
             audit(studentUserId, recordedSessionId, deviceId, ipAddress, "PLAYBACK_DENIED", "BLOCKED_BY_ADMIN");

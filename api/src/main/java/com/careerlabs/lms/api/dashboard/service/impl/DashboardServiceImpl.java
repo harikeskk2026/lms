@@ -9,13 +9,14 @@ import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.attendance.service.AttendanceAnalyticsService;
 import com.careerlabs.lms.api.attendance.service.AttendanceRiskService;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
-import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
+import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.dashboard.dto.response.AdminDashboardResponse;
 import com.careerlabs.lms.api.dashboard.dto.response.StudentDashboardResponse;
 import com.careerlabs.lms.api.dashboard.service.DashboardService;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.placement.dto.response.AdminDriveResponse;
 import com.careerlabs.lms.api.placement.dto.response.StudentDriveResponse;
 import com.careerlabs.lms.api.placement.entity.DriveStatus;
@@ -89,6 +90,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final UserRepository userRepository;
     private final BatchRepository batchRepository;
     private final CollegeRepository collegeRepository;
+    private final CourseAccessGuard accessGuard;
 
     private final ReportService reportService;
     private final AttendanceAnalyticsService attendanceAnalyticsService;
@@ -119,6 +121,7 @@ public class DashboardServiceImpl implements DashboardService {
             UserRepository userRepository,
             BatchRepository batchRepository,
             CollegeRepository collegeRepository,
+            CourseAccessGuard accessGuard,
             ReportService reportService,
             AttendanceAnalyticsService attendanceAnalyticsService,
             AttendanceRiskService attendanceRiskService,
@@ -146,6 +149,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.userRepository = userRepository;
         this.batchRepository = batchRepository;
         this.collegeRepository = collegeRepository;
+        this.accessGuard = accessGuard;
         this.reportService = reportService;
         this.attendanceAnalyticsService = attendanceAnalyticsService;
         this.attendanceRiskService = attendanceRiskService;
@@ -443,7 +447,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
         List<Enrollment> publishedEnrollments = enrollments.stream()
-                .filter(e -> e.isActive() && e.getCourse() != null && e.getCourse().getStatus() == CourseStatus.PUBLISHED)
+                .filter(e -> e.isActive() && e.getCourse() != null && accessGuard.isReadableCourseStatus(e.getCourse().getStatus()))
                 .toList();
         List<StudentDashboardResponse.UpcomingClass> upcomingClasses = buildUpcomingClasses(student);
 

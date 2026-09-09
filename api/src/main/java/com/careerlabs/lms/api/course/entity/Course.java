@@ -42,9 +42,6 @@ public class Course {
     @Column(nullable = false)
     private Level level = Level.BEGINNER;
 
-    @Column(name = "is_active", nullable = false)
-    private boolean active = true;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CourseStatus status = CourseStatus.DRAFT;
@@ -125,14 +122,6 @@ public class Course {
 
     public void setLevel(Level level) {
         this.level = level;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
     }
 
     public CourseStatus getStatus() {

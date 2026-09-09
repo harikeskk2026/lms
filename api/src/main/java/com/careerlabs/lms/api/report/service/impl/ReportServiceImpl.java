@@ -509,7 +509,9 @@ public class ReportServiceImpl implements ReportService {
     public OverviewResponse getOverview(PerformanceReportResponse performance) {
         long totalStudents = studentRepository.count();
         long activeBatches = batchRepository.findAllByOrderByCreatedAtDesc().stream().filter(Batch::isActive).count();
-        long activeCourses = courseRepository.findAllByOrderByCreatedAtDesc().stream().filter(Course::isActive).count();
+        long activeCourses = courseRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(c -> c.getStatus() == com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED)
+                .count();
 
         PlacementReportResponse placement = getPlacementReport(new PlacementReportRequest());
 

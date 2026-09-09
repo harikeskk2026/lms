@@ -3,7 +3,7 @@ package com.careerlabs.lms.api.student.controller;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.course.entity.Course;
-import com.careerlabs.lms.api.course.entity.CourseStatus;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.dto.response.StudentCourseResponse;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -26,13 +26,16 @@ public class StudentCourseController {
     private final StudentRepository studentRepository;
     private final SyllabusModuleRepository moduleRepository;
     private final SyllabusTopicRepository topicRepository;
+    private final CourseAccessGuard accessGuard;
 
     public StudentCourseController(StudentRepository studentRepository,
                                    SyllabusModuleRepository moduleRepository,
-                                   SyllabusTopicRepository topicRepository) {
+                                   SyllabusTopicRepository topicRepository,
+                                   CourseAccessGuard accessGuard) {
         this.studentRepository = studentRepository;
         this.moduleRepository = moduleRepository;
         this.topicRepository = topicRepository;
+        this.accessGuard = accessGuard;
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -51,7 +54,7 @@ public class StudentCourseController {
         Batch batch = student.getBatch();
         Course course = batch.getCourse();
 
-        if (course.getStatus() != CourseStatus.PUBLISHED) {
+        if (!accessGuard.isReadableCourseStatus(course.getStatus())) {
             return ResponseEntity.ok(ApiResponse.of(List.of()));
         }
 

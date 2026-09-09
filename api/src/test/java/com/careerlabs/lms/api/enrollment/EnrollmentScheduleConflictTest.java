@@ -9,6 +9,7 @@ import com.careerlabs.lms.api.enrollment.dto.request.EnrollStudentRequest;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.BatchScheduleConflictValidator;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.enrollment.service.impl.EnrollmentServiceImpl;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -39,6 +40,7 @@ class EnrollmentScheduleConflictTest {
     @Mock BatchRepository batchRepository;
 
     BatchScheduleConflictValidator validator;
+    CourseAccessGuard accessGuard;
     EnrollmentServiceImpl enrollmentService;
 
     Course course1, course2;
@@ -83,7 +85,8 @@ class EnrollmentScheduleConflictTest {
     @BeforeEach
     void setUp(){
         validator = new BatchScheduleConflictValidator(enrollmentRepository);
-        enrollmentService = new EnrollmentServiceImpl(enrollmentRepository, studentRepository, courseRepository, batchRepository, validator);
+        accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
+        enrollmentService = new EnrollmentServiceImpl(enrollmentRepository, studentRepository, courseRepository, batchRepository, validator, accessGuard);
 
         course1 = makeCourse(10L, "Java Bootcamp");
         course2 = makeCourse(20L, "Python Bootcamp");

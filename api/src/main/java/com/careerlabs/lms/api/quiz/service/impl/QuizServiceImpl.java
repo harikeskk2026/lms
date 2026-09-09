@@ -4,9 +4,11 @@ import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.quiz.dto.request.AssignQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.request.AttachQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.CreateQuizRequest;
@@ -56,12 +58,13 @@ public class QuizServiceImpl implements QuizService {
     private final BatchRepository batchRepository;
     private final UserRepository userRepository;
     private final QuizAvailabilityService quizAvailabilityService;
+    private final CourseAccessGuard accessGuard;
 
     public QuizServiceImpl(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
                             QuestionRepository questionRepository, QuizAttemptRepository quizAttemptRepository,
                             QuizAssignmentRepository quizAssignmentRepository, CourseRepository courseRepository,
                             BatchRepository batchRepository, UserRepository userRepository,
-                            QuizAvailabilityService quizAvailabilityService) {
+                            QuizAvailabilityService quizAvailabilityService, CourseAccessGuard accessGuard) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.questionRepository = questionRepository;
@@ -71,6 +74,7 @@ public class QuizServiceImpl implements QuizService {
         this.batchRepository = batchRepository;
         this.userRepository = userRepository;
         this.quizAvailabilityService = quizAvailabilityService;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -200,6 +204,9 @@ public class QuizServiceImpl implements QuizService {
         // from polluting the student quiz list and Analytics' improvementHistory.
         java.util.Map<String, StudentQuizResponse> seen = new java.util.LinkedHashMap<>();
         for (Quiz quiz : quizRepository.findAllByStatusOrderByCreatedAtDesc(QuizStatus.PUBLISHED)) {
+            if (isLinkedToUnavailableCourse(quiz)) {
+                continue;
+            }
             if (!quizAvailabilityService.isAssignedTo(quiz, studentId)) {
                 continue;
             }
@@ -219,6 +226,9 @@ public class QuizServiceImpl implements QuizService {
         Quiz quiz = findOrThrow(id);
         if (quiz.getStatus() != QuizStatus.PUBLISHED) {
             throw new ResourceNotFoundException("Quiz not found: " + id);
+        }
+        if (isLinkedToUnavailableCourse(quiz)) {
+            throw new ForbiddenException("This course is not currently available");
         }
         return toStudentResponse(quiz, studentId);
     }
@@ -356,6 +366,11 @@ public class QuizServiceImpl implements QuizService {
     private Quiz findOrThrow(Long id) {
         return quizRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + id));
+    }
+
+    /** A quiz tied to a course whose status is not readable (e.g. DRAFT) is hidden from students. Courses without a link are unaffected. */
+    private boolean isLinkedToUnavailableCourse(Quiz quiz) {
+        return quiz.getCourseId() != null && !accessGuard.isReadableCourse(quiz.getCourseId());
     }
 
     private void applyRequest(Quiz quiz, String title, String description,

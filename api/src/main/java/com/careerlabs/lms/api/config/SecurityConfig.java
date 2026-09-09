@@ -110,8 +110,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/health", "/oauth2/**", "/api/drive/**", "/error").permitAll()
                         .requestMatchers("/api/admin/admins", "/api/admin/admins/**").hasRole("SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/admin/users/*/reset-password").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/courses/*/enrollments", "/api/courses/*/enrollments/*", "/api/courses/*/enrollments/bulk").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.GET, "/api/courses/*/enrollments").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        // Enrollment creation: only ADMIN/SUPERADMIN may enroll (self or for students).
+                        // Students are blocked by rule; trainers are read-only on enrollments.
+                        .requestMatchers(HttpMethod.POST, "/api/courses/*/enroll").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/courses/*/enrollments", "/api/courses/*/enrollments/*", "/api/courses/*/enrollments/bulk").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/courses", "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/courses", "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/courses", "/api/courses/**").hasAnyRole("ADMIN", "SUPERADMIN")
@@ -160,6 +163,10 @@ public class SecurityConfig {
                         // and student-facing announcement endpoints are restricted to the STUDENT role.
                         .requestMatchers("/api/admin/announcements/**", "/api/admin/announcement-templates/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/student/announcements/**").hasRole("STUDENT")
+                        // Admin batch endpoints that (un)enroll students are ADMIN/SUPERADMIN only;
+                        // trainers stay read-only on batch membership.
+                        .requestMatchers(HttpMethod.POST, "/api/admin/batches/*/enroll").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/batches/*/students/*").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/**").authenticated()
                         .anyRequest().authenticated()

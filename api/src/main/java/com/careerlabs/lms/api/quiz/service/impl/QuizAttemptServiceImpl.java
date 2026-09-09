@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.quiz.service.impl;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.quiz.dto.request.SubmitAnswerRequest;
 import com.careerlabs.lms.api.quiz.dto.response.QuizAttemptResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResultResponse;
@@ -48,12 +49,13 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
     private final QuizScoringService quizScoringService;
     private final GamificationService gamificationService;
     private final QuizAvailabilityService quizAvailabilityService;
+    private final CourseAccessGuard accessGuard;
 
     public QuizAttemptServiceImpl(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
                                    QuizAttemptRepository quizAttemptRepository,
                                    QuestionAttemptRepository questionAttemptRepository,
                                    QuizScoringService quizScoringService, GamificationService gamificationService,
-                                   QuizAvailabilityService quizAvailabilityService) {
+                                   QuizAvailabilityService quizAvailabilityService, CourseAccessGuard accessGuard) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
@@ -61,6 +63,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         this.quizScoringService = quizScoringService;
         this.gamificationService = gamificationService;
         this.quizAvailabilityService = quizAvailabilityService;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -70,6 +73,9 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + quizId));
         if (quiz.getStatus() != QuizStatus.PUBLISHED) {
             throw new ConflictException("Quiz is not available");
+        }
+        if (quiz.getCourseId() != null && !accessGuard.isReadableCourse(quiz.getCourseId())) {
+            throw new ForbiddenException("This course is not currently available");
         }
         if (quiz.getType() == QuizType.ADAPTIVE) {
             throw new ConflictException("This quiz uses adaptive mode — start it via the adaptive quiz endpoint");

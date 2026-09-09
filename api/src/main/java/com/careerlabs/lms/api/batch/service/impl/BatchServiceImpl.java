@@ -16,6 +16,7 @@ import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.course.util.CourseDurationParser;
+import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
@@ -42,19 +43,22 @@ public class BatchServiceImpl implements BatchService {
     private final AssignmentRepository assignmentRepository;
     private final DailyClassRepository dailyClassRepository;
     private final UserRepository userRepository;
+    private final CourseAccessGuard accessGuard;
 
     public BatchServiceImpl(BatchRepository batchRepository,
                              CourseRepository courseRepository,
                              StudentRepository studentRepository,
                              AssignmentRepository assignmentRepository,
                              DailyClassRepository dailyClassRepository,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             CourseAccessGuard accessGuard) {
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.studentRepository = studentRepository;
         this.assignmentRepository = assignmentRepository;
         this.dailyClassRepository = dailyClassRepository;
         this.userRepository = userRepository;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -73,7 +77,7 @@ public class BatchServiceImpl implements BatchService {
             Student student = studentRepository.findByUserId(principal.id()).orElse(null);
             if (student != null && student.getBatch() != null
                     && student.getBatch().getCourse() != null
-                    && student.getBatch().getCourse().getStatus() == CourseStatus.PUBLISHED) {
+                    && accessGuard.isReadableCourseStatus(student.getBatch().getCourse().getStatus())) {
                 batches = List.of(student.getBatch());
             } else {
                 batches = List.of();
@@ -119,18 +123,18 @@ public class BatchServiceImpl implements BatchService {
         if (principal != null) {
             if ("TRAINER".equalsIgnoreCase(principal.role())) {
                 boolean assigned = batch.getTrainerId() != null && batch.getTrainerId().equals(principal.id());
-                boolean published = batch.getCourse() != null
-                        && batch.getCourse().getStatus() == CourseStatus.PUBLISHED;
-                if (!assigned || !published) {
+                boolean readable = batch.getCourse() != null
+                        && accessGuard.isReadableCourseStatus(batch.getCourse().getStatus());
+                if (!assigned || !readable) {
                     throw new ForbiddenException("You are not assigned to any published batch for this course");
                 }
             } else if ("STUDENT".equalsIgnoreCase(principal.role())) {
                 Student student = studentRepository.findByUserId(principal.id()).orElse(null);
                 boolean inBatch = student != null && student.getBatch() != null
                         && student.getBatch().getId().equals(batch.getId());
-                boolean published = batch.getCourse() != null
-                        && batch.getCourse().getStatus() == CourseStatus.PUBLISHED;
-                if (!inBatch || !published) {
+                boolean readable = batch.getCourse() != null
+                        && accessGuard.isReadableCourseStatus(batch.getCourse().getStatus());
+                if (!inBatch || !readable) {
                     throw new ForbiddenException("You are not enrolled in this batch");
                 }
             }
