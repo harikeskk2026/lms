@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.placement.controller;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.request.CreateMockInterviewRequest;
@@ -15,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -39,13 +41,27 @@ public class AdminMockInterviewController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<MockInterviewResponse>> create(@Valid @RequestBody CreateMockInterviewRequest request) {
+        if (request.getScheduledAt() == null || request.getScheduledAt().isBlank()) {
+            throw new BadRequestException("Scheduled date and time is required");
+        }
+
+        Instant scheduledAt = request.parseScheduledAt();
+        if (scheduledAt == null) {
+            throw new BadRequestException("Invalid date and time format");
+        }
+
+        // Allow 60 seconds grace period for network/processing delay
+        if (scheduledAt.isBefore(Instant.now().minusSeconds(60))) {
+            throw new BadRequestException("Mock interview cannot be scheduled in the past");
+        }
+
         Student student = studentRepository.findWithUserById(request.getStudentId())
                 .orElseGet(() -> studentRepository.findById(request.getStudentId())
                         .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + request.getStudentId())));
 
         MockInterview m = new MockInterview();
         m.setStudent(student);
-        m.setScheduledAt(request.parseScheduledAt());
+        m.setScheduledAt(scheduledAt);
         m.setInterviewerName(request.getInterviewerName());
         m.setMeetLink(request.getMeetLink());
         m.setStatus(MockInterviewStatus.SCHEDULED);

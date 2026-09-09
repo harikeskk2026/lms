@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 
 import { Plus, ChevronDown, ChevronUp, Star, Trash2, Calendar, Building2, MapPin, Users, CheckCircle, X } from 'lucide-react'
@@ -120,15 +120,39 @@ export default function PlacementPage() {
     } catch { toast.error('Failed') }
   }
 
+  const isPastMockTime = useMemo(() => {
+    if (!mockForm.scheduledAt) return false
+    const d = new Date(mockForm.scheduledAt)
+    return !isNaN(d.getTime()) && d.getTime() < Date.now()
+  }, [mockForm.scheduledAt])
+
   const handleScheduleMock = async (e) => {
-    e.preventDefault(); setSaving(true)
+    e.preventDefault()
+    if (!mockForm.studentId) {
+      toast.error('Please select a student')
+      return
+    }
+    if (!mockForm.scheduledAt) {
+      toast.error('Please select date and time')
+      return
+    }
+    const scheduledDate = new Date(mockForm.scheduledAt)
+    if (isNaN(scheduledDate.getTime()) || scheduledDate.getTime() < Date.now()) {
+      toast.error('Mock interview cannot be scheduled in the past')
+      return
+    }
+    setSaving(true)
     try {
       await adminApi.scheduleMockInterview(mockForm)
       toast.success('Mock interview scheduled')
       setMockPanel(false)
       setMockForm({ studentId: '', scheduledAt: '', interviewerName: '', meetLink: '' })
       loadData()
-    } catch { toast.error('Failed') } finally { setSaving(false) }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to schedule mock interview')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleFeedback = async (e) => {
@@ -520,26 +544,37 @@ export default function PlacementPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Date & Time *</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Date & Time *</label>
             <DateTimePicker12h
               required
+              disablePast
+              minDate={new Date().toISOString().split('T')[0]}
               value={mockForm.scheduledAt}
               onChange={val => setMockForm(f => ({ ...f, scheduledAt: val }))}
             />
+            {isPastMockTime && (
+              <p className="text-xs font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                ⚠️ Mock interview cannot be scheduled in the past. Please choose a future time.
+              </p>
+            )}
           </div>
           {[
             { label: 'Interviewer Name', key: 'interviewerName', placeholder: 'Rajesh Kumar' },
             { label: 'Meeting Link', key: 'meetLink', placeholder: 'https://meet.google.com/...' },
           ].map(({ label, key, placeholder }) => (
             <div key={key}>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">{label}</label>
               <input value={mockForm[key]} onChange={e => setMockForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           ))}
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setMockPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button type="button" onClick={() => setMockPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+            <button
+              type="submit"
+              disabled={saving || isPastMockTime || !mockForm.scheduledAt || !mockForm.studentId}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed shadow-sm hover:shadow transition-all"
+            >
               {saving ? 'Scheduling...' : 'Schedule'}
             </button>
           </div>

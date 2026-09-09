@@ -2,41 +2,18 @@
 import React, { useMemo } from 'react'
 import { Calendar, Clock, X } from 'lucide-react'
 
-const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'))
-const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
-
 function parseIso(val) {
   if (!val) {
-    return { hasValue: false, date: '', hour12: '10', minute: '00', ampm: 'AM' }
+    return { hasValue: false, date: '', time: '' }
   }
   const clean = String(val).replace(' ', 'T')
   const [d, t] = clean.split('T')
   const date = d || ''
   if (!t) {
-    return { hasValue: Boolean(date), date, hour12: '10', minute: '00', ampm: 'AM' }
+    return { hasValue: Boolean(date), date, time: '' }
   }
-  const [hStr, mStr] = t.split(':')
-  const h24 = parseInt(hStr, 10)
-  const safeH24 = isNaN(h24) ? 10 : h24
-  const minute = (mStr || '00').slice(0, 2).padStart(2, '0')
-  const ampm = safeH24 >= 12 ? 'PM' : 'AM'
-  const h12Num = safeH24 % 12 === 0 ? 12 : safeH24 % 12
-  const hour12 = String(h12Num).padStart(2, '0')
-  return { hasValue: true, date, hour12, minute, ampm }
-}
-
-function toIso(date, hour12, minute, ampm) {
-  if (!date) return ''
-  const hNum = parseInt(hour12, 10) || 12
-  let h24
-  if (ampm === 'AM') {
-    h24 = hNum === 12 ? 0 : hNum
-  } else {
-    h24 = hNum === 12 ? 12 : hNum + 12
-  }
-  const h24Str = String(h24).padStart(2, '0')
-  const mStr = String(minute || '00').padStart(2, '0')
-  return `${date}T${h24Str}:${mStr}`
+  const time = t.slice(0, 5)
+  return { hasValue: true, date, time }
 }
 
 function getTodayString() {
@@ -47,15 +24,36 @@ function getTodayString() {
   return `${year}-${month}-${day}`
 }
 
+function getNowTimeString() {
+  const d = new Date()
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
 export default function DateTimePicker12h({
   value,
   onChange,
   required = false,
   minDate,
+  disablePast = false,
   disabled = false,
   className = '',
 }) {
-  const { hasValue, date, hour12, minute, ampm } = useMemo(() => parseIso(value), [value])
+  const { hasValue, date, time } = useMemo(() => parseIso(value), [value])
+
+  const todayStr = useMemo(() => getTodayString(), [])
+  const effectiveMinDate = minDate || (disablePast ? todayStr : undefined)
+
+  // If the selected date is today, constrain min time to current time
+  const minTime = useMemo(() => {
+    if (disablePast || (minDate && minDate >= todayStr)) {
+      if (date === todayStr) {
+        return getNowTimeString()
+      }
+    }
+    return undefined
+  }, [disablePast, minDate, date, todayStr])
 
   const handleDateChange = (e) => {
     const newDate = e.target.value
@@ -63,25 +61,29 @@ export default function DateTimePicker12h({
       onChange?.('')
       return
     }
-    onChange?.(toIso(newDate, hour12, minute, ampm))
+    // If time already chosen, keep it, otherwise default to a sensible upcoming time
+    let effectiveTime = time
+    if (!effectiveTime) {
+      if ((disablePast || minDate) && newDate === todayStr) {
+        const now = new Date(Date.now() + 30 * 60 * 1000)
+        const h = String(now.getHours()).padStart(2, '0')
+        const m = String(Math.ceil(now.getMinutes() / 15) * 15 % 60).padStart(2, '0')
+        effectiveTime = `${h}:${m}`
+      } else {
+        effectiveTime = '10:00'
+      }
+    }
+    onChange?.(`${newDate}T${effectiveTime}`)
   }
 
-  const handleHourChange = (e) => {
-    const newHour = e.target.value
-    const curDate = date || getTodayString()
-    onChange?.(toIso(curDate, newHour, minute, ampm))
-  }
-
-  const handleMinuteChange = (e) => {
-    const newMinute = e.target.value
-    const curDate = date || getTodayString()
-    onChange?.(toIso(curDate, hour12, newMinute, ampm))
-  }
-
-  const handleAmPmToggle = (newAmPm) => {
-    if (ampm === newAmPm && hasValue) return
-    const curDate = date || getTodayString()
-    onChange?.(toIso(curDate, hour12, minute, newAmPm))
+  const handleTimeChange = (e) => {
+    const newTime = e.target.value
+    const curDate = date || (effectiveMinDate || todayStr)
+    if (!newTime) {
+      onChange?.(curDate ? `${curDate}T00:00` : '')
+      return
+    }
+    onChange?.(`${curDate}T${newTime}`)
   }
 
   const handleClear = (e) => {
@@ -95,111 +97,46 @@ export default function DateTimePicker12h({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-center">
         {/* Date Section */}
         <div className="relative flex items-center min-w-0">
-          <div className="absolute left-3 text-slate-400 pointer-events-none">
+          <div className="absolute left-3 text-slate-400 pointer-events-none z-10">
             <Calendar size={15} />
           </div>
           <input
             type="date"
             required={required}
             disabled={disabled}
-            min={minDate}
+            min={effectiveMinDate}
             value={date}
             onChange={handleDateChange}
-            className="w-full h-11 pl-9 pr-2.5 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all cursor-pointer min-w-0"
+            onClick={(e) => { try { e.target.showPicker?.() } catch {} }}
+            className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all cursor-pointer min-w-0"
           />
         </div>
 
-        {/* Time + AM/PM Section */}
-        <div
-          className={`h-11 flex items-center justify-between gap-1 px-2.5 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 transition-all focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 min-w-0 ${
-            !hasValue && !required ? 'opacity-85' : ''
-          }`}
-        >
-          {/* Time digits */}
-          <div className="flex items-center gap-0.5 min-w-0 flex-shrink-0">
-            <Clock size={14} className="text-slate-400 flex-shrink-0 mr-1" />
-
-            {/* Hour select */}
-            <div className="relative">
-              <select
-                disabled={disabled}
-                value={hour12}
-                onChange={handleHourChange}
-                aria-label="Hour"
-                className="appearance-none bg-transparent text-center font-bold text-sm text-slate-800 dark:text-slate-100 outline-none cursor-pointer py-1 px-1 rounded-lg hover:bg-purple-100/70 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
-              >
-                {HOURS.map((h) => (
-                  <option key={h} value={h} className="bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100">
-                    {h}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <span className="text-slate-400 font-bold select-none text-sm -mt-0.5">:</span>
-
-            {/* Minute select */}
-            <div className="relative">
-              <select
-                disabled={disabled}
-                value={minute}
-                onChange={handleMinuteChange}
-                aria-label="Minute"
-                className="appearance-none bg-transparent text-center font-bold text-sm text-slate-800 dark:text-slate-100 outline-none cursor-pointer py-1 px-1 rounded-lg hover:bg-purple-100/70 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
-              >
-                {MINUTES.map((m) => (
-                  <option key={m} value={m} className="bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100">
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {/* Time Section - Unified Single Time Input */}
+        <div className="relative flex items-center min-w-0">
+          <div className="absolute left-3 text-slate-400 pointer-events-none z-10">
+            <Clock size={15} />
           </div>
-
-          {/* AM / PM Segmented Pills + Optional Clear */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <div className="flex items-center bg-slate-200/90 dark:bg-gray-700/80 p-0.5 rounded-lg text-xs font-bold select-none border border-slate-300/40 dark:border-gray-600/50">
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => handleAmPmToggle('AM')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wide transition-all duration-150 ${
-                  hasValue && ampm === 'AM'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : !hasValue && ampm === 'AM'
-                    ? 'bg-slate-300 dark:bg-gray-600 text-slate-700 dark:text-slate-200 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                AM
-              </button>
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => handleAmPmToggle('PM')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wide transition-all duration-150 ${
-                  hasValue && ampm === 'PM'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : !hasValue && ampm === 'PM'
-                    ? 'bg-slate-300 dark:bg-gray-600 text-slate-700 dark:text-slate-200 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                PM
-              </button>
-            </div>
-
-            {!required && hasValue && !disabled && (
-              <button
-                type="button"
-                onClick={handleClear}
-                title="Clear date and time"
-                className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
+          <input
+            type="time"
+            required={required}
+            disabled={disabled}
+            min={minTime}
+            value={time}
+            onChange={handleTimeChange}
+            onClick={(e) => { try { e.target.showPicker?.() } catch {} }}
+            className={`w-full h-11 pl-9 ${!required && hasValue && !disabled ? 'pr-9' : 'pr-3'} rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all cursor-pointer min-w-0`}
+          />
+          {!required && hasValue && !disabled && (
+            <button
+              type="button"
+              onClick={handleClear}
+              title="Clear date and time"
+              className="absolute right-2.5 p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors z-10"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>

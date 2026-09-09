@@ -61,7 +61,7 @@ public class CreateMockInterviewRequest {
 
     public Instant parseScheduledAt() {
         if (scheduledAt == null || scheduledAt.isBlank()) {
-            return Instant.now();
+            return null;
         }
         try {
             return Instant.parse(scheduledAt);
@@ -74,7 +74,7 @@ public class CreateMockInterviewRequest {
                 return LocalDateTime.parse(scheduledAt, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                         .atZone(ZoneId.systemDefault()).toInstant();
             } catch (Exception e2) {
-                return Instant.now();
+                return null;
             }
         }
     }
