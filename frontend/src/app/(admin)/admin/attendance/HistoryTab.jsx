@@ -202,6 +202,15 @@ export default function HistoryTab() {
   useEffect(() => { load() }, [load])
 
   const updateFilter = (key, value) => {
+    if (key === 'to' && value && filters.from && value < filters.from) {
+      toast.error('The "To" date cannot be earlier than the "From" date')
+      return
+    }
+    if (key === 'from' && value && filters.to && value > filters.to) {
+      setFilters(prev => ({ ...prev, from: value, to: '' }))
+      setPage(1)
+      return
+    }
     setFilters(prev => ({ ...prev, [key]: value }))
     setPage(1)
   }
@@ -213,12 +222,12 @@ export default function HistoryTab() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">From</label>
-            <input type="date" value={filters.from} onChange={e => updateFilter('from', e.target.value)}
+            <input type="date" value={filters.from} max={filters.to || undefined} onChange={e => updateFilter('from', e.target.value)}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">To</label>
-            <input type="date" value={filters.to} onChange={e => updateFilter('to', e.target.value)}
+            <input type="date" value={filters.to} min={filters.from || undefined} onChange={e => updateFilter('to', e.target.value)}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
           <div>

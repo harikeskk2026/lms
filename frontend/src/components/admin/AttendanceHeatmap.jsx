@@ -64,7 +64,7 @@ export default function AttendanceHeatmap({ dailyTrend = [] }) {
   const dayStats = Array.from({ length: 7 }, () => ({ total: 0, count: 0 }))
 
   for (const d of dailyTrend) {
-    if (!d.date) continue
+    if (!d.date || !d.total || d.total === 0) continue
     const dow = new Date(d.date).getDay()
     dayStats[dow].total += (d.pct !== undefined ? d.pct : (d.present ? 100 : 0))
     dayStats[dow].count++

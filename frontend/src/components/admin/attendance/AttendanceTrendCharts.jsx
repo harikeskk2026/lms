@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine
@@ -8,14 +8,80 @@ import {
 const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
 const SKELETON = <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
 
-export function AttendanceDailyTrendChart({ data }) {
+export function AttendanceDailyTrendChart({ data, days = 7 }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+
+  const chartData = useMemo(() => {
+    if (!days || !Number.isInteger(Number(days)) || Number(days) <= 0) return data || []
+
+    const numDays = Number(days)
+    const dataByDate = {}
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        if (!item.date) continue
+        const key = item.date.slice(0, 10)
+        if (!dataByDate[key]) {
+          dataByDate[key] = {
+            ...item,
+            present: item.present || 0,
+            absent: item.absent || 0,
+            late: item.late || 0,
+            total: item.total || 0,
+          }
+        } else {
+          dataByDate[key].present += item.present || 0
+          dataByDate[key].absent += item.absent || 0
+          dataByDate[key].late += item.late || 0
+          dataByDate[key].total += item.total || 0
+          dataByDate[key].pct = dataByDate[key].total > 0
+            ? Math.round((dataByDate[key].present * 100) / dataByDate[key].total)
+            : 0
+        }
+      }
+    }
+
+    const fullList = []
+    const now = new Date()
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    for (let i = numDays - 1; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(now.getDate() - i)
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      const key = `${year}-${month}-${day}`
+      const label = `${d.getDate()} ${monthNames[d.getMonth()]}`
+
+      if (dataByDate[key]) {
+        fullList.push({
+          ...dataByDate[key],
+          date: key,
+          label: dataByDate[key].label || label
+        })
+      } else {
+        fullList.push({
+          date: key,
+          label,
+          present: 0,
+          absent: 0,
+          late: 0,
+          total: 0,
+          pct: 0
+        })
+      }
+    }
+    return fullList
+  }, [data, days])
+
   if (!mounted) return SKELETON
+
+  const numDays = Number(days) || 7
+  const tickInterval = numDays <= 7 ? 0 : numDays <= 30 ? 4 : 12
 
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ left: -10, right: 10 }}>
+      <AreaChart data={chartData} margin={{ left: -10, right: 10 }}>
         <defs>
           <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.3} />
@@ -26,7 +92,7 @@ export function AttendanceDailyTrendChart({ data }) {
             <stop offset="95%" stopColor="#ffd668" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+        <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={tickInterval} />
         <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
         <Tooltip contentStyle={TOOLTIP_STYLE} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -43,6 +109,14 @@ export function WeeklyAttendanceRateChart({ data }) {
   useEffect(() => { setMounted(true) }, [])
   if (!mounted) return SKELETON
 
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-[220px] flex flex-col items-center justify-center text-gray-400 text-xs">
+        <p>No weekly attendance records found</p>
+      </div>
+    )
+  }
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <LineChart data={data} margin={{ left: -10, right: 10 }}>
@@ -50,7 +124,7 @@ export function WeeklyAttendanceRateChart({ data }) {
         <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
         <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, 'Attendance']} />
         <ReferenceLine y={75} stroke="#ffd668" strokeDasharray="4 2" label={{ value: '75% min', fill: '#ffd668', fontSize: 10 }} />
-        <Line type="monotone" dataKey="pct" name="Rate" stroke="#6d28d9" strokeWidth={2.5} dot={{ fill: '#6d28d9', r: 4 }} />
+        <Line type="monotone" dataKey="pct" name="Rate" stroke="#6d28d9" strokeWidth={2.5} dot={{ fill: '#6d28d9', r: 5, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 7 }} />
       </LineChart>
     </ResponsiveContainer>
   )
@@ -60,6 +134,14 @@ export function MonthlyAttendanceBreakdownChart({ data }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
   if (!mounted) return SKELETON
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-[220px] flex flex-col items-center justify-center text-gray-400 text-xs">
+        <p>No monthly attendance records found</p>
+      </div>
+    )
+  }
 
   return (
     <ResponsiveContainer width="100%" height={220}>

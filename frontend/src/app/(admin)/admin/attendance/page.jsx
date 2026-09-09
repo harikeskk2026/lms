@@ -78,7 +78,7 @@ function PctBar({ pct }) {
 
 // ─── TAB 1: Mark Attendance ────────────────────────────────────────────────────
 
-function MarkAttendanceTab() {
+function MarkAttendanceTab({ onAttendanceSaved }) {
   const [batches, setBatches]             = useState([])
   const [classes, setClasses]             = useState([])
   const [selectedBatch, setSelectedBatch] = useState('')
@@ -129,7 +129,6 @@ function MarkAttendanceTab() {
   const removeAttachment = (index) => {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
-
 
   useEffect(() => {
     adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
@@ -211,6 +210,7 @@ function MarkAttendanceTab() {
       } else {
         toast.success('Draft saved — class stays pending')
       }
+      onAttendanceSaved?.()
     } catch { toast.error('Failed to save attendance') } finally { setSaving(false) }
   }
 
@@ -294,7 +294,6 @@ function MarkAttendanceTab() {
               Attendance saved — {saveResult.PRESENT} present, {saveResult.ABSENT} absent
               {saveResult.LATE > 0 ? `, ${saveResult.LATE} late` : ''}
               {saveResult.LEAVE > 0 ? `, ${saveResult.LEAVE} on leave` : ''}
-
             </p>
           </div>
         </GlassCard>
@@ -378,7 +377,6 @@ function MarkAttendanceTab() {
               </button>
             </div>
           </div>
-
 
           {/* Student table */}
           <GlassCard className="overflow-hidden">
@@ -505,7 +503,6 @@ function MarkAttendanceTab() {
             </div>
           </GlassCard>
 
-
           {/* Sticky save bar */}
           <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl -mx-6 -mb-6 px-6 py-4 border-t border-purple-100 dark:border-purple-900/30 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
@@ -582,7 +579,6 @@ function BatchOverviewTab() {
   }
 
   useEffect(() => { if (selectedBatch) reloadDetail() }, [monthFilter])
-
 
   if (loading) return <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-44" />)}</div>
 
@@ -696,6 +692,7 @@ function AnalyticsTab() {
   const dayOfWeekStats = {}
   if (data?.dailyTrend) {
     for (const d of data.dailyTrend) {
+      if (!d.total || d.total === 0) continue
       const dow = new Date(d.date).getDay()
       if (!dayOfWeekStats[dow]) dayOfWeekStats[dow] = { total: 0, count: 0 }
       dayOfWeekStats[dow].total += d.pct
@@ -708,6 +705,7 @@ function AnalyticsTab() {
   if (data?.dailyTrend?.length) {
     const dowAvgs = {}
     for (const d of data.dailyTrend) {
+      if (!d.total || d.total === 0) continue
       const dow = new Date(d.date).getDay()
       if (!dowAvgs[dow]) dowAvgs[dow] = { total: 0, count: 0 }
       dowAvgs[dow].total += d.pct; dowAvgs[dow].count++
@@ -719,6 +717,8 @@ function AnalyticsTab() {
       mostAbsentDay = `${DAYS[dow]} (avg ${Math.round(stat.total / stat.count)}%)`
     }
   }
+
+  const totalClassesTracked = data?.dailyTrend?.filter(d => (d.total > 0 || d.classTitle))?.length || 0
 
   return (
     <div className="space-y-6">
@@ -750,14 +750,14 @@ function AnalyticsTab() {
           {/* Top stats */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard label="Overall Attendance Rate" value={`${data.overallPct}%`} icon={TrendingUp} />
-            <StatCard label="Total Classes Tracked"   value={data.dailyTrend?.length || 0} icon={BookOpen} />
+            <StatCard label="Total Classes Tracked"   value={totalClassesTracked} icon={BookOpen} />
             <StatCard label="Most Absent Day" value={mostAbsentDay || '—'} icon={TrendingDown} iconColor="text-yellow-500" />
           </div>
 
           {/* Area chart — Attendance Trend */}
           <GlassCard className="p-5">
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Attendance Trend</h3>
-            <AttendanceDailyTrendChart data={data.dailyTrend} />
+            <AttendanceDailyTrendChart data={data.dailyTrend} days={days} />
           </GlassCard>
 
           {/* Weekly + Monthly charts */}
@@ -785,7 +785,7 @@ function AnalyticsTab() {
 
 // ─── TAB 4: Alerts ─────────────────────────────────────────────────────────────
 
-function AlertsTab() {
+function AlertsTab({ onAlertsChanged }) {
   const [alerts, setAlerts]         = useState([])
   const [loading, setLoading]       = useState(true)
   const [threshold, setThreshold]   = useState(75)
@@ -803,11 +803,17 @@ function AlertsTab() {
   useEffect(() => { load(showResolved) }, [showResolved])
 
   const generate = async () => {
+    const numThreshold = Number(threshold)
+    if (threshold === '' || isNaN(numThreshold) || numThreshold < 0 || numThreshold > 100) {
+      toast.error('Please enter a valid threshold percentage between 0 and 100')
+      return
+    }
     setGenerating(true)
     try {
-      const r = await adminApi.generateAlerts({ threshold })
+      const r = await adminApi.generateAlerts({ threshold: numThreshold })
       toast.success(`Generated ${r.data.data.generated} new alerts (checked ${r.data.data.checked} students)`)
       load(false)
+      onAlertsChanged?.()
     } catch { toast.error('Failed to generate alerts') } finally { setGenerating(false) }
   }
 
@@ -816,6 +822,7 @@ function AlertsTab() {
       await adminApi.resolveAlert(id)
       setAlerts(prev => prev.filter(a => a.id !== id))
       toast.success('Alert resolved')
+      onAlertsChanged?.()
     } catch { toast.error('Failed to resolve') }
   }
 
@@ -836,8 +843,44 @@ function AlertsTab() {
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-600 dark:text-gray-400">Alert when below:</label>
             <input
-              type="number" value={threshold} onChange={e => setThreshold(e.target.value)}
-              min={50} max={100}
+              type="text"
+              inputMode="numeric"
+              value={threshold}
+              onChange={e => {
+                const val = e.target.value
+                if (val === '') {
+                  setThreshold('')
+                  return
+                }
+                const clean = val.replace(/[^0-9]/g, '')
+                if (clean === '') {
+                  setThreshold('')
+                  return
+                }
+                const num = parseInt(clean, 10)
+                if (num > 100) {
+                  setThreshold(100)
+                } else if (num < 0) {
+                  setThreshold(0)
+                } else {
+                  setThreshold(num)
+                }
+              }}
+              onKeyDown={e => {
+                if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+                  e.preventDefault()
+                }
+              }}
+              onBlur={() => {
+                if (threshold === '' || isNaN(Number(threshold))) {
+                  setThreshold(75)
+                } else if (Number(threshold) < 0) {
+                  setThreshold(0)
+                } else if (Number(threshold) > 100) {
+                  setThreshold(100)
+                }
+              }}
+              placeholder="0-100"
               className="w-16 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-sm text-center outline-none focus:ring-2 focus:ring-purple-500"
             />
             <span className="text-sm text-gray-500">%</span>
@@ -929,31 +972,67 @@ function AlertsTab() {
 
 // ─── Command Center strip ───────────────────────────────────────────────────────
 
-function CommandCenterStrip() {
+function CommandCenterStrip({ refreshKey = 0 }) {
   const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    adminApi.getAttendanceDashboard().then(r => setStats(r.data.data)).catch(() => {})
+  const fetchStats = useCallback(async () => {
+    try {
+      const r = await adminApi.getAttendanceDashboard()
+      setStats(r.data?.data || null)
+    } catch (err) {
+      console.error('Failed to load command center stats:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  if (!stats) return <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats, refreshKey])
+
+  if (loading && !stats) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    )
+  }
+
+  const current = stats || {
+    totalStudents: 0,
+    todaysClasses: 0,
+    averageAttendance: 0,
+    below75Count: 0,
+    criticalCount: 0,
+    unmarkedClasses: 0,
+  }
 
   const cards = [
-    { label: 'Total Students', value: stats.totalStudents, icon: Users },
-    { label: "Today's Classes", value: stats.todaysClasses, icon: Calendar },
-    { label: 'Average Attendance', value: `${stats.averageAttendance}%`, icon: TrendingUp },
-    { label: 'Below 75%', value: stats.below75Count, icon: AlertTriangle, iconColor: 'text-yellow-500' },
-    { label: 'Critical Students', value: stats.criticalCount, icon: XCircle, iconColor: 'text-red-500' },
-    { label: 'Unmarked Classes', value: stats.unmarkedClasses, icon: FileEdit, iconColor: 'text-orange-500' },
+    { label: 'Total Students', value: current.totalStudents, sub: 'Active enrollments', icon: Users, iconColor: 'text-blue-600 dark:text-blue-400', bg: 'hover:border-blue-300/50' },
+    { label: "Today's Classes", value: current.todaysClasses, sub: 'Scheduled today', icon: Calendar, iconColor: 'text-purple-600 dark:text-purple-400', bg: 'hover:border-purple-300/50' },
+    { label: 'Average Attendance', value: `${current.averageAttendance}%`, sub: 'Across active batches', icon: TrendingUp, iconColor: current.averageAttendance >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400', bg: 'hover:border-emerald-300/50' },
+    { label: 'Below 75%', value: current.below75Count, sub: current.below75Count > 0 ? 'Requires attention' : 'All good', icon: AlertTriangle, iconColor: 'text-amber-500', bg: 'hover:border-amber-300/50' },
+    { label: 'Critical Students', value: current.criticalCount, sub: current.criticalCount > 0 ? 'High risk' : 'Zero at risk', icon: XCircle, iconColor: 'text-red-500', bg: 'hover:border-red-300/50' },
+    { label: 'Unmarked Classes', value: current.unmarkedClasses, sub: current.unmarkedClasses > 0 ? 'Pending marking' : 'Up to date', icon: FileEdit, iconColor: 'text-orange-500', bg: 'hover:border-orange-300/50' },
   ]
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-      {cards.map(c => (
-        <GlassCard key={c.label} className="p-4">
-          <c.icon size={16} className={c.iconColor || 'text-purple-600'} />
-          <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-2">{c.value}</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">{c.label}</p>
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {cards.map((c) => (
+        <GlassCard key={c.label} className={`p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${c.bg}`}>
+          <div className="flex items-center justify-between">
+            <div className={`p-2 rounded-xl bg-purple-50/70 dark:bg-purple-900/30 ${c.iconColor}`}>
+              <c.icon size={18} />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight leading-none">{c.value}</p>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mt-1 truncate">{c.label}</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{c.sub}</p>
+          </div>
         </GlassCard>
       ))}
     </div>
@@ -1019,7 +1098,7 @@ function TodayTab() {
 
 // ─── TAB 6: Corrections ─────────────────────────────────────────────────────────
 
-function CorrectionsTab() {
+function CorrectionsTab({ onCorrectionsChanged }) {
   const [corrections, setCorrections] = useState([])
   const [loading, setLoading]         = useState(true)
   const [statusFilter, setStatusFilter] = useState('PENDING')
@@ -1047,6 +1126,7 @@ function CorrectionsTab() {
       setRejectingId(null)
       setRejectComment('')
       load()
+      onCorrectionsChanged?.()
     } catch { toast.error('Failed to review request') } finally { setReviewing(null) }
   }
 
@@ -1185,6 +1265,16 @@ const TABS = [
 
 export default function AttendancePage() {
   const [activeTab, setActiveTab] = useState('mark')
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const handleRefresh = useCallback(() => {
+    setRefreshKey(k => k + 1)
+  }, [])
+
+  const handleTabChange = (key) => {
+    setActiveTab(key)
+    setRefreshKey(k => k + 1)
+  }
 
   const exportCSV = async () => {
     try {
@@ -1222,19 +1312,25 @@ export default function AttendancePage() {
             <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Attendance Management</h1>
             <p className="text-sm text-gray-500 mt-0.5">Track, analyze and manage student attendance across all batches</p>
           </div>
-          <button onClick={exportCSV}
-            className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-4 py-2 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
-            <FileDown size={14} /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleRefresh} title="Refresh real-time stats"
+              className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
+              <RefreshCw size={14} /> Refresh
+            </button>
+            <button onClick={exportCSV}
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors shadow-sm">
+              <FileDown size={14} /> Export CSV
+            </button>
+          </div>
         </div>
 
         {/* Command Center */}
-        <CommandCenterStrip />
+        <CommandCenterStrip refreshKey={refreshKey} />
 
         {/* Tab bar */}
         <div className="flex items-center gap-1 p-1 bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl w-fit flex-wrap">
           {TABS.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setActiveTab(key)}
+            <button key={key} onClick={() => handleTabChange(key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 activeTab === key
                   ? 'bg-gradient-to-r from-purple-600 to-violet-600 text-white shadow-md'
@@ -1248,12 +1344,12 @@ export default function AttendancePage() {
 
         {/* Tab content */}
         {activeTab === 'today'       && <TodayTab />}
-        {activeTab === 'mark'        && <MarkAttendanceTab />}
+        {activeTab === 'mark'        && <MarkAttendanceTab onAttendanceSaved={handleRefresh} />}
         {activeTab === 'overview'    && <BatchOverviewTab />}
         {activeTab === 'analytics'   && <AnalyticsTab />}
-        {activeTab === 'alerts'      && <AlertsTab />}
+        {activeTab === 'alerts'      && <AlertsTab onAlertsChanged={handleRefresh} />}
         {activeTab === 'history'     && <HistoryTab />}
-        {activeTab === 'corrections' && <CorrectionsTab />}
+        {activeTab === 'corrections' && <CorrectionsTab onCorrectionsChanged={handleRefresh} />}
       </div>
     </div>
   )

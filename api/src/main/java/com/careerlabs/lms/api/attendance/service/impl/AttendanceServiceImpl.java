@@ -52,11 +52,13 @@ import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -117,6 +119,10 @@ public class AttendanceServiceImpl implements AttendanceService {
     public DailyClassResponse createClass(DailyClassRequest request) {
         Batch batch = batchRepository.findById(request.batchId())
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found with id: " + request.batchId()));
+
+        if (!batch.isActive()) {
+            throw new IllegalStateException("Cannot create a class for a completed or inactive batch: " + batch.getName());
+        }
 
         DailyClass dailyClass = new DailyClass();
         dailyClass.setBatch(batch);
@@ -186,6 +192,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        // Guard: do not allow marking attendance for classes belonging to inactive/completed batches
+        Batch classBatch = dailyClass.getBatch();
+        if (classBatch != null && !classBatch.isActive()) {
+            throw new IllegalStateException(
+                    "Cannot mark attendance for class '" + dailyClass.getTitle() +
+                    "' because batch '" + classBatch.getName() + "' is no longer active.");
+        }
 
         for (AttendanceRecordRequest rec : records) {
             Student student = studentRepository.findById(rec.studentId())
@@ -339,13 +353,15 @@ public class AttendanceServiceImpl implements AttendanceService {
                 totalLate += lt;
 
                 int studentTotal = sAtt.size();
+                // Students with NO records count as 0% attendance
                 int pct = studentTotal > 0 ? (int) Math.round((p * 100.0) / studentTotal) : 0;
                 totalPctSum += pct;
-                if (pct < 75 && studentTotal > 0) {
+                if (pct < 75) {
                     lowAttCount++;
                 }
             }
 
+            // Average across ALL enrolled students (0% for those with no records)
             int avgAttendance = totalStudents > 0 ? totalPctSum / totalStudents : 0;
 
             list.add(new AttendanceOverviewItemResponse(
@@ -369,24 +385,27 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @Transactional(readOnly = true)
     public AttendanceAnalyticsResponse getAttendanceAnalytics(Long batchId, Integer days) {
+        int daysForDaily = days != null && days > 0 ? days : 30;
+        LocalDateTime sinceDaily = LocalDateTime.now().minusDays(daysForDaily);
+        int daysForHistory = Math.max(daysForDaily, 60);
+        LocalDateTime sinceHistory = LocalDateTime.now().minusDays(daysForHistory);
+
         List<DailyClass> classes;
-        if (days != null && days > 0) {
-            LocalDateTime since = LocalDateTime.now().minusDays(days);
-            if (batchId != null) {
-                classes = dailyClassRepository.findByBatchIdAndStatusAndDateGreaterThanEqualOrderByDateAsc(batchId, ClassStatus.COMPLETED, since);
-            } else {
-                classes = dailyClassRepository.findByStatusAndDateGreaterThanEqualOrderByDateAsc(ClassStatus.COMPLETED, since);
-            }
+        List<DailyClass> historyClasses;
+
+        if (batchId != null) {
+            classes = dailyClassRepository.findByBatchIdAndStatusAndDateGreaterThanEqualOrderByDateAsc(batchId, ClassStatus.COMPLETED, sinceDaily);
+            historyClasses = dailyClassRepository.findByBatchIdAndStatusAndDateGreaterThanEqualOrderByDateAsc(batchId, ClassStatus.COMPLETED, sinceHistory);
         } else {
-            if (batchId != null) {
-                classes = dailyClassRepository.findByBatchIdAndStatusOrderByDateAsc(batchId, ClassStatus.COMPLETED);
-            } else {
-                classes = dailyClassRepository.findByStatusOrderByDateAsc(ClassStatus.COMPLETED);
-            }
+            classes = dailyClassRepository.findByStatusAndDateGreaterThanEqualOrderByDateAsc(ClassStatus.COMPLETED, sinceDaily);
+            historyClasses = dailyClassRepository.findByStatusAndDateGreaterThanEqualOrderByDateAsc(ClassStatus.COMPLETED, sinceHistory);
         }
 
-        List<Long> classIds = classes.stream().map(DailyClass::getId).toList();
-        List<Attendance> allAttendances = classIds.isEmpty() ? List.of() : attendanceRepository.findByDailyClassIdIn(classIds);
+        Set<Long> allClassIdSet = new HashSet<>();
+        for (DailyClass c : classes) allClassIdSet.add(c.getId());
+        for (DailyClass c : historyClasses) allClassIdSet.add(c.getId());
+
+        List<Attendance> allAttendances = allClassIdSet.isEmpty() ? List.of() : attendanceRepository.findByDailyClassIdIn(new ArrayList<>(allClassIdSet));
         Map<Long, List<Attendance>> attByClass = allAttendances.stream()
                 .collect(Collectors.groupingBy(a -> a.getDailyClass().getId()));
 
@@ -420,6 +439,30 @@ public class AttendanceServiceImpl implements AttendanceService {
                     p, ab, lt, total, pct,
                     cls.getDate().format(labelFmt)
             ));
+        }
+
+        for (DailyClass cls : historyClasses) {
+            List<Attendance> classAtt = attByClass.getOrDefault(cls.getId(), List.of());
+            int p = (int) classAtt.stream().filter(att -> att.getStatus() == AttendStatus.PRESENT).count();
+            int ab = (int) classAtt.stream().filter(att -> att.getStatus() == AttendStatus.ABSENT).count();
+            int lt = (int) classAtt.stream().filter(att -> att.getStatus() == AttendStatus.LATE).count();
+            int total = classAtt.size();
+            int pct = total > 0 ? (int) Math.round((p * 100.0) / total) : 0;
+
+            int weekNumber = cls.getDate().get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+            String weekKey = cls.getDate().getYear() + "-W" + (weekNumber < 10 ? "0" + weekNumber : weekNumber);
+            String weekLabel = "W" + weekNumber;
+
+            weeklyMap.merge(weekKey,
+                    new AttendanceAnalyticsResponse.WeeklyTrendPoint(weekLabel, p, ab, lt, total, pct),
+                    (existing, added) -> {
+                        int np = existing.present() + added.present();
+                        int na = existing.absent() + added.absent();
+                        int nl = existing.late() + added.late();
+                        int nt = existing.total() + added.total();
+                        int npct = nt > 0 ? (int) Math.round((np * 100.0) / nt) : 0;
+                        return new AttendanceAnalyticsResponse.WeeklyTrendPoint(existing.week(), np, na, nl, nt, npct);
+                    });
 
             String monthKey = cls.getDate().format(DateTimeFormatter.ofPattern("yyyy-MM"));
             String monthLabel = cls.getDate().format(DateTimeFormatter.ofPattern("MMM yy"));
@@ -454,9 +497,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Transactional(readOnly = true)
     public List<LowAttendanceStudentResponse> getLowAttendanceStudents(Double threshold, Long batchId) {
         double thresh = threshold != null ? threshold : 75.0;
+        // Only scan active batches — completed batches should not generate new alerts
         List<Batch> batches = batchId != null ?
-                batchRepository.findById(batchId).map(List::of).orElse(List.of()) :
-                batchRepository.findAllByOrderByCreatedAtDesc();
+                batchRepository.findById(batchId)
+                        .filter(Batch::isActive)
+                        .map(List::of).orElse(List.of()) :
+                batchRepository.findAllByOrderByCreatedAtDesc().stream()
+                        .filter(Batch::isActive)
+                        .toList();
 
         List<LowAttendanceStudentResponse> results = new ArrayList<>();
 
@@ -654,7 +702,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @Transactional
     public Map<String, Object> generateAttendanceAlerts(Double threshold) {
-        double thresh = threshold != null ? threshold : 75.0;
+        double thresh = threshold != null ? Math.max(0.0, Math.min(100.0, threshold)) : 75.0;
         List<LowAttendanceStudentResponse> lowStudents = getLowAttendanceStudents(thresh, null);
 
         int generated = 0;

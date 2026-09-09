@@ -112,11 +112,11 @@ export const adminApi = {
   },
 
   // Students
-  getStudents: (params) => api.get('/admin/students', { params }),
-  createStudent: (data) => api.post('/admin/students', data),
-  getStudentDetail: (id) => api.get(`/admin/students/${id}`),
-  updateStudent: (id, data) => api.patch(`/admin/students/${id}`, data),
-  toggleStudentStatus: (id) => api.patch(`/admin/students/${id}/status`),
+  getStudents: (params) => api.get('/students', { params }),
+  createStudent: (data) => api.post('/students', data),
+  getStudentDetail: (id) => api.get(`/students/${id}`),
+  updateStudent: (id, data) => api.put(`/students/${id}`, data),
+  toggleStudentStatus: (id) => api.patch(`/students/${id}/status`),
 
   // Trainers
   getTrainers: (params) => api.get('/trainers', { params }),

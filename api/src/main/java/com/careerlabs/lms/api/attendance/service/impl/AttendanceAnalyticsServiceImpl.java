@@ -59,44 +59,55 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 .filter(Batch::isActive)
                 .toList();
 
-        int totalStudents = 0;
         int below75Count = 0;
         int criticalCount = 0;
-        int totalPctSum = 0;
-        int batchesWithStudents = 0;
+        int totalPresentCount = 0;
+        int totalMarkedCount = 0;
+        double totalStudentPctSum = 0;
+        int totalBatchStudents = 0; // all students across active batches
 
         for (Batch batch : activeBatches) {
             List<Student> students = studentRepository.findByBatchId(batch.getId());
             if (students.isEmpty()) continue;
 
+            totalBatchStudents += students.size();
             List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
             Map<Long, List<Attendance>> byStudent = attendances.stream()
                     .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
             AttendancePolicy policy = attendancePolicyService.getEffectivePolicy(batch.getId());
 
-            int batchPctSum = 0;
             for (Student student : students) {
-                totalStudents++;
                 List<Attendance> studentAttendance = byStudent.getOrDefault(student.getId(), List.of());
                 int total = studentAttendance.size();
-                if (total == 0) continue;
 
-                int present = (int) studentAttendance.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
-                int pct = (int) Math.round((present * 100.0) / total);
-                batchPctSum += pct;
+                // Students with NO records contribute 0% to the average
+                int present = total > 0
+                        ? (int) studentAttendance.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count()
+                        : 0;
+                double pct = total > 0 ? (present * 100.0) / total : 0.0;
+
+                totalStudentPctSum += pct;
+                if (total > 0) {
+                    totalPresentCount += present;
+                    totalMarkedCount += total;
+                }
 
                 if (pct < policy.getHealthyThreshold()) {
                     below75Count++;
                 }
-                if (attendanceRiskService.classify(pct, policy) == RiskLevel.CRITICAL) {
+                if (attendanceRiskService.classify((int) Math.round(pct), policy) == RiskLevel.CRITICAL) {
                     criticalCount++;
                 }
             }
-            totalPctSum += students.isEmpty() ? 0 : batchPctSum / students.size();
-            batchesWithStudents++;
         }
 
-        int averageAttendance = batchesWithStudents > 0 ? totalPctSum / batchesWithStudents : 0;
+        // Use the same count as the dashboard so both views show the same number
+        int totalStudents = (int) studentRepository.count();
+
+        // Average = sum of each student's pct / active-batch students (includes 0% for unmarked)
+        int averageAttendance = totalBatchStudents > 0
+                ? (int) Math.round(totalStudentPctSum / totalBatchStudents)
+                : 0;
 
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
@@ -119,11 +130,13 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
         int totalStudents = 0;
         int below75Count = 0;
         int criticalCount = 0;
-        int totalPctSum = 0;
-        int batchesWithStudents = 0;
+        double totalStudentPctSum = 0;
+        int totalPresentCount = 0;
+        int totalMarkedCount = 0;
 
         for (Batch batch : activeBatches) {
             List<Student> students = studentRepository.findByBatchId(batch.getId());
+            totalStudents += students.size();
             if (students.isEmpty()) continue;
 
             List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
@@ -131,29 +144,35 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                     .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
             AttendancePolicy policy = attendancePolicyService.getEffectivePolicy(batch.getId());
 
-            int batchPctSum = 0;
             for (Student student : students) {
-                totalStudents++;
                 List<Attendance> studentAttendance = byStudent.getOrDefault(student.getId(), List.of());
                 int total = studentAttendance.size();
-                if (total == 0) continue;
 
-                int present = (int) studentAttendance.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
-                int pct = (int) Math.round((present * 100.0) / total);
-                batchPctSum += pct;
+                // Students with NO records contribute 0% to the average
+                int present = total > 0
+                        ? (int) studentAttendance.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count()
+                        : 0;
+                double pct = total > 0 ? (present * 100.0) / total : 0.0;
+
+                totalStudentPctSum += pct;
+                if (total > 0) {
+                    totalPresentCount += present;
+                    totalMarkedCount += total;
+                }
 
                 if (pct < policy.getHealthyThreshold()) {
                     below75Count++;
                 }
-                if (attendanceRiskService.classify(pct, policy) == RiskLevel.CRITICAL) {
+                if (attendanceRiskService.classify((int) Math.round(pct), policy) == RiskLevel.CRITICAL) {
                     criticalCount++;
                 }
             }
-            totalPctSum += students.isEmpty() ? 0 : batchPctSum / students.size();
-            batchesWithStudents++;
         }
 
-        int averageAttendance = batchesWithStudents > 0 ? totalPctSum / batchesWithStudents : 0;
+        // Average = sum of each student's pct / total batch students (includes 0% for unmarked)
+        int averageAttendance = totalStudents > 0
+                ? (int) Math.round(totalStudentPctSum / totalStudents)
+                : 0;
 
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
