@@ -10,7 +10,6 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.List;
 
 public class AssignmentRequest {
 
@@ -44,8 +43,6 @@ public class AssignmentRequest {
     private String attachmentUrl;
 
     private String attachmentName;
-
-    private List<AssignmentAttachmentRequest> attachments;
 
     private AssignmentStatus status;
 
@@ -143,13 +140,5 @@ public class AssignmentRequest {
 
     public void setStatus(AssignmentStatus status) {
         this.status = status;
-    }
-
-    public List<AssignmentAttachmentRequest> getAttachments() {
-        return attachments;
-    }
-
-    public void setAttachments(List<AssignmentAttachmentRequest> attachments) {
-        this.attachments = attachments;
     }
 }

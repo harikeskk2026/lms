@@ -1,13 +1,11 @@
 package com.careerlabs.lms.api.assignment.service.impl;
 
 import com.careerlabs.lms.api.assignment.dto.request.AssignmentRequest;
-import com.careerlabs.lms.api.assignment.dto.response.AssignmentAttachmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.AssignmentPageResponse;
 import com.careerlabs.lms.api.assignment.dto.response.AssignmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.StudentAssignmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.UploadResponse;
 import com.careerlabs.lms.api.assignment.entity.Assignment;
-import com.careerlabs.lms.api.assignment.entity.AssignmentAttachment;
 import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
 import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
 import com.careerlabs.lms.api.assignment.service.AssignmentService;
@@ -64,11 +62,11 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final NotificationService notificationService;
 
     public AssignmentServiceImpl(AssignmentRepository assignmentRepository, CourseRepository courseRepository,
-                                  BatchRepository batchRepository, FileStorageService fileStorageService,
-                                  StudentRepository studentRepository,
-                                  EnrollmentRepository enrollmentRepository,
-                                  AssignmentSubmissionRepository submissionRepository,
-                                  NotificationService notificationService) {
+            BatchRepository batchRepository, FileStorageService fileStorageService,
+            StudentRepository studentRepository,
+            EnrollmentRepository enrollmentRepository,
+            AssignmentSubmissionRepository submissionRepository,
+            NotificationService notificationService) {
         this.assignmentRepository = assignmentRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
@@ -82,7 +80,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Override
     @Transactional(readOnly = true)
     public AssignmentPageResponse list(String search, Long courseId, Long batchId, AssignmentStatus status,
-                                        LocalDate dueDateFrom, LocalDate dueDateTo, int page, int limit) {
+            LocalDate dueDateFrom, LocalDate dueDateTo, int page, int limit) {
         int pageNumber = Math.max(page, 1);
         int pageSize = limit > 0 ? limit : 20;
 
@@ -91,8 +89,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                 buildSpecification(search, courseId, batchId, status, dueDateFrom, dueDateTo), pageable);
 
         List<Long> ids = result.getContent().stream().map(Assignment::getId).toList();
-        Map<Long, Long> countsByAssignmentId = ids.isEmpty() ? Map.of() :
-                submissionRepository.findByAssignmentIdIn(ids).stream()
+        Map<Long, Long> countsByAssignmentId = ids.isEmpty() ? Map.of()
+                : submissionRepository.findByAssignmentIdIn(ids).stream()
                         .collect(Collectors.groupingBy(s -> s.getAssignment().getId(), Collectors.counting()));
 
         List<AssignmentResponse> assignments = result.getContent().stream()
@@ -121,7 +119,8 @@ public class AssignmentServiceImpl implements AssignmentService {
             batchIds.add(student.getBatch().getId());
         }
 
-        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        List<Enrollment> enrollments = enrollmentRepository
+                .findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
         for (Enrollment e : enrollments) {
             if (e.getBatch() != null) {
                 batchIds.add(e.getBatch().getId());
@@ -151,30 +150,31 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime closeDateTime = assignment.getDueDate() != null
-                ? (assignment.getCloseTime() != null ? LocalDateTime.of(assignment.getDueDate(), assignment.getCloseTime()) : assignment.getDueDate().atTime(23, 59, 59))
+                ? (assignment.getCloseTime() != null
+                        ? LocalDateTime.of(assignment.getDueDate(), assignment.getCloseTime())
+                        : assignment.getDueDate().atTime(23, 59, 59))
                 : null;
         boolean isOverdue = submission.isEmpty() && closeDateTime != null && now.isAfter(closeDateTime);
 
         StudentAssignmentResponse.SubmissionInfo submissionInfo = submission.map(s -> {
-            String status = s.isReviewed() ? "GRADED" : (s.getStatus() != null ? s.getStatus().name() : (s.isLate() ? "LATE" : "SUBMITTED"));
+            String status = s.isReviewed() ? "GRADED"
+                    : (s.getStatus() != null ? s.getStatus().name() : (s.isLate() ? "LATE" : "SUBMITTED"));
             List<SubmissionAttachmentResponse> files = s.getAttachments() != null && !s.getAttachments().isEmpty()
-                    ? s.getAttachments().stream().map(a -> new SubmissionAttachmentResponse(a.getFileUrl(), a.getFileName())).toList()
-                    : (s.getFileUrl() != null ? List.of(new SubmissionAttachmentResponse(s.getFileUrl(), s.getFileName())) : List.of());
+                    ? s.getAttachments().stream()
+                            .map(a -> new SubmissionAttachmentResponse(a.getFileUrl(), a.getFileName())).toList()
+                    : (s.getFileUrl() != null
+                            ? List.of(new SubmissionAttachmentResponse(s.getFileUrl(), s.getFileName()))
+                            : List.of());
             return new StudentAssignmentResponse.SubmissionInfo(
                     s.getId(), status, s.getMarks(), s.getFeedback(), s.getFileUrl(), s.getFileName(), s.getNotes(),
                     s.getSubmittedAt(), s.isReviewed() ? s.getUpdatedAt() : null, files, s.getRejectionReason());
         }).orElse(null);
 
-        List<AssignmentAttachmentResponse> assignmentAttachments = assignment.getAttachments() != null && !assignment.getAttachments().isEmpty()
-                ? assignment.getAttachments().stream().map(a -> new AssignmentAttachmentResponse(a.getFileUrl(), a.getFileName())).toList()
-                : (assignment.getAttachmentUrl() != null ? List.of(new AssignmentAttachmentResponse(assignment.getAttachmentUrl(), assignment.getAttachmentName())) : List.of());
-
         return new StudentAssignmentResponse(
                 assignment.getId(), assignment.getTitle(), assignment.getDescription(),
                 assignment.getBatch().getName(), assignment.getStartDate(), assignment.getPublishTime(),
                 assignment.getDueDate(), assignment.getCloseTime(), assignment.getTotalMarks(),
-                assignment.getAttachmentUrl(), assignment.getAttachmentName(), isOverdue, submissionInfo,
-                assignmentAttachments);
+                assignment.getAttachmentUrl(), assignment.getAttachmentName(), isOverdue, submissionInfo);
     }
 
     @Override
@@ -195,8 +195,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     "📋 New Assignment: " + saved.getTitle(),
                     "Due on " + saved.getDueDate() + ". Submit before the deadline.",
                     NotificationType.INFO,
-                    "/student/assignments"
-            );
+                    "/student/assignments");
         }
 
         return AssignmentResponse.from(saved);
@@ -234,8 +233,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 "📋 New Assignment: " + saved.getTitle(),
                 "Due on " + saved.getDueDate() + ". Submit before the deadline.",
                 NotificationType.INFO,
-                "/student/assignments"
-        );
+                "/student/assignments");
 
         return AssignmentResponse.from(saved);
     }
@@ -260,21 +258,6 @@ public class AssignmentServiceImpl implements AssignmentService {
     public UploadResponse uploadAttachment(MultipartFile file) {
         StoredFile stored = fileStorageService.store(file, "assignments");
         return new UploadResponse(stored.url(), stored.originalName());
-    }
-
-    @Override
-    public List<UploadResponse> uploadAttachments(MultipartFile[] files) {
-        if (files == null || files.length == 0) {
-            return List.of();
-        }
-        List<UploadResponse> list = new ArrayList<>();
-        for (MultipartFile file : files) {
-            if (file != null && !file.isEmpty()) {
-                StoredFile stored = fileStorageService.store(file, "assignments");
-                list.add(new UploadResponse(stored.url(), stored.originalName()));
-            }
-        }
-        return list;
     }
 
     private Assignment findOrThrow(Long id) {
@@ -314,36 +297,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         assignment.setDueDate(request.getDueDate());
         assignment.setCloseTime(request.getCloseTime());
         assignment.setTotalMarks(request.getTotalMarks());
-
-        if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
-            List<AssignmentAttachment> attList = request.getAttachments().stream()
-                    .filter(a -> a != null && a.fileUrl() != null && !a.fileUrl().isBlank())
-                    .map(a -> new AssignmentAttachment(a.fileUrl(), a.fileName()))
-                    .toList();
-            assignment.setAttachments(new ArrayList<>(attList));
-            if (!attList.isEmpty()) {
-                assignment.setAttachmentUrl(attList.get(0).getFileUrl());
-                assignment.setAttachmentName(attList.get(0).getFileName());
-            } else {
-                assignment.setAttachmentUrl(null);
-                assignment.setAttachmentName(null);
-            }
-        } else if (request.getAttachmentUrl() != null && !request.getAttachmentUrl().isBlank()) {
-            assignment.setAttachmentUrl(request.getAttachmentUrl());
-            assignment.setAttachmentName(request.getAttachmentName());
-            assignment.setAttachments(new ArrayList<>(List.of(new AssignmentAttachment(request.getAttachmentUrl(), request.getAttachmentName()))));
-        } else {
-            assignment.setAttachmentUrl(null);
-            assignment.setAttachmentName(null);
-            if (assignment.getAttachments() != null) {
-                assignment.getAttachments().clear();
-            }
-        }
+        assignment.setAttachmentUrl(request.getAttachmentUrl());
+        assignment.setAttachmentName(request.getAttachmentName());
     }
 
     private Specification<Assignment> buildSpecification(String search, Long courseId, Long batchId,
-                                                           AssignmentStatus status, LocalDate dueDateFrom,
-                                                           LocalDate dueDateTo) {
+            AssignmentStatus status, LocalDate dueDateFrom,
+            LocalDate dueDateTo) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 

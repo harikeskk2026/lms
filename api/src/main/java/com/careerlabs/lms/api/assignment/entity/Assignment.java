@@ -2,9 +2,7 @@ package com.careerlabs.lms.api.assignment.entity;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.course.entity.Course;
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -21,8 +19,6 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "assignments")
@@ -66,10 +62,6 @@ public class Assignment {
 
     @Column(name = "attachment_name")
     private String attachmentName;
-
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "assignment_attachments", joinColumns = @JoinColumn(name = "assignment_id"))
-    private List<AssignmentAttachment> attachments = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -183,20 +175,6 @@ public class Assignment {
 
     public void setAttachmentName(String attachmentName) {
         this.attachmentName = attachmentName;
-    }
-
-    public List<AssignmentAttachment> getAttachments() {
-        if (attachments == null || attachments.isEmpty()) {
-            if (attachmentUrl != null && !attachmentUrl.isBlank()) {
-                return List.of(new AssignmentAttachment(attachmentUrl, attachmentName));
-            }
-            return new ArrayList<>();
-        }
-        return attachments;
-    }
-
-    public void setAttachments(List<AssignmentAttachment> attachments) {
-        this.attachments = attachments != null ? attachments : new ArrayList<>();
     }
 
     public AssignmentStatus getStatus() {

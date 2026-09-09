@@ -14,7 +14,7 @@ import java.util.List;
 public interface AssignmentService {
 
     AssignmentPageResponse list(String search, Long courseId, Long batchId, AssignmentStatus status,
-                                 LocalDate dueDateFrom, LocalDate dueDateTo, int page, int limit);
+            LocalDate dueDateFrom, LocalDate dueDateTo, int page, int limit);
 
     List<StudentAssignmentResponse> listForStudent(Long userId);
 
@@ -33,6 +33,4 @@ public interface AssignmentService {
     AssignmentResponse reopen(Long id);
 
     UploadResponse uploadAttachment(MultipartFile file);
-
-    List<UploadResponse> uploadAttachments(MultipartFile[] files);
 }

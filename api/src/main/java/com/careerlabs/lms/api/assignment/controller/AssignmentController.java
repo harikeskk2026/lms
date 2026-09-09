@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/assignments")
@@ -65,7 +64,7 @@ public class AssignmentController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<AssignmentResponse>> update(@PathVariable Long id,
-                                                                    @Valid @RequestBody AssignmentRequest request) {
+            @Valid @RequestBody AssignmentRequest request) {
         AssignmentResponse response = assignmentService.update(id, request);
         return ResponseEntity.ok(ApiResponse.of("Assignment updated", response));
     }
@@ -94,10 +93,5 @@ public class AssignmentController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<UploadResponse>> upload(@RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.of(assignmentService.uploadAttachment(file)));
-    }
-
-    @PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<List<UploadResponse>>> uploadMultiple(@RequestPart("files") MultipartFile[] files) {
-        return ResponseEntity.ok(ApiResponse.of(assignmentService.uploadAttachments(files)));
     }
 }

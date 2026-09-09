@@ -3,40 +3,39 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Download,
-  Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw, Check, X, Eye,
+  Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw, Check, X,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import submissionService from '@/services/submissionService'
 import { resolveFileUrl } from '@/lib/api'
-import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 const STATUS_COLORS = {
-  DRAFT:     'bg-gray-100 text-gray-600',
+  DRAFT: 'bg-gray-100 text-gray-600',
   PUBLISHED: 'bg-green-100 text-green-700',
-  CLOSED:    'bg-red-100 text-red-700',
+  CLOSED: 'bg-red-100 text-red-700',
 }
 
 const ROW_STATUS_COLORS = {
-  PENDING:          'bg-gray-100 text-gray-500',
+  PENDING: 'bg-gray-100 text-gray-500',
   PENDING_APPROVAL: 'bg-amber-100 text-amber-800 border border-amber-200',
-  SUBMITTED:        'bg-blue-100 text-blue-700',
-  LATE:             'bg-orange-100 text-orange-700',
-  REJECTED:         'bg-red-100 text-red-700',
+  SUBMITTED: 'bg-blue-100 text-blue-700',
+  LATE: 'bg-orange-100 text-orange-700',
+  REJECTED: 'bg-red-100 text-red-700',
 }
 
 const ROW_STATUS_LABELS = {
-  PENDING:          'Not Submitted',
+  PENDING: 'Not Submitted',
   PENDING_APPROVAL: 'Pending Approval',
-  SUBMITTED:        'Submitted',
-  LATE:             'Late',
-  REJECTED:         'Rejected',
+  SUBMITTED: 'Submitted',
+  LATE: 'Late',
+  REJECTED: 'Rejected',
 }
 
 const EVAL_STATUS_COLORS = {
   EVALUATED: 'bg-green-100 text-green-700',
-  PENDING:   'bg-gray-100 text-gray-500',
+  PENDING: 'bg-gray-100 text-gray-500',
 }
 
 const SUBMISSIONS_PAGE_SIZE = 10
@@ -56,7 +55,6 @@ export default function AssignmentDetailPage() {
   const [actionLoading, setActionLoading] = useState({})
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
-  const [previewFile, setPreviewFile] = useState(null)
   const [filters, setFilters] = useState(EMPTY_SUBMISSION_FILTERS)
   const [page, setPage] = useState(1)
   const searchTimer = useRef(null)
@@ -275,9 +273,9 @@ export default function AssignmentDetailPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { icon: BookOpen, label: 'Course', value: assignment.course.title },
-              { icon: Users,    label: 'Batch',  value: assignment.batch.name },
+              { icon: Users, label: 'Batch', value: assignment.batch.name },
               { icon: Calendar, label: 'Due Date', value: format(new Date(assignment.dueDate), 'dd MMM yyyy') },
-              { icon: Award,    label: 'Total Marks', value: assignment.totalMarks },
+              { icon: Award, label: 'Total Marks', value: assignment.totalMarks },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-2">
                 <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
@@ -294,50 +292,13 @@ export default function AssignmentDetailPage() {
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Description</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{assignment.description}</p>
           </div>
-          {((assignment.attachments && assignment.attachments.length > 0) || assignment.attachmentUrl) && (
+          {assignment.attachmentUrl && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Attachments ({assignment.attachments?.length || 1})
-              </h3>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {((assignment.attachments && assignment.attachments.length > 0)
-                  ? assignment.attachments
-                  : [{ fileUrl: assignment.attachmentUrl, fileName: assignment.attachmentName }]
-                ).map((att, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/30 bg-purple-50/40 dark:bg-purple-950/20 text-xs"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 mr-2">
-                      <Paperclip size={14} className="text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate" title={att.fileName}>
-                        {att.fileName || 'Attachment'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewFile({ url: att.fileUrl, name: att.fileName })}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors"
-                        title="Preview attachment"
-                      >
-                        <Eye size={12} />
-                        <span>Preview</span>
-                      </button>
-                      <a
-                        href={resolveFileUrl(att.fileUrl)}
-                        download={att.fileName || 'attachment'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 rounded-md text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-                        title="Download attachment"
-                      >
-                        <Download size={13} />
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Attachment</h3>
+              <a href={resolveFileUrl(assignment.attachmentUrl)} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-purple-600 hover:underline font-semibold">
+                <Paperclip size={14} /> {assignment.attachmentName || 'Download attachment'} <Download size={12} />
+              </a>
             </div>
           )}
         </div>
@@ -347,12 +308,12 @@ export default function AssignmentDetailPage() {
           <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Submissions</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: 'Total Students',     value: subLoading ? '—' : stats.totalStudents,     color: 'text-gray-700 dark:text-gray-300' },
-              { label: 'Submitted',          value: subLoading ? '—' : stats.submitted,          color: 'text-green-600' },
-              { label: 'Not Submitted',      value: subLoading ? '—' : stats.notSubmitted,       color: 'text-gray-500' },
-              { label: 'Late Submissions',   value: subLoading ? '—' : stats.late,               color: 'text-amber-600' },
-              { label: 'Evaluated',          value: subLoading ? '—' : stats.evaluated,          color: 'text-purple-600' },
-              { label: 'Pending Evaluation', value: subLoading ? '—' : stats.pendingEvaluation,  color: 'text-blue-600' },
+              { label: 'Total Students', value: subLoading ? '—' : stats.totalStudents, color: 'text-gray-700 dark:text-gray-300' },
+              { label: 'Submitted', value: subLoading ? '—' : stats.submitted, color: 'text-green-600' },
+              { label: 'Not Submitted', value: subLoading ? '—' : stats.notSubmitted, color: 'text-gray-500' },
+              { label: 'Late Submissions', value: subLoading ? '—' : stats.late, color: 'text-amber-600' },
+              { label: 'Evaluated', value: subLoading ? '—' : stats.evaluated, color: 'text-purple-600' },
+              { label: 'Pending Evaluation', value: subLoading ? '—' : stats.pendingEvaluation, color: 'text-blue-600' },
             ].map(({ label, value, color }) => (
               <div key={label} className="text-center px-3 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
                 <p className={`text-xl font-extrabold font-display ${color}`}>{value}</p>
@@ -459,37 +420,17 @@ export default function AssignmentDetailPage() {
                       {row.files && row.files.length > 0 ? (
                         <div className="flex flex-col gap-1">
                           {row.files.map((f, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5 whitespace-nowrap">
-                              <button
-                                type="button"
-                                onClick={() => setPreviewFile({ url: f.fileUrl, name: f.fileName })}
-                                className="inline-flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 hover:underline font-semibold"
-                                title="Preview file"
-                              >
-                                <Eye size={12} /> {f.fileName || `File ${idx + 1}`}
-                              </button>
-                              <a href={resolveFileUrl(f.fileUrl)} download={f.fileName} target="_blank" rel="noopener noreferrer"
-                                className="text-gray-400 hover:text-purple-600" title="Download">
-                                <Download size={11} />
-                              </a>
-                            </div>
+                            <a key={idx} href={resolveFileUrl(f.fileUrl)} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold whitespace-nowrap">
+                              <Download size={12} /> {f.fileName || `File ${idx + 1}`}
+                            </a>
                           ))}
                         </div>
                       ) : row.fileUrl ? (
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewFile({ url: row.fileUrl, name: row.fileName })}
-                            className="inline-flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 hover:underline font-semibold"
-                            title="Preview file"
-                          >
-                            <Eye size={12} /> {row.fileName || 'File'}
-                          </button>
-                          <a href={resolveFileUrl(row.fileUrl)} download={row.fileName} target="_blank" rel="noopener noreferrer"
-                            className="text-gray-400 hover:text-purple-600" title="Download">
-                            <Download size={11} />
-                          </a>
-                        </div>
+                        <a href={resolveFileUrl(row.fileUrl)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold whitespace-nowrap">
+                          <Download size={12} /> {row.fileName || 'File'}
+                        </a>
                       ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3">
@@ -627,14 +568,6 @@ export default function AssignmentDetailPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {previewFile && (
-        <ViewAttachmentModal
-          url={previewFile.url}
-          name={previewFile.name}
-          onClose={() => setPreviewFile(null)}
-        />
       )}
     </div>
   )
