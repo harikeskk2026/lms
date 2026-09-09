@@ -1,11 +1,13 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronRight, ChevronUp,
-  Upload, ExternalLink, Clock, BookOpen, Image as ImageIcon,
+  Upload, ExternalLink, Clock, BookOpen, Image as ImageIcon, Eye, Download, X,
+  ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
@@ -197,9 +199,8 @@ export default function CourseManagePage({ params }) {
       <div className="flex gap-1 overflow-x-auto pb-1">
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              tab === t ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-purple-50 hover:text-purple-600'
-            }`}>
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${tab === t ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-purple-50 hover:text-purple-600'
+              }`}>
             {t}
           </button>
         ))}
@@ -619,8 +620,8 @@ function CourseStatusBadge({ status, onChange, disabled }) {
     const colorClass = status === 'DRAFT'
       ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
       : status === 'ARCHIVED'
-      ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
-      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+        ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
 
     return (
       <span
@@ -674,28 +675,269 @@ function StatusSelect({ value, onChange, small }) {
   )
 }
 
-function SyllabusMaterialBadge({ material }) {
-  const href = resolveFileUrl(material.url)
+function PdfCanvasViewer({ url, zoomMultiplier = 1 }) {
+  const scrollRef = useRef(null)
+  const canvasRefs = useRef([])
+  const renderTasksRef = useRef([])
+  const pdfRef = useRef(null)
+  const nativeWidthRef = useRef(null)
+
+  const [numPages, setNumPages] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setNumPages(0)
+    pdfRef.current = null
+    nativeWidthRef.current = null
+
+      ; (async () => {
+        try {
+          const pdfjsLib = await import('pdfjs-dist')
+          pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+          const pdf = await pdfjsLib.getDocument(url).promise
+          if (cancelled) return
+          const firstPage = await pdf.getPage(1)
+          nativeWidthRef.current = firstPage.getViewport({ scale: 1 }).width
+          pdfRef.current = pdf
+          setNumPages(pdf.numPages)
+        } catch (e) {
+          console.error(e)
+          if (!cancelled) setError('Failed to load PDF preview')
+        } finally {
+          if (!cancelled) setLoading(false)
+        }
+      })()
+
+    return () => { cancelled = true }
+  }, [url])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect?.width
+      if (width) setContainerWidth(width)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const baseScale = containerWidth && nativeWidthRef.current
+    ? (containerWidth - 32) / nativeWidthRef.current
+    : 1
+  const effectiveScale = Math.max(0.1, baseScale * zoomMultiplier)
+
+  useEffect(() => {
+    const pdf = pdfRef.current
+    if (!pdf || numPages === 0 || !containerWidth) return
+    let cancelled = false
+
+    renderTasksRef.current.forEach(t => t?.cancel?.())
+    renderTasksRef.current = []
+
+    const outputScale = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3)
+
+      ; (async () => {
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+          if (cancelled) return
+          const canvas = canvasRefs.current[pageNum - 1]
+          if (!canvas) continue
+          const page = await pdf.getPage(pageNum)
+          const cssViewport = page.getViewport({ scale: effectiveScale })
+          const renderViewport = page.getViewport({ scale: effectiveScale * outputScale })
+
+          canvas.width = Math.ceil(renderViewport.width)
+          canvas.height = Math.ceil(renderViewport.height)
+          canvas.style.width = `${Math.ceil(cssViewport.width)}px`
+          canvas.style.height = `${Math.ceil(cssViewport.height)}px`
+
+          const ctx = canvas.getContext('2d')
+          const task = page.render({ canvasContext: ctx, viewport: renderViewport })
+          renderTasksRef.current[pageNum - 1] = task
+          try {
+            await task.promise
+          } catch (e) {
+            if (e?.name !== 'RenderingCancelledException') console.error(e)
+          }
+        }
+      })()
+
+    return () => { cancelled = true }
+  }, [numPages, containerWidth, effectiveScale])
+
+  useEffect(() => () => pdfRef.current?.destroy?.(), [])
+
+  if (error) {
+    return <div className="flex-1 flex items-center justify-center text-sm text-gray-500">{error}</div>
+  }
+
   return (
-    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border border-purple-100 dark:border-purple-900/40 bg-purple-50/70 dark:bg-purple-950/20 text-xs">
-      <span className="text-sm flex-shrink-0">
-        {material.type === 'PDF' ? '📄' : material.type === 'VIDEO' ? '🎬' : material.type === 'PRESENTATION' ? '🖥️' : material.type === 'LINK' ? '🔗' : '📁'}
-      </span>
-      <span className="font-medium text-gray-700 dark:text-gray-200 truncate max-w-[180px]" title={material.title}>
-        {material.title}
-      </span>
-      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 uppercase">
-        {material.type}
-      </span>
-      {material.visibility && material.visibility !== 'PUBLISHED' && (
-        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-700">
-          {material.visibility}
-        </span>
-      )}
-      <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-800 ml-0.5">
-        <ExternalLink size={11} />
-      </a>
+    <div
+      ref={scrollRef}
+      onContextMenu={e => e.preventDefault()}
+      className="flex-1 min-h-0 h-full w-full overflow-y-auto overflow-x-auto bg-gray-950 flex flex-col items-center gap-6 p-6 select-none"
+    >
+      {loading && <p className="text-sm text-gray-400 py-8">Loading PDF preview…</p>}
+      {Array.from({ length: numPages }).map((_, i) => (
+        <canvas key={i} ref={el => (canvasRefs.current[i] = el)} className="shadow-2xl bg-white rounded-xs mb-2" />
+      ))}
     </div>
+  )
+}
+
+function MaterialPreviewModal({ material, onClose }) {
+  const [mounted, setMounted] = useState(false)
+  const [zoomMultiplier, setZoomMultiplier] = useState(0.5)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  if (!material || !mounted) return null
+
+  const fileUrl = resolveFileUrl(material.url)
+  const isPdf = material.type === 'PDF' || /\.pdf($|\?)/i.test(material.url || '')
+  const isVideo = material.type === 'VIDEO' || /\.(mp4|mov|webm|mkv)($|\?)/i.test(material.url || '')
+  const isImage = /\.(jpg|jpeg|png|webp|gif|svg)($|\?)/i.test(material.url || '')
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] bg-gray-950 w-screen h-screen flex flex-col overflow-hidden animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="w-full h-full flex flex-col bg-white dark:bg-gray-900 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0 z-10 shadow-xs">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <span className="text-xl flex-shrink-0">
+              {isPdf ? '📄' : isVideo ? '🎬' : material.type === 'PRESENTATION' ? '🖥️' : material.type === 'LINK' ? '🔗' : '📁'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display font-bold text-sm sm:text-base text-gray-900 dark:text-white truncate">
+                {material.title}
+              </h3>
+              {material.description && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{material.description}</p>
+              )}
+            </div>
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 uppercase flex-shrink-0">
+              {material.type}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isPdf && (
+              <div className="flex items-center gap-1 mr-2 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setZoomMultiplier(z => Math.max(0.2, +(z - 0.1).toFixed(2)))}
+                  className="p-1 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700"
+                  title="Zoom out"
+                >
+                  <ZoomOut size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomMultiplier(0.5)}
+                  className="text-xs font-semibold text-gray-600 dark:text-gray-300 w-12 text-center hover:text-purple-600"
+                  title="Reset to 50%"
+                >
+                  {Math.round(zoomMultiplier * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomMultiplier(z => Math.min(3, +(z + 0.1).toFixed(2)))}
+                  className="p-1 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700"
+                  title="Zoom in"
+                >
+                  <ZoomIn size={16} />
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 transition-colors"
+              title="Close View"
+            >
+              <X size={16} />
+              <span>Close</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Content Preview */}
+        <div className="flex-1 min-h-0 w-full bg-gray-100 dark:bg-gray-950 flex items-center justify-center relative overflow-hidden">
+          {isPdf ? (
+            <PdfCanvasViewer url={fileUrl} zoomMultiplier={zoomMultiplier} />
+          ) : isVideo ? (
+            <video
+              controls
+              autoPlay
+              controlsList="nodownload"
+              src={fileUrl}
+              className="max-w-full max-h-full rounded-lg shadow-lg"
+            />
+          ) : isImage ? (
+            <img
+              src={fileUrl}
+              alt={material.title}
+              className="max-w-full max-h-full object-contain p-4 select-none"
+            />
+          ) : (
+            <div className="text-center p-8 max-w-md space-y-3">
+              <div className="w-16 h-16 rounded-2xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center mx-auto text-2xl">
+                📄
+              </div>
+              <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm">{material.title}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Direct in-browser preview is available for PDF, Video, and Image files.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function SyllabusMaterialBadge({ material }) {
+  const [previewing, setPreviewing] = useState(false)
+  return (
+    <>
+      <div
+        onClick={() => setPreviewing(true)}
+        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border border-purple-100 dark:border-purple-900/40 bg-purple-50/70 dark:bg-purple-950/20 text-xs cursor-pointer hover:bg-purple-100/70 dark:hover:bg-purple-900/40 transition-colors"
+        title={`Click to view: ${material.title}`}
+      >
+        <span className="text-sm flex-shrink-0">
+          {material.type === 'PDF' ? '📄' : material.type === 'VIDEO' ? '🎬' : material.type === 'PRESENTATION' ? '🖥️' : material.type === 'LINK' ? '🔗' : '📁'}
+        </span>
+        <span className="font-medium text-gray-700 dark:text-gray-200 truncate max-w-[180px]" title={material.title}>
+          {material.title}
+        </span>
+        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 uppercase">
+          {material.type}
+        </span>
+        {material.visibility && material.visibility !== 'PUBLISHED' && (
+          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-700">
+            {material.visibility}
+          </span>
+        )}
+        <span className="text-purple-600 hover:text-purple-800 ml-0.5">
+          <Eye size={11} />
+        </span>
+      </div>
+      {previewing && (
+        <MaterialPreviewModal material={material} onClose={() => setPreviewing(false)} />
+      )}
+    </>
   )
 }
 
@@ -1624,9 +1866,10 @@ function MaterialsTab({ courseId }) {
   const [editingId, setEditingId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [previewMaterial, setPreviewMaterial] = useState(null)
 
   useEffect(() => {
-    courseContentService.getModules(courseId).then(r => setModules(r.data || [])).catch(() => {})
+    courseContentService.getModules(courseId).then(r => setModules(r.data || [])).catch(() => { })
   }, [courseId])
 
   const topics = modules.find(m => String(m.id) === String(moduleId))?.topics || []
@@ -1724,7 +1967,7 @@ function MaterialsTab({ courseId }) {
     const newOrder = [...materials]
     const target = index + direction
     if (target < 0 || target >= newOrder.length) return
-    ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
+      ;[newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]]
     setMaterials(newOrder)
     try { await courseContentService.reorderMaterials(newOrder.map(m => m.id)) } catch { toast.error('Failed to reorder'); load() }
   }
@@ -1806,13 +2049,17 @@ function MaterialsTab({ courseId }) {
             ) : (
               <div className="space-y-2">
                 {materials.map((m, i) => (
-                  <div key={m.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate flex items-center gap-1.5">
-                        {m.title}
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0">{m.type}</span>
+                  <div key={m.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100/70 dark:hover:bg-gray-750 transition-colors">
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setPreviewMaterial(m)}>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate hover:text-purple-600 dark:hover:text-purple-400 transition-colors" title={m.title}>
+                          {m.title}
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0 whitespace-nowrap">
+                          {m.type}
+                        </span>
                         <StatusBadge status={m.visibility} />
-                      </p>
+                      </div>
                       {m.description && <p className="text-xs text-gray-400 truncate">{m.description}</p>}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -1832,6 +2079,13 @@ function MaterialsTab({ courseId }) {
             )}
           </div>
         </div>
+      )}
+
+      {previewMaterial && (
+        <MaterialPreviewModal
+          material={previewMaterial}
+          onClose={() => setPreviewMaterial(null)}
+        />
       )}
     </div>
   )

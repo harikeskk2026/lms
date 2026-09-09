@@ -112,13 +112,19 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
         ])
 
         if (stRes.status === 'fulfilled') {
-          students = (stRes.value.data?.students || stRes.value.data || []).slice(0, 5)
+          const stData = stRes.value?.data?.data || stRes.value?.data
+          const stList = Array.isArray(stData) ? stData : (stData?.students || [])
+          students = stList.slice(0, 5)
         }
         if (cRes.status === 'fulfilled') {
-          courses = (cRes.value.data || []).filter(c => c.title?.toLowerCase().includes(lower)).slice(0, 5)
+          const cData = cRes.value?.data || cRes.value
+          const cList = Array.isArray(cData) ? cData : (cData?.courses || [])
+          courses = cList.filter(c => c.title?.toLowerCase().includes(lower)).slice(0, 5)
         }
         if (bRes.status === 'fulfilled') {
-          batches = (bRes.value.data || []).filter(b => b.name?.toLowerCase().includes(lower) || b.course?.title?.toLowerCase().includes(lower)).slice(0, 5)
+          const bData = bRes.value?.data || bRes.value
+          const bList = Array.isArray(bData) ? bData : (bData?.batches || [])
+          batches = bList.filter(b => b.name?.toLowerCase().includes(lower) || b.course?.title?.toLowerCase().includes(lower)).slice(0, 5)
         }
       } else {
         const [cRes, aRes] = await Promise.allSettled([
@@ -127,10 +133,14 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
         ])
 
         if (cRes.status === 'fulfilled') {
-          courses = (cRes.value.data || []).filter(c => c.title?.toLowerCase().includes(lower)).slice(0, 5)
+          const cData = cRes.value?.data?.data || cRes.value?.data || cRes.value
+          const cList = Array.isArray(cData) ? cData : (cData?.courses || [])
+          courses = cList.filter(c => c.title?.toLowerCase().includes(lower)).slice(0, 5)
         }
         if (aRes.status === 'fulfilled') {
-          assignments = (aRes.value.data || []).filter(a => a.title?.toLowerCase().includes(lower)).slice(0, 5)
+          const aData = aRes.value?.data?.data || aRes.value?.data || aRes.value
+          const aList = Array.isArray(aData) ? aData : (aData?.assignments || [])
+          assignments = aList.filter(a => a.title?.toLowerCase().includes(lower)).slice(0, 5)
         }
       }
     } catch (err) {

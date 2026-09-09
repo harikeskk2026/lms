@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/students")
+@RequestMapping({"/api/students", "/api/admin/students"})
 public class StudentController {
 
     private final StudentService studentService;
