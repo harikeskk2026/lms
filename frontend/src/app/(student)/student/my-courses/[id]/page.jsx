@@ -1,12 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import {
-  Play, Download, ChevronDown, ExternalLink,
+  Play, ChevronDown, Eye,
 } from 'lucide-react'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import SkeletonCard from '@/components/student/SkeletonCard'
-import { resolveFileUrl } from '@/lib/api'
+import MaterialPreviewModal from '@/components/ui/MaterialPreviewModal'
 
 const TABS = ['Overview', 'Syllabus', 'Materials']
 const MATERIAL_ICONS = { PDF: '📄', DOCUMENT: '📃', PRESENTATION: '🖥️', VIDEO: '🎬', LINK: '🔗', OTHER: '📁' }
@@ -15,23 +15,19 @@ function getMaterialAction(type) {
   switch (type) {
     case 'VIDEO':
       return { icon: <Play size={12} />, label: 'Watch' }
-    case 'LINK':
-      return { icon: <ExternalLink size={12} />, label: 'Visit' }
-    case 'PDF':
-    case 'DOCUMENT':
-    case 'PRESENTATION':
-      return { icon: <ExternalLink size={12} />, label: 'Open' }
     default:
-      return { icon: <Download size={12} />, label: 'Download' }
+      return { icon: <Eye size={12} />, label: 'View' }
   }
 }
 
-function MaterialItem({ material, compact = false }) {
+function MaterialItem({ material, compact = false, onView }) {
   const action = getMaterialAction(material.type)
-  const href = resolveFileUrl(material.url)
 
   return (
-    <div className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border border-purple-100/70 dark:border-purple-900/40 bg-white/80 dark:bg-purple-950/20 hover:bg-purple-50/70 dark:hover:bg-purple-900/30 transition-colors ${compact ? 'text-xs' : ''}`}>
+    <div
+      onClick={() => onView?.(material)}
+      className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border border-purple-100/70 dark:border-purple-900/40 bg-white/80 dark:bg-purple-950/20 hover:bg-purple-50/70 dark:hover:bg-purple-900/30 transition-colors cursor-pointer ${compact ? 'text-xs' : ''}`}
+    >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <span className="text-lg flex-shrink-0">{MATERIAL_ICONS[material.type] || '📁'}</span>
         <div className="min-w-0 flex-1">
@@ -46,20 +42,22 @@ function MaterialItem({ material, compact = false }) {
           {material.type}
         </span>
       </div>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="chip bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60 transition-colors text-[11px] px-2.5 py-1 flex items-center gap-1 font-semibold flex-shrink-0"
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onView?.(material)
+        }}
+        className="chip bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60 transition-colors text-[11px] px-2.5 py-1 flex items-center gap-1 font-semibold flex-shrink-0 cursor-pointer"
       >
         {action.icon}
         <span>{action.label}</span>
-      </a>
+      </button>
     </div>
   )
 }
 
-function ModuleAccordion({ mod }) {
+function ModuleAccordion({ mod, onViewMaterial }) {
   const [open, setOpen] = useState(false)
   const hasModuleMaterials = mod.materials && mod.materials.length > 0
   const topics = mod.topics || []
@@ -92,7 +90,7 @@ function ModuleAccordion({ mod }) {
           {hasModuleMaterials && (
             <div className="space-y-1.5 pb-2">
               {mod.materials.map(m => (
-                <MaterialItem key={m.id} material={m} compact />
+                <MaterialItem key={m.id} material={m} compact onView={onViewMaterial} />
               ))}
             </div>
           )}
@@ -116,7 +114,7 @@ function ModuleAccordion({ mod }) {
                   {hasTopicMaterials && (
                     <div className="mt-2 space-y-1.5 pl-2">
                       {t.materials.map(m => (
-                        <MaterialItem key={m.id} material={m} compact />
+                        <MaterialItem key={m.id} material={m} compact onView={onViewMaterial} />
                       ))}
                     </div>
                   )}
@@ -139,6 +137,7 @@ export default function MyCourseDetailPage({ params }) {
   const [syllabus, setSyllabus] = useState(null)
   const [materials, setMaterials] = useState(null)
   const [typeFilter, setTypeFilter] = useState('ALL')
+  const [previewMaterial, setPreviewMaterial] = useState(null)
 
   const loadData = useCallback(() => {
     courseService.get(id)
@@ -180,7 +179,7 @@ export default function MyCourseDetailPage({ params }) {
     )
   }
 
-  const courseMaterials = (materials || []).filter(m => !m.moduleId && !m.topicId && !m.sessionId)
+  const courseMaterials = (materials || []).filter(m => !m.moduleId && !m.topicId)
   const matTypes = materials ? [...new Set(materials.map(m => m.type))] : []
   const filteredMats = materials ? (typeFilter === 'ALL' ? materials : materials.filter(m => m.type === typeFilter)) : []
 
@@ -216,11 +215,10 @@ export default function MyCourseDetailPage({ params }) {
       <div className="glass-card p-5">
         {tab === 'Overview' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 { label: 'Modules', value: syllabus?.length ?? '—', icon: '📚' },
                 { label: 'Topics', value: syllabus?.reduce((s, m) => s + (m.topics || []).length, 0) ?? '—', icon: '📝' },
-                { label: 'Sessions', value: sessions?.length ?? '—', icon: '🎬' },
                 { label: 'Materials', value: materials?.length ?? '—', icon: '📄' },
               ].map(s => (
                 <div key={s.label} className="bg-purple-50/70 dark:bg-purple-900/20 rounded-xl p-4 text-center">
@@ -248,12 +246,12 @@ export default function MyCourseDetailPage({ params }) {
                     </div>
                     <div className="space-y-1.5">
                       {courseMaterials.map(m => (
-                        <MaterialItem key={m.id} material={m} compact />
+                        <MaterialItem key={m.id} material={m} compact onView={setPreviewMaterial} />
                       ))}
                     </div>
                   </div>
                 )}
-                {syllabus.map(mod => <ModuleAccordion key={mod.id} mod={mod} />)}
+                {syllabus.map(mod => <ModuleAccordion key={mod.id} mod={mod} onViewMaterial={setPreviewMaterial} />)}
               </div>
             )
         )}
@@ -274,19 +272,21 @@ export default function MyCourseDetailPage({ params }) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {filteredMats.map(m => {
-                    const levelLabel = m.sessionId ? 'Session' : m.topicId ? 'Topic' : m.moduleId ? 'Module' : 'Course'
-                    const levelColor = m.sessionId
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                      : m.topicId
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                        : m.moduleId
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                          : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                    const levelLabel = m.topicId ? 'Topic' : m.moduleId ? 'Module' : 'Course'
+                    const levelColor = m.topicId
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : m.moduleId
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
 
                     const action = getMaterialAction(m.type)
 
                     return (
-                      <div key={m.id} className="flex items-center gap-3 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/30 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors bg-white/60 dark:bg-purple-950/20">
+                      <div
+                        key={m.id}
+                        onClick={() => setPreviewMaterial(m)}
+                        className="flex items-center gap-3 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/30 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors bg-white/60 dark:bg-purple-950/20 cursor-pointer group"
+                      >
                         <span className="text-2xl flex-shrink-0">{MATERIAL_ICONS[m.type] || '📁'}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -300,11 +300,17 @@ export default function MyCourseDetailPage({ params }) {
                           <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm truncate" title={m.title}>{m.title}</p>
                           {m.description && <p className="text-xs text-gray-400 truncate mt-0.5">{m.description}</p>}
                         </div>
-                        <a href={resolveFileUrl(m.url)} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 chip bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 transition-colors text-xs px-2.5 py-1.5 font-semibold flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPreviewMaterial(m)
+                          }}
+                          className="flex items-center gap-1 chip bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 transition-colors text-xs px-2.5 py-1.5 font-semibold flex-shrink-0 cursor-pointer"
+                        >
                           {action.icon}
                           <span>{action.label}</span>
-                        </a>
+                        </button>
                       </div>
                     )
                   })}
@@ -313,6 +319,13 @@ export default function MyCourseDetailPage({ params }) {
             </div>
         )}
       </div>
+
+      {previewMaterial && (
+        <MaterialPreviewModal
+          material={previewMaterial}
+          onClose={() => setPreviewMaterial(null)}
+        />
+      )}
     </div>
   )
 }

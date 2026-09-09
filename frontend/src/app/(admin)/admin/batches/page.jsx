@@ -422,7 +422,7 @@ export default function BatchesPage() {
               />
             </div>
 
-            {/* Course & Trainer */}
+            {/* Course */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
               <select
@@ -434,12 +434,18 @@ export default function BatchesPage() {
                 <option value="">Select course</option>
                 {courses.filter(c => c.status === 'PUBLISHED').map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.title}
+                    {c.title} — {c.duration}
                   </option>
                 ))}
               </select>
+              {selectedCourse && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Selected course duration: <span className="font-semibold text-purple-600">{selectedCourse.duration}</span>
+                </p>
+              )}
             </div>
 
+            {/* Trainer */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
               <select
@@ -448,7 +454,7 @@ export default function BatchesPage() {
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
               >
                 <option value="">Select trainer (optional)</option>
-                {trainers.map(t => (
+                {trainers.filter(t => t.active !== false).map(t => (
                   <option key={t.id} value={t.id}>
                     {t.name}{t.designation ? ` (${t.designation})` : ''}
                   </option>
@@ -478,29 +484,6 @@ export default function BatchesPage() {
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-              <select value={form.courseId} onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))} required
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">Select course</option>
-                {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title} — {c.duration}</option>)}
-              </select>
-              {selectedCourse && (
-                <p className="text-xs text-gray-500 mt-1">Selected course duration: <span className="font-semibold text-purple-600">{selectedCourse.duration}</span></p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
-              <select value={form.trainerId} onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">Select trainer (optional)</option>
-                {trainers.filter(t => t.active !== false).map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}{t.designation ? ` (${t.designation})` : ''}
-                  </option>
-                ))}
-              </select>
             </div>
 
             {/* Dates */}
