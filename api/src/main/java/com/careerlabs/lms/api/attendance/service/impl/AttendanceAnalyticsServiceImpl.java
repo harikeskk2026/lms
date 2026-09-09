@@ -17,17 +17,22 @@ import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.meeting.entity.MeetingLink;
+import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
 public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsService {
 
     private final BatchRepository batchRepository;
@@ -36,6 +41,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
     private final AttendanceRepository attendanceRepository;
     private final AttendancePolicyService attendancePolicyService;
     private final AttendanceRiskService attendanceRiskService;
+    private final MeetingLinkRepository meetingLinkRepository;
 
     public AttendanceAnalyticsServiceImpl(
             BatchRepository batchRepository,
@@ -43,13 +49,15 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             DailyClassRepository dailyClassRepository,
             AttendanceRepository attendanceRepository,
             AttendancePolicyService attendancePolicyService,
-            AttendanceRiskService attendanceRiskService) {
+            AttendanceRiskService attendanceRiskService,
+            MeetingLinkRepository meetingLinkRepository) {
         this.batchRepository = batchRepository;
         this.studentRepository = studentRepository;
         this.dailyClassRepository = dailyClassRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendancePolicyService = attendancePolicyService;
         this.attendanceRiskService = attendanceRiskService;
+        this.meetingLinkRepository = meetingLinkRepository;
     }
 
     @Override
@@ -109,9 +117,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 ? (int) Math.round(totalStudentPctSum / totalBatchStudents)
                 : 0;
 
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
-        LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
-        int todaysClasses = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay).size();
+        int todaysClasses = getTodayClasses(LocalDate.now()).size();
         int unmarkedClasses = (int) dailyClassRepository.countByStatusAndDateLessThanEqual(ClassStatus.SCHEDULED, LocalDateTime.now());
 
         return new AttendanceCommandCenterResponse(totalStudents, todaysClasses, averageAttendance, below75Count, criticalCount, unmarkedClasses);
@@ -174,15 +180,11 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 ? (int) Math.round(totalStudentPctSum / totalStudents)
                 : 0;
 
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
-        LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
-        List<DailyClass> todayClasses = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay).stream()
-                .filter(c -> c.getBatch() != null && batchIds.contains(c.getBatch().getId()))
-                .toList();
-        int todaysClasses = todayClasses.size();
-        int unmarkedClasses = (int) todayClasses.stream()
-                .filter(c -> c.getStatus() == ClassStatus.SCHEDULED && !c.getDate().isAfter(LocalDateTime.now()))
+        List<TodayClassResponse> todayClasses = getTodayClasses(LocalDate.now());
+        int todaysClasses = (int) todayClasses.stream()
+                .filter(c -> c.batchId() != null && batchIds.contains(c.batchId()))
                 .count();
+        int unmarkedClasses = (int) dailyClassRepository.countByStatusAndDateLessThanEqual(ClassStatus.SCHEDULED, LocalDateTime.now());
 
         return new AttendanceCommandCenterResponse(totalStudents, todaysClasses, averageAttendance, below75Count, criticalCount, unmarkedClasses);
     }
@@ -190,9 +192,18 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
     @Override
     @Transactional(readOnly = true)
     public List<TodayClassResponse> getTodayClasses() {
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        return getTodayClasses(null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TodayClassResponse> getTodayClasses(LocalDate date) {
+        LocalDate targetDate = date != null ? date : LocalDate.now();
+        LocalDateTime startOfDay = targetDate.atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
+
         List<DailyClass> classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
+        List<MeetingLink> scheduledMeetings = meetingLinkRepository.findByScheduledStartBetweenOrderByScheduledStartAsc(startOfDay, endOfDay);
 
         List<Long> classIds = classes.stream().map(DailyClass::getId).toList();
         Map<Long, List<Attendance>> attendanceByClassId = classIds.isEmpty() ? Map.of() : attendanceRepository
@@ -207,8 +218,17 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 .findByBatchIdIn(batchIds).stream()
                 .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.collectingAndThen(Collectors.counting(), Long::intValue)));
 
+        Set<String> seenKeys = new HashSet<>();
         List<TodayClassResponse> result = new ArrayList<>();
+
         for (DailyClass cls : classes) {
+            String key = (cls.getBatch() != null ? cls.getBatch().getId() : "null")
+                    + "|" + (cls.getTitle() != null ? cls.getTitle().trim().toLowerCase() : "")
+                    + "|" + (cls.getDate() != null ? cls.getDate().toLocalDate() + "T" + cls.getDate().getHour() + ":" + cls.getDate().getMinute() : "");
+            if (!seenKeys.add(key)) {
+                continue;
+            }
+
             List<Attendance> attendances = attendanceByClassId.getOrDefault(cls.getId(), List.of());
             int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
             int absent = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
@@ -216,8 +236,8 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
 
             result.add(new TodayClassResponse(
                     cls.getId(),
-                    cls.getBatch().getId(),
-                    cls.getBatch().getName(),
+                    cls.getBatch() != null ? cls.getBatch().getId() : null,
+                    cls.getBatch() != null ? cls.getBatch().getName() : "All Batches",
                     cls.getDate(),
                     cls.getTitle(),
                     cls.getStatus(),
@@ -225,6 +245,27 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                     cls.getMeetLink(),
                     cls.getRecordingUrl()));
         }
+
+        // Include any scheduled MeetingLinks that don't have a DailyClass linked or matched
+        for (MeetingLink m : scheduledMeetings) {
+            String key = (m.getBatch() != null ? m.getBatch().getId() : "null")
+                    + "|" + (m.getTitle() != null ? m.getTitle().trim().toLowerCase() : "")
+                    + "|" + (m.getScheduledStart() != null ? m.getScheduledStart().toLocalDate() + "T" + m.getScheduledStart().getHour() + ":" + m.getScheduledStart().getMinute() : "");
+            if (m.getDailyClass() == null && seenKeys.add(key)) {
+                int totalStudents = m.getBatch() != null ? studentCountByBatchId.getOrDefault(m.getBatch().getId(), 0) : 0;
+                result.add(new TodayClassResponse(
+                        null,
+                        m.getBatch() != null ? m.getBatch().getId() : null,
+                        m.getBatch() != null ? m.getBatch().getName() : (m.getCourse() != null ? m.getCourse().getTitle() : "All Batches"),
+                        m.getScheduledStart(),
+                        m.getTitle(),
+                        ClassStatus.SCHEDULED,
+                        0, 0, totalStudents,
+                        m.getMeetUrl(),
+                        null));
+            }
+        }
+
         return result;
     }
 }

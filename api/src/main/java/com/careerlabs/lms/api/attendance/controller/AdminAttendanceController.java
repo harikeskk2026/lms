@@ -234,8 +234,9 @@ public class AdminAttendanceController {
     }
 
     @GetMapping("/attendance/today")
-    public ResponseEntity<ApiResponse<List<TodayClassResponse>>> getTodayClasses() {
-        return ResponseEntity.ok(ApiResponse.of(attendanceAnalyticsService.getTodayClasses()));
+    public ResponseEntity<ApiResponse<List<TodayClassResponse>>> getTodayClasses(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(ApiResponse.of(attendanceAnalyticsService.getTodayClasses(date)));
     }
 
     // ─── Correction Requests ────────────────────────────────────────────────────

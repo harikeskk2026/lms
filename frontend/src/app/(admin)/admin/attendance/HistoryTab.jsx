@@ -62,7 +62,7 @@ function StudentDetailModal({ studentId, onClose }) {
   const auditLogs = detail?.auditLogs || []
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
       <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-purple-100 dark:border-purple-900/40 p-6 overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         
         {/* Header */}

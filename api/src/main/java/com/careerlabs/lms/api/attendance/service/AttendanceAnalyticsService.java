@@ -12,4 +12,6 @@ public interface AttendanceAnalyticsService {
     AttendanceCommandCenterResponse getCommandCenterForBatches(List<Long> batchIds);
 
     List<TodayClassResponse> getTodayClasses();
+
+    List<TodayClassResponse> getTodayClasses(java.time.LocalDate date);
 }

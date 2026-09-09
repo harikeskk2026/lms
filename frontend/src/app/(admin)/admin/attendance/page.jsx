@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import {
   CheckSquare, Save, BarChart2, Bell, Users, BookOpen,
   ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
-  FileDown, RefreshCw, ChevronDown, Calendar, ClipboardList,
+  FileDown, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Calendar, ClipboardList,
   Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -952,8 +952,8 @@ function AlertsTab({ onAlertsChanged }) {
                         className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 transition-colors">
                         Resolve
                       </button>
-                      {alert.student?.userId && (
-                        <a href={`/admin/students/${alert.student.userId}`}
+                      {(alert.studentId || alert.student?.id || alert.student?.userId) && (
+                        <a href={`/admin/students/${alert.studentId || alert.student?.id || alert.student?.userId}`}
                           className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 hover:bg-purple-200 transition-colors">
                           View Student
                         </a>
@@ -1044,54 +1044,177 @@ function CommandCenterStrip({ refreshKey = 0 }) {
 function TodayTab() {
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
 
-  useEffect(() => {
-    adminApi.getTodayClasses()
-      .then(r => setClasses(r.data.data || []))
-      .catch(() => toast.error('Failed to load today\'s classes'))
+  const loadClasses = useCallback((dateStr) => {
+    setLoading(true)
+    adminApi.getTodayClasses(dateStr)
+      .then(r => {
+        const raw = r.data?.data || []
+        const seen = new Set()
+        const unique = []
+        for (const item of raw) {
+          const key = `${item.batchId || 'all'}-${(item.title || '').trim().toLowerCase()}-${item.date || ''}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            unique.push(item)
+          }
+        }
+        setClasses(unique)
+      })
+      .catch(() => toast.error('Failed to load scheduled classes'))
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="space-y-3">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+  useEffect(() => {
+    loadClasses(selectedDate)
+  }, [selectedDate, loadClasses])
 
-  if (classes.length === 0) {
-    return (
-      <GlassCard className="p-8 text-center">
-        <Calendar className="mx-auto mb-3 text-gray-400" size={32} />
-        <p className="text-gray-500 text-sm">No classes scheduled for today.</p>
-      </GlassCard>
-    )
+  const handlePrevDay = () => {
+    const d = new Date(selectedDate + 'T00:00:00')
+    d.setDate(d.getDate() - 1)
+    setSelectedDate(format(d, 'yyyy-MM-dd'))
   }
 
+  const handleNextDay = () => {
+    const d = new Date(selectedDate + 'T00:00:00')
+    d.setDate(d.getDate() + 1)
+    setSelectedDate(format(d, 'yyyy-MM-dd'))
+  }
+
+  const handleToday = () => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    if (selectedDate === todayStr) {
+      loadClasses(todayStr)
+    } else {
+      setSelectedDate(todayStr)
+    }
+  }
+
+  const isToday = selectedDate === format(new Date(), 'yyyy-MM-dd')
+  const dateObj = new Date(selectedDate + 'T00:00:00')
+  const formattedDateTitle = format(dateObj, 'EEEE, d MMMM yyyy')
+
   return (
-    <div className="space-y-3">
-      {classes.map(c => (
-        <GlassCard key={c.classId} className="p-4 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="font-semibold text-gray-800 dark:text-white">{c.title}</p>
-            <p className="text-xs text-gray-500">{c.batchName} · {format(new Date(c.date), 'h:mm a')}</p>
+    <div className="space-y-4">
+      {/* Date Navigation Bar */}
+      <GlassCard className="p-4 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrevDay}
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors"
+            title="Previous Day"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={e => e.target.value && setSelectedDate(e.target.value)}
+            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+          />
+
+          <button
+            onClick={handleNextDay}
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors"
+            title="Next Day"
+          >
+            <ChevronRight size={18} />
+          </button>
+
+          <button
+            onClick={handleToday}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              isToday
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50'
+            }`}
+          >
+            Today
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <span>{formattedDateTitle}</span>
+              {isToday && (
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  TODAY
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-gray-400">
+              {classes.length} class{classes.length === 1 ? '' : 'es'} scheduled
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-center">
-              <p className="text-sm font-bold text-green-600">{c.present}</p>
-              <p className="text-[10px] text-gray-400">Present</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-yellow-600">{c.absent}</p>
-              <p className="text-[10px] text-gray-400">Absent</p>
-            </div>
-            <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${c.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
-              {c.status === 'COMPLETED' ? 'Completed' : 'Pending'}
-            </span>
-            {c.meetLink && (
-              <a href={c.meetLink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Join</a>
-            )}
-            {c.recordingUrl && (
-              <a href={c.recordingUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Recording</a>
-            )}
-          </div>
+          <button
+            onClick={() => loadClasses(selectedDate)}
+            className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={15} />
+          </button>
+        </div>
+      </GlassCard>
+
+      {/* Class List */}
+      {loading ? (
+        <div className="space-y-3">
+          {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}
+        </div>
+      ) : classes.length === 0 ? (
+        <GlassCard className="p-8 text-center">
+          <Calendar className="mx-auto mb-3 text-gray-400" size={36} />
+          <p className="text-gray-700 dark:text-gray-300 font-semibold text-sm">No classes scheduled for {formattedDateTitle}</p>
+          <p className="text-gray-400 text-xs mt-1">Select another date or jump back to today to view scheduled sessions.</p>
+          {!isToday && (
+            <button
+              onClick={handleToday}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+            >
+              <Calendar size={14} /> View Today's Classes
+            </button>
+          )}
         </GlassCard>
-      ))}
+      ) : (
+        <div className="space-y-3">
+          {classes.map((c, idx) => (
+            <GlassCard key={c.classId ? `class-${c.classId}` : `meeting-${c.title}-${c.date}-${idx}`} className="p-4 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-white">{c.title}</p>
+                <p className="text-xs text-gray-500">{c.batchName} · {c.date ? format(new Date(c.date), 'h:mm a') : '—'}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <p className="text-sm font-bold text-green-600">{c.present}</p>
+                  <p className="text-[10px] text-gray-400">Present</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-yellow-600">{c.absent}</p>
+                  <p className="text-[10px] text-gray-400">Absent</p>
+                </div>
+                {c.totalStudents > 0 && (
+                  <div className="text-center hidden sm:block">
+                    <p className="text-sm font-bold text-purple-600">{c.totalStudents}</p>
+                    <p className="text-[10px] text-gray-400">Total</p>
+                  </div>
+                )}
+                <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${c.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
+                  {c.status === 'COMPLETED' ? 'Completed' : 'Pending'}
+                </span>
+                {c.meetLink && (
+                  <a href={c.meetLink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Join</a>
+                )}
+                {c.recordingUrl && (
+                  <a href={c.recordingUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Recording</a>
+                )}
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

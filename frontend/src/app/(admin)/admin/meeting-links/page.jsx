@@ -8,10 +8,12 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
+import batchService from '@/services/batchService'
 import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import SlidePanel from '@/components/admin/SlidePanel'
 
-const PLATFORMS = ['ZOOM', 'CUSTOM']
+const PLATFORMS = ['ZOOM']
 const STATUSES = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED']
 
 const STATUS_BADGE = {
@@ -39,6 +41,7 @@ export default function AdminMeetingLinksPage() {
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filterCourse, setFilterCourse] = useState('')
   const [filterBatch, setFilterBatch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -54,17 +57,24 @@ export default function AdminMeetingLinksPage() {
   const [attendees, setAttendees] = useState([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
 
-  const loadData = async () => {
+  const extractList = (r) => {
+    if (Array.isArray(r)) return r
+    if (Array.isArray(r?.data)) return r.data
+    if (Array.isArray(r?.data?.data)) return r.data.data
+    if (Array.isArray(r?.content)) return r.content
+    if (Array.isArray(r?.data?.content)) return r.data.content
+    return []
+  }
+
+  const getBatchCourseId = (b) => b?.course?.id ?? b?.courseId ?? ''
+  const getBatchCourseTitle = (b) => b?.course?.title ?? b?.courseName ?? b?.courseTitle ?? ''
+
+  const loadMeetings = async () => {
     setLoading(true)
     try {
-      const [mRes, bRes, cRes] = await Promise.all([
-        adminApi.getMeetings({ batchId: filterBatch || undefined, status: filterStatus || undefined }),
-        adminApi.getBatches(),
-        courseService.list().catch(() => ({ data: [] })),
-      ])
-      setMeetings(mRes.data?.data || [])
-      setBatches(bRes.data?.data || [])
-      setCourses(cRes.data || [])
+      const mRes = await adminApi.getMeetings({ batchId: filterBatch || undefined, status: filterStatus || undefined })
+      const mList = extractList(mRes?.data) || extractList(mRes) || []
+      setMeetings(mList)
     } catch {
       toast.error('Failed to load scheduled classes')
     } finally {
@@ -72,12 +82,47 @@ export default function AdminMeetingLinksPage() {
     }
   }
 
+  const loadBatchesAndCourses = async () => {
+    try {
+      const [bRes, cRes] = await Promise.allSettled([
+        batchService.list(),
+        courseService.list()
+      ])
+      if (bRes.status === 'fulfilled') {
+        setBatches(extractList(bRes.value))
+      }
+      if (cRes.status === 'fulfilled') {
+        setCourses(extractList(cRes.value))
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const loadData = () => {
+    loadBatchesAndCourses()
+    loadMeetings()
+  }
+
   useEffect(() => {
-    loadData()
+    loadBatchesAndCourses()
+  }, [])
+
+  useEffect(() => {
+    loadMeetings()
+    const interval = setInterval(() => {
+      adminApi.getMeetings({ batchId: filterBatch || undefined, status: filterStatus || undefined })
+        .then(mRes => {
+          const mList = extractList(mRes?.data) || extractList(mRes) || []
+          setMeetings(mList)
+        })
+        .catch(() => {})
+    }, 15000)
+    return () => clearInterval(interval)
   }, [filterBatch, filterStatus])
 
   const batchOptionsForForm = form.courseId
-    ? batches.filter(b => String(b.course?.id) === String(form.courseId))
+    ? batches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
     : batches
 
   const openCreate = () => {
@@ -88,13 +133,19 @@ export default function AdminMeetingLinksPage() {
 
   const openEdit = (m) => {
     setEditingId(m.id)
+    const matchingBatch = batches.find(b => String(b.id) === String(m.batchId))
+    const courseId = m.courseId
+      ? String(m.courseId)
+      : matchingBatch
+      ? String(getBatchCourseId(matchingBatch))
+      : ''
     setForm({
       title: m.title || '',
       description: m.description || '',
       meetUrl: m.meetUrl || '',
       platform: m.platform || 'ZOOM',
-      batchId: m.batchId || '',
-      courseId: m.courseId || '',
+      batchId: m.batchId ? String(m.batchId) : '',
+      courseId: courseId,
       hostName: m.hostName || '',
       scheduledStart: m.scheduledStart ? m.scheduledStart.slice(0, 16) : '',
       scheduledEnd: m.scheduledEnd ? m.scheduledEnd.slice(0, 16) : '',
@@ -194,15 +245,26 @@ export default function AdminMeetingLinksPage() {
   }
 
   const filteredMeetings = meetings.filter(m => {
+    if (filterCourse) {
+      const matchesCourse = String(m.courseId) === String(filterCourse) || (m.batchId && batches.some(b => String(b.id) === String(m.batchId) && String(getBatchCourseId(b)) === String(filterCourse)))
+      if (!matchesCourse) return false
+    }
+    if (filterBatch && String(m.batchId) !== String(filterBatch)) return false
+    if (filterStatus && m.status !== filterStatus) return false
     if (!searchQuery) return true
     const q = searchQuery.toLowerCase()
     return (
       m.title?.toLowerCase().includes(q) ||
       m.hostName?.toLowerCase().includes(q) ||
       m.batchName?.toLowerCase().includes(q) ||
+      m.courseTitle?.toLowerCase().includes(q) ||
       m.meetUrl?.toLowerCase().includes(q)
     )
   })
+
+  const filterBatchesList = filterCourse
+    ? batches.filter(b => String(getBatchCourseId(b)) === String(filterCourse))
+    : batches
 
   const liveCount = meetings.filter(m => m.status === 'LIVE').length
   const scheduledCount = meetings.filter(m => m.status === 'SCHEDULED').length
@@ -275,8 +337,8 @@ export default function AdminMeetingLinksPage() {
 
       {/* Filters Bar */}
       <div className="glass-card p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-[240px]">
-          <div className="relative flex-1 max-w-xs">
+        <div className="flex items-center gap-3 flex-1 min-w-[240px] flex-wrap">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -288,12 +350,23 @@ export default function AdminMeetingLinksPage() {
           </div>
 
           <select
+            value={filterCourse}
+            onChange={e => { setFilterCourse(e.target.value); setFilterBatch('') }}
+            className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="">All Courses</option>
+            {courses.map(c => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+
+          <select
             value={filterBatch}
             onChange={e => setFilterBatch(e.target.value)}
             className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
           >
             <option value="">All Batches</option>
-            {batches.map(b => (
+            {filterBatchesList.map(b => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
@@ -456,244 +529,237 @@ export default function AdminMeetingLinksPage() {
         </div>
       )}
 
-      {/* Slide / Modal Form Panel */}
-      {panelOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-lg md:max-w-xl bg-white dark:bg-gray-900 h-full overflow-y-auto overflow-x-hidden p-6 shadow-2xl space-y-5 animate-slideIn">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
-              <h2 className="font-display font-bold text-lg text-gray-900 dark:text-white">
-                {editingId ? 'Edit Scheduled Class' : 'Schedule Class'}
-              </h2>
-              <button
-                onClick={() => setPanelOpen(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+      {/* Schedule / Edit Class SlidePanel */}
+      <SlidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={editingId ? 'Edit Scheduled Class' : 'Schedule Class'}
+        subtitle={editingId ? 'Update meeting details, date/time or batch targeting' : 'Publish a new live class meeting link'}
+        width="w-full max-w-lg md:max-w-xl"
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+              Title *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. React & Next.js Live Class"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+              Platform *
+            </label>
+            <select
+              value={form.platform}
+              onChange={e => setForm(f => ({ ...f, platform: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="ZOOM">Zoom</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                Course
+              </label>
+              <select
+                value={form.courseId}
+                onChange={e => {
+                  const courseId = e.target.value
+                  setForm(f => {
+                    const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(courseId))
+                    return { ...f, courseId, batchId: stillValid ? f.batchId : '' }
+                  })
+                }}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
               >
-                ✕
-              </button>
+                <option value="">Select Course</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>{c.title || c.name}</option>
+                ))}
+              </select>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. React & Next.js Live Class"
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Platform *
-                </label>
-                <select
-                  value={form.platform}
-                  onChange={e => setForm(f => ({ ...f, platform: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="ZOOM">Zoom</option>
-                  <option value="CUSTOM">Custom Meeting URL</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Course
-                  </label>
-                  <select
-                    value={form.courseId}
-                    onChange={e => {
-                      const courseId = e.target.value
-                      setForm(f => {
-                        const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(b.course?.id) === String(courseId))
-                        return { ...f, courseId, batchId: stillValid ? f.batchId : '' }
-                      })
-                    }}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">All Courses</option>
-                    {courses.map(c => (
-                      <option key={c.id} value={c.id}>{c.title}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Target Batch
-                  </label>
-                  <select
-                    value={form.batchId}
-                    onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">All Batches</option>
-                    {batchOptionsForForm.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Meeting URL *
-                </label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://zoom.us/j/123456789 or custom URL"
-                  value={form.meetUrl}
-                  onChange={e => setForm(f => ({ ...f, meetUrl: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Host Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Prof. Arjun"
-                  value={form.hostName}
-                  onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Scheduled Start *
-                  </label>
-                  <DateTimePicker12h
-                    required
-                    value={form.scheduledStart}
-                    onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Scheduled End (Optional)
-                  </label>
-                  <DateTimePicker12h
-                    value={form.scheduledEnd}
-                    onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Passcode (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 123456"
-                  value={form.passcode}
-                  onChange={e => setForm(f => ({ ...f, passcode: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Description / Agenda
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Topics to be covered in this live session..."
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setPanelOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw size={15} className="animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    editingId ? 'Save Changes' : 'Schedule Class'
-                  )}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                Target Batch
+              </label>
+              <select
+                value={form.batchId}
+                onChange={e => {
+                  const batchId = e.target.value
+                  if (batchId) {
+                    const selectedBatch = batches.find(b => String(b.id) === String(batchId))
+                    const bCourseId = getBatchCourseId(selectedBatch)
+                    if (bCourseId && !form.courseId) {
+                      setForm(f => ({ ...f, batchId, courseId: String(bCourseId) }))
+                      return
+                    }
+                  }
+                  setForm(f => ({ ...f, batchId }))
+                }}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">
+                  {form.courseId ? 'Select Batch (or all batches in course)' : 'Select Batch'}
+                </option>
+                {batchOptionsForForm.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name || b.title} {!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+              Meeting URL *
+            </label>
+            <input
+              type="url"
+              required
+              placeholder="https://zoom.us/j/123456789"
+              value={form.meetUrl}
+              onChange={e => setForm(f => ({ ...f, meetUrl: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+              Host Name
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Prof. Arjun"
+              value={form.hostName}
+              onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                Scheduled Start *
+              </label>
+              <DateTimePicker12h
+                required
+                value={form.scheduledStart}
+                onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                Scheduled End (Optional)
+              </label>
+              <DateTimePicker12h
+                value={form.scheduledEnd}
+                onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+              Passcode (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. 123456"
+              value={form.passcode}
+              onChange={e => setForm(f => ({ ...f, passcode: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+              Description / Agenda
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Topics to be covered in this live session..."
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <RefreshCw size={15} className="animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                editingId ? 'Save Changes' : 'Schedule Class'
+              )}
+            </button>
+          </div>
+        </form>
+      </SlidePanel>
 
       {/* Attendees Panel */}
-      {attendeesMeeting && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white dark:bg-gray-900 h-full overflow-y-auto p-6 shadow-2xl space-y-4 animate-slideIn">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
-              <div>
-                <h2 className="font-display font-bold text-lg text-gray-900 dark:text-white">Who Joined</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{attendeesMeeting.title}</p>
-              </div>
-              <button
-                onClick={() => setAttendeesMeeting(null)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            {loadingAttendees ? (
-              <div className="space-y-2">
-                {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}
-              </div>
-            ) : attendees.length === 0 ? (
-              <div className="text-center py-10 text-gray-400">
-                <Users size={32} className="mx-auto mb-2 text-gray-300 dark:text-gray-700" />
-                <p className="font-semibold text-gray-600 dark:text-gray-300 text-sm">No one has joined yet</p>
-                <p className="text-xs text-gray-400 mt-1">This fills in as students click "Join Meeting" on their side.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{attendees.length} student{attendees.length === 1 ? '' : 's'} joined</p>
-                {attendees.map(a => (
-                  <div key={a.studentUserId} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{a.name}</p>
-                      {a.email && <p className="text-xs text-gray-400 truncate">{a.email}</p>}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{format(new Date(a.firstJoinedAt), 'dd MMM, hh:mm a')}</p>
-                      {a.joinCount > 1 && (
-                        <p className="text-[10px] text-gray-400">Joined {a.joinCount}×</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+      <SlidePanel
+        open={Boolean(attendeesMeeting)}
+        onClose={() => setAttendeesMeeting(null)}
+        title="Who Joined"
+        subtitle={attendeesMeeting?.title}
+        width="w-full max-w-md"
+      >
+        {loadingAttendees ? (
+          <div className="space-y-2">
+            {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}
           </div>
-        </div>
-      )}
+        ) : attendees.length === 0 ? (
+          <div className="text-center py-10 text-gray-400">
+            <Users size={32} className="mx-auto mb-2 text-gray-300 dark:text-gray-700" />
+            <p className="font-semibold text-gray-600 dark:text-gray-300 text-sm">No one has joined yet</p>
+            <p className="text-xs text-gray-400 mt-1">This fills in as students click "Join Meeting" on their side.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{attendees.length} student{attendees.length === 1 ? '' : 's'} joined</p>
+            {attendees.map(a => (
+              <div key={a.studentUserId} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{a.name}</p>
+                  {a.email && <p className="text-xs text-gray-400 truncate">{a.email}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{format(new Date(a.firstJoinedAt), 'dd MMM, hh:mm a')}</p>
+                  {a.joinCount > 1 && (
+                    <p className="text-[10px] text-gray-400">Joined {a.joinCount}×</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SlidePanel>
 
       <DeleteConfirmModal
         isOpen={Boolean(deletingMeeting)}

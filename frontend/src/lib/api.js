@@ -140,6 +140,9 @@ export const adminApi = {
   deleteTrainer: (id) => api.delete(`/trainers/${id}`),
 
 
+  // Courses
+  getCourses: (params) => api.get('/courses', { params }),
+
   // Batches
   getBatches: (params) => api.get('/batches', { params }),
   createBatch: (data) => api.post('/batches', data),
@@ -165,7 +168,7 @@ export const adminApi = {
   generateAlerts: (params) => api.post('/admin/attendance/alerts/generate', null, { params }),
   resolveAlert: (id) => api.patch(`/admin/attendance/alerts/${id}/resolve`),
   getAttendanceDashboard: () => api.get('/admin/attendance/dashboard'),
-  getTodayClasses: () => api.get('/admin/attendance/today'),
+  getTodayClasses: (date) => api.get('/admin/attendance/today', { params: date ? { date } : {} }),
   copyPreviousAttendance: (classId) => api.get(`/admin/attendance/${classId}/copy-previous`),
   saveAttendanceDraft: (classId, records) => api.post(`/admin/attendance/${classId}`, { records }, { params: { submit: false } }),
   submitAttendance: (classId, records) => api.post(`/admin/attendance/${classId}`, { records }, { params: { submit: true } }),
@@ -178,6 +181,14 @@ export const adminApi = {
   getAttendanceAuditLogs: (params) => api.get('/admin/attendance/audit-logs', { params }),
   getStudentAuditLogs: (id) => api.get(`/admin/attendance/student/${id}/audit-logs`),
   exportCSV: (params) => api.get('/reports/export', { params }),
+
+  // Meeting Links / Scheduled Classes
+  getMeetings: (params) => api.get('/admin/meetings', { params }),
+  createMeeting: (data) => api.post('/admin/meetings', data),
+  updateMeeting: (id, data) => api.put(`/admin/meetings/${id}`, data),
+  updateMeetingStatus: (id, status) => api.patch(`/admin/meetings/${id}/status`, null, { params: { status } }),
+  deleteMeeting: (id) => api.delete(`/admin/meetings/${id}`),
+  getMeetingAttendees: (id) => api.get(`/admin/meetings/${id}/attendees`),
 
   // Quizzes
   getQuizzes: (params) => api.get('/admin/quizzes', { params }),
@@ -306,12 +317,15 @@ export const studentApi = {
   }),
 
   // Mock Analytics
-  getMockAnalytics: () => api.get('/student/mock-analytics'),
-
   // Announcements
   getAnnouncements: () => api.get('/student/announcements'),
   markAnnouncementViewed: (id) => api.post(`/student/announcements/${id}/view`),
   acknowledgeAnnouncement: (id) => api.post(`/student/announcements/${id}/acknowledge`),
   getAnnouncementComments: (id) => api.get(`/student/announcements/${id}/comments`),
   addAnnouncementComment: (id, data) => api.post(`/student/announcements/${id}/comments`, data),
+
+  // Meeting Links
+  getMeetings: () => api.get('/student/meetings'),
+  getLiveMeetings: () => api.get('/student/meetings/live'),
+  joinMeeting: (id) => api.post(`/student/meetings/${id}/join`),
 }
