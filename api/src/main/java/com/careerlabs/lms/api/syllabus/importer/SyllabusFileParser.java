@@ -87,6 +87,11 @@ public class SyllabusFileParser {
         if (bytes.length == 0) throw new BadRequestException("File is empty");
         String content = new String(bytes, StandardCharsets.UTF_8).trim();
         if (content.isEmpty()) throw new BadRequestException("File is empty");
+        // Strip UTF-8 BOM if present (Excel exports CSV with BOM)
+        if (content.charAt(0) == '\uFEFF') {
+            content = content.substring(1);
+            bytes = content.getBytes(StandardCharsets.UTF_8);
+        }
         // Detect malformed by checking header line exists
         try (Reader reader = new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8);
              CSVParser parser = CSVFormat.DEFAULT

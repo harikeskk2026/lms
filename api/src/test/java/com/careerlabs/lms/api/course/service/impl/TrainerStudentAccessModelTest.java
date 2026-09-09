@@ -348,6 +348,23 @@ class TrainerStudentAccessModelTest {
         assertThrows(ForbiddenException.class, () -> accessGuard.requireContentAccess(studentPrincipal, courseB.getId()));
     }
 
+    @Test
+    @DisplayName("Student course access: allowed for Course B when actively enrolled even if assigned batch belongs to Course A")
+    void studentCourseAccess_enrolledWithoutBatchOrDifferentBatch_allowed() {
+        setId(studentEntity, 1L);
+        when(courseRepository.findById(courseB.getId())).thenReturn(Optional.of(courseB));
+        when(studentRepository.findByUserId(studentPrincipal.id()))
+                .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseB.getId()))
+                .thenReturn(true);
+
+        CourseResponse result = courseService.get(courseB.getId(), studentPrincipal);
+
+        assertNotNull(result);
+        assertEquals("Course B", result.title());
+        assertDoesNotThrow(() -> accessGuard.requireContentAccess(studentPrincipal, courseB.getId()));
+    }
+
     // ─────────────────────────────────────────────────────────────
     // 5. BATCH REASSIGNMENT TEST
     // ─────────────────────────────────────────────────────────────

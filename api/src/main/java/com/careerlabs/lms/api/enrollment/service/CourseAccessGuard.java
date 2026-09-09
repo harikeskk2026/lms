@@ -74,9 +74,18 @@ public class CourseAccessGuard {
             return false;
         }
         return studentRepository.findByUserId(principal.id())
-                .map(student -> student.getBatch() != null
-                        && student.getBatch().getCourse() != null
-                        && courseId.equals(student.getBatch().getCourse().getId()))
+                .map(student -> {
+                    boolean assignedInBatch = student.getBatch() != null
+                            && student.getBatch().getCourse() != null
+                            && courseId.equals(student.getBatch().getCourse().getId());
+                    if (assignedInBatch) {
+                        return true;
+                    }
+                    if (student.getId() != null) {
+                        return enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), courseId);
+                    }
+                    return false;
+                })
                 .orElse(false);
     }
 
@@ -96,7 +105,7 @@ public class CourseAccessGuard {
         return false;
     }
 
-    /** Course browsing/detail visibility: relationship-based AND status must be PUBLISHED. */
+
     public void requireVisible(JwtUserPrincipal principal, Course course) {
         if (principal == null) {
             throw new ForbiddenException("Authentication required");
