@@ -13,6 +13,7 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -20,6 +21,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/student/placement")
+@Transactional(readOnly = true)
 public class StudentPlacementHubController {
 
     private final StudentRepository studentRepository;
@@ -99,6 +101,7 @@ public class StudentPlacementHubController {
     }
 
     @PatchMapping("/profile")
+    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateProfile(@RequestBody Map<String, Object> body,
                                                                            @AuthenticationPrincipal JwtUserPrincipal principal) {
         Student student = studentRepository.findByUserId(principal.id())

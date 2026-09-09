@@ -25,6 +25,39 @@ const EMPTY_FORM = {
 
 const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
 
+function validateAssignmentDates(startDate, publishTime, dueDate, closeTime) {
+  if (!startDate || !dueDate) return null
+  const startDT = new Date(`${startDate}T${publishTime || '00:00'}`)
+  const dueDT = new Date(`${dueDate}T${closeTime || '23:59'}`)
+  if (dueDT < startDT) {
+    if (startDate > dueDate) {
+      return 'Due date cannot be earlier than publish / start date'
+    }
+    return 'Close time must be after publish time when on the same date'
+  }
+  return null
+}
+
+function validateTotalMarks(val) {
+  if (val === '' || val === null || val === undefined) {
+    return 'Total Marks is required'
+  }
+  const num = Number(val)
+  if (isNaN(num)) {
+    return 'Total Marks must be a valid number'
+  }
+  if (!Number.isInteger(num)) {
+    return 'Total Marks must be a whole integer number'
+  }
+  if (num < 1) {
+    return 'Total Marks must be at least 1'
+  }
+  if (num > 1000) {
+    return 'Total Marks cannot exceed 1000'
+  }
+  return null
+}
+
 export default function AssignmentsPage() {
   const router = useRouter()
   const [assignments, setAssignments] = useState([])
@@ -48,6 +81,9 @@ export default function AssignmentsPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const searchTimer = useRef(null)
+
+  const dateError = validateAssignmentDates(form.startDate, form.publishTime, form.dueDate, form.closeTime)
+  const marksError = validateTotalMarks(form.totalMarks)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -139,17 +175,17 @@ export default function AssignmentsPage() {
   })
 
   const handleSubmit = async (status) => {
-    if (!form.title || !form.description || !form.courseId || !form.batchId || !form.dueDate || !form.totalMarks) {
+    if (!form.title || !form.description || !form.courseId || !form.batchId || !form.dueDate || form.totalMarks === '' || form.totalMarks === null) {
       toast.error('Please fill in all required fields')
       return
     }
-    if (form.startDate && form.dueDate) {
-      const startDT = new Date(`${form.startDate}T${form.publishTime || '00:00'}`)
-      const dueDT = new Date(`${form.dueDate}T${form.closeTime || '23:59'}`)
-      if (dueDT < startDT) {
-        toast.error('Due date & close time must be after publish date & time')
-        return
-      }
+    if (dateError) {
+      toast.error(dateError)
+      return
+    }
+    if (marksError) {
+      toast.error(marksError)
+      return
     }
     setSaving(true)
     try {
@@ -444,7 +480,15 @@ export default function AssignmentsPage() {
               <input
                 type="date"
                 value={form.startDate}
-                onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                max={form.dueDate || undefined}
+                onChange={e => {
+                  const newStart = e.target.value
+                  setForm(f => ({
+                    ...f,
+                    startDate: newStart,
+                    dueDate: f.dueDate && newStart && f.dueDate < newStart ? '' : f.dueDate,
+                  }))
+                }}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
@@ -467,7 +511,9 @@ export default function AssignmentsPage() {
                 value={form.dueDate}
                 min={form.startDate || undefined}
                 onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                  dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
               />
             </div>
             <div>
@@ -480,14 +526,35 @@ export default function AssignmentsPage() {
               />
             </div>
           </div>
+
+          {dateError && (
+            <p className="text-xs text-red-500 font-medium -mt-1">{dateError}</p>
+          )}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total Marks *</label>
             <input
-              type="number" min="1"
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
               value={form.totalMarks}
-              onChange={e => setForm(f => ({ ...f, totalMarks: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              onKeyDown={e => {
+                // Disallow minus (-), plus (+), e/E, and period (.)
+                if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                  e.preventDefault()
+                }
+              }}
+              onChange={e => {
+                const val = e.target.value
+                setForm(f => ({ ...f, totalMarks: val }))
+              }}
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                marksError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+              }`}
             />
+            {marksError && (
+              <p className="text-xs text-red-500 font-medium mt-1">{marksError}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF, DOCX, or XLS only)</label>

@@ -434,7 +434,7 @@ export default function BatchesPage() {
                 <option value="">Select course</option>
                 {courses.filter(c => c.status === 'PUBLISHED').map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.title} — {c.duration}
+                    {c.title}{c.duration ? ` — ${c.duration}` : ''}
                   </option>
                 ))}
               </select>
@@ -445,7 +445,7 @@ export default function BatchesPage() {
               )}
             </div>
 
-            {/* Trainer */}
+            {/* Assign Lead Trainer */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
               <select

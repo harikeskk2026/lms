@@ -22,6 +22,7 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     List<Student> findByCourseIdIn(List<Long> courseIds);
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "batch", "college", "course"})
     Optional<Student> findByUserId(Long userId);
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user"})

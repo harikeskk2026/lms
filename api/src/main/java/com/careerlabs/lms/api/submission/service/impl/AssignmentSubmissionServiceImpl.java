@@ -23,6 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -37,17 +40,20 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
     private final AssignmentSubmissionRepository submissionRepository;
     private final AssignmentRepository assignmentRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final FileStorageService fileStorageService;
     private final NotificationService notificationService;
 
     public AssignmentSubmissionServiceImpl(AssignmentSubmissionRepository submissionRepository,
                                             AssignmentRepository assignmentRepository,
                                             StudentRepository studentRepository,
+                                            EnrollmentRepository enrollmentRepository,
                                             FileStorageService fileStorageService,
                                             NotificationService notificationService) {
         this.submissionRepository = submissionRepository;
         this.assignmentRepository = assignmentRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.fileStorageService = fileStorageService;
         this.notificationService = notificationService;
     }
@@ -125,7 +131,11 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
 
-        if (student.getBatch() == null || !student.getBatch().getId().equals(assignment.getBatch().getId())) {
+        boolean isEnrolledInBatch = (student.getBatch() != null && student.getBatch().getId().equals(assignment.getBatch().getId()))
+                || enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId()).stream()
+                        .anyMatch(e -> e.getBatch() != null && e.getBatch().getId().equals(assignment.getBatch().getId()));
+
+        if (!isEnrolledInBatch) {
             throw new BadRequestException("You are not enrolled in this assignment's batch");
         }
         if (submissionRepository.findByAssignmentIdAndStudentId(assignmentId, student.getId()).isPresent()) {

@@ -33,14 +33,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,12 +56,14 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final BatchRepository batchRepository;
     private final FileStorageService fileStorageService;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final AssignmentSubmissionRepository submissionRepository;
     private final NotificationService notificationService;
 
     public AssignmentServiceImpl(AssignmentRepository assignmentRepository, CourseRepository courseRepository,
                                   BatchRepository batchRepository, FileStorageService fileStorageService,
                                   StudentRepository studentRepository,
+                                  EnrollmentRepository enrollmentRepository,
                                   AssignmentSubmissionRepository submissionRepository,
                                   NotificationService notificationService) {
         this.assignmentRepository = assignmentRepository;
@@ -64,6 +71,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         this.batchRepository = batchRepository;
         this.fileStorageService = fileStorageService;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.submissionRepository = submissionRepository;
         this.notificationService = notificationService;
     }
@@ -97,12 +105,25 @@ public class AssignmentServiceImpl implements AssignmentService {
     public List<StudentAssignmentResponse> listForStudent(Long userId) {
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
-        if (student.getBatch() == null) {
+
+        Set<Long> batchIds = new LinkedHashSet<>();
+        if (student.getBatch() != null) {
+            batchIds.add(student.getBatch().getId());
+        }
+
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        for (Enrollment e : enrollments) {
+            if (e.getBatch() != null) {
+                batchIds.add(e.getBatch().getId());
+            }
+        }
+
+        if (batchIds.isEmpty()) {
             return List.of();
         }
 
-        List<Assignment> assignments = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
-                student.getBatch().getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
+        List<Assignment> assignments = assignmentRepository.findByBatchIdInAndStatusInOrderByDueDateAsc(
+                new ArrayList<>(batchIds), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
 
         List<Long> assignmentIds = assignments.stream().map(Assignment::getId).toList();
         Map<Long, AssignmentSubmission> submissionsByAssignmentId = assignmentIds.isEmpty()
