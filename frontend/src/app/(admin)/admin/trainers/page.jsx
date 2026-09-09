@@ -1,12 +1,14 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
+import courseService from '@/services/courseService'
 import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
+import SearchableSelect from '@/components/admin/SearchableSelect'
 import clsx from 'clsx'
 
 const EMPTY_FORM = {
@@ -16,6 +18,8 @@ const EMPTY_FORM = {
   phone: '',
   designation: '',
   department: '',
+  courseId: '',
+  batchId: '',
 }
 
 function genPassword() {
@@ -52,6 +56,10 @@ export default function TrainersPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
+  // Course and Batch options for assignment
+  const [courses, setCourses] = useState([])
+  const [batches, setBatches] = useState([])
+
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErr, setFormErr] = useState({})
   const [editingTrainer, setEditingTrainer] = useState(null)
@@ -63,6 +71,41 @@ export default function TrainersPage() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  const loadCoursesAndBatches = useCallback(async () => {
+    try {
+      const [cRes, bRes] = await Promise.all([
+        courseService.list().catch(() => ({ data: [] })),
+        adminApi.getBatches().catch(() => ({ data: { data: [] } })),
+      ])
+      setCourses(cRes.data || [])
+      setBatches(bRes.data?.data || [])
+    } catch (err) {
+      console.error('Failed to load courses and batches', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadCoursesAndBatches()
+  }, [loadCoursesAndBatches])
+
+  const filteredBatches = form.courseId
+    ? batches.filter(b => b.course && String(b.course.id) === String(form.courseId))
+    : []
+
+  const courseOptions = useMemo(() => {
+    return courses.map(c => ({
+      value: String(c.id),
+      label: c.title,
+    }))
+  }, [courses])
+
+  const batchOptions = useMemo(() => {
+    return filteredBatches.map(b => ({
+      value: String(b.id),
+      label: `${b.name}${b.trainer ? ` (Current: ${b.trainer.name})` : ' (Unassigned)'}`,
+    }))
+  }, [filteredBatches])
 
   const fetchTrainers = useCallback(async () => {
     setLoading(true)
@@ -93,14 +136,17 @@ export default function TrainersPage() {
 
   // Open Create Modal
   function handleOpenAdd() {
-    setForm({ ...EMPTY_FORM, password: '' })
+    setForm({ ...EMPTY_FORM, password: '', courseId: '', batchId: '' })
     setFormErr({})
     setShowAddModal(true)
+    loadCoursesAndBatches()
   }
 
   // Open Edit Modal
   function handleOpenEdit(trainer) {
     setEditingTrainer(trainer)
+    const existingBatchId = trainer.batches?.[0]?.id || ''
+    const matchingBatch = batches.find(b => String(b.id) === String(existingBatchId))
     setForm({
       name: trainer.name || '',
       email: trainer.email || '',
@@ -108,9 +154,12 @@ export default function TrainersPage() {
       phone: trainer.phone || '',
       designation: trainer.designation || '',
       department: trainer.department || '',
+      courseId: matchingBatch?.course?.id ? String(matchingBatch.course.id) : '',
+      batchId: existingBatchId ? String(existingBatchId) : '',
     })
     setFormErr({})
     setShowEditModal(true)
+    loadCoursesAndBatches()
   }
 
   // Open Delete Modal
@@ -151,10 +200,13 @@ export default function TrainersPage() {
         phone: form.phone.trim() || null,
         designation: form.designation.trim() || null,
         department: form.department.trim() || null,
+        courseId: form.courseId ? Number(form.courseId) : null,
+        batchId: form.batchId ? Number(form.batchId) : null,
       })
       toast.success('Trainer created successfully!')
       setShowAddModal(false)
       fetchTrainers()
+      loadCoursesAndBatches()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create trainer')
     } finally {
@@ -174,10 +226,13 @@ export default function TrainersPage() {
         phone: form.phone.trim() || null,
         designation: form.designation.trim() || null,
         department: form.department.trim() || null,
+        courseId: form.courseId ? Number(form.courseId) : null,
+        batchId: form.batchId ? Number(form.batchId) : null,
       })
       toast.success('Trainer updated successfully!')
       setShowEditModal(false)
       fetchTrainers()
+      loadCoursesAndBatches()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update trainer')
     } finally {
@@ -471,7 +526,7 @@ export default function TrainersPage() {
       {/* Add Trainer Modal */}
       {showAddModal && mounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp border border-slate-100 dark:border-gray-800">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp border border-slate-100 dark:border-gray-800 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
               <h3 className="font-bold text-lg text-slate-900 dark:text-white">Add New Trainer</h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
@@ -568,6 +623,37 @@ export default function TrainersPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                    Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <SearchableSelect
+                    options={courseOptions}
+                    value={form.courseId}
+                    onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
+                    placeholder="Select Course"
+                    searchPlaceholder="Search course..."
+                    emptyLabel="No courses found"
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                    Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <SearchableSelect
+                    options={batchOptions}
+                    value={form.batchId}
+                    onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
+                    placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
+                    searchPlaceholder="Search batch..."
+                    disabled={!form.courseId}
+                    emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
                 <button
                   type="button"
@@ -593,7 +679,7 @@ export default function TrainersPage() {
       {/* Edit Trainer Modal */}
       {showEditModal && mounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp border border-slate-100 dark:border-gray-800">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp border border-slate-100 dark:border-gray-800 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
               <h3 className="font-bold text-lg text-slate-900 dark:text-white">Edit Trainer Profile</h3>
               <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
@@ -657,6 +743,37 @@ export default function TrainersPage() {
                   onChange={e => setForm({ ...form, department: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                    Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <SearchableSelect
+                    options={courseOptions}
+                    value={form.courseId}
+                    onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
+                    placeholder="Select Course"
+                    searchPlaceholder="Search course..."
+                    emptyLabel="No courses found"
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                    Assign Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <SearchableSelect
+                    options={batchOptions}
+                    value={form.batchId}
+                    onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
+                    placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
+                    searchPlaceholder="Search batch..."
+                    disabled={!form.courseId}
+                    emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
+                  />
+                </div>
               </div>
 
               {editingTrainer?.batches && editingTrainer.batches.length > 0 && (

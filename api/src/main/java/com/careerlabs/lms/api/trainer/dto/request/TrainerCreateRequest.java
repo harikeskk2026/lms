@@ -20,6 +20,9 @@ public class TrainerCreateRequest {
     private String phone;
     private String designation;
     private String department;
+    private Long courseId;
+    private Long batchId;
+    private java.util.List<Long> batchIds;
 
     public TrainerCreateRequest() {
     }
@@ -31,6 +34,30 @@ public class TrainerCreateRequest {
         this.phone = phone;
         this.designation = designation;
         this.department = department;
+    }
+
+    public Long getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(Long courseId) {
+        this.courseId = courseId;
+    }
+
+    public Long getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(Long batchId) {
+        this.batchId = batchId;
+    }
+
+    public java.util.List<Long> getBatchIds() {
+        return batchIds;
+    }
+
+    public void setBatchIds(java.util.List<Long> batchIds) {
+        this.batchIds = batchIds;
     }
 
     public String getName() {

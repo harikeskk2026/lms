@@ -116,7 +116,23 @@ public class TrainerServiceImpl implements TrainerService {
         user.setDepartment(request.getDepartment());
 
         User saved = userRepository.save(user);
-        return TrainerResponse.from(saved, List.of());
+
+        if (request.getBatchId() != null) {
+            Batch batch = batchRepository.findById(request.getBatchId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.getBatchId()));
+            batch.setTrainerId(saved.getId());
+            batchRepository.save(batch);
+        } else if (request.getBatchIds() != null && !request.getBatchIds().isEmpty()) {
+            for (Long bId : request.getBatchIds()) {
+                batchRepository.findById(bId).ifPresent(b -> {
+                    b.setTrainerId(saved.getId());
+                    batchRepository.save(b);
+                });
+            }
+        }
+
+        List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(saved.getId());
+        return TrainerResponse.from(saved, batches);
     }
 
     @Override
@@ -138,6 +154,14 @@ public class TrainerServiceImpl implements TrainerService {
         user.setDepartment(request.getDepartment());
 
         User saved = userRepository.save(user);
+
+        if (request.getBatchId() != null) {
+            Batch batch = batchRepository.findById(request.getBatchId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.getBatchId()));
+            batch.setTrainerId(saved.getId());
+            batchRepository.save(batch);
+        }
+
         List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(id);
         return TrainerResponse.from(saved, batches);
     }
