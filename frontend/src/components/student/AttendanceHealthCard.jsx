@@ -30,7 +30,7 @@ export default function AttendanceHealthCard() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <p className="text-xs text-gray-500 uppercase font-semibold tracking-wide">Attendance Health</p>
-          <p className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1">{health.currentPercentage}%</p>
+          <p className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1">{health.overallPercentage ?? health.currentPercentage}%</p>
           <span className={`inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-xl text-xs font-bold ${cfg.bg} ${cfg.text}`}>
             {cfg.emoji} {cfg.label}
           </span>

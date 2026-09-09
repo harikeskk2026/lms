@@ -472,7 +472,7 @@ public class DashboardServiceImpl implements DashboardService {
         return new StudentDashboardResponse.Overview(
                 enrollments.size(),
                 performance.assignmentCompletionPct(),
-                attendanceHealth.currentPercentage(),
+                attendanceHealth.overallPercentage(),
                 pendingAssignments.size(),
                 quizAnalytics.overallSkill(),
                 stats.getTotalXp(),

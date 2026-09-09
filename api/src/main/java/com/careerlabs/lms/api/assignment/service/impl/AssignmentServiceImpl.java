@@ -250,6 +250,10 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     private void applyRequest(Assignment assignment, AssignmentRequest request) {
+        if (request.getTotalMarks() == null || request.getTotalMarks() < 1 || request.getTotalMarks() > 100) {
+            throw new BadRequestException("Please enter correct value below 100");
+        }
+
         if (request.getStartDate() != null && request.getDueDate() != null) {
             LocalDateTime startDateTime = request.getPublishTime() != null
                     ? LocalDateTime.of(request.getStartDate(), request.getPublishTime())

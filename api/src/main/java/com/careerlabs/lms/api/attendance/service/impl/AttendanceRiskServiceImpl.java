@@ -64,18 +64,23 @@ public class AttendanceRiskServiceImpl implements AttendanceRiskService {
                 });
 
         List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
-        int currentPercentage = percentageOf(attendances);
+        int overallPercentage = percentageOf(attendances);
+
+        List<Attendance> recent = attendances.size() > TREND_WINDOW
+                ? attendances.subList(0, TREND_WINDOW)
+                : attendances;
+        int currentPercentage = percentageOf(recent);
 
         List<Attendance> priorToRecent = attendances.size() > TREND_WINDOW
-                ? attendances.subList(TREND_WINDOW, attendances.size())
+                ? attendances.subList(TREND_WINDOW, Math.min(TREND_WINDOW * 2, attendances.size()))
                 : List.of();
         int previousPercentage = priorToRecent.isEmpty() ? currentPercentage : percentageOf(priorToRecent);
 
         Long batchId = student.getBatch() != null ? student.getBatch().getId() : null;
         AttendancePolicy policy = attendancePolicyService.getEffectivePolicy(batchId);
-        RiskLevel riskLevel = classify(currentPercentage, policy);
+        RiskLevel riskLevel = classify(overallPercentage, policy);
 
-        return new AttendanceHealthResponse(currentPercentage, previousPercentage, currentPercentage - previousPercentage, riskLevel);
+        return new AttendanceHealthResponse(overallPercentage, currentPercentage, previousPercentage, currentPercentage - previousPercentage, riskLevel);
     }
 
     private int percentageOf(List<Attendance> attendances) {

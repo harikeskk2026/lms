@@ -37,7 +37,7 @@ public class AssignmentRequest {
 
     @NotNull(message = AssignmentValidationMessages.TOTAL_MARKS_REQUIRED)
     @Min(value = 1, message = AssignmentValidationMessages.TOTAL_MARKS_MIN)
-    @Max(value = 1000, message = AssignmentValidationMessages.TOTAL_MARKS_MAX)
+    @Max(value = 100, message = AssignmentValidationMessages.TOTAL_MARKS_MAX)
     private Integer totalMarks;
 
     private String attachmentUrl;

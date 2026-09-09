@@ -40,20 +40,15 @@ function validateAssignmentDates(startDate, publishTime, dueDate, closeTime) {
 
 function validateTotalMarks(val) {
   if (val === '' || val === null || val === undefined) {
-    return 'Total Marks is required'
+    return 'Please enter correct value below 100'
   }
-  const num = Number(val)
-  if (isNaN(num)) {
-    return 'Total Marks must be a valid number'
+  const strVal = String(val).trim()
+  if (!/^\d+$/.test(strVal)) {
+    return 'Please enter correct value below 100'
   }
-  if (!Number.isInteger(num)) {
-    return 'Total Marks must be a whole integer number'
-  }
-  if (num < 1) {
-    return 'Total Marks must be at least 1'
-  }
-  if (num > 1000) {
-    return 'Total Marks cannot exceed 1000'
+  const num = Number(strVal)
+  if (num < 1 || num > 100) {
+    return 'Please enter correct value below 100'
   }
   return null
 }
@@ -547,7 +542,7 @@ export default function AssignmentsPage() {
             <input
               type="number"
               min="1"
-              max="1000"
+              max="100"
               step="1"
               value={form.totalMarks}
               onKeyDown={e => {
