@@ -181,6 +181,7 @@ export const adminApi = {
   editAttendanceRecord: (id, data) => api.put(`/admin/attendance/${id}`, data),
   getCorrections: (params) => api.get('/admin/attendance/corrections', { params }),
   reviewCorrection: (id, data) => api.put(`/admin/attendance/corrections/${id}`, data),
+  verifyCorrection: (id) => api.get(`/admin/attendance/corrections/${id}/verify`),
   getAttendancePolicy: (params) => api.get('/admin/attendance/policy', { params }),
   saveAttendancePolicy: (data) => api.put('/admin/attendance/policy', data),
   getAttendanceHistory: (params) => api.get('/admin/attendance/history', { params }),
@@ -382,6 +383,7 @@ export const studentApi = {
   }),
 
   // Mock Analytics
+  getMockAnalytics: () => api.get('/student/mock-analytics'),
   // Announcements
   getAnnouncements: () => api.get('/student/announcements'),
   markAnnouncementViewed: (id) => api.post(`/student/announcements/${id}/view`),

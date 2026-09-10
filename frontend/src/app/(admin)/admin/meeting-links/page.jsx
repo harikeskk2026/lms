@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
-import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import SlidePanel from '@/components/admin/SlidePanel'
 
@@ -731,7 +731,7 @@ export default function AdminMeetingLinksPage() {
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                 Scheduled Start <span className="text-red-500">*</span>
               </label>
-              <DateTimePicker12h
+              <DateTimePicker
                 value={form.scheduledStart}
                 hasError={Boolean(errors.scheduledStart)}
                 onChange={val => {
@@ -748,7 +748,7 @@ export default function AdminMeetingLinksPage() {
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                 Scheduled End (Optional)
               </label>
-              <DateTimePicker12h
+              <DateTimePicker
                 value={form.scheduledEnd}
                 hasError={Boolean(errors.scheduledEnd)}
                 onChange={val => {

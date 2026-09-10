@@ -12,7 +12,7 @@ import { adminApi, resolveFileUrl } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import assignmentService from '@/services/assignmentService'
-import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DateTimePicker from '@/components/ui/DateTimePicker'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL']
@@ -438,7 +438,7 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
         <div className="pt-1">
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Schedule for (optional)</label>
           <div className="w-full max-w-md">
-            <DateTimePicker12h
+            <DateTimePicker
               disablePast
               minDate={new Date().toISOString().split('T')[0]}
               value={form.scheduledAt}

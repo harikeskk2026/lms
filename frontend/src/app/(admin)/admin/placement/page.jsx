@@ -2,13 +2,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Plus, ChevronDown, ChevronUp, Star, Trash2, Calendar, Building2, MapPin, Users, CheckCircle, X, FileText, Upload } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, Star, Trash2, Pencil, Calendar, Building2, MapPin, Users, CheckCircle, X, FileText, Upload } from 'lucide-react'
 import { format, differenceInDays, isPast } from 'date-fns'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import SlidePanel from '@/components/admin/SlidePanel'
 import EligibilityCriteriaFields from '@/components/admin/EligibilityCriteriaFields'
-import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DateTimePicker from '@/components/ui/DateTimePicker'
 import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 import MultiSelect from '@/components/ui/MultiSelect'
@@ -66,6 +66,7 @@ export default function PlacementPage() {
   const [viewingApps, setViewingApps] = useState(null)
   const [drivePanel, setDrivePanel] = useState(false)
   const [driveForm, setDriveForm] = useState(EMPTY_DRIVE_FORM)
+  const [editingDrive, setEditingDrive] = useState(null)
   const [ask, confirmModal] = useConfirmModal()
   const [loading, setLoading] = useState(true)
   const [iqDiff, setIqDiff] = useState('')
@@ -77,7 +78,7 @@ export default function PlacementPage() {
   const [feedbackPanel, setFeedbackPanel] = useState(null)
   const [saving, setSaving] = useState(false)
   const [mockForm, setMockForm] = useState(INITIAL_MOCK_FORM)
-  const [iqForm, setIqForm] = useState({ question: '', answer: '', difficulty: 'MEDIUM', courseId: '' })
+  const [iqForm, setIqForm] = useState({ question: '', answer: '', difficulty: 'EASY', courseId: '' })
   const [feedbackForm, setFeedbackForm] = useState({ feedback: '', rating: 5, status: 'COMPLETED', strengths: '', improvements: '' })
   const [editIq, setEditIq] = useState(null)
   const [aptList, setAptList] = useState([])
@@ -370,7 +371,7 @@ export default function PlacementPage() {
       toast.success(editIq ? 'Updated' : 'Question added')
       setIqPanel(false)
       setEditIq(null)
-      setIqForm({ question: '', answer: '', difficulty: 'MEDIUM', courseId: '' })
+      setIqForm({ question: '', answer: '', difficulty: 'EASY', courseId: '' })
       loadData()
     } catch (err) { toast.error(err?.response?.data?.message || 'Failed') } finally { setSaving(false) }
   }
@@ -533,15 +534,20 @@ export default function PlacementPage() {
     const driveDate = driveForm.driveDate ? new Date(driveForm.driveDate + 'T00:00:00') : null
     const deadline = driveForm.applyDeadline ? new Date(driveForm.applyDeadline + 'T00:00:00') : null
     const todayStart = new Date(new Date().toDateString())
-    if (driveDate && deadline && deadline > driveDate) {
-      fieldErrors.applyDeadline = 'Apply deadline cannot be after the drive date'
-      fieldErrors.driveDate = 'Apply deadline cannot be after the drive date'
+    if (driveDate && deadline && deadline >= driveDate) {
+      fieldErrors.applyDeadline = 'Apply deadline must be before the drive date'
+      fieldErrors.driveDate = 'Apply deadline must be before the drive date'
     }
     if (driveDate && driveDate < todayStart) {
       fieldErrors.driveDate = fieldErrors.driveDate || 'Drive date cannot be in the past'
     }
     if (deadline && deadline < todayStart) {
       fieldErrors.applyDeadline = fieldErrors.applyDeadline || 'Apply deadline cannot be in the past'
+    }
+    if (!driveGeneral && !driveForm.minCgpa && !driveForm.minPercentage) {
+      const msg = 'Enter a minimum CGPA or Percentage'
+      fieldErrors.minCgpa = msg
+      fieldErrors.minPercentage = msg
     }
     if (Object.keys(fieldErrors).length > 0) {
       setDriveErrors(fieldErrors)
@@ -550,17 +556,25 @@ export default function PlacementPage() {
       return
     }
     try {
-      await adminApi.createDrive({
+      const payload = {
         ...driveForm,
         requirements: driveForm.requirements.split(',').map(s => s.trim()).filter(Boolean),
         skills: driveForm.skills.split(',').map(s => s.trim()).filter(Boolean),
         eligibleBatchIds: driveGeneral ? [] : (driveForm.eligibleBatchIds || []),
         eligibleCourseIds: driveGeneral ? [] : (driveForm.eligibleCourseIds || []),
-      })
-      toast.success('Drive created')
+        minAttendancePct: editingDrive ? editingDrive.minAttendancePct : undefined,
+      }
+      if (editingDrive) {
+        await adminApi.updateDrive(editingDrive.id, payload)
+        toast.success('Drive updated')
+      } else {
+        await adminApi.createDrive(payload)
+        toast.success('Drive created')
+      }
       setDrivePanel(false)
       setDriveErrors({})
       setDriveGeneral(false)
+      setEditingDrive(null)
       setDriveForm(EMPTY_DRIVE_FORM)
       loadData()
     } catch (err) {
@@ -572,11 +586,46 @@ export default function PlacementPage() {
           if (f) byField[f] = er?.message || 'Invalid value'
         })
         setDriveErrors(byField)
-        toast.error(errors.find(er => er?.message)?.message || 'Failed to create drive')
+        toast.error(errors.find(er => er?.message)?.message || 'Failed to save drive')
       } else {
-        toast.error(err?.response?.data?.message || 'Failed to create drive')
+        toast.error(err?.response?.data?.message || 'Failed to save drive')
       }
     } finally { setSaving(false) }
+  }
+
+  const handleEditDrive = (d) => {
+    setEditingDrive(d)
+    setDriveGeneral(!(d.eligibleBatches?.length || d.eligibleCourses?.length))
+    setDriveForm({
+      companyName: d.companyName || '',
+      role: d.role || '',
+      packageOffered: d.packageOffered || '',
+      location: d.location || '',
+      driveDate: d.driveDate || '',
+      applyDeadline: d.applyDeadline || '',
+      description: d.description || '',
+      requirements: (d.requirements || []).join(', '),
+      skills: (d.skills || []).join(', '),
+      driveType: d.driveType || 'CAMPUS',
+      applyLink: d.applyLink || '',
+      minCgpa: d.minCgpa ?? null,
+      minPercentage: d.minPercentage ?? null,
+      maxBacklogs: d.maxBacklogs ?? null,
+      eligibleBatchIds: (d.eligibleBatches || []).map(b => String(b.id)),
+      eligibleCourseIds: (d.eligibleCourses || []).map(c => String(c.id)),
+    })
+    setDriveErrors({})
+    setDrivePanel(true)
+  }
+
+  const handleDeleteDrive = async (d) => {
+    const ok = await ask({ title: 'Delete Drive?', message: `Delete "${d.companyName} — ${d.role}"? All applications and interview data will be removed.`, confirmLabel: 'Delete', tone: 'danger' })
+    if (!ok) return
+    try {
+      await adminApi.deleteDrive(d.id)
+      toast.success('Drive deleted')
+      loadData()
+    } catch { toast.error('Failed to delete drive') }
   }
 
   const handleViewApps = async (driveId) => {
@@ -1088,7 +1137,7 @@ export default function PlacementPage() {
                 />
               </div>
             </div>
-            <button onClick={() => { setIqPanel(true); setEditIq(null); setIqForm({ question: '', answer: '', difficulty: 'MEDIUM', courseId: '' }) }}
+            <button onClick={() => { setIqPanel(true); setEditIq(null); setIqForm({ question: '', answer: '', difficulty: 'EASY', courseId: '' }) }}
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-3 py-2 text-xs font-semibold">
               <Plus size={12} /> Add Question
             </button>
@@ -1389,7 +1438,7 @@ export default function PlacementPage() {
                 />
               </div>
             </div>
-            <button onClick={() => setDrivePanel(true)}
+            <button onClick={() => { setEditingDrive(null); setDriveForm(EMPTY_DRIVE_FORM); setDriveGeneral(false); setDriveErrors({}); setDrivePanel(true) }}
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
               <Plus size={14} /> Create Drive
             </button>
@@ -1437,6 +1486,14 @@ export default function PlacementPage() {
                           <button onClick={() => handleViewApps(d.id)}
                             className="text-xs bg-purple-50 text-purple-600 px-2.5 py-1 rounded-lg font-semibold hover:bg-purple-100">
                             Applications
+                          </button>
+                          <button onClick={() => handleEditDrive(d)}
+                            className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg font-semibold hover:bg-blue-100 inline-flex items-center gap-1">
+                            <Pencil size={11} /> Edit
+                          </button>
+                          <button onClick={() => handleDeleteDrive(d)}
+                            className="text-xs bg-red-50 text-red-600 px-2.5 py-1 rounded-lg font-semibold hover:bg-red-100 inline-flex items-center gap-1">
+                            <Trash2 size={11} /> Delete
                           </button>
                         </div>
                       </td>
@@ -1844,7 +1901,7 @@ export default function PlacementPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Date & Time *</label>
-            <DateTimePicker12h
+            <DateTimePicker
               required
               disablePast
               minDate={new Date().toISOString().split('T')[0]}
@@ -2040,7 +2097,7 @@ export default function PlacementPage() {
       </SlidePanel>
 
       {/* Create Drive Panel */}
-      <SlidePanel open={drivePanel} onClose={() => setDrivePanel(false)} title="Create Company Drive">
+      <SlidePanel open={drivePanel} onClose={() => { setDrivePanel(false); setEditingDrive(null) }} title={editingDrive ? 'Edit Company Drive' : 'Create Company Drive'}>
         <form onSubmit={handleCreateDrive} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -2059,19 +2116,23 @@ export default function PlacementPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Date *</label>
-              <input type="date" value={driveForm.driveDate} onChange={e => setDriveForm(f => ({ ...f, driveDate: e.target.value }))} required
+              <input type="date" value={driveForm.driveDate} onChange={e => {
+                const newDate = e.target.value
+                setDriveForm(f => ({ ...f, driveDate: newDate, applyDeadline: (newDate && f.applyDeadline && f.applyDeadline >= newDate) ? '' : f.applyDeadline }))
+              }} required
                 className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${driveErrors.driveDate ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
               {driveErrors.driveDate && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.driveDate}</p>}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Apply Deadline *</label>
               <input type="date" value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
+                max={driveForm.driveDate ? (() => { const d = new Date(driveForm.driveDate + 'T00:00:00'); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })() : undefined}
                 className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${driveErrors.applyDeadline ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
               {driveErrors.applyDeadline && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.applyDeadline}</p>}
             </div>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Description *</label>
             <textarea value={driveForm.description} onChange={e => setDriveForm(f => ({ ...f, description: e.target.value }))} rows={3}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
           </div>
@@ -2086,7 +2147,7 @@ export default function PlacementPage() {
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Type</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Type *</label>
             <CustomSelect
               value={driveForm.driveType}
               onChange={v => setDriveForm(f => ({ ...f, driveType: v }))}
@@ -2118,7 +2179,7 @@ export default function PlacementPage() {
               </p>
             ) : (
               <>
-                <EligibilityCriteriaFields value={driveForm} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
+                <EligibilityCriteriaFields value={driveForm} errors={driveErrors} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
                 {driveErrors.eligibleBatchIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleBatchIds}</p>}
                 {driveErrors.eligibleCourseIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleCourseIds}</p>}
               </>
@@ -2127,7 +2188,7 @@ export default function PlacementPage() {
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setDrivePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
             <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-              {saving ? 'Creating...' : 'Create Drive'}
+              {saving ? (editingDrive ? 'Saving...' : 'Creating...') : (editingDrive ? 'Save Changes' : 'Create Drive')}
             </button>
           </div>
         </form>
@@ -2145,7 +2206,7 @@ export default function PlacementPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Course (blank = All Students)</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Course</label>
             <CustomSelect
               value={iqForm.courseId}
               onChange={v => setIqForm(f => ({ ...f, courseId: v }))}
@@ -2394,7 +2455,7 @@ export default function PlacementPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Date & Time *</label>
-            <DateTimePicker12h
+            <DateTimePicker
               required
               disablePast
               minDate={new Date().toISOString().split('T')[0]}

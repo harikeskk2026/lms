@@ -135,8 +135,8 @@ public class DriveServiceImpl implements DriveService {
         if (driveDate == null && applyDeadline == null) {
             return;
         }
-        if (driveDate != null && applyDeadline != null && applyDeadline.isAfter(driveDate)) {
-            throw new BadRequestException("Apply deadline cannot be after the drive date");
+        if (driveDate != null && applyDeadline != null && !applyDeadline.isBefore(driveDate)) {
+            throw new BadRequestException("Apply deadline must be before the drive date");
         }
         if (creating) {
             LocalDate today = LocalDate.now();

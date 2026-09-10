@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Search, Check, X } from 'lucide-react'
 
 /**
@@ -25,18 +26,42 @@ export default function MultiSelect({
   const [query, setQuery] = useState('')
   const [openUpward, setOpenUpward] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const [menuAnchor, setMenuAnchor] = useState(null)
   const containerRef = useRef(null)
+  const menuRef = useRef(null)
+
+  const closeMenu = () => {
+    setOpen(false)
+    setQuery('')
+    setMenuAnchor(null)
+  }
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setOpen(false)
-        setQuery('')
+      const inContainer = containerRef.current && containerRef.current.contains(e.target)
+      const inMenu = menuRef.current && menuRef.current.contains(e.target)
+      if (!inContainer && !inMenu) {
+        closeMenu()
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => closeMenu()
+    const onScroll = (e) => {
+      if (menuRef.current && menuRef.current.contains(e.target)) return
+      close()
+    }
+    window.addEventListener('resize', close)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      window.removeEventListener('resize', close)
+      document.removeEventListener('scroll', onScroll, true)
+    }
+  }, [open])
 
   const toggleOpen = () => {
     setOpen(o => {
@@ -44,8 +69,18 @@ export default function MultiSelect({
       if (next && containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
         const spaceBelow = window.innerHeight - rect.bottom
-        setOpenUpward(spaceBelow < 300 && rect.top > spaceBelow)
+        const up = spaceBelow < 300 && rect.top > spaceBelow
+        setOpenUpward(up)
         setHighlightedIndex(0)
+        setMenuAnchor({
+          left: rect.left,
+          right: window.innerWidth - rect.right,
+          top: rect.bottom,
+          bottom: window.innerHeight - rect.top,
+          width: Math.max(rect.width, 220),
+        })
+      } else {
+        setMenuAnchor(null)
       }
       return next
     })
@@ -85,8 +120,7 @@ export default function MultiSelect({
     }
     if (e.key === 'Escape') {
       e.preventDefault()
-      setOpen(false)
-      setQuery('')
+      closeMenu()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       setHighlightedIndex(i => (i < filtered.length - 1 ? i + 1 : 0))
@@ -108,6 +142,66 @@ export default function MultiSelect({
   const summary = selectedOptions.length > 2
     ? `${selectedOptions.length} selected`
     : selectedOptions.map(o => o.label).join(', ')
+
+  const menu = open && !disabled && menuAnchor ? createPortal(
+    <div
+      ref={menuRef}
+      role="listbox"
+      onKeyDown={handleKeyDown}
+      style={{
+        position: 'fixed',
+        zIndex: 9999,
+        width: menuAnchor.width,
+        maxWidth: 'calc(100vw - 16px)',
+        left: menuAnchor.left,
+        ...(openUpward ? { bottom: menuAnchor.bottom + 6 } : { top: menuAnchor.top + 6 }),
+      }}
+      className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden"
+    >
+      {searchable && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/60">
+          <Search size={14} className="text-gray-400 flex-shrink-0" />
+          <input
+            autoFocus
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="w-full bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
+          />
+        </div>
+      )}
+      <div className="max-h-60 overflow-y-auto py-1">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-3 text-sm text-gray-400 text-center">{emptyLabel}</p>
+        ) : (
+          filtered.map((option, idx) => {
+            const isSelected = value.some(v => String(v) === String(option.value))
+            const isHighlighted = idx === highlightedIndex
+            return (
+              <button
+                type="button"
+                key={option.value}
+                onClick={() => toggle(option.value)}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                title={option.label}
+                className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm transition-colors break-words ${
+                  isSelected
+                    ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-semibold'
+                    : isHighlighted
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <span className="min-w-0">{option.label}</span>
+                {isSelected && <Check size={15} className="flex-shrink-0" />}
+              </button>
+            )
+          })
+        )}
+      </div>
+    </div>,
+    document.body
+  ) : null
 
   return (
     <div ref={containerRef} className="relative w-full min-w-0" onKeyDown={handleKeyDown}>
@@ -133,56 +227,7 @@ export default function MultiSelect({
           <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>
-
-      {open && !disabled && (
-        <div
-          className={`absolute z-50 w-full min-w-[220px] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden ${
-            openUpward ? 'bottom-full mb-1.5' : 'mt-1.5'
-          }`}
-        >
-          {searchable && (
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/60">
-              <Search size={14} className="text-gray-400 flex-shrink-0" />
-              <input
-                autoFocus
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
-              />
-            </div>
-          )}
-          <div className="max-h-60 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-gray-400 text-center">{emptyLabel}</p>
-            ) : (
-              filtered.map((option, idx) => {
-                const isSelected = value.some(v => String(v) === String(option.value))
-                const isHighlighted = idx === highlightedIndex
-                return (
-                  <button
-                    type="button"
-                    key={option.value}
-                    onClick={() => toggle(option.value)}
-                    onMouseEnter={() => setHighlightedIndex(idx)}
-                    title={option.label}
-                    className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm transition-colors break-words ${
-                      isSelected
-                        ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-semibold'
-                        : isHighlighted
-                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    <span className="min-w-0">{option.label}</span>
-                    {isSelected && <Check size={15} className="flex-shrink-0" />}
-                  </button>
-                )
-              })
-            )}
-          </div>
-        </div>
-      )}
+      {menu}
     </div>
   )
 }

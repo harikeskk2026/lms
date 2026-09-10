@@ -6,7 +6,7 @@ import recordedSessionService from '@/services/recordedSessionService'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
-import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const STATUS_STYLES = {
@@ -373,14 +373,14 @@ export default function RecordedSessionsPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Available From</label>
-              <DateTimePicker12h
+              <DateTimePicker
                 value={form.availableFrom}
                 onChange={val => setForm(f => ({ ...f, availableFrom: val }))}
               />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Available Until</label>
-              <DateTimePicker12h
+              <DateTimePicker
                 value={form.availableUntil}
                 onChange={val => setForm(f => ({ ...f, availableUntil: val }))}
               />

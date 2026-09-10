@@ -9,7 +9,7 @@ import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionBankPanel from '@/components/admin/QuestionBankPanel'
 import QuestionForm from '@/components/admin/QuestionForm'
 import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
-import DateTimePicker12h from '@/components/ui/DateTimePicker12h'
+import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 
 const STEP_LABELS = ['Basic Details', 'Questions', 'Preview']
@@ -826,14 +826,14 @@ export default function QuizzesPage() {
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date/Time</label>
-                <DateTimePicker12h
+                <DateTimePicker
                   value={form.scheduledStart}
                   onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">End Date/Time</label>
-                <DateTimePicker12h
+                <DateTimePicker
                   value={form.scheduledEnd}
                   onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
                 />
