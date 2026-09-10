@@ -18,6 +18,7 @@ public record BatchResponse(
         BatchMode mode,
         int maxStudents,
         boolean isActive,
+        String status,
         Instant createdAt,
         Instant updatedAt,
         int studentCount
@@ -28,6 +29,7 @@ public record BatchResponse(
     }
 
     public static BatchResponse from(Batch batch, int studentCount, TrainerSummary trainer) {
+        String status = computeStatus(batch.getStartDate(), batch.getEndDate());
         return new BatchResponse(
                 batch.getId(),
                 batch.getName(),
@@ -40,9 +42,24 @@ public record BatchResponse(
                 batch.getMode(),
                 batch.getMaxStudents(),
                 batch.isActive(),
+                status,
                 batch.getCreatedAt(),
                 batch.getUpdatedAt(),
                 studentCount);
+    }
+
+    private static String computeStatus(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            return "UNKNOWN";
+        }
+        LocalDate today = LocalDate.now();
+        if (today.isBefore(startDate)) {
+            return "UPCOMING";
+        } else if (!today.isAfter(endDate)) {
+            return "ACTIVE";
+        } else {
+            return "ENDED";
+        }
     }
 
     public record CourseSummary(Long id, String title) {

@@ -275,7 +275,7 @@ export default function QuestionBankPanel({ onChange }) {
           {[...Array(4)].map((_, i) => <div key={i} className="h-16 glass-card animate-pulse" />)}
         </div>
       ) : questions.length === 0 ? (
-        <div className="glass-card p-16 text-center text-gray-400">No questions match these filters.</div>
+        <div className="glass-card p-8 sm:p-16 text-center text-gray-400">No questions match these filters.</div>
       ) : (
         <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto">
@@ -414,7 +414,7 @@ export default function QuestionBankPanel({ onChange }) {
         </div>
       )}
 
-      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Question' : 'Add Question'} width="w-[560px]">
+      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Question' : 'Add Question'} width="w-full sm:w-[480px] lg:w-[560px]">
         <QuestionForm
           topics={topics}
           courses={courses}
@@ -426,7 +426,7 @@ export default function QuestionBankPanel({ onChange }) {
         />
       </SlidePanel>
 
-      <SlidePanel open={bulkPanelOpen} onClose={() => setBulkPanelOpen(false)} title="Batch Add Questions" width="w-[680px]">
+      <SlidePanel open={bulkPanelOpen} onClose={() => setBulkPanelOpen(false)} title="Batch Add Questions" width="w-full sm:w-[480px] lg:w-[680px]">
         <BulkQuestionForm
           topics={topics}
           courses={courses}
@@ -435,7 +435,7 @@ export default function QuestionBankPanel({ onChange }) {
         />
       </SlidePanel>
 
-      <SlidePanel open={importPanelOpen} onClose={() => setImportPanelOpen(false)} title="Upload Questions (CSV / Excel)" width="w-[680px]">
+      <SlidePanel open={importPanelOpen} onClose={() => setImportPanelOpen(false)} title="Upload Questions (CSV / Excel)" width="w-full sm:w-[480px] lg:w-[680px]">
         <ExcelCsvImporter
           topics={topics}
           courses={courses}
@@ -450,7 +450,7 @@ export default function QuestionBankPanel({ onChange }) {
         />
       </SlidePanel>
 
-      <SlidePanel open={pdfImportPanelOpen} onClose={() => setPdfImportPanelOpen(false)} title="Upload Questions (PDF)" width="w-[680px]">
+      <SlidePanel open={pdfImportPanelOpen} onClose={() => setPdfImportPanelOpen(false)} title="Upload Questions (PDF)" width="w-full sm:w-[480px] lg:w-[680px]">
         <PdfQuestionImporter
           topics={topics}
           courses={courses}
@@ -465,7 +465,7 @@ export default function QuestionBankPanel({ onChange }) {
         />
       </SlidePanel>
 
-      <SlidePanel open={!!previewing} onClose={() => setPreviewing(null)} title="Preview" width="w-[480px]">
+      <SlidePanel open={!!previewing} onClose={() => setPreviewing(null)} title="Preview" width="w-full sm:w-[480px]">
         {previewing && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
@@ -498,14 +498,14 @@ export default function QuestionBankPanel({ onChange }) {
         )}
       </SlidePanel>
 
-      <SlidePanel open={!!analyticsQuestion} onClose={() => { setAnalyticsQuestion(null); setQuestionAnalytics(null) }} title="Question Analytics" width="w-[380px]">
+      <SlidePanel open={!!analyticsQuestion} onClose={() => { setAnalyticsQuestion(null); setQuestionAnalytics(null) }} title="Question Analytics" width="w-full sm:w-[380px]">
         {analyticsQuestion && (
           <div className="space-y-4">
             <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{analyticsQuestion.questionText}</p>
             {loadingQAnalytics ? (
               <div className="space-y-3">{[0,1].map(i => <div key={i} className="h-16 glass-card animate-pulse" />)}</div>
             ) : questionAnalytics ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { label: 'Attempts', val: questionAnalytics.attempts },
                   { label: 'Correct', val: questionAnalytics.correct },

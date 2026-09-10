@@ -126,7 +126,7 @@ export default function StudentDashboardPage() {
 
   if (loading) return (
     <div className="page-wrapper">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[0,1,2,3].map(i => <SkeletonStat key={i} />)}
       </div>
     </div>
@@ -174,7 +174,7 @@ export default function StudentDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeInUp delay-100">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeInUp delay-100">
         {/* Progress Ring */}
         <div className="stat-card flex flex-col items-center text-center">
           <ProgressRing pct={Math.round(overview.assignmentCompletionPct ?? 0)} size={88} strokeWidth={9} />
@@ -458,7 +458,7 @@ export default function StudentDashboardPage() {
             <h3 className="section-title mb-0"><Trophy size={16} /> Gamification</h3>
             <Link href="/student/quizzes/leaderboard" className="text-xs text-brand-600 hover:underline">View Leaderboard →</Link>
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div className="text-center p-3 bg-purple-50/70 dark:bg-purple-900/20 rounded-xl">
               <Zap size={18} className="mx-auto text-brand-600 mb-1" />
               <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{gamification.xp}</p>

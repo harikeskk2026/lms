@@ -254,7 +254,7 @@ function AnalyticsTab({ onStartQuiz }) {
       <SkillLevelCard />
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { icon: Target, label: 'Overall Skill', val: `${Math.round(overallSkill)}%`, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-900/30' },
           { icon: TrendingUp, label: 'Accuracy Rate', val: `${Math.round(accuracy)}%`, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
@@ -1312,7 +1312,7 @@ export default function QuizzesPage() {
             </div>
 
             {/* Search Input */}
-            <div className="relative min-w-[240px]">
+            <div className="relative min-w-0 w-full sm:w-auto sm:min-w-[240px]">
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"

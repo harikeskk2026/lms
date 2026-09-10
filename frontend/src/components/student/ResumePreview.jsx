@@ -3,7 +3,7 @@
 export default function ResumePreview({ resumeData, studentName }) {
   if (!resumeData) {
     return (
-      <div className="resume-preview bg-white rounded-xl p-8 text-center text-gray-400">
+      <div className="resume-preview bg-white rounded-xl p-5 sm:p-8 text-center text-gray-400">
         <p className="text-sm">Fill in your details to see the preview</p>
       </div>
     )

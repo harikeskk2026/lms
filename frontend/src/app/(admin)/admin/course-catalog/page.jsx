@@ -26,7 +26,7 @@ const STATUS_COLORS = {
   ARCHIVED: 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
 }
 
-const EMPTY_FORM = { title: '', courseCode: '', slug: '', description: '', duration: '', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
+const EMPTY_FORM = { title: '', courseCode: '', slug: '', description: '', durationValue: '', durationUnit: 'months', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
 
 export default function CourseCatalogPage() {
   const router = useRouter()
@@ -79,15 +79,29 @@ export default function CourseCatalogPage() {
     setPanelOpen(true)
   }
 
+  function parseDuration(duration) {
+    if (!duration) return { durationValue: '', durationUnit: 'months' }
+    const match = duration.trim().match(/^(\d+)\s*(d|day|days|w|week|weeks|m|month|months|y|year|years)$/i)
+    if (!match) return { durationValue: '', durationUnit: 'months' }
+    const value = match[1]
+    const unit = match[2].toLowerCase()
+    if (unit === 'd' || unit === 'day' || unit === 'days') return { durationValue: value, durationUnit: 'days' }
+    if (unit === 'w' || unit === 'week' || unit === 'weeks') return { durationValue: value, durationUnit: 'weeks' }
+    if (unit === 'y' || unit === 'year' || unit === 'years') return { durationValue: value, durationUnit: 'years' }
+    return { durationValue: value, durationUnit: 'months' }
+  }
+
   function openEdit(course) {
     setEditingId(course.id)
     setEditingCourseStatus(course.status)
+    const parsed = parseDuration(course.duration)
     reset({
       title: course.title,
       courseCode: course.courseCode || '',
       slug: course.slug || '',
       description: course.description,
-      duration: course.duration,
+      durationValue: parsed.durationValue,
+      durationUnit: parsed.durationUnit,
       level: course.level,
       thumbnail: course.thumbnail || '',
       status: course.status,
@@ -98,11 +112,17 @@ export default function CourseCatalogPage() {
   async function onSubmit(data) {
     setSaving(true)
     try {
+      const payload = {
+        ...data,
+        duration: `${data.durationValue} ${data.durationUnit}`,
+      }
+      delete payload.durationValue
+      delete payload.durationUnit
       if (editingId) {
-        await courseService.update(editingId, data)
+        await courseService.update(editingId, payload)
         toast.success('Course updated')
       } else {
-        await courseService.create(data)
+        await courseService.create(payload)
         toast.success('Course created')
       }
       setPanelOpen(false)
@@ -345,9 +365,18 @@ export default function CourseCatalogPage() {
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
-            <input {...register('duration')} placeholder="3 months"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            {errors.duration && <span className="text-xs text-red-500 mt-1 block">{errors.duration.message}</span>}
+            <div className="flex gap-2">
+              <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="e.g. 3"
+                className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <select {...register('durationUnit', { required: 'Required' })}
+                className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="days">Days</option>
+                <option value="weeks">Weeks</option>
+                <option value="months">Months</option>
+                <option value="years">Years</option>
+              </select>
+            </div>
+            {(errors.durationValue || errors.durationUnit) && <span className="text-xs text-red-500 mt-1 block">Duration is required</span>}
           </div>
 
           <div>
@@ -386,11 +415,6 @@ export default function CourseCatalogPage() {
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Thumbnail</label>
             <div className="flex gap-2">
               <input
-                {...register('thumbnail')}
-                placeholder="https://... or upload image"
-                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <input
                 ref={thumbFileInputRef}
                 type="file"
                 accept="image/*"
@@ -420,10 +444,10 @@ export default function CourseCatalogPage() {
                 type="button"
                 onClick={() => thumbFileInputRef.current?.click()}
                 disabled={uploadingThumb}
-                className="px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5 whitespace-nowrap transition-colors"
+                className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center gap-1.5 transition-colors"
               >
                 <Upload size={14} />
-                {uploadingThumb ? 'Uploading...' : 'Upload'}
+                {uploadingThumb ? 'Uploading...' : 'Upload Thumbnail'}
               </button>
             </div>
             {thumbnailValue && (

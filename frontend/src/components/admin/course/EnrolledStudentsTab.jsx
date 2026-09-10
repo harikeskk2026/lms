@@ -383,7 +383,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
           ))}
         </div>
       ) : error ? (
-        <div className="p-8 text-center rounded-2xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30">
+        <div className="p-5 sm:p-8 text-center rounded-2xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30">
           <AlertCircle size={32} className="mx-auto text-red-500 mb-2" />
           <h3 className="font-bold text-sm text-red-800 dark:text-red-300">Unable to load enrollments</h3>
           <p className="text-xs text-red-600 dark:text-red-400 mt-1 max-w-sm mx-auto">{error}</p>
@@ -396,7 +396,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         </div>
       ) : enrollments.length === 0 ? (
         search || batchFilter || statusFilter !== 'active' ? (
-          <div className="text-center py-12 space-y-3">
+          <div className="text-center py-6 sm:py-12 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
               <Search size={22} />
             </div>
@@ -412,7 +412,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
             </button>
           </div>
         ) : (
-          <div className="text-center py-14 space-y-3">
+          <div className="text-center py-6 sm:py-14 space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
               <GraduationCap size={28} />
             </div>
@@ -593,7 +593,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
               </button>
             </div>
 
-            <form onSubmit={handleEnrollSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleEnrollSubmit} className="p-4 sm:p-6 space-y-4">
               {/* Selected Students Chips summary */}
               {selectedStudentIds.length > 0 && (
                 <div className="space-y-1.5 bg-purple-50/60 dark:bg-purple-950/30 p-3 rounded-2xl border border-purple-100 dark:border-purple-900/40">

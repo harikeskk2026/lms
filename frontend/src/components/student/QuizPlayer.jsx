@@ -373,7 +373,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
             {[
               { label: 'Correct', value: `✓ ${result.correctCount}`, color: 'text-green-400' },
               { label: 'Wrong', value: `✗ ${result.wrongCount}`, color: 'text-yellow-400' },
@@ -397,7 +397,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                   {interviewResult.readinessLevel.replace('_', ' ')}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { label: 'Technical Knowledge', value: interviewResult.technicalKnowledge },
                   { label: 'Problem Solving', value: interviewResult.problemSolving },

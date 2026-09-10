@@ -46,7 +46,18 @@ public class AnnouncementPlaceholderResolver {
         Map<String, String> vars = new HashMap<>();
         vars.put("studentName", student.getUser() != null ? student.getUser().getName() : "");
         vars.put("batchName", student.getBatch() != null ? student.getBatch().getName() : "");
-        vars.put("courseName", student.getCourse() != null ? student.getCourse().getTitle() : "");
+
+        // Collect all unique course names: direct course + batch's course
+        java.util.LinkedHashSet<String> courseNames = new java.util.LinkedHashSet<>();
+        if (student.getCourse() != null && student.getCourse().getTitle() != null) {
+            courseNames.add(student.getCourse().getTitle());
+        }
+        if (student.getBatch() != null && student.getBatch().getCourse() != null
+                && student.getBatch().getCourse().getTitle() != null) {
+            courseNames.add(student.getBatch().getCourse().getTitle());
+        }
+        vars.put("courseName", String.join(", ", courseNames));
+
         vars.put("date", LocalDate.now().format(DATE_FORMAT));
 
         long total = attendanceRepository.countByStudentId(student.getId());
@@ -64,7 +75,7 @@ public class AnnouncementPlaceholderResolver {
         Map<String, String> vars = new HashMap<>();
         vars.put("studentName", "Jane Student");
         vars.put("batchName", "Demo Batch");
-        vars.put("courseName", "Sample Course");
+        vars.put("courseName", "Java, Python");
         vars.put("attendancePercentage", "82");
         vars.put("date", LocalDate.now().format(DATE_FORMAT));
         return vars;

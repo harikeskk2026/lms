@@ -278,7 +278,7 @@ function HeroHeader({ hub, refreshHub }) {
           </div>
 
           {/* Right — Readiness Ring */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
             {/* Quick links */}
             <div className="flex flex-col gap-2 text-xs">
               {hub?.profile?.linkedinUrl ? (
@@ -357,7 +357,7 @@ function DashboardTab({ hub, analytics, mocks }) {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard icon={Brain} label="Mock Interviews" value={`${completed.length}/${analytics?.totalMocks || 0}`}
           sub={<StarRating rating={Math.round(analytics?.averageRating || 0)} />} color="purple" />
         <KpiCard icon={Briefcase} label="Drive Applications" value={hub?.appliedDrives || 0}
@@ -598,7 +598,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
       {/* Left: Form */}
       <div className="lg:col-span-3 space-y-3">
         {/* Save indicator */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-lg font-bold text-gray-800 dark:text-white">Resume Builder</h2>
           <div className="flex items-center gap-2">
             {saving && <span className="text-xs text-gray-400 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Saving...</span>}
@@ -628,11 +628,11 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                   <div className="space-y-3">
                     <FormInput label="Professional Headline" placeholder="Full Stack Python Developer" value={resumeData.headline || ''} onChange={v => updateField('headline', v)} />
                     <FormTextarea label="Professional Summary" placeholder="Passionate developer with experience in..." value={resumeData.summary || ''} onChange={v => updateField('summary', v)} rows={3} />
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <FormInput label="Phone" placeholder="9876543210" value={resumeData.phone || ''} onChange={v => updateField('phone', v.replace(/\D/g, '').slice(0, 10))} />
                       <FormInput label="Location" placeholder="Chennai, Tamil Nadu" value={resumeData.location || ''} onChange={v => updateField('location', v)} />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <FormInput label="LinkedIn URL" placeholder="linkedin.com/in/yourname" value={resumeData.linkedinUrl || ''} onChange={v => updateField('linkedinUrl', v)} />
                       <FormInput label="GitHub URL" placeholder="github.com/yourname" value={resumeData.githubUrl || ''} onChange={v => updateField('githubUrl', v)} />
                     </div>
@@ -645,7 +645,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onAdd={() => addItem('education', { degree: '', institution: '', year: '', grade: '' })}
                     onRemove={(i) => removeItem('education', i)}
                     renderItem={(edu, i) => (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <FormInput label="Degree/Course" placeholder="B.Tech CSE" value={edu.degree || ''} onChange={v => updateArrayItem('education', i, 'degree', v)} />
                         <FormInput label="Institution" placeholder="Anna University" value={edu.institution || ''} onChange={v => updateArrayItem('education', i, 'institution', v)} />
                         <FormInput label="Year" placeholder="2020-2024" value={edu.year || ''} onChange={v => updateArrayItem('education', i, 'year', v)} />
@@ -661,7 +661,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onRemove={(i) => removeItem('experience', i)}
                     renderItem={(exp, i) => (
                       <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <FormInput label="Role" placeholder="Junior Developer" value={exp.role || ''} onChange={v => updateArrayItem('experience', i, 'role', v)} />
                           <FormInput label="Company" placeholder="TCS" value={exp.company || ''} onChange={v => updateArrayItem('experience', i, 'company', v)} />
                         </div>
@@ -681,7 +681,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                         <FormInput label="Project Name" placeholder="E-Commerce Platform" value={proj.name || ''} onChange={v => updateArrayItem('projects', i, 'name', v)} />
                         <FormInput label="Tech Stack (comma separated)" placeholder="Python, Django, PostgreSQL" value={proj.tech || ''} onChange={v => updateArrayItem('projects', i, 'tech', v)} />
                         <FormTextarea label="Description" placeholder="Brief description of what this project does..." value={proj.description || ''} onChange={v => updateArrayItem('projects', i, 'description', v)} rows={2} />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <FormInput label="GitHub Link" placeholder="github.com/..." value={proj.github || ''} onChange={v => updateArrayItem('projects', i, 'github', v)} />
                           <FormInput label="Live Link" placeholder="yourapp.com" value={proj.live || ''} onChange={v => updateArrayItem('projects', i, 'live', v)} />
                         </div>
@@ -695,7 +695,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onAdd={() => addItem('certifications', { name: '', issuer: '', date: '', url: '' })}
                     onRemove={(i) => removeItem('certifications', i)}
                     renderItem={(cert, i) => (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <FormInput label="Certificate Name" placeholder="AWS Cloud Practitioner" value={cert.name || ''} onChange={v => updateArrayItem('certifications', i, 'name', v)} />
                         <FormInput label="Issuer" placeholder="Amazon Web Services" value={cert.issuer || ''} onChange={v => updateArrayItem('certifications', i, 'issuer', v)} />
                         <FormInput label="Date" placeholder="Jan 2024" value={cert.date || ''} onChange={v => updateArrayItem('certifications', i, 'date', v)} />
@@ -710,7 +710,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onAdd={() => addItem('languages', { name: '', level: 'Conversational' })}
                     onRemove={(i) => removeItem('languages', i)}
                     renderItem={(lang, i) => (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <FormInput label="Language" placeholder="English" value={lang.name || ''} onChange={v => updateArrayItem('languages', i, 'name', v)} />
                         <div>
                           <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">Proficiency</label>

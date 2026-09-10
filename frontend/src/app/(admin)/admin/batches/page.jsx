@@ -324,8 +324,12 @@ export default function BatchesPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${b.isActive ? 'bg-green-400/30 text-green-100' : 'bg-gray-400/30 text-gray-200'}`}>
-                          {b.isActive ? 'Active' : 'Ended'}
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${
+                          b.status === 'ACTIVE' ? 'bg-green-400/30 text-green-100'
+                          : b.status === 'UPCOMING' ? 'bg-blue-400/30 text-blue-100'
+                          : 'bg-gray-400/30 text-gray-200'
+                        }`}>
+                          {b.status === 'ACTIVE' ? 'Active' : b.status === 'UPCOMING' ? 'Upcoming' : 'Ended'}
                         </span>
                         {canManageBatch && (
                           <button
@@ -464,7 +468,7 @@ export default function BatchesPage() {
             </div>
 
             {/* Clean Start & End Time Fields */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
                 <input
@@ -488,12 +492,11 @@ export default function BatchesPage() {
             </div>
 
             {/* Dates */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
                 <input
                   type="date"
-                  min={new Date().toISOString().slice(0, 10)}
                   value={form.startDate}
                   onChange={e => {
                     const newStart = e.target.value
@@ -528,7 +531,7 @@ export default function BatchesPage() {
             {batchDateError && (
               <p className="text-xs text-red-500 font-medium">{batchDateError}</p>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode</label>
                 <select

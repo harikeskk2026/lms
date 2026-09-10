@@ -102,7 +102,7 @@ export default function TrainerDashboardView() {
     <div className="max-w-7xl mx-auto space-y-6">
 
       {/* Welcome Banner */}
-      <div className="rounded-2xl p-7 text-white overflow-hidden relative"
+      <div className="rounded-2xl p-5 sm:p-7 text-white overflow-hidden relative"
         style={{ background: 'linear-gradient(135deg, #2e1065 0%, #5b21b6 40%, #7c3aed 75%, #8b5cf6 100%)' }}>
         <div className="absolute -right-12 -top-12 w-60 h-60 rounded-full opacity-[0.07] bg-white" />
         <div className="absolute right-16 bottom-0 w-36 h-36 rounded-full opacity-[0.04] bg-white" />
@@ -161,7 +161,7 @@ export default function TrainerDashboardView() {
         {loading ? (
           <div className="space-y-3">{[...Array(2)].map((_, i) => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
         ) : (stats?.todaySchedule || []).length === 0 ? (
-          <div className="p-8 text-center bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
+          <div className="p-5 sm:p-8 text-center bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
             <Clock size={28} className="text-purple-300 dark:text-purple-700 mx-auto mb-2" />
             <p className="text-sm font-semibold text-purple-800 dark:text-purple-200">No sessions scheduled for today</p>
             <p className="text-xs text-purple-500/80 dark:text-purple-400 mt-1">Check back later or review your batch schedule in Courses.</p>
@@ -271,7 +271,7 @@ export default function TrainerDashboardView() {
           {loading ? (
             <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
           ) : (stats?.pendingGrading || []).length === 0 ? (
-            <div className="text-center py-8 bg-green-50/60 dark:bg-green-950/10 rounded-2xl border border-green-100 dark:border-green-900/20">
+            <div className="text-center py-5 sm:py-8 bg-green-50/60 dark:bg-green-950/10 rounded-2xl border border-green-100 dark:border-green-900/20">
               <CheckCircle2 size={26} className="text-green-500 mx-auto mb-2" />
               <p className="text-sm font-semibold text-green-700 dark:text-green-400">All submissions evaluated!</p>
               <p className="text-xs text-green-600/60 dark:text-green-500/50 mt-0.5">No pending items.</p>
@@ -302,7 +302,7 @@ export default function TrainerDashboardView() {
             <Target size={17} className="text-purple-600 dark:text-purple-400" />
             <h3 className="font-display font-bold text-gray-800 dark:text-white">Trainer Quick Actions</h3>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {QUICK_ACTIONS.map(({ label, icon: Icon, href, grad }) => (
               <button
                 key={label}

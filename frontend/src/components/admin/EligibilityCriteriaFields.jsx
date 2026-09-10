@@ -42,7 +42,7 @@ export default function EligibilityCriteriaFields({ value, onChange, errors = {}
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="col-span-2">
           <label className="block text-sm font-semibold text-gray-700 mb-1">Min Academic Score *</label>
           <div className="flex items-center gap-2">

@@ -117,7 +117,7 @@ export default function SuperAdminDashboard() {
         <div className="absolute -right-6 -top-6 w-40 h-40 rounded-full border border-amber-400/20" />
         <div className="absolute right-24 bottom-0 w-32 h-32 rounded-full border border-white/10" />
 
-        <div className="relative z-10 p-7 flex items-start justify-between">
+        <div className="relative z-10 p-5 sm:p-7 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2.5 mb-2">
               <div className="w-7 h-7 rounded-lg bg-amber-400/20 flex items-center justify-center ring-1 ring-amber-400/40">
@@ -244,7 +244,7 @@ export default function SuperAdminDashboard() {
             <div className="w-1 h-5 rounded-full bg-purple-600" />
             <h3 className="font-display font-bold text-gray-800 dark:text-white">System Quick Actions</h3>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {QUICK_ACTIONS.map(({ label, icon: Icon, href, grad }) => (
               <button
                 key={label}

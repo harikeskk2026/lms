@@ -172,7 +172,7 @@ export default function AcademicDetailsSection({ onSaved }) {
         summaryText={tenthSummary}
         isFilled={Boolean(form.tenthYearOfPassing && form.tenthPercentage)}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Year of Passing (Calendar)</label>
             <input
@@ -200,7 +200,7 @@ export default function AcademicDetailsSection({ onSaved }) {
         summaryText={twelfthSummary}
         isFilled={Boolean(form.twelfthYearOfPassing && form.twelfthPercentage)}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Year of Passing (Calendar)</label>
             <input
@@ -229,7 +229,7 @@ export default function AcademicDetailsSection({ onSaved }) {
         summaryText={diplomaSummary}
         isFilled={Boolean(form.diplomaYearOfPassing && form.diplomaPercentage)}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Year of Passing (Calendar)</label>
             <input
@@ -257,7 +257,7 @@ export default function AcademicDetailsSection({ onSaved }) {
         summaryText={ugSummary}
         isFilled={Boolean(form.ugDegree && form.ugScore)}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Degree / Course</label>
             <input type="text" value={form.ugDegree}
@@ -273,7 +273,7 @@ export default function AcademicDetailsSection({ onSaved }) {
               className={INPUT_CLS} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Year of Passing (Calendar)</label>
             <input
@@ -331,7 +331,7 @@ export default function AcademicDetailsSection({ onSaved }) {
         summaryText={pgSummary}
         isFilled={Boolean(form.pgDegree && form.pgScore)}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Degree / Course</label>
             <input type="text" value={form.pgDegree}
@@ -347,7 +347,7 @@ export default function AcademicDetailsSection({ onSaved }) {
               className={INPUT_CLS} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLS}>Year of Passing (Calendar)</label>
             <input

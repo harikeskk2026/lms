@@ -133,7 +133,7 @@ export default function StudentProfilePage() {
       <div className="glass-card p-6">
         <div className="flex flex-wrap items-center gap-5">
           <ProfilePhotoUploader name={profile.name} photoUrl={profile.photoUrl} onUploaded={handlePhotoUploaded} />
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-0">
             <h2 className="font-display text-lg font-bold text-gray-900 dark:text-white">{profile.name}</h2>
             <p className="text-sm text-gray-500">{profile.email}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">

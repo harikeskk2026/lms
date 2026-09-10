@@ -285,7 +285,7 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
                     {qErrs.questionText && <span className="text-xs text-red-500 mt-0.5 block">{qErrs.questionText}</span>}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Type *</label>
                       <select
@@ -322,7 +322,7 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Topic</label>
                       <select

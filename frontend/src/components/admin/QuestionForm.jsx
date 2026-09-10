@@ -118,7 +118,7 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
         {errors.questionText && <span className="text-xs text-red-500 mt-1 block">{errors.questionText.message}</span>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Type *</label>
           <select {...register('questionType')}
@@ -135,7 +135,7 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-sm font-semibold text-gray-700">Topic</label>

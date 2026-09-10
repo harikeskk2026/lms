@@ -510,7 +510,7 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
           </div>
 
           <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-            <div className="max-h-[300px] overflow-y-auto">
+            <div className="max-h-[300px] overflow-x-auto overflow-y-auto">
               <table className="w-full text-xs text-left">
                 <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 text-gray-500">
                   <tr>

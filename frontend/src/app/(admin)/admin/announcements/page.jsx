@@ -111,6 +111,15 @@ export default function AnnouncementsPage() {
         return
       }
     }
+    if (status === 'PUBLISHED' && form.scheduledAt) {
+      const scheduledDate = new Date(form.scheduledAt)
+      if (!isNaN(scheduledDate.getTime()) && scheduledDate > new Date()) {
+        const confirmed = window.confirm(
+          `You have set a schedule time (${format(scheduledDate, 'MMM d, yyyy h:mm a')}), but "Publish" will send the announcement immediately. Do you want to publish now?`
+        )
+        if (!confirmed) return
+      }
+    }
     setSaving(true)
     try {
       const payload = buildPayload(status)

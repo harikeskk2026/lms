@@ -336,7 +336,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-purple-100 dark:border-purple-900/40 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-purple-50/50 via-white to-violet-50/50 dark:from-purple-950/20 dark:via-gray-900 dark:to-violet-950/20">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-purple-50/50 via-white to-violet-50/50 dark:from-purple-950/20 dark:via-gray-900 dark:to-violet-950/20">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-purple-600/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
               <FileSpreadsheet size={20} />
@@ -365,7 +365,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
           {/* Result View (shown after import completes) */}
           {importResult ? (
             <div className="space-y-6 animate-in fade-in duration-200">
@@ -561,7 +561,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-3xl p-8 text-center cursor-pointer transition-all ${
+                  className={`border-2 border-dashed rounded-3xl p-5 sm:p-8 text-center cursor-pointer transition-all ${
                     isDragging
                       ? 'border-purple-600 bg-purple-50/60 dark:bg-purple-950/40 scale-[1.01]'
                       : file
@@ -702,7 +702,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100 dark:border-gray-800 flex flex-col-reverse sm:flex-row items-center sm:justify-between gap-2 bg-gray-50/50 dark:bg-gray-900/50">
           {importResult ? (
             <>
               <button

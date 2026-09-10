@@ -422,13 +422,6 @@ export default function BatchDetailPage() {
     } catch { toast.error('Failed to save') } finally { setSaving(false) }
   }
 
-  const handleToggleStatus = async () => {
-    try {
-      await adminApi.toggleBatchStatus(id)
-      toast.success('Batch status updated')
-      load()
-    } catch { toast.error('Failed to update batch status') }
-  }
 
   const handleRemoveStudent = async (studentUserId) => {
     if (!confirm('Remove this student from the batch?')) return
@@ -490,14 +483,21 @@ export default function BatchDetailPage() {
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors">
               <Pencil size={12} /> Edit Batch
             </button>
-            <button onClick={handleToggleStatus}
-              className={`text-xs font-bold px-3 py-1 rounded-full transition-colors ${batch.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-              {batch.isActive ? 'Active' : 'Ended'}
-            </button>
+            <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+              batch.status === 'ACTIVE' ? 'bg-green-100 text-green-700'
+              : batch.status === 'UPCOMING' ? 'bg-blue-100 text-blue-700'
+              : 'bg-gray-100 text-gray-500'
+            }`}>
+              {batch.status === 'ACTIVE' ? 'Active' : batch.status === 'UPCOMING' ? 'Upcoming' : 'Ended'}
+            </span>
           </div>
         ) : (
-          <span className={`ml-auto text-xs font-bold px-3 py-1 rounded-full ${batch.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-            {batch.isActive ? 'Active' : 'Ended'}
+          <span className={`ml-auto text-xs font-bold px-3 py-1 rounded-full ${
+            batch.status === 'ACTIVE' ? 'bg-green-100 text-green-700'
+            : batch.status === 'UPCOMING' ? 'bg-blue-100 text-blue-700'
+            : 'bg-gray-100 text-gray-500'
+          }`}>
+            {batch.status === 'ACTIVE' ? 'Active' : batch.status === 'UPCOMING' ? 'Upcoming' : 'Ended'}
           </span>
         )}
       </div>
@@ -515,7 +515,7 @@ export default function BatchDetailPage() {
       {/* Overview Tab */}
       {tab === 'Overview' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Enrolled', value: enrolled, color: 'text-purple-600' },
               { label: 'Total Classes', value: totalClasses, color: 'text-blue-600' },
@@ -1201,12 +1201,11 @@ export default function BatchDetailPage() {
                   <p className="text-xs text-gray-500 mt-1">Course duration: <span className="font-semibold text-purple-600">{selectedForEdit.duration}</span></p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date *</label>
                   <input
                     type="date"
-                    min={new Date().toISOString().slice(0, 10)}
                     value={editForm.startDate}
                     onChange={e => {
                       const newStart = e.target.value
@@ -1246,7 +1245,7 @@ export default function BatchDetailPage() {
                 <input value={editForm.timing} onChange={e => setEditForm(f => ({ ...f, timing: e.target.value }))} placeholder="09:00 AM - 12:00 PM"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Mode</label>
                   <select value={editForm.mode} onChange={e => setEditForm(f => ({ ...f, mode: e.target.value }))}

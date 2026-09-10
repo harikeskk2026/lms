@@ -166,8 +166,8 @@ export default function CourseManagePage({ params }) {
         <ArrowLeft size={14} /> Back to Courses
       </Link>
 
-      <div className="glass-card p-5">
-        <div className="flex items-start justify-between gap-4">
+      <div className="glass-card p-3 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center flex-wrap gap-2 mb-1">
               <h1 className="font-display text-xl font-extrabold text-gray-900 dark:text-white">{course.title}</h1>
@@ -189,7 +189,7 @@ export default function CourseManagePage({ params }) {
           {user?.role !== 'TRAINER' && (
             <button
               onClick={handleOpenEdit}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-semibold transition-colors shadow-xs flex-shrink-0"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-semibold transition-colors shadow-xs self-start"
             >
               <Pencil size={13} /> Edit Course
             </button>
@@ -338,16 +338,9 @@ export default function CourseManagePage({ params }) {
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Thumbnail</label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={editForm.thumbnail || ''}
-                onChange={e => setEditForm(f => ({ ...f, thumbnail: e.target.value }))}
-                placeholder="Image URL or upload a file below..."
-                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <label className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 cursor-pointer text-xs font-semibold transition-colors">
+              <label className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-xs font-semibold transition-colors">
                 <Upload size={14} />
-                <span>{uploadingThumb ? 'Uploading...' : 'Upload'}</span>
+                <span>{uploadingThumb ? 'Uploading...' : 'Upload Thumbnail'}</span>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
@@ -420,12 +413,12 @@ function OverviewTab({ course, onEdit }) {
   const hasValidThumbnail = Boolean(course?.thumbnail && !imgError)
 
   return (
-    <div className="glass-card p-5 space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+    <div className="glass-card p-3 sm:p-5 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-3">
         <h2 className="font-display font-bold text-base text-gray-900 dark:text-white">Course Overview</h2>
         <button
           onClick={onEdit}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors self-start"
         >
           <Pencil size={13} /> Edit Details
         </button>
@@ -537,9 +530,9 @@ function DurationInput({ value, unit, onValueChange, onUnitChange, small, onKeyD
     <div className="flex gap-1">
       <input type="number" min="1" value={value} onChange={e => onValueChange(e.target.value)} placeholder="Duration"
         onKeyDown={onKeyDown}
-        className={`w-20 rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`} />
+        className={`w-16 sm:w-20 rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`} />
       <select value={unit} onChange={e => onUnitChange(e.target.value)}
-        className={`rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`}>
+        className={`rounded-lg border border-gray-200 bg-gray-50 px-1 sm:px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`}>
         {DURATION_UNITS.map(u => <option key={u} value={u}>{u.charAt(0) + u.slice(1).toLowerCase()}</option>)}
       </select>
     </div>
@@ -608,7 +601,7 @@ function StatusBadge({ status, onChange, disabled, title }) {
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
         title={title || "Click to change course status"}
-        className={`appearance-none cursor-pointer text-[9px] font-bold pl-2 pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 ${selectStyle} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`appearance-none cursor-pointer text-[9px] font-bold px-1.5 sm:pl-2 sm:pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 max-w-[70px] sm:max-w-none ${selectStyle} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
         <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
@@ -1110,16 +1103,16 @@ function SyllabusTab({ courseId }) {
   if (loading) return <div className="glass-card p-8 animate-pulse h-40" />
 
   return (
-    <div className="glass-card p-5 space-y-4">
+    <div className="glass-card p-3 sm:p-5 space-y-4">
       {/* Header bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Syllabus</h2>
           <p className="text-xs text-gray-500">
             {modules.length} {modules.length === 1 ? 'module' : 'modules'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {modules.length > 0 && (
             <button
               type="button"
@@ -1306,77 +1299,76 @@ function SyllabusTab({ courseId }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between px-4 py-3 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-800 gap-2">
-                  <button
-                    onClick={() => setExpanded(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                    className="flex items-center gap-2.5 flex-1 text-left min-w-0"
-                  >
-                    <span className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-gray-400 flex-shrink-0">
-                      {expanded[m.id] ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                    </span>
-                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
-                      {m.title}
-                    </span>
+                <div className="px-3 py-3 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex items-start gap-2">
+                    <button
+                      onClick={() => setExpanded(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                      className="flex items-center gap-1.5 flex-1 text-left min-w-0"
+                    >
+                      <span className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="text-gray-400 flex-shrink-0">
+                        {expanded[m.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                        {m.title}
+                      </span>
+                    </button>
+                    {canManageSyllabus && (
+                      <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openEditModule(m)}
+                          className="w-7 h-7 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center justify-center transition-colors"
+                          title="Edit Module"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => promptDeleteModule(m)}
+                          title="Delete Module"
+                          className="w-7 h-7 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 flex items-center justify-center transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5 pl-8">
                     <StatusBadge
                       status={m.status}
                       title="Click to switch module status"
                       onChange={(newStatus) => updateModuleStatus(m, newStatus)}
                     />
-                    <span className="text-xs text-gray-400 flex-shrink-0">
-                      ({topics.length} {topics.length === 1 ? 'topic' : 'topics'})
+                    {canManageSyllabus && expanded[m.id] && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => moveModule(i, -1)}
+                          disabled={i === 0}
+                          title="Move Up"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 flex items-center gap-0.5 text-[10px] text-gray-500 transition-colors"
+                        >
+                          <ChevronUp size={10} /> Up
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveModule(i, 1)}
+                          disabled={i === modules.length - 1}
+                          title="Move Down"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 flex items-center gap-0.5 text-[10px] text-gray-500 transition-colors"
+                        >
+                          <ChevronDown size={10} /> Dn
+                        </button>
+                      </>
+                    )}
+                    <span className="text-[10px] text-gray-400 ml-auto whitespace-nowrap">
+                      {topics.length} {topics.length === 1 ? 'topic' : 'topics'}
+                      {formatDuration(m.durationValue, m.durationUnit) && ` · ${formatDuration(m.durationValue, m.durationUnit)}`}
                     </span>
-                    {formatDuration(m.durationValue, m.durationUnit) && (
-                      <span className="text-xs text-gray-400 flex-shrink-0 flex items-center gap-1">
-                        <Clock size={11} /> {formatDuration(m.durationValue, m.durationUnit)}
-                      </span>
-                    )}
-                    {hasModuleMaterials && (
-                      <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium flex-shrink-0">
-                        📁 {m.materials.length} mat{m.materials.length > 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </button>
-
-                  {canManageSyllabus && (
-                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => moveModule(i, -1)}
-                        disabled={i === 0}
-                        title="Move Up"
-                        className="w-7 h-7 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
-                      >
-                        <ChevronUp size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveModule(i, 1)}
-                        disabled={i === modules.length - 1}
-                        title="Move Down"
-                        className="w-7 h-7 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
-                      >
-                        <ChevronDown size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openEditModule(m)}
-                        className="px-2.5 py-1 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <Pencil size={12} /> Edit Module
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => promptDeleteModule(m)}
-                        title="Delete Module"
-                        className="w-7 h-7 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 flex items-center justify-center transition-colors"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -1399,7 +1391,7 @@ function SyllabusTab({ courseId }) {
               {/* Module Expanded Content: Topics & Sessions */}
               {expanded[m.id] && (
                 <div className="p-4 space-y-3 bg-gray-50/30 dark:bg-gray-900/40">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
                     <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                       Topics ({topics.length})
                     </span>
@@ -1418,7 +1410,7 @@ function SyllabusTab({ courseId }) {
                   {showAddTopic[m.id] && (
                     <div className="p-3 rounded-xl border border-purple-200 dark:border-purple-800/40 bg-white dark:bg-gray-900 space-y-2">
                       <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 uppercase">New Topic</p>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <input
                           value={(newTopic[m.id] || EMPTY_TOPIC_FORM).title}
                           onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), title: e.target.value } }))}
@@ -1431,7 +1423,7 @@ function SyllabusTab({ courseId }) {
                           value={(newTopic[m.id] || EMPTY_TOPIC_FORM).durationHours}
                           onChange={e => setNewTopic(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || EMPTY_TOPIC_FORM), durationHours: e.target.value } }))}
                           placeholder="Hours"
-                          className="w-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                          className="w-full sm:w-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
                         />
                         <StatusSelect
                           small
@@ -1481,7 +1473,7 @@ function SyllabusTab({ courseId }) {
                                 <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 uppercase">Edit Topic</span>
                                 <StatusSelect small value={editingTopic.status} onChange={v => setEditingTopic(f => ({ ...f, status: v }))} />
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex flex-col sm:flex-row gap-2">
                                 <input
                                   value={editingTopic.title}
                                   onChange={e => setEditingTopic(f => ({ ...f, title: e.target.value }))}
@@ -1494,7 +1486,7 @@ function SyllabusTab({ courseId }) {
                                   value={editingTopic.durationHours}
                                   onChange={e => setEditingTopic(f => ({ ...f, durationHours: e.target.value }))}
                                   placeholder="Hours"
-                                  className="w-20 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                                  className="w-full sm:w-20 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-500"
                                 />
                               </div>
                               <input
@@ -1521,57 +1513,46 @@ function SyllabusTab({ courseId }) {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 min-w-0 truncate flex-1">
                                   {t.title}
                                 </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <StatusBadge
                                   status={t.status}
                                   title="Click to switch topic status"
                                   onChange={(newStatus) => updateTopicStatus(t, newStatus)}
                                 />
-                                {t.durationHours && (
-                                  <span className="text-[11px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
-                                    <Clock size={10} /> {t.durationHours}h
-                                  </span>
+                                {canManageSyllabus && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditTopic(t)}
+                                      className="w-6 h-6 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center justify-center"
+                                      title="Edit Topic"
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => promptDeleteTopic(t)}
+                                      title="Delete Topic"
+                                      className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </>
                                 )}
                               </div>
-                              {canManageSyllabus && (
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => moveTopic(m.id, topics, ti, -1)}
-                                    disabled={ti === 0}
-                                    title="Move Up"
-                                    className="w-6 h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 flex items-center justify-center"
-                                  >
-                                    <ChevronUp size={11} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => moveTopic(m.id, topics, ti, 1)}
-                                    disabled={ti === topics.length - 1}
-                                    title="Move Down"
-                                    className="w-6 h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 flex items-center justify-center"
-                                  >
-                                    <ChevronDown size={11} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openEditTopic(t)}
-                                    className="px-2 py-0.5 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium flex items-center gap-1"
-                                  >
-                                    <Pencil size={11} /> Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => promptDeleteTopic(t)}
-                                    title="Delete Topic"
-                                    className="w-6 h-6 rounded hover:bg-red-100 text-red-500 flex items-center justify-center"
-                                  >
-                                    <Trash2 size={11} />
-                                  </button>
+                              {(t.durationHours || t.description) && (
+                                <div className="flex items-center gap-2 text-xs text-gray-400">
+                                  {t.durationHours && (
+                                    <span className="flex items-center gap-0.5">
+                                      <Clock size={10} /> {t.durationHours}h
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1795,7 +1776,7 @@ function MaterialsTab({ courseId }) {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description (optional)" rows={2}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
                     {MATERIAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1927,7 +1908,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
 
   return (
     <div className="glass-card p-5 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-sm text-gray-500">Batches running for <span className="font-semibold text-gray-700 dark:text-gray-200">{courseTitle}</span></p>
         {canCreateBatch && (
           <button onClick={() => setShowForm(s => !s)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-semibold">
@@ -2037,12 +2018,12 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
       ) : (
         <div className="space-y-2">
           {batches.map(b => (
-            <div key={b.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{b.name}</p>
-                <p className="text-xs text-gray-400">{b.startDate} — {b.endDate} · {b.mode} · {b.timing}</p>
+            <div key={b.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{b.name}</p>
+                <p className="text-xs text-gray-400 truncate">{b.startDate} — {b.endDate} · {b.mode} · {b.timing}</p>
               </div>
-              <Link href="/admin/batches" className="text-xs font-semibold text-purple-600 hover:underline">Manage in Batches</Link>
+              <Link href="/admin/batches" className="text-xs font-semibold text-purple-600 hover:underline flex-shrink-0">Manage in Batches</Link>
             </div>
           ))}
         </div>

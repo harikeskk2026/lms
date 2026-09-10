@@ -98,7 +98,7 @@ export default function AdminDashboardView() {
     <div className="max-w-7xl mx-auto space-y-6">
 
       {/* Welcome Banner */}
-      <div className="rounded-2xl p-7 text-white overflow-hidden relative"
+      <div className="rounded-2xl p-5 sm:p-7 text-white overflow-hidden relative"
         style={{ background: 'linear-gradient(135deg, #3b0764 0%, #5b21b6 40%, #7c3aed 75%, #8b5cf6 100%)' }}>
         <div className="absolute -right-12 -top-12 w-60 h-60 rounded-full opacity-[0.08] bg-white" />
         <div className="absolute right-16 bottom-0 w-36 h-36 rounded-full opacity-[0.05] bg-white" />
@@ -274,7 +274,7 @@ export default function AdminDashboardView() {
             <div className="w-2 h-2 rounded-full bg-violet-500" />
             <h3 className="font-display font-bold text-gray-800 dark:text-white">Operational Quick Actions</h3>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {QUICK_ACTIONS.map(({ label, icon: Icon, href, color }) => (
               <button
                 key={label}

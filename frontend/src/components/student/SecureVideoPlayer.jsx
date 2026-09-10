@@ -226,7 +226,7 @@ export default function SecureVideoPlayer({ recordedSessionId }) {
 
   if (conflict) {
     return (
-      <div className="glass-card p-8 text-center space-y-4">
+      <div className="glass-card p-5 sm:p-8 text-center space-y-4">
         <AlertTriangle className="mx-auto text-yellow-500" size={32} />
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           This account is already playing a recorded session on another device.
@@ -241,7 +241,7 @@ export default function SecureVideoPlayer({ recordedSessionId }) {
 
   if (error) {
     return (
-      <div className="glass-card p-8 text-center">
+      <div className="glass-card p-5 sm:p-8 text-center">
         <AlertTriangle className="mx-auto text-red-500 mb-3" size={32} />
         <p className="text-sm text-red-600">{error}</p>
       </div>
