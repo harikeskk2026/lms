@@ -36,6 +36,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -88,6 +89,8 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         return new SubmissionListResponse(rows, new SubmissionSummaryResponse(total, submitted, pending, late));
     }
 
+    private static final Set<String> ALLOWED_SUBMISSION_EXTENSIONS = Set.of("pdf", "docx", "doc");
+
     @Override
     @Transactional
     public SubmissionRowResponse grade(Long assignmentId, Long submissionId, GradeSubmissionRequest request) {
@@ -97,17 +100,26 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
             throw new ResourceNotFoundException("Submission not found: " + submissionId);
         }
 
-        if (request.getMarks() != null) {
-            if (request.getMarks() > submission.getAssignment().getTotalMarks()) {
-                throw new BadRequestException("Marks cannot exceed the assignment's total marks");
+        if (submission.getMarks() != null) {
+            // Marks are already allocated and cannot be modified
+            if (request.getMarks() != null && !request.getMarks().equals(submission.getMarks())) {
+                throw new BadRequestException("Marks have already been allocated for this submission and cannot be changed.");
             }
-            submission.setMarks(request.getMarks());
-        }
-        if (request.getFeedback() != null) {
-            submission.setFeedback(request.getFeedback());
-        }
-        if (request.getReviewed() != null) {
-            submission.setReviewed(request.getReviewed());
+            // Allow updating the feedback given by the user
+            if (request.getFeedback() != null) {
+                submission.setFeedback(request.getFeedback().trim().isEmpty() ? null : request.getFeedback().trim());
+            }
+        } else {
+            if (request.getMarks() != null) {
+                if (request.getMarks() > submission.getAssignment().getTotalMarks()) {
+                    throw new BadRequestException("Marks cannot exceed the assignment's total marks");
+                }
+                submission.setMarks(request.getMarks());
+            }
+            if (request.getFeedback() != null) {
+                submission.setFeedback(request.getFeedback().trim().isEmpty() ? null : request.getFeedback().trim());
+            }
+            submission.setReviewed(true);
         }
 
         SubmissionRowResponse result = toRow(submissionRepository.save(submission));
@@ -229,7 +241,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         String primaryFileName = null;
 
         for (MultipartFile file : validFiles) {
-            StoredFile stored = fileStorageService.store(file, "submissions");
+            StoredFile stored = fileStorageService.store(file, "submissions", ALLOWED_SUBMISSION_EXTENSIONS);
             SubmissionAttachment att = new SubmissionAttachment(stored.url(), stored.originalName());
             attachments.add(att);
             if (primaryFileUrl == null) {

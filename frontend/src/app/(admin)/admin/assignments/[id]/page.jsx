@@ -2,13 +2,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Download,
+  ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Eye,
   Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw, Check, X,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatAssignmentDueDate } from '@/utils/assignmentDate'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import submissionService from '@/services/submissionService'
+import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 import { resolveFileUrl } from '@/lib/api'
 
 const STATUS_COLORS = {
@@ -49,9 +51,7 @@ export default function AssignmentDetailPage() {
   const [loading, setLoading] = useState(true)
   const [subLoading, setSubLoading] = useState(true)
   const [subError, setSubError] = useState(false)
-  const [gradeInputs, setGradeInputs] = useState({})
-  const [feedbackInputs, setFeedbackInputs] = useState({})
-  const [saving, setSaving] = useState({})
+  const [viewingFile, setViewingFile] = useState(null)
   const [actionLoading, setActionLoading] = useState({})
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -73,15 +73,6 @@ export default function AssignmentDetailPage() {
     submissionService.list(id)
       .then(r => {
         setSubmissions(r.data.submissions)
-        const grades = {}, feedbacks = {}
-        r.data.submissions.forEach(s => {
-          if (s.submissionId) {
-            grades[s.submissionId] = s.marks ?? ''
-            feedbacks[s.submissionId] = s.feedback ?? ''
-          }
-        })
-        setGradeInputs(grades)
-        setFeedbackInputs(feedbacks)
       })
       .catch(err => { toast.error(err.message || 'Failed to load submissions'); setSubError(true) })
       .finally(() => setSubLoading(false))
@@ -159,29 +150,6 @@ export default function AssignmentDetailPage() {
       toast.success('Assignment deleted')
       router.push('/admin/assignments')
     } catch (err) { toast.error(err.message || 'Failed to delete') }
-  }
-
-  const handleGrade = async (row) => {
-    const marks = gradeInputs[row.submissionId]
-    if (marks === '' || marks === undefined) return toast.error('Enter marks')
-    setSaving(s => ({ ...s, [row.submissionId]: true }))
-    try {
-      await submissionService.grade(id, row.submissionId, {
-        marks: Number(marks),
-        feedback: feedbackInputs[row.submissionId] || '',
-        reviewed: true,
-      })
-      toast.success('Submission graded')
-      loadSubmissions()
-    } catch (err) { toast.error(err.message || 'Failed to grade') }
-    finally { setSaving(s => ({ ...s, [row.submissionId]: false })) }
-  }
-
-  const handleMarkReviewed = async (row) => {
-    try {
-      await submissionService.grade(id, row.submissionId, { reviewed: !row.reviewed })
-      loadSubmissions()
-    } catch (err) { toast.error(err.message || 'Failed to update') }
   }
 
   const handleApprove = async (row) => {
@@ -274,7 +242,7 @@ export default function AssignmentDetailPage() {
             {[
               { icon: BookOpen, label: 'Course', value: assignment.course.title },
               { icon: Users, label: 'Batch', value: assignment.batch.name },
-              { icon: Calendar, label: 'Due Date', value: format(new Date(assignment.dueDate), 'dd MMM yyyy') },
+              { icon: Calendar, label: 'Due Date', value: formatAssignmentDueDate(assignment.dueDate, assignment.closeTime, assignment.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy') },
               { icon: Award, label: 'Total Marks', value: assignment.totalMarks },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-2">
@@ -295,10 +263,16 @@ export default function AssignmentDetailPage() {
           {assignment.attachmentUrl && (
             <div>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Attachment</h3>
-              <a href={resolveFileUrl(assignment.attachmentUrl)} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-purple-600 hover:underline font-semibold">
-                <Paperclip size={14} /> {assignment.attachmentName || 'Download attachment'} <Download size={12} />
-              </a>
+              <button
+                type="button"
+                onClick={() => setViewingFile({ url: resolveFileUrl(assignment.attachmentUrl), name: assignment.attachmentName || 'Attachment' })}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800/40 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors shadow-2xs"
+                title="Preview attachment"
+              >
+                <Paperclip size={13} className="text-purple-500" />
+                <span className="truncate max-w-[260px]">{assignment.attachmentName || 'Attachment'}</span>
+                <Eye size={13} className="text-purple-500 ml-0.5" />
+              </button>
             </div>
           )}
         </div>
@@ -390,7 +364,7 @@ export default function AssignmentDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['Student ID', 'Student', 'Status', 'Submitted', 'File', 'Marks', 'Feedback', 'Evaluation', 'Actions'].map(h => (
+                  {['Student ID', 'Student', 'Status', 'Submitted', 'File', 'Score', 'Feedback', 'Evaluation', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -420,84 +394,95 @@ export default function AssignmentDetailPage() {
                       {row.files && row.files.length > 0 ? (
                         <div className="flex flex-col gap-1">
                           {row.files.map((f, idx) => (
-                            <a key={idx} href={resolveFileUrl(f.fileUrl)} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold whitespace-nowrap">
-                              <Download size={12} /> {f.fileName || `File ${idx + 1}`}
-                            </a>
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setViewingFile({ url: resolveFileUrl(f.fileUrl), name: f.fileName || `File ${idx + 1}` })}
+                              className="inline-flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 hover:underline font-semibold whitespace-nowrap"
+                              title="Preview file"
+                            >
+                              <Paperclip size={12} className="text-purple-500" />
+                              <span className="truncate max-w-[160px]">{f.fileName || `File ${idx + 1}`}</span>
+                              <Eye size={12} className="text-purple-500 flex-shrink-0 ml-0.5" />
+                            </button>
                           ))}
                         </div>
                       ) : row.fileUrl ? (
-                        <a href={resolveFileUrl(row.fileUrl)} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold whitespace-nowrap">
-                          <Download size={12} /> {row.fileName || 'File'}
-                        </a>
-                      ) : <span className="text-gray-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
-                        <input
-                          type="number" min="0" max={assignment.totalMarks}
-                          value={gradeInputs[row.submissionId] ?? ''}
-                          onChange={e => setGradeInputs(prev => ({ ...prev, [row.submissionId]: e.target.value }))}
-                          placeholder={`/ ${assignment.totalMarks}`}
-                          className="w-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-purple-500"
-                        />
-                      ) : <span className="text-gray-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
-                        <input
-                          type="text"
-                          value={feedbackInputs[row.submissionId] ?? ''}
-                          onChange={e => setFeedbackInputs(prev => ({ ...prev, [row.submissionId]: e.target.value }))}
-                          placeholder="Optional feedback"
-                          className="w-40 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-purple-500"
-                        />
-                      ) : <span className="text-gray-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
-                        <button onClick={() => handleMarkReviewed(row)}
-                          className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full transition-colors ${row.reviewed ? EVAL_STATUS_COLORS.EVALUATED : EVAL_STATUS_COLORS.PENDING} hover:opacity-80`}
-                          title={row.reviewed ? 'Evaluated — click to mark pending' : 'Mark as evaluated'}>
-                          <CheckCircle2 size={12} /> {row.reviewed ? 'Evaluated' : 'Pending'}
+                        <button
+                          type="button"
+                          onClick={() => setViewingFile({ url: resolveFileUrl(row.fileUrl), name: row.fileName || 'File' })}
+                          className="inline-flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 hover:underline font-semibold whitespace-nowrap"
+                          title="Preview file"
+                        >
+                          <Paperclip size={12} className="text-purple-500" />
+                          <span className="truncate max-w-[160px]">{row.fileName || 'File'}</span>
+                          <Eye size={12} className="text-purple-500 flex-shrink-0 ml-0.5" />
                         </button>
-                      ) : row.status === 'PENDING_APPROVAL' ? (
-                        <span className="text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full">Needs Review</span>
                       ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      {row.submissionId ? (
-                        row.status === 'PENDING_APPROVAL' ? (
-                          <div className="flex items-center gap-1.5 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleApprove(row)}
-                              disabled={actionLoading[row.submissionId]}
-                              className="inline-flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-2.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-60"
-                              title="Approve submission"
-                            >
-                              <Check size={13} />
-                              <span>Approve</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setRejectTarget(row); setRejectReason('') }}
-                              disabled={actionLoading[row.submissionId]}
-                              className="inline-flex items-center gap-1 text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold px-2 py-1.5 rounded-lg transition-colors disabled:opacity-60"
-                              title="Reject submission"
-                            >
-                              <X size={13} />
-                              <span>Reject</span>
-                            </button>
-                          </div>
-                        ) : (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
-                          <button onClick={() => handleGrade(row)} disabled={saving[row.submissionId]}
-                            className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-60 whitespace-nowrap">
-                            {saving[row.submissionId] ? 'Saving...' : 'Save'}
+                      {row.marks != null ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800/60 shadow-2xs">
+                          <Award size={12} className="text-purple-600 dark:text-purple-400" />
+                          {row.marks} / {assignment.totalMarks}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.feedback ? (
+                        <p className="text-xs text-gray-700 dark:text-gray-300 italic max-w-[180px] truncate" title={row.feedback}>
+                          "{row.feedback}"
+                        </p>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.reviewed || row.marks != null ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-200 dark:border-green-800/40">
+                          <CheckCircle2 size={12} /> Evaluated
+                        </span>
+                      ) : row.status === 'PENDING_APPROVAL' ? (
+                        <span className="text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                          Needs Review
+                        </span>
+                      ) : row.status === 'SUBMITTED' || row.status === 'LATE' ? (
+                        <span className="text-xs font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                          Pending
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.status === 'PENDING_APPROVAL' ? (
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(row)}
+                            disabled={actionLoading[row.submissionId]}
+                            className="inline-flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-2.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-60"
+                            title="Approve submission"
+                          >
+                            <Check size={13} />
+                            <span>Approve</span>
                           </button>
-                        ) : null
-                      ) : null}
+                          <button
+                            type="button"
+                            onClick={() => { setRejectTarget(row); setRejectReason('') }}
+                            disabled={actionLoading[row.submissionId]}
+                            className="inline-flex items-center gap-1 text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold px-2 py-1.5 rounded-lg transition-colors disabled:opacity-60"
+                            title="Reject submission"
+                          >
+                            <X size={13} />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -568,6 +553,13 @@ export default function AssignmentDetailPage() {
             </div>
           </div>
         </div>
+      )}
+      {viewingFile && (
+        <ViewAttachmentModal
+          url={viewingFile.url}
+          name={viewingFile.name}
+          onClose={() => setViewingFile(null)}
+        />
       )}
     </div>
   )

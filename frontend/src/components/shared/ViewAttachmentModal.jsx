@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, X, ZoomIn, ZoomOut, FileText, ImageIcon, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, X, ZoomIn, ZoomOut, FileText, ImageIcon, Loader2, AlertCircle, ShieldAlert, Lock, EyeOff } from 'lucide-react'
+import toast from 'react-hot-toast'
+import tokenStorage from '@/utilities/tokenStorage'
 import { resolveFileUrl } from '@/lib/api'
 
 /**
@@ -17,9 +19,40 @@ function getFileType(name) {
 }
 
 /**
+ * Security watermark repeating diagonal grid.
+ * Displays student / user identity, timestamp, and confidentiality notice across the entire view.
+ * Specifically styled to remain clearly legible over white PDF documents and dark backgrounds alike,
+ * establishing an undeniable forensic deterrent against phone camera capture and external recordings.
+ */
+function SecurityWatermark({ user }) {
+  const userName = user?.name || user?.email || 'Authorized User'
+  const userEmail = user?.email || ''
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const watermarkText = `${userName} ${userEmail ? `• ${userEmail} ` : ''}• CONFIDENTIAL • ${dateStr} ${timeStr} • DO NOT RECORD`
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-40 overflow-hidden select-none flex flex-wrap items-center justify-around gap-x-20 gap-y-16 p-6"
+      aria-hidden="true"
+    >
+      {Array.from({ length: 48 }).map((_, i) => (
+        <span
+          key={i}
+          className="transform -rotate-25 text-xs font-mono font-bold tracking-wider text-neutral-900/15 dark:text-neutral-100/20 uppercase whitespace-nowrap drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]"
+        >
+          {watermarkText}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
  * Native in-platform PDF canvas viewer powered by PDF.js.
  * Eliminates browser PDF toolbars, removes download/print options,
- * and renders all pages sequentially onto HTML5 canvas elements.
+ * renders all pages sequentially onto HTML5 canvas elements,
+ * and restricts canvas pixel extraction.
  */
 function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
   const canvasRefs = useRef([])
@@ -49,7 +82,7 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
     return () => observer.disconnect()
   }, [containerRef])
 
-  // Load PDF document directly from URL using PDF.js (no binary pre-fetch needed)
+  // Load PDF document directly from URL using PDF.js
   useEffect(() => {
     if (!url) return
     let cancelled = false
@@ -64,7 +97,6 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
         const pdfjsLib = await import('pdfjs-dist')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
-        // Pass URL directly — pdfjs handles the fetch internally
         const loadingTask = pdfjsLib.getDocument(url)
         const pdf = await loadingTask.promise
         if (cancelled) return
@@ -105,7 +137,7 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
     renderTasksRef.current.forEach(t => t?.cancel?.())
     renderTasksRef.current = []
 
-    // High-DPI support: render at device pixel ratio (capped at 2.5x) for sharp text
+    // High-DPI support: render at device pixel ratio (capped at 2.5x)
     const outputScale = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2.5)
 
     ;(async () => {
@@ -129,6 +161,12 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
           renderTasksRef.current[pageNum - 1] = renderTask
 
           await renderTask.promise
+
+          // Canvas pixel scraping deterrence
+          try {
+            canvas.toDataURL = () => 'data:image/png;base64,'
+            canvas.toBlob = (cb) => cb?.(new Blob([]))
+          } catch {}
         } catch (e) {
           if (e?.name !== 'RenderingCancelledException') {
             console.error(`Error rendering page ${pageNum}:`, e)
@@ -171,7 +209,7 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
         <div key={i} className="flex flex-col items-center max-w-full">
           <canvas
             ref={el => (canvasRefs.current[i] = el)}
-            className="shadow-2xl bg-white rounded-md max-w-full"
+            className="shadow-2xl bg-white rounded-md max-w-full pointer-events-none select-none"
             onContextMenu={e => e.preventDefault()}
             onDragStart={e => e.preventDefault()}
           />
@@ -188,7 +226,11 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
   const [numPages, setNumPages] = useState(0)
   const [zoomLevel, setZoomLevel] = useState(1.0)
   const [mounted, setMounted] = useState(false)
+  const [isObscured, setIsObscured] = useState(false)
+  const [obscureReason, setObscureReason] = useState('')
   const scrollContainerRef = useRef(null)
+
+  const user = tokenStorage.getUser()
 
   // Resolve relative /uploads/ paths to same-origin URLs
   const fileUrl = url
@@ -220,12 +262,231 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
     }
   }, [])
 
+  // ── 0. Synchronous DOM Obscuration & Restoration Helpers ────────────────
+  const obscureDom = useCallback((reason) => {
+    setIsObscured(true)
+    if (reason) setObscureReason(reason)
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.style.filter = 'blur(100px)'
+      scrollContainerRef.current.style.opacity = '0'
+      scrollContainerRef.current.style.visibility = 'hidden'
+      scrollContainerRef.current.style.pointerEvents = 'none'
+    }
+  }, [])
+
+  const restoreDom = useCallback(() => {
+    setIsObscured(false)
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.style.filter = 'none'
+      scrollContainerRef.current.style.opacity = '1'
+      scrollContainerRef.current.style.visibility = 'visible'
+      scrollContainerRef.current.style.pointerEvents = 'auto'
+    }
+  }, [])
+
+  // Clipboard sanitization helper: overwrites system clipboard with a warning
+  const wipeClipboard = useCallback(async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText('⚠️ Protected Content: Screenshots and screen recordings of assignment files are prohibited.')
+      }
+    } catch {
+      // Ignore clipboard permission rejections silently
+    }
+  }, [])
+
+  // ── 1. Focus / Window Blur / Visibility Anti-Screenshot Shield ───────────
+  // Windows Snipping Tool (Win+Shift+S) and screen capture overlays immediately
+  // take window focus away. By immediately obscuring the screen on blur or
+  // inactive state, any capture attempts only capture the opaque security shield.
+  useEffect(() => {
+    const handleBlur = () => {
+      obscureDom('Window inactive — content protected against background snips and screen capture.')
+      wipeClipboard()
+    }
+
+    const handleFocus = () => {
+      wipeClipboard()
+      restoreDom()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        obscureDom('Tab is hidden — content protected.')
+        wipeClipboard()
+      } else if (document.hasFocus()) {
+        wipeClipboard()
+        restoreDom()
+      }
+    }
+
+    // High-frequency 60ms continuous focus guard
+    const focusInterval = setInterval(() => {
+      if (!document.hasFocus() && !document.hidden) {
+        obscureDom('Window lost focus — content protected.')
+      }
+    }, 60)
+
+    window.addEventListener('blur', handleBlur)
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(focusInterval)
+    }
+  }, [obscureDom, restoreDom, wipeClipboard])
+
+  // ── 2. Keyboard Interception & Clipboard Wiping ──────────────────────────
+  // Intercepts PrintScreen, Windows Snipping Tool (Win+Shift+S), Ctrl+P, Ctrl+S,
+  // and DevTools combinations. Wipes system clipboard immediately on capture key.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const key = e.key || ''
+      const code = e.keyCode || e.which
+
+      // PrintScreen key (any combination with Alt, Shift, Ctrl, Win)
+      if (key === 'PrintScreen' || key === 'Snapshot' || code === 44) {
+        e.preventDefault()
+        e.stopPropagation()
+        obscureDom('Screenshot key detected — screen capture is strictly restricted.')
+        wipeClipboard()
+        toast.error('Screenshots and screen recordings are restricted on assignment files.', { id: 'screenshot-blocked' })
+        setTimeout(() => {
+          if (document.hasFocus()) restoreDom()
+        }, 2500)
+        return
+      }
+
+      // Windows/Command + Shift + S (Snipping Tool shortcut) or Ctrl + Shift + S
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (key.toLowerCase() === 's' || code === 83)) {
+        e.preventDefault()
+        e.stopPropagation()
+        obscureDom('Screen capture shortcut detected — content protected.')
+        wipeClipboard()
+        toast.error('Screen capture is restricted on assignment files.', { id: 'snip-blocked' })
+        setTimeout(() => {
+          if (document.hasFocus()) restoreDom()
+        }, 2500)
+        return
+      }
+
+      // Ctrl + P or Meta + P (Print / Save to PDF)
+      if ((e.ctrlKey || e.metaKey) && (key.toLowerCase() === 'p' || code === 80)) {
+        e.preventDefault()
+        e.stopPropagation()
+        toast.error('Printing or exporting assignment files is prohibited.', { id: 'print-blocked' })
+        return
+      }
+
+      // Ctrl + S or Meta + S (Save Page)
+      if ((e.ctrlKey || e.metaKey) && (key.toLowerCase() === 's' || code === 83) && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        toast.error('Saving assignment files is prohibited.', { id: 'save-blocked' })
+        return
+      }
+
+      // Ctrl + Shift + I/C/J or F12 or Ctrl + U (Inspect / View Source)
+      if (
+        code === 123 ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'c', 'j'].includes(key.toLowerCase())) ||
+        ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'u')
+      ) {
+        e.preventDefault()
+        e.stopPropagation()
+        toast.error('Developer tools are disabled on secure document preview.', { id: 'devtools-blocked' })
+        return
+      }
+    }
+
+    const handleKeyUp = (e) => {
+      const key = e.key || ''
+      const code = e.keyCode || e.which
+      if (key === 'PrintScreen' || key === 'Snapshot' || code === 44) {
+        e.preventDefault()
+        e.stopPropagation()
+        wipeClipboard()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', handleKeyUp, true)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', handleKeyUp, true)
+    }
+  }, [obscureDom, restoreDom, wipeClipboard])
+
+  // ── 3. Screen Sharing & Screen Recording Override ────────────────────────
+  // Overrides navigator.mediaDevices.getDisplayMedia and getUserMedia to disable
+  // browser-initiated screen recording, tab capture, or window sharing.
+  useEffect(() => {
+    let originalGetDisplayMedia = null
+    let originalGetUserMedia = null
+
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      if (navigator.mediaDevices.getDisplayMedia) {
+        originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices)
+        navigator.mediaDevices.getDisplayMedia = async () => {
+          obscureDom('Screen sharing / recording blocked.')
+          toast.error('Screen recording and screen sharing are disabled while viewing protected assignment files.', { id: 'stream-blocked' })
+          throw new DOMException('Screen recording and screen sharing are prohibited for protected documents.', 'NotAllowedError')
+        }
+      }
+      if (navigator.mediaDevices.getUserMedia) {
+        originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+        navigator.mediaDevices.getUserMedia = async (constraints) => {
+          if (constraints?.video?.mediaSource || constraints?.video?.mandatory?.chromeMediaSource) {
+            obscureDom('Screen capture blocked.')
+            toast.error('Screen capture is disabled while viewing protected files.', { id: 'stream-blocked' })
+            throw new DOMException('Screen capture is prohibited.', 'NotAllowedError')
+          }
+          return originalGetUserMedia(constraints)
+        }
+      }
+    }
+
+    return () => {
+      if (originalGetDisplayMedia && navigator.mediaDevices) {
+        navigator.mediaDevices.getDisplayMedia = originalGetDisplayMedia
+      }
+      if (originalGetUserMedia && navigator.mediaDevices) {
+        navigator.mediaDevices.getUserMedia = originalGetUserMedia
+      }
+    }
+  }, [obscureDom])
+
+  // ── 4. Print Protection CSS Injection ────────────────────────────────────
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.id = 'anti-screenshot-print-rules'
+    style.innerHTML = `
+      @media print {
+        html, body, #__next, .view-attachment-modal, canvas, img, iframe, header, main {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          height: 0 !important;
+          width: 0 !important;
+        }
+      }
+    `
+    document.head.appendChild(style)
+    return () => {
+      const el = document.getElementById('anti-screenshot-print-rules')
+      if (el) el.remove()
+    }
+  }, [])
+
   const handleZoomIn = () => setZoomLevel(z => Math.min(2.5, +(z + 0.15).toFixed(2)))
   const handleZoomOut = () => setZoomLevel(z => Math.max(0.3, +(z - 0.15).toFixed(2)))
   const handleResetZoom = () => setZoomLevel(1.0)
 
-  // Google Docs Viewer needs a publicly accessible absolute URL.
-  // For localhost, we construct the full URL from window.location.origin.
+  // Office URL configuration
   const officeAbsoluteUrl = fileUrl
     ? (fileUrl.startsWith('/') ? `${typeof window !== 'undefined' ? window.location.origin : ''}${fileUrl}` : fileUrl)
     : ''
@@ -237,9 +498,13 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
 
   const modal = (
     <div
-      className="fixed inset-0 z-[9999] w-screen h-screen bg-gray-950 flex flex-col overflow-hidden select-none animate-fadeIn"
+      className="view-attachment-modal fixed inset-0 z-[9999] w-screen h-screen bg-gray-950 flex flex-col overflow-hidden select-none animate-fadeIn"
       onContextMenu={e => e.preventDefault()}
+      onDragStart={e => e.preventDefault()}
     >
+      {/* ── Security Watermark Overlay ────────────────────────────────────── */}
+      <SecurityWatermark user={user} />
+
       {/* ── Top Header Toolbar ────────────────────────────────────────────── */}
       <header className="h-14 min-h-[56px] w-full px-4 sm:px-6 bg-gray-900 border-b border-gray-800 flex items-center justify-between gap-4 flex-shrink-0 z-20 shadow-md">
         
@@ -248,7 +513,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-gray-200 bg-gray-800 hover:bg-gray-700 hover:text-white transition-colors border border-gray-700 active:scale-95 flex-shrink-0"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-gray-200 bg-gray-800 hover:bg-gray-700 hover:text-white transition-colors border border-gray-700 active:scale-95 flex-shrink-0 cursor-pointer"
             title="Go Back"
           >
             <ArrowLeft size={16} />
@@ -272,6 +537,11 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
                 {numPages} {numPages === 1 ? 'page' : 'pages'}
               </span>
             )}
+
+            {/* Protected Badge */}
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-md hidden md:inline-flex flex-shrink-0">
+              <Lock size={10} /> Protected View
+            </span>
           </div>
         </div>
 
@@ -283,7 +553,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
                 type="button"
                 onClick={handleZoomOut}
                 disabled={zoomLevel <= 0.3}
-                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 transition-colors cursor-pointer"
                 title="Zoom out"
               >
                 <ZoomOut size={16} />
@@ -292,7 +562,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
               <button
                 type="button"
                 onClick={handleResetZoom}
-                className="text-xs font-semibold text-gray-300 w-12 text-center hover:text-purple-400 transition-colors"
+                className="text-xs font-semibold text-gray-300 w-12 text-center hover:text-purple-400 transition-colors cursor-pointer"
                 title="Reset zoom to 100%"
               >
                 {Math.round(zoomLevel * 100)}%
@@ -302,7 +572,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
                 type="button"
                 onClick={handleZoomIn}
                 disabled={zoomLevel >= 2.5}
-                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 transition-colors cursor-pointer"
                 title="Zoom in"
               >
                 <ZoomIn size={16} />
@@ -313,7 +583,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
             title="Close Preview (Esc)"
           >
             <X size={18} />
@@ -321,11 +591,52 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
         </div>
       </header>
 
+      {/* ── Anti-Screenshot & Screen Recording Protection Shield ───────────── */}
+      {isObscured && (
+        <div
+          onClick={() => {
+            window.focus()
+            setIsObscured(false)
+          }}
+          className="absolute inset-0 z-50 bg-gray-950/98 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center select-none cursor-pointer animate-fadeIn"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mb-4 shadow-xl shadow-red-500/10">
+            <ShieldAlert size={36} className="animate-pulse" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2 tracking-wide">Screen Capture Restricted</h3>
+          <p className="text-sm text-gray-300 max-w-md mb-2 leading-relaxed">
+            {obscureReason || 'Content is protected against unauthorized screenshots, snipping tools, and screen recordings.'}
+          </p>
+          <p className="text-xs text-gray-500 max-w-sm mb-6">
+            Assignment materials are protected by CareerLabs Content Security Policy.
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.focus()
+              setIsObscured(false)
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-md transition-all active:scale-95 cursor-pointer"
+          >
+            <Lock size={14} />
+            <span>Click to Resume Viewing</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Fullscreen Content Area ────────────────────────────────────────── */}
       <main
         ref={scrollContainerRef}
-        className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-auto bg-gray-950 flex flex-col items-center p-4 sm:p-8 relative scrollbar-thin"
+        style={{
+          filter: isObscured ? 'blur(80px)' : 'none',
+          opacity: isObscured ? 0 : 1,
+          pointerEvents: isObscured ? 'none' : 'auto',
+          transition: 'filter 0.12s ease, opacity 0.12s ease',
+        }}
+        className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-auto bg-gray-950 flex flex-col items-center p-4 sm:p-8 relative scrollbar-thin select-none"
         onContextMenu={e => e.preventDefault()}
+        onDragStart={e => e.preventDefault()}
       >
         {/* In-Platform PDF Canvas Viewer (No native toolbar, no download option) */}
         {fileType === 'pdf' && fileUrl && (

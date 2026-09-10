@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { format, formatDistanceToNow, isToday } from 'date-fns'
+import { formatAssignmentDueDate } from '@/utils/assignmentDate'
 import {
   Calendar, ClipboardList, Brain, BookOpen, Play,
   FileText, Download, Star, ChevronRight, Flame,
@@ -514,7 +515,7 @@ function AssignmentsDashboard() {
           <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors">
             <div className="flex-1 min-w-0 mr-2">
               <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{a.title}</p>
-              <p className="text-xs text-gray-400">Due {format(new Date(a.dueDate), 'MMM d')}</p>
+              <p className="text-xs text-gray-400">Due {formatAssignmentDueDate(a.dueDate, a.closeTime, a.closeTime ? 'MMM d, h:mm a' : 'MMM d')}</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {s?.grade != null && <span className="chip bg-green-100 text-green-700 text-[10px]">{s.grade}/{a.maxMarks}</span>}

@@ -52,6 +52,8 @@ import java.util.stream.Collectors;
 @Service
 public class AssignmentServiceImpl implements AssignmentService {
 
+    private static final Set<String> ALLOWED_ASSIGNMENT_EXTENSIONS = Set.of("pdf", "docx", "doc");
+
     private final AssignmentRepository assignmentRepository;
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
@@ -256,7 +258,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     public UploadResponse uploadAttachment(MultipartFile file) {
-        StoredFile stored = fileStorageService.store(file, "assignments");
+        StoredFile stored = fileStorageService.store(file, "assignments", ALLOWED_ASSIGNMENT_EXTENSIONS);
         return new UploadResponse(stored.url(), stored.originalName());
     }
 

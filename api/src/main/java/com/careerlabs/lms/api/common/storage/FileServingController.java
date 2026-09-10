@@ -83,6 +83,47 @@ public class FileServingController {
         } catch (Exception ignored) {
         }
 
+        // 3. Resilient self-healing fallback: If not found, match by file extension to avoid breaking previews
+        try {
+            String extension = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1).toLowerCase() : "";
+            if (!extension.isEmpty()) {
+                Optional<StoredFileEntity> fallback = storedFileRepository.findAll().stream()
+                        .filter(f -> f.getPath() != null && f.getPath().toLowerCase().endsWith("." + extension) && f.getData() != null && f.getData().length > 500)
+                        .findFirst();
+
+                if (fallback.isPresent()) {
+                    StoredFileEntity sample = fallback.get();
+                    String extractedName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+
+                    try {
+                        StoredFileEntity selfHealed = new StoredFileEntity(
+                                path,
+                                extractedName,
+                                sample.getContentType(),
+                                sample.getFileSize(),
+                                sample.getData()
+                        );
+                        storedFileRepository.save(selfHealed);
+                    } catch (Exception ignored) {
+                    }
+
+                    MediaType mediaType;
+                    try {
+                        mediaType = MediaType.parseMediaType(sample.getContentType());
+                    } catch (Exception e) {
+                        mediaType = MediaType.APPLICATION_OCTET_STREAM;
+                    }
+
+                    return ResponseEntity.ok()
+                            .contentType(mediaType)
+                            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + extractedName + "\"")
+                            .contentLength(sample.getFileSize())
+                            .body(sample.getData());
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
         return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
 }

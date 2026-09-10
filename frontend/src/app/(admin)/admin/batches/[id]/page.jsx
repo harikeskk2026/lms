@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search, Download, Paperclip, Eye, FileText, Check, X } from 'lucide-react'
+import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search, Paperclip, Eye, FileText, Check, X, Award, Lock } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi, resolveFileUrl } from '@/lib/api'
 import studentService from '@/services/studentService'
@@ -41,6 +42,12 @@ export default function BatchDetailPage() {
   const [submissionsSummary, setSubmissionsSummary] = useState(null)
   const [submissionsFilter, setSubmissionsFilter] = useState('SUBMITTED')
   const [tab, setTab] = useState('Overview')
+  const [viewingFile, setViewingFile] = useState(null)
+  const [panelGradeInputs, setPanelGradeInputs] = useState({})
+  const [panelFeedbackInputs, setPanelFeedbackInputs] = useState({})
+  const [panelGradingLoading, setPanelGradingLoading] = useState({})
+  const [editingFeedbackId, setEditingFeedbackId] = useState({})
+  const [editingFeedbackText, setEditingFeedbackText] = useState({})
   const [attPanel, setAttPanel] = useState(false)
   const [attClass, setAttClass] = useState(null)
   const [attSheet, setAttSheet] = useState(null)
@@ -74,13 +81,93 @@ export default function BatchDetailPage() {
     try {
       const res = await submissionService.list(a.id)
       const data = res.data?.data || res.data || {}
-      setSubmissionsList(data.submissions || [])
+      const subs = data.submissions || []
+      setSubmissionsList(subs)
       setSubmissionsSummary(data.summary || null)
+      const grades = {}
+      const feedbacks = {}
+      subs.forEach(sub => {
+        if (sub.submissionId) {
+          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
+          feedbacks[sub.submissionId] = sub.feedback || ''
+        }
+      })
+      setPanelGradeInputs(grades)
+      setPanelFeedbackInputs(feedbacks)
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'Failed to load submissions')
       setSubmissionsList([])
     } finally {
       setSubmissionsLoading(false)
+    }
+  }
+
+  const handleSaveMarks = async (s) => {
+    if (!selectedAssignment || !s.submissionId) return
+    const rawMarks = panelGradeInputs[s.submissionId]
+    if (rawMarks === '' || rawMarks === undefined || rawMarks === null) {
+      toast.error('Please enter marks to allocate')
+      return
+    }
+    const max = selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100
+    const marks = Number(rawMarks)
+    if (isNaN(marks) || marks < 0 || marks > max) {
+      toast.error(`Marks must be between 0 and ${max}`)
+      return
+    }
+
+    setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: true }))
+    try {
+      await submissionService.grade(selectedAssignment.id, s.submissionId, {
+        marks: marks,
+        feedback: panelFeedbackInputs[s.submissionId]?.trim() || '',
+        reviewed: true,
+      })
+      toast.success(`Marks allocated permanently for ${s.studentName}`)
+      const res = await submissionService.list(selectedAssignment.id)
+      const data = res.data?.data || res.data || {}
+      const subs = data.submissions || []
+      setSubmissionsList(subs)
+      setSubmissionsSummary(data.summary || null)
+      const grades = {}
+      const feedbacks = {}
+      subs.forEach(sub => {
+        if (sub.submissionId) {
+          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
+          feedbacks[sub.submissionId] = sub.feedback || ''
+        }
+      })
+      setPanelGradeInputs(grades)
+      setPanelFeedbackInputs(feedbacks)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to allocate marks')
+    } finally {
+      setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: false }))
+    }
+  }
+
+  const handleUpdateFeedback = async (s) => {
+    if (!selectedAssignment || !s.submissionId) return
+    const newFeedback = (editingFeedbackText[s.submissionId] ?? '').trim()
+    setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: true }))
+    try {
+      await submissionService.grade(selectedAssignment.id, s.submissionId, {
+        marks: s.marks,
+        feedback: newFeedback,
+        reviewed: true,
+      })
+      toast.success(`Feedback updated for ${s.studentName}`)
+      const res = await submissionService.list(selectedAssignment.id)
+      const data = res.data?.data || res.data || {}
+      const subs = data.submissions || []
+      setSubmissionsList(subs)
+      setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: false }))
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to update feedback')
+    } finally {
+      setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: false }))
     }
   }
 
@@ -92,8 +179,20 @@ export default function BatchDetailPage() {
       toast.success(`Submission approved for ${s.studentName}`)
       const res = await submissionService.list(selectedAssignment.id)
       const data = res.data?.data || res.data || {}
-      setSubmissionsList(data.submissions || [])
+      const subs = data.submissions || []
+      setSubmissionsList(subs)
       setSubmissionsSummary(data.summary || null)
+      const grades = {}
+      const feedbacks = {}
+      subs.forEach(sub => {
+        if (sub.submissionId) {
+          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
+          feedbacks[sub.submissionId] = sub.feedback || ''
+        }
+      })
+      setPanelGradeInputs(grades)
+      setPanelFeedbackInputs(feedbacks)
+      load()
     } catch (err) {
       toast.error(err.message || 'Failed to approve submission')
     } finally {
@@ -114,8 +213,20 @@ export default function BatchDetailPage() {
       toast.success(`Submission rejected for ${s.studentName}`)
       const res = await submissionService.list(selectedAssignment.id)
       const data = res.data?.data || res.data || {}
-      setSubmissionsList(data.submissions || [])
+      const subs = data.submissions || []
+      setSubmissionsList(subs)
       setSubmissionsSummary(data.summary || null)
+      const grades = {}
+      const feedbacks = {}
+      subs.forEach(sub => {
+        if (sub.submissionId) {
+          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
+          feedbacks[sub.submissionId] = sub.feedback || ''
+        }
+      })
+      setPanelGradeInputs(grades)
+      setPanelFeedbackInputs(feedbacks)
+      load()
     } catch (err) {
       toast.error(err.message || 'Failed to reject submission')
     } finally {
@@ -796,17 +907,17 @@ export default function BatchDetailPage() {
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Submitted Files ({files.length}):</p>
                             <div className="flex flex-wrap gap-1.5">
                               {files.map((f, fIdx) => (
-                                <a
+                                <button
                                   key={fIdx}
-                                  href={resolveFileUrl(f.fileUrl)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-50 transition-colors shadow-2xs"
+                                  type="button"
+                                  onClick={() => setViewingFile({ url: resolveFileUrl(f.fileUrl), name: f.fileName || `Submission File ${fIdx + 1}` })}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-50 transition-colors shadow-2xs cursor-pointer"
+                                  title="Preview file within platform"
                                 >
                                   <Paperclip size={12} className="text-purple-500" />
                                   <span className="truncate max-w-[180px]">{f.fileName || `File ${fIdx + 1}`}</span>
-                                  <Download size={11} className="text-gray-400 ml-0.5" />
-                                </a>
+                                  <Eye size={12} className="text-purple-600 ml-0.5" />
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -823,20 +934,116 @@ export default function BatchDetailPage() {
                         )}
 
                         {/* Marks & Feedback */}
-                        {(s.marks != null || s.feedback) && (
-                          <div className="flex items-center justify-between text-xs pt-1 text-gray-500">
-                            {s.marks != null && (
-                              <span>
-                                Score: <strong className="text-green-600">{s.marks}</strong> / {selectedAssignment.totalMarks ?? selectedAssignment.maxMarks}
+                        {(s.marks != null || s.reviewed) ? (
+                          <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-xs space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Award size={14} className="text-emerald-600 dark:text-emerald-400" />
+                                <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                                  Score: {s.marks ?? '—'} / {selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100}
+                                </span>
+                              </div>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
+                                <Lock size={10} /> Marks Locked
                               </span>
-                            )}
-                            {s.feedback && (
-                              <span className="italic text-gray-400 truncate max-w-[250px]">
-                                Feedback: {s.feedback}
-                              </span>
+                            </div>
+
+                            {/* Feedback Section with User Edit Ability */}
+                            {editingFeedbackId[s.submissionId] ? (
+                              <div className="flex items-center gap-2 pt-1 border-t border-emerald-100 dark:border-emerald-900/40">
+                                <input
+                                  type="text"
+                                  value={editingFeedbackText[s.submissionId] ?? ''}
+                                  onChange={(e) => setEditingFeedbackText(prev => ({ ...prev, [s.submissionId]: e.target.value }))}
+                                  placeholder="Enter feedback for student..."
+                                  className="flex-1 text-xs px-2.5 py-1 rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  disabled={panelGradingLoading[s.submissionId]}
+                                  onClick={() => handleUpdateFeedback(s)}
+                                  className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: false }))}
+                                  className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 text-[11px] font-semibold cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between pt-1 border-t border-emerald-100 dark:border-emerald-900/40">
+                                <div className="flex-1 pr-2">
+                                  {s.feedback ? (
+                                    <p className="text-gray-600 dark:text-gray-300 text-[11px] italic pl-5">
+                                      "{s.feedback}"
+                                    </p>
+                                  ) : (
+                                    <p className="text-gray-400 dark:text-gray-500 text-[11px] italic pl-5">
+                                      No feedback provided.
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: true }))
+                                    setEditingFeedbackText(prev => ({ ...prev, [s.submissionId]: s.feedback || '' }))
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300 hover:text-purple-900 bg-white/80 dark:bg-gray-800 border border-purple-200 dark:border-purple-700/60 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex-shrink-0"
+                                >
+                                  <Pencil size={10} />
+                                  <span>{s.feedback ? 'Edit Feedback' : 'Add Feedback'}</span>
+                                </button>
+                              </div>
                             )}
                           </div>
-                        )}
+                        ) : (s.status !== 'PENDING' && s.status !== 'PENDING_APPROVAL' && s.status !== 'REJECTED' && s.submissionId) ? (
+                          <div className="p-3 rounded-xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/30 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-purple-900 dark:text-purple-200 flex items-center gap-1">
+                                <Award size={13} className="text-purple-600" /> Allocate Marks
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                Max Marks: {selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-24">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100}
+                                  value={panelGradeInputs[s.submissionId] ?? ''}
+                                  onChange={(e) => setPanelGradeInputs(prev => ({ ...prev, [s.submissionId]: e.target.value }))}
+                                  placeholder="Marks"
+                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={panelFeedbackInputs[s.submissionId] ?? ''}
+                                  onChange={(e) => setPanelFeedbackInputs(prev => ({ ...prev, [s.submissionId]: e.target.value }))}
+                                  placeholder="Feedback (optional)..."
+                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                disabled={panelGradingLoading[s.submissionId]}
+                                onClick={() => handleSaveMarks(s)}
+                                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-60 flex-shrink-0 cursor-pointer"
+                              >
+                                {panelGradingLoading[s.submissionId] ? 'Saving...' : 'Allocate'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
 
                         {/* Rejection reason if any */}
                         {s.status === 'REJECTED' && s.rejectionReason && (
@@ -1038,6 +1245,14 @@ export default function BatchDetailPage() {
           )
         })()}
       </SlidePanel>
+      {/* Attachment Preview Modal */}
+      {viewingFile && (
+        <ViewAttachmentModal
+          url={viewingFile.url}
+          name={viewingFile.name}
+          onClose={() => setViewingFile(null)}
+        />
+      )}
     </div>
   )
 }

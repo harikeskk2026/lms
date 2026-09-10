@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatAssignmentDueDate } from '@/utils/assignmentDate'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import courseService from '@/services/courseService'
@@ -144,6 +145,12 @@ export default function AssignmentsPage() {
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+    if (!['.pdf', '.docx', '.doc'].includes(ext)) {
+      toast.error(`"${file.name}" is not supported. Only PDF or DOCX files are allowed`)
+      e.target.value = ''
+      return
+    }
     setUploading(true)
     try {
       const r = await assignmentService.upload(file)
@@ -375,7 +382,7 @@ export default function AssignmentsPage() {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course.title}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch.name}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{format(new Date(a.dueDate), 'dd MMM yyyy')}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{formatAssignmentDueDate(a.dueDate, a.closeTime, a.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy')}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.totalMarks}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[a.status]}`}>{a.status}</span>
@@ -577,7 +584,7 @@ export default function AssignmentsPage() {
             )}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF, DOCX, or XLS only)</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF or DOCX only)</label>
             {form.attachmentName ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
                 <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate min-w-0">
@@ -601,7 +608,7 @@ export default function AssignmentsPage() {
             ) : (
               <input
                 type="file"
-                accept=".pdf,.docx,.xls,.xlsx"
+                accept=".pdf,.docx,.doc"
                 onChange={handleFileChange}
                 disabled={uploading}
                 className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:text-sm file:font-semibold hover:file:bg-purple-100"
