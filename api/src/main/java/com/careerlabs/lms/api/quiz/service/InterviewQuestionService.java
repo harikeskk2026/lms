@@ -10,9 +10,9 @@ import java.util.List;
 
 public interface InterviewQuestionService {
 
-    InterviewPrepPageResponse browse(String category, QuizDifficulty difficulty, String search, int page, int limit);
+    InterviewPrepPageResponse browse(String category, QuizDifficulty difficulty, String search, Long courseId, int page, int limit);
 
-    List<InterviewQuestionResponse> listAll();
+    List<InterviewQuestionResponse> listAll(String category, QuizDifficulty difficulty, String search, Boolean active, Long courseId);
 
     InterviewQuestionResponse get(Long id);
 
@@ -20,5 +20,5 @@ public interface InterviewQuestionService {
 
     InterviewQuestionResponse update(Long id, UpdateInterviewQuestionRequest request);
 
-    void deactivate(Long id);
+    void delete(Long id);
 }

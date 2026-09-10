@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
-export default function SlidePanel({ open, onClose, title, subtitle, children, width = 'w-[480px]' }) {
+export default function SlidePanel({ open, onClose, title, subtitle, children, width = 'w-full sm:w-[480px] lg:w-[540px]' }) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function SlidePanel({ open, onClose, title, subtitle, children, w
   return createPortal(
     <>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[90] animate-fadeIn" onClick={onClose} />
-      <div className={`fixed top-0 right-0 h-full ${width} z-[100] bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInRight border-l border-purple-100 dark:border-purple-900/30`}>
+      <div className={`fixed top-0 right-0 h-full ${width} max-w-full min-w-0 z-[100] bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInRight border-l border-purple-100 dark:border-purple-900/30`}>
         <div className="flex items-center justify-between px-6 py-5 border-b border-purple-100 dark:border-purple-900/30">
           <div>
             <h2 className="font-display font-bold text-lg text-gray-800 dark:text-white">{title}</h2>

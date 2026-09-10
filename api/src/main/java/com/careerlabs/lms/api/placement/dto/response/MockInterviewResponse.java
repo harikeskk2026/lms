@@ -1,68 +1,77 @@
 package com.careerlabs.lms.api.placement.dto.response;
 
 import com.careerlabs.lms.api.placement.entity.MockInterview;
+import com.careerlabs.lms.api.placement.entity.MockInterviewMode;
 import com.careerlabs.lms.api.placement.entity.MockInterviewStatus;
-import com.careerlabs.lms.api.student.entity.Student;
+import com.careerlabs.lms.api.placement.entity.PreparationMaterial;
 import org.hibernate.Hibernate;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 
 public record MockInterviewResponse(
     Long id,
-    StudentRef student,
+    MockInterviewMode mode,
     Instant scheduledAt,
+    Integer durationMinutes,
     String interviewerName,
     String meetLink,
+    String location,
     MockInterviewStatus status,
-    Integer rating,
-    String feedback,
-    List<String> strengths,
-    List<String> improvements,
+    String syllabus,
+    String instructions,
+    List<MockInterviewCandidateResponse> candidates,
+    List<Long> preparationMaterialIds,
     Instant createdAt
 ) {
-    public record StudentRef(Long id, UserRef user) {}
     public record UserRef(Long id, String name, String email) {}
 
     public static MockInterviewResponse from(MockInterview m) {
-        StudentRef sRef = null;
-        if (m.getStudent() != null) {
-            Student s = m.getStudent();
-            UserRef uRef = null;
-            try {
-                if (s.getUser() != null) {
-                    if (Hibernate.isInitialized(s.getUser())) {
-                        uRef = new UserRef(s.getUser().getId(), s.getUser().getName(), s.getUser().getEmail());
-                    } else {
-                        uRef = new UserRef(s.getUser().getId(), null, null);
-                    }
-                }
-            } catch (Exception e) {
-                uRef = null;
-            }
-            sRef = new StudentRef(s.getId(), uRef);
+        return build(m, m.getId(), null);
+    }
+
+    /**
+     * Builds the response so the candidate list only exposes the current student's
+     * participation (student view must never leak other students' data).
+     */
+    public static MockInterviewResponse forStudent(MockInterview m, Long studentId) {
+        return build(m, m.getId(), studentId);
+    }
+
+    public static MockInterviewResponse from(MockInterview m, Long candidateOnlyStudentId) {
+        return build(m, m.getId(), candidateOnlyStudentId);
+    }
+
+    private static MockInterviewResponse build(MockInterview m, Long id, Long candidateOnlyStudentId) {
+        List<MockInterviewCandidateResponse> candidates;
+        if (candidateOnlyStudentId != null) {
+            candidates = m.getCandidates().stream()
+                    .filter(c -> c.getStudent() != null && c.getStudent().getId().equals(candidateOnlyStudentId))
+                    .map(MockInterviewCandidateResponse::from)
+                    .toList();
+        } else {
+            candidates = m.getCandidates().stream().map(MockInterviewCandidateResponse::from).toList();
         }
 
-        List<String> strList = m.getStrengths() != null && !m.getStrengths().isBlank()
-                ? Arrays.stream(m.getStrengths().split(",")).map(String::trim).filter(st -> !st.isEmpty()).toList()
-                : List.of();
-
-        List<String> impList = m.getImprovements() != null && !m.getImprovements().isBlank()
-                ? Arrays.stream(m.getImprovements().split(",")).map(String::trim).filter(st -> !st.isEmpty()).toList()
-                : List.of();
+        List<Long> prepIds = m.getPreparationMaterials().stream()
+                .filter(pm -> pm.getId() != null)
+                .map(PreparationMaterial::getId)
+                .sorted()
+                .toList();
 
         return new MockInterviewResponse(
-                m.getId(),
-                sRef,
+                id,
+                m.getMode(),
                 m.getScheduledAt(),
+                m.getDurationMinutes(),
                 m.getInterviewerName(),
                 m.getMeetLink(),
+                m.getLocation(),
                 m.getStatus(),
-                m.getRating(),
-                m.getFeedback(),
-                strList,
-                impList,
+                m.getSyllabus(),
+                m.getInstructions(),
+                candidates,
+                prepIds,
                 m.getCreatedAt()
         );
     }

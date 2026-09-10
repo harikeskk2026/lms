@@ -146,11 +146,46 @@ public class SecurityConfig {
                         // Meeting link endpoints
                         .requestMatchers("/api/admin/meetings/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/meetings/**").hasRole("STUDENT")
-                        // Placement endpoints
-                        .requestMatchers("/api/student/placement/**", "/api/student/skills/**",
+                        // Placement endpoints — student-facing (read + express interest + own profile)
+                        .requestMatchers("/api/student/placement/**",
                                 "/api/student/resume/**", "/api/student/resume-file",
                                 "/api/student/drives/**", "/api/student/mock-interviews/**",
-                                "/api/student/mock-analytics").hasRole("STUDENT")
+                                "/api/student/mock-analytics", "/api/student/offers/**",
+                                "/api/student/interviews/**",
+                                "/api/student/interview-prep/**",
+                                "/api/student/preparation-materials/**").hasRole("STUDENT")
+                        // Preparation materials admin — trainers read-only, mutations ADMIN/SUPERADMIN
+                        .requestMatchers(HttpMethod.POST, "/api/admin/preparation-materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/preparation-materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/preparation-materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/admin/preparation-materials/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        // Placement admin endpoints — mutations restricted to ADMIN/SUPERADMIN only
+                        .requestMatchers(HttpMethod.POST, "/api/admin/drives/**",
+                                "/api/admin/mock-interviews/**",
+                                "/api/admin/interview-questions/**",
+                                "/api/admin/aptitude-tips/**",
+                                "/api/admin/interview-resources/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/drives/**",
+                                "/api/admin/mock-interviews/**",
+                                "/api/admin/interview-questions/**",
+                                "/api/admin/aptitude-tips/**",
+                                "/api/admin/interview-resources/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/drives/**",
+                                "/api/admin/interview-questions/**",
+                                "/api/admin/aptitude-tips/**",
+                                "/api/admin/interview-resources/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        // Placement admin write endpoints — ADMIN/SUPERADMIN only (TRAINER is read-only on placement)
+                        .requestMatchers(HttpMethod.POST, "/api/admin/offers/**", "/api/admin/placement/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/offers/**", "/api/admin/placement/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/offers/**", "/api/admin/placement/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        // Placement admin read-only endpoints — ADMIN/SUPERADMIN/TRAINER
+                        .requestMatchers(HttpMethod.GET, "/api/admin/placement/**",
+                                "/api/admin/drives/**",
+                                "/api/admin/mock-interviews/**",
+                                "/api/admin/interview-questions/**",
+                                "/api/admin/aptitude-tips/**",
+                                "/api/admin/interview-resources/**",
+                                "/api/admin/offers/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         // Course content mutation endpoints (syllabus modules/topics/materials are restricted to ADMIN/SUPERADMIN)
                         .requestMatchers(HttpMethod.POST, "/api/modules", "/api/modules/**", "/api/topics", "/api/topics/**", "/api/materials", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/modules", "/api/modules/**", "/api/topics", "/api/topics/**", "/api/materials", "/api/materials/**").hasAnyRole("ADMIN", "SUPERADMIN")

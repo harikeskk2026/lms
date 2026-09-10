@@ -150,6 +150,7 @@ export const adminApi = {
 
   // Batches
   getBatches: (params) => api.get('/batches', { params }),
+  getCourses: () => api.get('/courses'),
   createBatch: (data) => api.post('/batches', data),
   getBatchDetail: (id) => api.get(`/batches/${id}`),
   updateBatch: (id, data) => api.put(`/batches/${id}`, data),
@@ -211,20 +212,69 @@ export const adminApi = {
   updateInterviewQuestion: (id, data) => api.patch(`/admin/interview-questions/${id}`, data),
   deleteInterviewQuestion: (id) => api.delete(`/admin/interview-questions/${id}`),
 
+  // Aptitude Tips
+  getAptitudeTips: (params) => api.get('/admin/aptitude-tips', { params }),
+  createAptitudeTip: (data) => api.post('/admin/aptitude-tips', data),
+  updateAptitudeTip: (id, data) => api.patch(`/admin/aptitude-tips/${id}`, data),
+  deleteAptitudeTip: (id) => api.delete(`/admin/aptitude-tips/${id}`),
+
+  // Interview Resources
+  getInterviewResources: (params) => api.get('/admin/interview-resources', { params }),
+  createInterviewResource: (data) => api.post('/admin/interview-resources', data),
+  updateInterviewResource: (id, data) => api.patch(`/admin/interview-resources/${id}`, data),
+  deleteInterviewResource: (id) => api.delete(`/admin/interview-resources/${id}`),
+
   // Admin Company Drives
   getDrives: (p) => api.get('/admin/drives', { params: p }),
   createDrive: (d) => api.post('/admin/drives', d),
   updateDrive: (id, d) => api.patch(`/admin/drives/${id}`, d),
-  updateDriveStatus: (id, status) => api.patch(`/admin/drives/${id}/status`, { status }),
+  deleteDrive: (id) => api.delete(`/admin/drives/${id}`),
   getDriveApplications: (id) => api.get(`/admin/drives/${id}/applications`),
+  getApplicationHistory: (driveId, appId) => api.get(`/admin/drives/${driveId}/applications/${appId}/history`),
   updateDriveApplication: (driveId, appId, d) => api.patch(`/admin/drives/${driveId}/applications/${appId}`, d),
+
+  // Interview rounds & scheduling (real placement interviews per drive)
+  getInterviewRounds: (driveId) => api.get(`/admin/drives/${driveId}/interviews/rounds`),
+  createInterviewRound: (driveId, d) => api.post(`/admin/drives/${driveId}/interviews/rounds`, d),
+  deleteInterviewRound: (driveId, roundId) => api.delete(`/admin/drives/${driveId}/interviews/rounds/${roundId}`),
+  getInterviews: (driveId) => api.get(`/admin/drives/${driveId}/interviews`),
+  scheduleInterview: (driveId, d) => api.post(`/admin/drives/${driveId}/interviews`, d),
+  completeInterview: (driveId, interviewId, d) => api.patch(`/admin/drives/${driveId}/interviews/${interviewId}`, d),
+  submitEvaluation: (driveId, d) => api.post(`/admin/drives/${driveId}/interviews/evaluations`, d),
+  getInterviewEvaluations: (driveId, interviewId) => api.get(`/admin/drives/${driveId}/interviews/${interviewId}/evaluations`),
 
   // Placement
   getPlacement: (params) => api.get('/students', { params }),
-  updatePlacementStatus: (studentId, status) => api.put(`/students/${studentId}`, { placementStatus: status }),
+  updatePlacementStatus: (studentId, status) => api.patch(`/students/${studentId}/placement-status`, { placementStatus: status }),
+  getPlacementRecords: () => api.get('/admin/placement/placements'),
+  recordPlacement: (d) => api.post('/admin/placement/placements', d),
   getMockInterviews: (params) => api.get('/admin/mock-interviews', { params }),
   scheduleMockInterview: (data) => api.post('/admin/mock-interviews', data),
   updateMockInterview: (id, data) => api.patch(`/admin/mock-interviews/${id}`, data),
+  updateMockCandidate: (id, candidateId, data) => api.patch(`/admin/mock-interviews/${id}/candidates/${candidateId}`, data),
+
+  // Preparation materials
+  getPreparationMaterials: () => api.get('/admin/preparation-materials'),
+  getPreparationMaterial: (id) => api.get(`/admin/preparation-materials/${id}`),
+  createPreparationMaterial: (d) => api.post('/admin/preparation-materials', d),
+  updatePreparationMaterial: (id, d) => api.patch(`/admin/preparation-materials/${id}`, d),
+  deletePreparationMaterial: (id) => api.delete(`/admin/preparation-materials/${id}`),
+  publishPreparationMaterial: (id) => api.post(`/admin/preparation-materials/${id}/publish`),
+  archivePreparationMaterial: (id) => api.post(`/admin/preparation-materials/${id}/archive`),
+  uploadPrepDocument: (id, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/admin/preparation-materials/${id}/documents`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  deletePrepDocument: (id, docId) => api.delete(`/admin/preparation-materials/${id}/documents/${docId}`),
+  setPrepQuestions: (id, questions) => api.put(`/admin/preparation-materials/${id}/questions`, questions),
+
+  // Offers
+  getOffers: (driveId) => api.get('/admin/offers', { params: driveId ? { driveId } : {} }),
+  issueOffer: (d) => api.post('/admin/offers', d),
+  withdrawOffer: (id) => api.delete(`/admin/offers/${id}`),
 
   // Assignments
   getAssignments: (params) => api.get('/admin/assignments', { params }),
@@ -291,8 +341,15 @@ export const studentApi = {
   getQuizLeaderboard: (id) => api.get(`/student/quizzes/${id}/leaderboard`),
   getQuizAnalytics: () => api.get('/student/quiz-analytics'),
   getInterviewPrep: (p) => api.get('/student/interview-prep', { params: p }),
+  getAptitudeTips: () => api.get('/student/interview-prep/aptitude-tips'),
+  getInterviewResources: () => api.get('/student/interview-prep/resources'),
   getPlacement: () => api.get('/student/placement'),
   getMockInterviews: () => api.get('/student/mock-interviews'),
+
+  // Preparation materials
+  getPreparationMaterials: () => api.get('/student/preparation-materials'),
+  getPreparationMaterial: (id) => api.get(`/student/preparation-materials/${id}`),
+  downloadPrepDocument: (id, docId) => api.get(`/student/preparation-materials/${id}/documents/${docId}`, { responseType: 'blob' }),
   getNotifications: () => api.get('/student/notifications'),
   markRead: (id) => api.patch(`/student/notifications/${id}/read`),
   markAllRead: () => api.patch('/student/notifications/read-all'),
@@ -306,15 +363,18 @@ export const studentApi = {
   getResume: () => api.get('/student/resume'),
   saveResume: (d) => api.put('/student/resume', d),
 
-  // Skills
-  getSkills: () => api.get('/student/skills'),
-  addSkill: (d) => api.post('/student/skills', d),
-  updateSkill: (id, d) => api.patch(`/student/skills/${id}`, d),
-  deleteSkill: (id) => api.delete(`/student/skills/${id}`),
-
   // Drives
   getDrives: () => api.get('/student/drives'),
   expressInterest: (id) => api.post(`/student/drives/${id}/interest`),
+  withdrawInterest: (id) => api.delete(`/student/drives/${id}/interest`),
+
+  // Offers
+  getMyOffers: () => api.get('/student/offers'),
+  acceptOffer: (id) => api.post(`/student/offers/${id}/accept`),
+  rejectOffer: (id) => api.post(`/student/offers/${id}/reject`),
+
+  // Placement interviews
+  getMyInterviews: () => api.get('/student/interviews'),
 
   // Resume upload (actual PDF file - distinct from the Resume Builder above)
   uploadResumeFile: (form) => api.post('/student/resume-file', form, {

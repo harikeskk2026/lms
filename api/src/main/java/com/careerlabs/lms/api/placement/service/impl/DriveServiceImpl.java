@@ -2,17 +2,18 @@ package com.careerlabs.lms.api.placement.service.impl;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.placement.dto.request.CreateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateDriveRequest;
-import com.careerlabs.lms.api.placement.dto.request.UpdateDriveStatusRequest;
 import com.careerlabs.lms.api.placement.dto.response.AdminDriveResponse;
 import com.careerlabs.lms.api.placement.dto.response.StudentDriveResponse;
 import com.careerlabs.lms.api.placement.entity.Drive;
 import com.careerlabs.lms.api.placement.entity.DriveApplication;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
+import com.careerlabs.lms.api.placement.repository.DriveApplicationStatusHistoryRepository;
 import com.careerlabs.lms.api.placement.repository.DriveRepository;
 import com.careerlabs.lms.api.placement.service.DriveService;
 import com.careerlabs.lms.api.placement.service.PlacementEligibilityGuard;
@@ -21,6 +22,7 @@ import com.careerlabs.lms.api.student.repository.StudentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -33,17 +35,20 @@ public class DriveServiceImpl implements DriveService {
 
     private final DriveRepository driveRepository;
     private final DriveApplicationRepository driveApplicationRepository;
+    private final DriveApplicationStatusHistoryRepository statusHistoryRepository;
     private final StudentRepository studentRepository;
     private final BatchRepository batchRepository;
     private final CourseRepository courseRepository;
     private final PlacementEligibilityGuard eligibilityGuard;
 
     public DriveServiceImpl(DriveRepository driveRepository, DriveApplicationRepository driveApplicationRepository,
+                             DriveApplicationStatusHistoryRepository statusHistoryRepository,
                              StudentRepository studentRepository, BatchRepository batchRepository,
                              CourseRepository courseRepository,
                              PlacementEligibilityGuard eligibilityGuard) {
         this.driveRepository = driveRepository;
         this.driveApplicationRepository = driveApplicationRepository;
+        this.statusHistoryRepository = statusHistoryRepository;
         this.studentRepository = studentRepository;
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
@@ -70,6 +75,7 @@ public class DriveServiceImpl implements DriveService {
     @Override
     @Transactional
     public AdminDriveResponse create(CreateDriveRequest request, Long adminUserId) {
+        validateDriveDates(request.getDriveDate(), request.getApplyDeadline(), true);
         Drive drive = new Drive();
         applyCreate(drive, request);
         drive.setCreatedBy(adminUserId);
@@ -79,6 +85,7 @@ public class DriveServiceImpl implements DriveService {
     @Override
     @Transactional
     public AdminDriveResponse update(Long id, UpdateDriveRequest request) {
+        validateDriveDates(request.getDriveDate(), request.getApplyDeadline(), false);
         Drive drive = findOrThrow(id);
         applyUpdate(drive, request);
         long applicationCount = driveApplicationRepository.countByDrive_Id(id);
@@ -87,11 +94,11 @@ public class DriveServiceImpl implements DriveService {
 
     @Override
     @Transactional
-    public AdminDriveResponse updateStatus(Long id, UpdateDriveStatusRequest request) {
+    public void delete(Long id) {
         Drive drive = findOrThrow(id);
-        drive.setStatus(request.getStatus());
-        long applicationCount = driveApplicationRepository.countByDrive_Id(id);
-        return AdminDriveResponse.from(driveRepository.save(drive), applicationCount);
+        statusHistoryRepository.deleteAllByApplication_Drive_Id(id);
+        driveApplicationRepository.deleteAllByDrive_Id(id);
+        driveRepository.delete(drive);
     }
 
     private Map<Long, Long> applicationCountsByDrive(List<Long> driveIds) {
@@ -124,6 +131,24 @@ public class DriveServiceImpl implements DriveService {
                 .toList();
     }
 
+    private void validateDriveDates(LocalDate driveDate, LocalDate applyDeadline, boolean creating) {
+        if (driveDate == null && applyDeadline == null) {
+            return;
+        }
+        if (driveDate != null && applyDeadline != null && applyDeadline.isAfter(driveDate)) {
+            throw new BadRequestException("Apply deadline cannot be after the drive date");
+        }
+        if (creating) {
+            LocalDate today = LocalDate.now();
+            if (driveDate != null && driveDate.isBefore(today)) {
+                throw new BadRequestException("Drive date cannot be in the past");
+            }
+            if (applyDeadline != null && applyDeadline.isBefore(today)) {
+                throw new BadRequestException("Apply deadline cannot be in the past");
+            }
+        }
+    }
+
     private void applyCreate(Drive drive, CreateDriveRequest request) {
         drive.setCompanyName(request.getCompanyName());
         drive.setRole(request.getRole());
@@ -135,7 +160,6 @@ public class DriveServiceImpl implements DriveService {
         drive.setRequirements(request.getRequirements());
         drive.setSkills(request.getSkills());
         drive.setDriveType(request.getDriveType());
-        drive.setStatus(request.getStatus());
         drive.setApplyLink(request.getApplyLink());
         drive.setMinCgpa(request.getMinCgpa());
         drive.setMinPercentage(request.getMinPercentage());
@@ -156,7 +180,6 @@ public class DriveServiceImpl implements DriveService {
         drive.setRequirements(request.getRequirements());
         drive.setSkills(request.getSkills());
         drive.setDriveType(request.getDriveType());
-        drive.setStatus(request.getStatus());
         drive.setApplyLink(request.getApplyLink());
         drive.setMinCgpa(request.getMinCgpa());
         drive.setMinPercentage(request.getMinPercentage());

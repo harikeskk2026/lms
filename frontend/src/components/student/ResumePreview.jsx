@@ -121,8 +121,8 @@ export default function ResumePreview({ resumeData, studentName }) {
           <div className="flex flex-wrap gap-2">
             {languages.map((lang, i) => (
               <span key={i} className="text-gray-700">
-                <span className="font-medium">{lang.name || lang}</span>
-                {lang.level && <span className="text-gray-400"> ({lang.level})</span>}
+                <span className="font-medium">{typeof lang === 'string' ? lang : (lang.name || 'Language')}</span>
+                {typeof lang === 'object' && lang.level && <span className="text-gray-400"> ({lang.level})</span>}
               </span>
             ))}
           </div>

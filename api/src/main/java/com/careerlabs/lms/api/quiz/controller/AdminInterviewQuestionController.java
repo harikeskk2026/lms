@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.quiz.dto.request.CreateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionResponse;
+import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.service.InterviewQuestionService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
@@ -11,11 +12,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -35,8 +37,13 @@ public class AdminInterviewQuestionController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<InterviewQuestionResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(interviewQuestionService.listAll()));
+    public ResponseEntity<ApiResponse<List<InterviewQuestionResponse>>> list(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) QuizDifficulty difficulty,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(ApiResponse.of(interviewQuestionService.listAll(category, difficulty, search, active, courseId)));
     }
 
     @GetMapping("/{id}")
@@ -52,7 +59,7 @@ public class AdminInterviewQuestionController {
         return ResponseEntity.status(201).body(ApiResponse.of("Interview question created", response));
     }
 
-    @PutMapping("/{id}")
+    @PatchMapping("/{id}")
     public ResponseEntity<ApiResponse<InterviewQuestionResponse>> update(
             @PathVariable Long id, @Valid @RequestBody UpdateInterviewQuestionRequest request) {
         InterviewQuestionResponse response = interviewQuestionService.update(id, request);
@@ -61,7 +68,7 @@ public class AdminInterviewQuestionController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deactivate(@PathVariable Long id) {
-        interviewQuestionService.deactivate(id);
-        return ResponseEntity.ok(ApiResponse.of("Interview question deactivated", null));
+        interviewQuestionService.delete(id);
+        return ResponseEntity.ok(ApiResponse.of("Interview question deleted", null));
     }
 }

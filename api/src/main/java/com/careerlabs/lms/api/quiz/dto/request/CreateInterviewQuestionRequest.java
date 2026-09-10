@@ -11,7 +11,6 @@ import java.util.List;
 
 public class CreateInterviewQuestionRequest {
 
-    @NotBlank(message = "Category is required")
     private String category;
 
     @NotBlank(message = "Question text is required")
@@ -28,6 +27,8 @@ public class CreateInterviewQuestionRequest {
     private QuizDifficulty difficulty;
 
     private List<String> tags;
+
+    private Long courseId;
 
     public String getCategory() {
         return category;
@@ -77,5 +78,13 @@ public class CreateInterviewQuestionRequest {
 
     public void setTags(List<String> tags) {
         this.tags = tags;
+    }
+
+    public Long getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(Long courseId) {
+        this.courseId = courseId;
     }
 }

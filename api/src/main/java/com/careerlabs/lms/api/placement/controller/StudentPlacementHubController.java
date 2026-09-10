@@ -6,8 +6,7 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
 import com.careerlabs.lms.api.placement.repository.DriveRepository;
-import com.careerlabs.lms.api.placement.repository.MockInterviewRepository;
-import com.careerlabs.lms.api.placement.repository.StudentSkillRepository;
+import com.careerlabs.lms.api.placement.repository.MockInterviewCandidateRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
@@ -28,21 +27,18 @@ public class StudentPlacementHubController {
     private final AcademicDetailsRepository academicDetailsRepository;
     private final DriveRepository driveRepository;
     private final DriveApplicationRepository driveApplicationRepository;
-    private final MockInterviewRepository mockInterviewRepository;
-    private final StudentSkillRepository skillRepository;
+    private final MockInterviewCandidateRepository mockCandidateRepository;
 
     public StudentPlacementHubController(StudentRepository studentRepository,
                                           AcademicDetailsRepository academicDetailsRepository,
                                           DriveRepository driveRepository,
                                           DriveApplicationRepository driveApplicationRepository,
-                                          MockInterviewRepository mockInterviewRepository,
-                                          StudentSkillRepository skillRepository) {
+                                          MockInterviewCandidateRepository mockCandidateRepository) {
         this.studentRepository = studentRepository;
         this.academicDetailsRepository = academicDetailsRepository;
         this.driveRepository = driveRepository;
         this.driveApplicationRepository = driveApplicationRepository;
-        this.mockInterviewRepository = mockInterviewRepository;
-        this.skillRepository = skillRepository;
+        this.mockCandidateRepository = mockCandidateRepository;
     }
 
     @GetMapping
@@ -58,8 +54,7 @@ public class StudentPlacementHubController {
         AcademicDetails academic = academicDetailsRepository.findByStudentId(student.getId()).orElse(null);
         long totalDrives = driveRepository.count();
         long appliedDrives = driveApplicationRepository.countByStudent_Id(student.getId());
-        long mockCount = mockInterviewRepository.countByStudent_Id(student.getId());
-        int skillCount = skillRepository.findByStudent_IdOrderByCreatedAtDesc(student.getId()).size();
+        long mockCount = mockCandidateRepository.countByStudent_Id(student.getId());
 
         Map<String, Object> profileMap = new HashMap<>();
         profileMap.put("phone", student.getPhone());
@@ -78,9 +73,8 @@ public class StudentPlacementHubController {
         }
 
         int readinessScore = 40;
-        if (student.getResumeUrl() != null && !student.getResumeUrl().isBlank()) readinessScore += 25;
-        if (skillCount > 0) readinessScore += 20;
-        if (academic != null && academic.getUgScore() != null) readinessScore += 15;
+        if (student.getResumeUrl() != null && !student.getResumeUrl().isBlank()) readinessScore += 35;
+        if (academic != null && academic.getUgScore() != null) readinessScore += 25;
         readinessScore = Math.min(100, readinessScore);
 
         Map<String, Object> res = new HashMap<>();
@@ -94,7 +88,6 @@ public class StudentPlacementHubController {
         res.put("totalDrives", totalDrives);
         res.put("appliedDrives", appliedDrives);
         res.put("mockCount", mockCount);
-        res.put("skillCount", skillCount);
         res.put("profile", profileMap);
 
         return ResponseEntity.ok(ApiResponse.of(res));

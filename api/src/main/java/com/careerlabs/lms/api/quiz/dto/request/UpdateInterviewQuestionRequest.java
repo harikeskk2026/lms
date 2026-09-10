@@ -11,7 +11,6 @@ import java.util.List;
 
 public class UpdateInterviewQuestionRequest {
 
-    @NotBlank(message = "Category is required")
     private String category;
 
     @NotBlank(message = "Question text is required")
@@ -30,6 +29,8 @@ public class UpdateInterviewQuestionRequest {
     private List<String> tags;
 
     private Boolean active;
+
+    private Long courseId;
 
     public String getCategory() {
         return category;
@@ -87,5 +88,13 @@ public class UpdateInterviewQuestionRequest {
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public Long getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(Long courseId) {
+        this.courseId = courseId;
     }
 }

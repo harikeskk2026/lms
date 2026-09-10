@@ -2,14 +2,20 @@ package com.careerlabs.lms.api.placement.controller;
 
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
+import com.careerlabs.lms.api.placement.dto.request.CreatePlacementRequest;
 import com.careerlabs.lms.api.placement.dto.response.AdminPlacementOverviewResponse;
 import com.careerlabs.lms.api.placement.dto.response.AdminPlacementOverviewResponse.PlacementStudentItem;
-import com.careerlabs.lms.api.placement.entity.MockInterview;
-import com.careerlabs.lms.api.placement.repository.MockInterviewRepository;
+import com.careerlabs.lms.api.placement.dto.response.PlacementResponse;
+import com.careerlabs.lms.api.placement.entity.MockInterviewCandidate;
+import com.careerlabs.lms.api.placement.repository.MockInterviewCandidateRepository;
+import com.careerlabs.lms.api.placement.service.PlacementService;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -19,23 +25,23 @@ import java.util.*;
 public class AdminPlacementController {
 
     private final StudentRepository studentRepository;
-    private final MockInterviewRepository mockInterviewRepository;
+    private final MockInterviewCandidateRepository mockCandidateRepository;
+    private final PlacementService placementService;
 
-    public AdminPlacementController(StudentRepository studentRepository, MockInterviewRepository mockInterviewRepository) {
+    public AdminPlacementController(StudentRepository studentRepository,
+                                    MockInterviewCandidateRepository mockCandidateRepository,
+                                    PlacementService placementService) {
         this.studentRepository = studentRepository;
-        this.mockInterviewRepository = mockInterviewRepository;
+        this.mockCandidateRepository = mockCandidateRepository;
+        this.placementService = placementService;
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<AdminPlacementOverviewResponse>> getOverview() {
         List<Student> students = studentRepository.findAll();
-        List<MockInterview> allMocks = mockInterviewRepository.findAllByOrderByScheduledAtDesc();
-
-        Map<Long, List<MockInterview>> mocksByStudent = new HashMap<>();
-        for (MockInterview m : allMocks) {
-            if (m.getStudent() != null) {
-                mocksByStudent.computeIfAbsent(m.getStudent().getId(), k -> new ArrayList<>()).add(m);
-            }
+        Map<Long, Long> mockCountsByStudent = new HashMap<>();
+        for (Student s : students) {
+            mockCountsByStudent.put(s.getId(), mockCandidateRepository.countByStudent_Id(s.getId()));
         }
 
         Map<String, Long> statusCounts = new HashMap<>();
@@ -49,9 +55,11 @@ public class AdminPlacementController {
             PlacementStatus status = s.getPlacementStatus() != null ? s.getPlacementStatus() : PlacementStatus.SEEKING;
             statusCounts.put(status.name(), statusCounts.getOrDefault(status.name(), 0L) + 1);
 
-            List<MockInterview> sMocks = mocksByStudent.getOrDefault(s.getId(), List.of());
-            long mockCount = sMocks.size();
-            int avgRating = (int) Math.round(sMocks.stream().filter(m -> m.getRating() != null).mapToInt(MockInterview::getRating).average().orElse(0.0));
+            double mockRating = mockCandidateRepository.findByStudent_IdOrderByMockInterviewScheduledAtDesc(s.getId())
+                    .stream().filter(c -> c.getRating() != null)
+                    .mapToInt(MockInterviewCandidate::getRating).average().orElse(0.0);
+            long mockCount = mockCountsByStudent.getOrDefault(s.getId(), 0L);
+            int avgRating = (int) Math.round(mockRating);
 
             items.add(new PlacementStudentItem(
                     s.getId(),
@@ -82,5 +90,17 @@ public class AdminPlacementController {
             studentRepository.save(student);
         }
         return ResponseEntity.ok(ApiResponse.of("Placement status updated", null));
+    }
+
+    @GetMapping("/placements")
+    public ResponseEntity<ApiResponse<List<PlacementResponse>>> listPlacements() {
+        return ResponseEntity.ok(ApiResponse.of(placementService.listAll()));
+    }
+
+    @PostMapping("/placements")
+    public ResponseEntity<ApiResponse<PlacementResponse>> recordPlacement(
+            @Valid @RequestBody CreatePlacementRequest request,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of("Placement recorded", placementService.record(request, principal.id())));
     }
 }

@@ -1,29 +1,28 @@
-'use client'
+﻿'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { format, formatDistanceToNow, differenceInDays, isPast } from 'date-fns'
 import {
-  Star, Calendar, CheckCircle, Circle, Briefcase, ExternalLink, Plus, Trash2,
+  Star, CheckCircle, Circle, Briefcase, ExternalLink, Plus,
   ChevronDown, ChevronUp, Target, TrendingUp, FileText, Code2, Brain,
-  BookOpen, Link2, Github, Linkedin, MapPin, Phone, Globe, Award,
-  BarChart2, Users, Zap, ArrowRight, Edit2, X, Save, Download,
+  BookOpen, Link2, Github, Linkedin, MapPin, Phone, Globe,
+  BarChart2, ArrowRight, Edit2, X, Save, Download,
   AlertCircle, Building2, Clock, BadgeCheck, Loader2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { studentApi } from '@/lib/api'
 import ResumePreview from '@/components/student/ResumePreview'
-import SkillCard from '@/components/student/SkillCard'
+import { useConfirmModal } from '@/components/ui/ConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
+import SearchInput from '@/components/ui/SearchInput'
 
 // recharts is a heavy dependency - load each chart only when its tab is
 // viewed, and only on the client (SSR doesn't need it).
 const CHART_SKELETON = <div className="h-[200px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
 const MockInterviewTrendChart = dynamic(
   () => import('@/components/student/placement/MockInterviewTrendChart'),
-  { ssr: false, loading: () => CHART_SKELETON }
-)
-const SkillRadarChart = dynamic(
-  () => import('@/components/student/placement/SkillRadarChart'),
   { ssr: false, loading: () => CHART_SKELETON }
 )
 
@@ -60,11 +59,9 @@ const STATUS_COLORS = {
   PLACED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   NOT_SEEKING: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
-const DRIVE_STATUS_COLORS = {
-  ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  UPCOMING: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  CLOSED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-  CANCELLED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+// A drive is open for applications until its apply deadline - there is no manual status.
+function isOpenDrive(d) {
+  return !!d?.applyDeadline && !isPast(new Date(d.applyDeadline))
 }
 // Students never apply directly - this is the admin-mediated pipeline their
 // expressed interest moves through (see DriveApplicationStatus on the backend).
@@ -74,8 +71,11 @@ const APPLICATION_STATUS_LABELS = {
   SHORTLISTED: 'Shortlisted',
   RESUME_SHARED: 'Resume Shared',
   SELECTED: 'Selected',
+  OFFERED: 'Offered',
+  ACCEPTED: 'Offered Accepted',
   NOT_SELECTED: 'Not Selected',
   REJECTED: 'Not Selected',
+  WITHDRAWN: 'Withdrawn',
 }
 const APPLICATION_STATUS_COLORS = {
   INTERESTED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
@@ -83,54 +83,33 @@ const APPLICATION_STATUS_COLORS = {
   SHORTLISTED: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
   RESUME_SHARED: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
   SELECTED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  OFFERED: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
+  ACCEPTED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   NOT_SELECTED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
   REJECTED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  WITHDRAWN: 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400',
 }
-const CATEGORY_COLORS = {
-  'Programming': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-  'Framework':   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  'Tool':        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  'Database':    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  'Soft Skill':  'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-}
-const SKILL_SUGGESTIONS = ['Python', 'Django', 'Flask', 'React', 'Next.js', 'Node.js', 'Express', 'SQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Git', 'Docker', 'Linux', 'AWS', 'REST APIs', 'GraphQL', 'TypeScript', 'JavaScript', 'HTML/CSS', 'Tailwind CSS', 'Problem Solving', 'Communication', 'Teamwork', 'Leadership', 'Time Management']
-const PROFICIENCY_LABELS = ['', 'Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
 const UPDATE_ICON = { SHORTLIST: '⭐', INTERVIEW: '📅', ACTION: '📋', FEEDBACK: '💬', UPDATE: '📌' }
 
-const HR_QUESTIONS = [
-  { q: 'Tell me about yourself.', cat: 'Introduction', diff: 'EASY', ans: 'Use the 3-part framework:\n\n1. Present: "I am [name], a [role/background]..."\n2. Past: "I have [X years/months] of experience in [skills]..."\n3. Future: "I am looking to [goal] at a company like yours."\n\nKeep it under 2 minutes. Start with your professional identity, not personal details.', tips: 'Practice out loud 5 times. Keep it under 90 seconds. Tailor to the company.' },
-  { q: 'Why do you want to work at our company?', cat: 'Company-specific', diff: 'MEDIUM', ans: 'Research the company first. Mention:\n\n1. Specific products/services you admire\n2. Company values that align with yours\n3. Growth opportunities in the role\n\n"I admire how [Company] is solving [problem]. Your engineering culture of [X] resonates with me, and I believe I can contribute to [specific team/goal]."', tips: 'Never say "for the salary" or "it looks prestigious". Be specific — mention real projects or news.' },
-  { q: 'What are your strengths and weaknesses?', cat: 'Behavioural', diff: 'MEDIUM', ans: 'Strength: Pick one that\'s genuinely relevant to the role. Give a specific example.\n\nWeakness: Pick a real weakness you\'re actively improving. Frame it constructively:\n"I used to struggle with [X], but I\'ve been working on it by [action], and I\'ve seen improvement in [result]."', tips: 'Avoid clichés like "I work too hard." Be honest but strategic.' },
-  { q: 'Where do you see yourself in 5 years?', cat: 'Behavioural', diff: 'MEDIUM', ans: 'Show ambition but align with the company:\n\n"In 5 years, I see myself as a [senior role] with expertise in [domain]. I want to grow with a company where I can take on increasing responsibility. This role at [Company] feels like the perfect starting point."', tips: 'Do NOT say "running my own startup" in most interviews. Show loyalty and growth intent.' },
-  { q: 'Describe a challenging situation and how you handled it.', cat: 'Situational', diff: 'HARD', ans: 'Use the STAR method:\n\nSituation: "In my [project/internship]..."\nTask: "I was responsible for..."\nAction: "I decided to... because..."\nResult: "As a result, we achieved..."\n\nPick a story where YOU took initiative. Quantify results if possible.', tips: 'Have 3-4 STAR stories ready covering: leadership, teamwork, failure, and problem-solving.' },
-  { q: 'Why should we hire you?', cat: 'Introduction', diff: 'HARD', ans: 'This is your elevator pitch. Structure:\n\n1. Your top 2-3 relevant skills/achievements\n2. How you solve their specific problem\n3. Your unique differentiator\n\n"You should hire me because I bring [skill 1], [skill 2], and a proven track record of [achievement]. I\'m confident I can [specific contribution] for your team."', tips: 'Tie your answer directly to the job description. Be confident, not arrogant.' },
-]
-
-const APT_TIPS = [
-  { topic: 'Time & Work', formula: 'Combined Rate = 1/A + 1/B; Time = 1/Rate', example: 'A does work in 10 days, B in 15 days. Together: 1/10 + 1/15 = 1/6. Time = 6 days' },
-  { topic: 'Percentages', formula: 'x% of y = (x × y) / 100; % change = (Diff/Original) × 100', example: '40% of 300 = (40 × 300)/100 = 120. Profit: Buy at 100, sell at 120 → 20% profit' },
-  { topic: 'Ratio & Proportion', formula: 'a:b = c:d → ad = bc (Cross multiply)', example: 'Boys:Girls = 3:2, total 30. Girls = (2/5) × 30 = 12' },
-  { topic: 'Number Series', formula: 'Check differences, ratios, alternating patterns, and squares/cubes', example: 'Fibonacci: 1,1,2,3,5,8,13... | Squares: 1,4,9,16,25...' },
-  { topic: 'Averages', formula: 'Avg = Sum/Count; New avg = (Old sum ± change) / new count', example: '5 numbers avg 20 (sum=100). Remove one with value 28. New avg = 72/4 = 18' },
-  { topic: 'Speed, Distance, Time', formula: 'Distance = Speed × Time; Relative speed: same dir = |S1-S2|, opposite = S1+S2', example: 'Train 100m at 54 km/h crosses pole: t = 100/(54×5/18) = 100/15 ≈ 6.67s' },
-]
-
-const RESOURCES = [
-  { title: 'Cracking the Coding Interview', desc: '189 programming questions & solutions by Gayle Laakmann McDowell. The gold standard for technical interview prep.', icon: BookOpen, link: '#', tag: 'Book' },
-  { title: 'NeetCode DSA Roadmap', desc: 'Structured DSA practice with 150+ curated LeetCode problems organized by topic. Best for systematic prep.', icon: Code2, link: 'https://neetcode.io/roadmap', tag: 'Free Resource' },
-  { title: 'Python Interview Handbook', desc: 'Comprehensive guide covering Python-specific interview questions from basics to advanced OOP and frameworks.', icon: FileText, link: '#', tag: 'Guide' },
-  { title: 'System Design Primer', desc: 'Learn how to design large-scale systems. Essential for senior-level interviews at product companies.', icon: BarChart2, link: 'https://github.com/donnemartin/system-design-primer', tag: 'GitHub' },
-  { title: 'HR Interview Framework', desc: 'Master the STAR method, common HR questions, salary negotiation, and how to make a strong impression.', icon: Users, link: '#', tag: 'Guide' },
-]
+const RESOURCE_ICONS = {
+  Book: BookOpen,
+  'Free Resource': Code2,
+  Guide: FileText,
+  GitHub: BarChart2,
+}
 
 // ─── MAIN PAGE ─────────────────────────────────────────────────────────────────
 export default function PlacementPage() {
   const [hub, setHub] = useState(null)
   const [analytics, setAnalytics] = useState(null)
+  const [mocks, setMocks] = useState([])
+  const [offers, setOffers] = useState([])
+  const [interviews, setInterviews] = useState([])
+  const [prepList, setPrepList] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Dashboard')
 
-  const TABS = ['Dashboard', 'Resume Builder', 'Skills', 'Company Drives', 'Interview Prep']
+  const TABS = ['Dashboard', 'Resume Builder', 'Company Drives', 'Prep Materials', 'My Offers', 'Interviews', 'Interview Prep']
 
   useEffect(() => {
     // Independent settles - one not-yet-implemented section (rolled out phase by
@@ -138,15 +117,42 @@ export default function PlacementPage() {
     Promise.allSettled([
       studentApi.getPlacementHub(),
       studentApi.getMockAnalytics(),
-    ]).then(([h, a]) => {
+      studentApi.getMockInterviews(),
+    ]).then(([h, a, m]) => {
       if (h.status === 'fulfilled') setHub(h.value.data.data)
       if (a.status === 'fulfilled') setAnalytics(a.value.data.data)
+      if (m.status === 'fulfilled') {
+        const rawMocks = m.value.data.data || []
+        setMocks(rawMocks.map(mk => {
+          const c = (mk.candidates || [])[0]
+          return {
+            ...mk,
+            status: c?.status || mk.status,
+            rating: c?.rating ?? null,
+            feedback: c?.feedback || null,
+            strengths: c?.strengths || [],
+            improvements: c?.improvements || [],
+          }
+        }))
+      }
     }).finally(() => setLoading(false))
   }, [])
 
   const refreshHub = () => {
     studentApi.getPlacementHub().then(h => setHub(h.data.data)).catch(() => {})
   }
+
+  useEffect(() => {
+    if (tab === 'My Offers') {
+      studentApi.getMyOffers().then(r => setOffers(r.data.data || [])).catch(() => {})
+    }
+    if (tab === 'Interviews') {
+      studentApi.getMyInterviews().then(r => setInterviews(r.data.data || [])).catch(() => {})
+    }
+    if (tab === 'Prep Materials') {
+      studentApi.getPreparationMaterials().then(r => setPrepList(r.data.data || [])).catch(() => toast.error('Failed to load preparation materials'))
+    }
+  }, [tab])
 
   if (loading) return <LoadingState />
 
@@ -178,10 +184,12 @@ export default function PlacementPage() {
 
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {tab === 'Dashboard' && <DashboardTab hub={hub} analytics={analytics} />}
+        {tab === 'Dashboard' && <DashboardTab hub={hub} analytics={analytics} mocks={mocks} />}
         {tab === 'Resume Builder' && <ResumeBuilderTab hub={hub} refreshHub={refreshHub} />}
-        {tab === 'Skills' && <SkillsTab />}
         {tab === 'Company Drives' && <CompanyDrivesTab />}
+        {tab === 'Prep Materials' && <PrepMaterialsTab list={prepList} reload={() => studentApi.getPreparationMaterials().then(r => setPrepList(r.data.data || []))} />}
+        {tab === 'My Offers' && <MyOffersTab offers={offers} reload={() => studentApi.getMyOffers().then(r => setOffers(r.data.data || [])).catch(err => toast.error('Failed to load offers'))} setOffers={setOffers} />}
+        {tab === 'Interviews' && <InterviewsTab interviews={interviews} reload={() => studentApi.getMyInterviews().then(r => setInterviews(r.data.data || [])).catch(err => toast.error('Failed to load interviews'))} />}
         {tab === 'Interview Prep' && <InterviewPrepTab hub={hub} />}
       </div>
     </div>
@@ -207,8 +215,8 @@ function HeroHeader({ hub, refreshHub }) {
     }
   }
 
-  const readiness = hub?.readiness || 0
-  const currentStatus = hub?.status || 'SEEKING'
+  const readiness = hub?.readinessScore || 0
+  const currentStatus = hub?.profile?.placementStatus || hub?.status || 'SEEKING'
   const stepIdx = STATUS_STEPS.indexOf(currentStatus)
 
   return (
@@ -223,7 +231,9 @@ function HeroHeader({ hub, refreshHub }) {
             <h1 className="text-2xl md:text-3xl font-bold mb-1" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
               Placement Hub
             </h1>
-            <p className="text-purple-200 text-sm">Python Batch 12 · Placement Season 2024</p>
+            <p className="text-purple-200 text-sm">
+              {[hub?.batchName, hub?.courseName].filter(Boolean).join(' · ') || 'Placement Hub'}
+            </p>
 
             {/* Status timeline */}
             <div className="mt-4 flex items-center gap-2">
@@ -271,15 +281,15 @@ function HeroHeader({ hub, refreshHub }) {
           <div className="flex items-center gap-6">
             {/* Quick links */}
             <div className="flex flex-col gap-2 text-xs">
-              {hub?.linkedinUrl ? (
-                <a href={hub.linkedinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-blue-300 hover:text-blue-200">
+              {hub?.profile?.linkedinUrl ? (
+                <a href={hub.profile.linkedinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-blue-300 hover:text-blue-200">
                   <Linkedin size={12} /> LinkedIn
                 </a>
               ) : (
                 <span className="flex items-center gap-1.5 text-white/40"><Linkedin size={12} /> No LinkedIn</span>
               )}
-              {hub?.githubUrl ? (
-                <a href={hub.githubUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-white/60 hover:text-white/90">
+              {hub?.profile?.githubUrl ? (
+                <a href={hub.profile.githubUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-white/60 hover:text-white/90">
                   <Github size={12} /> GitHub
                 </a>
               ) : (
@@ -308,10 +318,26 @@ function HeroHeader({ hub, refreshHub }) {
 }
 
 // ─── DASHBOARD TAB ────────────────────────────────────────────────────────────
-function DashboardTab({ hub, analytics }) {
-  const stats = hub?.stats || {}
-  const updates = hub?.placementUpdates || []
-  const nextMock = hub?.mockInterviews?.find(m => m.status === 'SCHEDULED')
+function DashboardTab({ hub, analytics, mocks }) {
+  const completed = (mocks || []).filter(m => m.status === 'COMPLETED')
+  const scheduled = (mocks || []).filter(m => m.status === 'SCHEDULED' || m.status === 'RESCHEDULED')
+  const nextMock = scheduled.length ? scheduled.sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))[0] : null
+
+  const trends = completed
+    .slice()
+    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+    .map(m => ({ label: format(new Date(m.scheduledAt), 'dd MMM'), rating: m.rating || 0 }))
+
+  const updates = [
+    ...(hub?.profile?.resumeUrl ? [{ type: 'ACTION', title: 'Resume uploaded', body: 'Your resume is visible to placement coordinators.', createdAt: new Date().toISOString() }] : []),
+    ...completed.slice(0, 4).map(m => ({
+      type: 'FEEDBACK',
+      title: `Mock ${m.rating ? 'rated ' + m.rating + '/5' : 'completed'} · ${m.interviewerName || 'Interviewer'}`,
+      body: m.feedback || 'No feedback recorded.',
+      createdAt: m.scheduledAt,
+    })),
+  ]
+
   const [checklist, setChecklist] = useState(() => {
     if (typeof window !== 'undefined') {
       try { return JSON.parse(localStorage.getItem('mock_checklist') || '{}') }
@@ -326,24 +352,24 @@ function DashboardTab({ hub, analytics }) {
     if (typeof window !== 'undefined') localStorage.setItem('mock_checklist', JSON.stringify(next))
   }
 
-  const checklistItems = ['Review Python OOP concepts', 'Practice 2 DSA problems', 'Prepare STAR stories', 'Test meeting link']
+  const checklistItems = ['Review key OOP concepts', 'Practice 2 DSA problems', 'Prepare STAR stories', 'Test meeting link']
 
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard icon={Brain} label="Mock Interviews" value={`${stats.completedMocks || 0}/${stats.totalMocks || 0}`}
-          sub={<StarRating rating={Math.round(stats.avgRating || 0)} />} color="purple" />
-        <KpiCard icon={Briefcase} label="Applications" value={stats.totalApplications || 0}
-          sub={<span className="text-emerald-600 font-semibold text-xs">{stats.shortlisted || 0} shortlisted</span>} color="blue" />
+        <KpiCard icon={Brain} label="Mock Interviews" value={`${completed.length}/${analytics?.totalMocks || 0}`}
+          sub={<StarRating rating={Math.round(analytics?.averageRating || 0)} />} color="purple" />
+        <KpiCard icon={Briefcase} label="Drive Applications" value={hub?.appliedDrives || 0}
+          sub={<span className="text-gray-500 text-xs">{hub?.totalDrives || 0} drives on campus</span>} color="blue" />
         <KpiCard icon={FileText} label="Resume"
-          value={hub?.resumeData?.summary ? 'Completed' : 'Incomplete'}
-          sub={<span className={hub?.resumeData?.summary ? 'text-emerald-600' : 'text-yellow-600'}>
-            {hub?.resumeData?.summary ? '✓ Ready' : '⚠ Needs work'}
+          value={hub?.profile?.resumeUrl ? 'Completed' : 'Incomplete'}
+          sub={<span className={hub?.profile?.resumeUrl ? 'text-emerald-600' : 'text-yellow-600'}>
+            {hub?.profile?.resumeUrl ? '✓ Ready' : '⚠ Needs work'}
           </span>} color="emerald" />
         <KpiCard icon={Target} label="Placement Status"
-          value={<span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[hub?.status || 'SEEKING']}`}>
-            {STATUS_LABELS[hub?.status || 'SEEKING']}
+          value={<span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[hub?.profile?.placementStatus || 'SEEKING']}`}>
+            {STATUS_LABELS[hub?.profile?.placementStatus || 'SEEKING']}
           </span>}
           sub="" color="violet" />
       </div>
@@ -351,13 +377,13 @@ function DashboardTab({ hub, analytics }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Performance Chart */}
         <div className="lg:col-span-2 space-y-4">
-          {analytics?.trend?.length > 0 ? (
+          {trends.length > 0 ? (
             <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5">
               <h3 className="font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                 <TrendingUp size={16} className="text-purple-600" />
                 Mock Interview Performance
               </h3>
-              <MockInterviewTrendChart trend={analytics.trend} />
+              <MockInterviewTrendChart trend={trends} />
             </div>
           ) : (
             <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5 flex flex-col items-center justify-center h-48 text-gray-400">
@@ -366,34 +392,22 @@ function DashboardTab({ hub, analytics }) {
             </div>
           )}
 
-          {/* Strengths & Improvements */}
-          {(analytics?.topStrengths?.length > 0 || analytics?.topImprovements?.length > 0) && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-emerald-100 dark:border-emerald-900/30 rounded-2xl shadow-xl p-4">
-                <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-2.5 flex items-center gap-1">
-                  <CheckCircle size={12} /> Top Strengths
-                </h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {analytics.topStrengths.map((s, i) => (
-                    <span key={i} className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-medium">
-                      {s.text}
-                      {s.count > 1 && <span className="bg-emerald-200 dark:bg-emerald-800 px-1 rounded-full">×{s.count}</span>}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-yellow-100 dark:border-yellow-900/30 rounded-2xl shadow-xl p-4">
-                <h4 className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 mb-2.5 flex items-center gap-1">
-                  <Zap size={12} /> Areas to Improve
-                </h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {analytics.topImprovements.map((s, i) => (
-                    <span key={i} className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 px-2 py-0.5 rounded-full text-[10px] font-medium">
-                      {s.text}
-                      {s.count > 1 && <span className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded-full">×{s.count}</span>}
-                    </span>
-                  ))}
-                </div>
+          {/* Recent feedback */}
+          {completed.length > 0 && (
+            <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5">
+              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-3">Recent Mock Feedback</h4>
+              <div className="space-y-3">
+                {completed.slice(0, 3).map(m => (
+                  <div key={m.id} className="flex items-start gap-3">
+                    <div className="flex-none w-14">
+                      <StarRating rating={m.rating || 0} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-800 dark:text-white">{m.interviewerName || 'Mock Interview'}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">{m.feedback || 'No feedback recorded.'}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -413,7 +427,12 @@ function DashboardTab({ hub, analytics }) {
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 {format(new Date(nextMock.scheduledAt), 'EEE, MMM d · h:mm a')}
+                {nextMock.mode ? ` · ${nextMock.mode === 'ONLINE' ? 'Online' : 'Offline'}` : ''}
+                {nextMock.durationMinutes ? ` · ${nextMock.durationMinutes}m` : ''}
               </p>
+              {nextMock.mode === 'OFFLINE' && nextMock.location ? (
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><MapPin size={11} /> {nextMock.location}</p>
+              ) : null}
               <p className="text-xs text-emerald-600 mt-1 font-medium">
                 {formatDistanceToNow(new Date(nextMock.scheduledAt), { addSuffix: true })}
               </p>
@@ -515,8 +534,8 @@ function ResumeBuilderTab({ hub, refreshHub }) {
         await studentApi.saveResume(data)
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
-      } catch {
-        toast.error('Failed to save')
+      } catch (err) {
+        toast.error(err?.response?.data?.message || 'Failed to save')
       } finally {
         setSaving(false)
       }
@@ -695,11 +714,12 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                         <FormInput label="Language" placeholder="English" value={lang.name || ''} onChange={v => updateArrayItem('languages', i, 'name', v)} />
                         <div>
                           <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">Proficiency</label>
-                          <select value={lang.level || 'Conversational'}
-                            onChange={e => updateArrayItem('languages', i, 'level', e.target.value)}
-                            className="w-full text-xs px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-                            {['Native', 'Fluent', 'Conversational', 'Basic'].map(l => <option key={l}>{l}</option>)}
-                          </select>
+                          <CustomSelect
+                            compact
+                            value={lang.level || 'Conversational'}
+                            onChange={v => updateArrayItem('languages', i, 'level', v)}
+                            options={['Native', 'Fluent', 'Conversational', 'Basic'].map(l => ({ value: l, label: l }))}
+                          />
                         </div>
                       </div>
                     )}
@@ -767,225 +787,25 @@ function ArraySection({ items, onAdd, onRemove, renderItem }) {
   )
 }
 
-// ─── SKILLS TAB ───────────────────────────────────────────────────────────────
-function SkillsTab() {
-  const [skills, setSkills] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [catFilter, setCatFilter] = useState('All')
-  const [form, setForm] = useState({ name: '', category: 'Programming', proficiency: 3, yearsExp: '' })
-  const [adding, setAdding] = useState(false)
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [editSkill, setEditSkill] = useState(null)
-
-  const CATS = ['All', 'Programming', 'Framework', 'Tool', 'Database', 'Soft Skill']
-
-  useEffect(() => {
-    studentApi.getSkills().then(r => setSkills(r.data.data || [])).catch(() => toast.error('Failed to load skills')).finally(() => setLoading(false))
-  }, [])
-
-  const filtered = catFilter === 'All' ? skills : skills.filter(s => s.category === catFilter)
-
-  const radarData = CATS.slice(1).map(cat => {
-    const catSkills = skills.filter(s => s.category === cat)
-    const avg = catSkills.length ? catSkills.reduce((s, sk) => s + sk.proficiency, 0) / catSkills.length : 0
-    return { category: cat.replace(' Skill', ''), avg: Math.round(avg * 10) / 10 }
-  }).filter(d => d.avg > 0)
-
-  const handleAdd = async () => {
-    if (!form.name.trim()) return toast.error('Skill name required')
-    setAdding(true)
-    const optimistic = { id: Date.now(), ...form, isVerified: false, createdAt: new Date().toISOString() }
-    setSkills(prev => [optimistic, ...prev])
-    try {
-      const res = await studentApi.addSkill({ ...form, proficiency: Number(form.proficiency), yearsExp: form.yearsExp ? Number(form.yearsExp) : null })
-      setSkills(prev => [res.data.data, ...prev.filter(s => s.id !== optimistic.id)])
-      setForm({ name: '', category: 'Programming', proficiency: 3, yearsExp: '' })
-      toast.success('Skill added!')
-    } catch (e) {
-      setSkills(prev => prev.filter(s => s.id !== optimistic.id))
-      toast.error(e?.response?.data?.message || 'Failed to add skill')
-    } finally {
-      setAdding(false)
-    }
-  }
-
-  const handleDelete = async (id) => {
-    const prev = skills
-    setSkills(s => s.filter(sk => sk.id !== id))
-    try {
-      await studentApi.deleteSkill(id)
-      toast.success('Skill removed')
-    } catch {
-      setSkills(prev)
-      toast.error('Failed to remove skill')
-    }
-  }
-
-  const handleEdit = async (skill) => {
-    if (!editSkill) return setEditSkill(skill)
-    try {
-      const res = await studentApi.updateSkill(editSkill.id, { proficiency: editSkill.proficiency, yearsExp: editSkill.yearsExp })
-      setSkills(s => s.map(sk => sk.id === editSkill.id ? res.data.data : sk))
-      setEditSkill(null)
-      toast.success('Skill updated')
-    } catch {
-      toast.error('Failed to update skill')
-    }
-  }
-
-  const suggestions = SKILL_SUGGESTIONS.filter(s =>
-    s.toLowerCase().includes(form.name.toLowerCase()) && !skills.find(sk => sk.name.toLowerCase() === s.toLowerCase())
-  ).slice(0, 6)
-
-  return (
-    <div className="space-y-6">
-      {/* Add skill form */}
-      <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5">
-        <h3 className="font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2 text-sm">
-          <Plus size={15} className="text-purple-600" /> Add New Skill
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
-          <div className="relative">
-            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">Skill Name</label>
-            <input
-              value={form.name}
-              onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setShowSuggestions(true) }}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              placeholder="e.g. Python"
-              className="w-full text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-            />
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
-                {suggestions.map(s => (
-                  <button key={s} onMouseDown={() => setForm(f => ({ ...f, name: s }))}
-                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/20">
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">Category</label>
-            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              className="w-full text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500">
-              {CATS.slice(1).map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">
-              Proficiency — {PROFICIENCY_LABELS[form.proficiency]}
-            </label>
-            <input type="range" min={1} max={5} value={form.proficiency}
-              onChange={e => setForm(f => ({ ...f, proficiency: Number(e.target.value) }))}
-              className="w-full accent-purple-600" />
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">Years Exp</label>
-              <input type="number" step="0.5" min="0" max="20" value={form.yearsExp}
-                onChange={e => setForm(f => ({ ...f, yearsExp: e.target.value }))}
-                placeholder="Optional"
-                className="w-full text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500" />
-            </div>
-            <button onClick={handleAdd} disabled={adding || !form.name.trim()}
-              className="mt-4 px-4 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors">
-              {adding ? <Loader2 size={14} className="animate-spin" /> : 'Add'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Radar chart */}
-      {radarData.length >= 2 && (
-        <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5">
-          <h3 className="font-semibold text-gray-800 dark:text-white mb-2 text-sm flex items-center gap-2">
-            <BarChart2 size={15} className="text-purple-600" /> Skill Profile
-          </h3>
-          <SkillRadarChart data={radarData} />
-        </div>
-      )}
-
-      {/* Category filter */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {CATS.map(c => (
-          <button key={c} onClick={() => setCatFilter(c)}
-            className={`flex-none px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              catFilter === c ? 'bg-purple-600 text-white shadow' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300'
-            }`}>
-            {c}
-            {c !== 'All' && <span className="ml-1 opacity-60">({skills.filter(s => s.category === c).length})</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* Skills grid */}
-      {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {[...Array(6)].map((_, i) => <div key={i} className="h-28 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <Code2 size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
-          <p className="text-sm font-medium">No skills yet</p>
-          <p className="text-xs mt-1">Add your first skill using the form above</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {filtered.map(skill => (
-            <SkillCard key={skill.id} skill={skill}
-              onEdit={() => setEditSkill(editSkill?.id === skill.id ? null : skill)}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Edit modal */}
-      {editSkill && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-sm shadow-2xl">
-            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Edit — {editSkill.name}</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Proficiency — {PROFICIENCY_LABELS[editSkill.proficiency]}</label>
-                <input type="range" min={1} max={5} value={editSkill.proficiency}
-                  onChange={e => setEditSkill(s => ({ ...s, proficiency: Number(e.target.value) }))}
-                  className="w-full accent-purple-600" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Years Experience</label>
-                <input type="number" step="0.5" value={editSkill.yearsExp || ''}
-                  onChange={e => setEditSkill(s => ({ ...s, yearsExp: e.target.value }))}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500" />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setEditSkill(null)} className="flex-1 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-300">Cancel</button>
-              <button onClick={handleEdit} className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold transition-colors">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── COMPANY DRIVES TAB ───────────────────────────────────────────────────────
 function CompanyDrivesTab() {
   const [drives, setDrives] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [drivePage, setDrivePage] = useState(1)
+  const [drivePageSize, setDrivePageSize] = useState(6)
   const [expanded, setExpanded] = useState(null)
   const [applying, setApplying] = useState(null)
+  const [withdrawing, setWithdrawing] = useState(null)
+  const [ask, confirmModal] = useConfirmModal()
 
   useEffect(() => {
     studentApi.getDrives().then(r => setDrives(r.data.data || [])).catch(() => toast.error('Failed to load drives')).finally(() => setLoading(false))
   }, [])
 
   const filtered = drives.filter(d => {
-    const matchFilter = filter === 'All' || (filter === 'Interested' ? !!d.applicationStatus : d.status === filter.toUpperCase())
+    const matchFilter = filter === 'All' || (filter === 'Interested' ? !!d.applicationStatus : filter === 'Open' ? isOpenDrive(d) : !isOpenDrive(d))
     const matchSearch = !search || d.companyName.toLowerCase().includes(search.toLowerCase()) || d.role.toLowerCase().includes(search.toLowerCase())
     return matchFilter && matchSearch
   })
@@ -1000,6 +820,21 @@ function CompanyDrivesTab() {
       toast.error(e?.response?.data?.message || 'Failed to record interest')
     } finally {
       setApplying(null)
+    }
+  }
+
+  const handleWithdraw = async (drive) => {
+    const ok = await ask({ title: 'Withdraw Application?', message: `Withdraw your application for ${drive.companyName}? This can't be undone.`, confirmLabel: 'Withdraw' })
+    if (!ok) return
+    setWithdrawing(drive.id)
+    try {
+      await studentApi.withdrawInterest(drive.id)
+      setDrives(prev => prev.map(d => d.id === drive.id ? { ...d, applicationStatus: 'WITHDRAWN' } : d))
+      toast.success('Application withdrawn')
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Failed to withdraw application')
+    } finally {
+      setWithdrawing(null)
     }
   }
 
@@ -1025,6 +860,9 @@ function CompanyDrivesTab() {
 
   const anyProfileIncomplete = drives.some(d => d.profileIncomplete)
 
+  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
+  const drivePageEff = clampPage(filtered, drivePage, drivePageSize)
+
   return (
     <div className="space-y-5">
       {/* Profile-completion nudge — eligibility can't be fully checked without it */}
@@ -1045,7 +883,7 @@ function CompanyDrivesTab() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search company or role..."
           className="flex-1 text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500" />
         <div className="flex gap-2">
-          {['All', 'Active', 'Upcoming', 'Interested'].map(f => (
+          {['All', 'Open', 'Closed', 'Interested'].map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                 filter === f ? 'bg-purple-600 text-white shadow' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
@@ -1069,7 +907,7 @@ function CompanyDrivesTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filtered.map(drive => (
+          {filtered.slice((drivePageEff - 1) * drivePageSize, drivePageEff * drivePageSize).map(drive => (
             <div key={drive.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm hover:shadow-lg transition-all overflow-hidden">
               {/* Card header */}
               <div className="p-4">
@@ -1081,9 +919,9 @@ function CompanyDrivesTab() {
                         <h3 className="font-bold text-gray-900 dark:text-white text-sm leading-tight">{drive.companyName}</h3>
                         <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{drive.role}</p>
                       </div>
-                      <span className={`flex-none text-[10px] px-2 py-0.5 rounded-full font-semibold ${DRIVE_STATUS_COLORS[drive.status] || ''}`}>
-                        {drive.status}
-                      </span>
+<span className={`flex-none text-[10px] px-2 py-0.5 rounded-full font-semibold ${isOpenDrive(drive) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                          {isOpenDrive(drive) ? 'Open' : 'Closed'}
+                        </span>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-1.5 text-[10px] text-gray-500 dark:text-gray-400">
                       <span className="flex items-center gap-0.5"><MapPin size={9} /> {drive.location}</span>
@@ -1112,9 +950,17 @@ function CompanyDrivesTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     {drive.applicationStatus ? (
-                      <span className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-bold ${APPLICATION_STATUS_COLORS[drive.applicationStatus] || ''}`}>
-                        <CheckCircle size={10} /> {APPLICATION_STATUS_LABELS[drive.applicationStatus] || drive.applicationStatus}
-                      </span>
+                      <>
+                        <span className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-bold ${APPLICATION_STATUS_COLORS[drive.applicationStatus] || ''}`}>
+                          <CheckCircle size={10} /> {APPLICATION_STATUS_LABELS[drive.applicationStatus] || drive.applicationStatus}
+                        </span>
+                        {['INTERESTED', 'UNDER_REVIEW', 'SHORTLISTED', 'RESUME_SHARED'].includes(drive.applicationStatus) && (
+                          <button onClick={() => handleWithdraw(drive)} disabled={withdrawing === drive.id}
+                            className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-xl text-[10px] font-medium hover:border-red-300 hover:text-red-500 transition-colors">
+                            {withdrawing === drive.id ? <Loader2 size={10} className="animate-spin" /> : 'Withdraw'}
+                          </button>
+                        )}
+                      </>
                     ) : drive.profileIncomplete ? (
                       <Link href="/student/profile" title={(drive.ineligibilityReasons || []).join('; ')}
                         className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-xl text-[10px] font-bold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
@@ -1126,7 +972,7 @@ function CompanyDrivesTab() {
                         <AlertCircle size={10} /> Not Eligible
                       </span>
                     ) : (
-                      <button onClick={() => handleExpressInterest(drive)} disabled={applying === drive.id || drive.status === 'CLOSED'}
+                      <button onClick={() => handleExpressInterest(drive)} disabled={applying === drive.id || !isOpenDrive(drive)}
                         className="flex items-center gap-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors">
                         {applying === drive.id ? <Loader2 size={10} className="animate-spin" /> : null}
                         I'm Interested →
@@ -1168,32 +1014,455 @@ function CompanyDrivesTab() {
           ))}
         </div>
       )}
+      <Pagination
+        data={filtered}
+        page={drivePage}
+        pageSize={drivePageSize}
+        onPageChange={setDrivePage}
+        onPageSizeChange={v => { setDrivePageSize(v); setDrivePage(1) }}
+        label="drives"
+      />
+      {confirmModal}
+    </div>
+  )
+}
+
+// ─── MY OFFERS TAB ────────────────────────────────────────────────────────────
+const OFFER_STATUS_STYLES = {
+  OFFERED: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
+  ACCEPTED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  REJECTED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  EXPIRED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  WITHDRAWN: 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400',
+}
+
+function MyOffersTab({ offers, reload, setOffers }) {
+  const [acting, setActing] = useState(null)
+  const [offerSearch, setOfferSearch] = useState('')
+  const [offerPage, setOfferPage] = useState(1)
+  const [offerPageSize, setOfferPageSize] = useState(5)
+  const [ask, confirmModal] = useConfirmModal()
+
+  const respond = async (offer, action) => {
+    const isAccept = action === 'accept'
+    const ok = await ask({
+      title: `${isAccept ? 'Accept' : 'Reject'} Offer?`,
+      message: `Are you sure you want to ${isAccept ? 'accept' : 'reject'} the offer from ${offer.companyName} (${offer.role})?`,
+      confirmLabel: isAccept ? 'Accept' : 'Reject',
+      tone: isAccept ? 'success' : 'danger',
+    })
+    if (!ok) return
+    setActing(offer.id)
+    try {
+      await (action === 'accept' ? studentApi.acceptOffer(offer.id) : studentApi.rejectOffer(offer.id))
+      toast.success(action === 'accept' ? 'Offer accepted — congratulations!' : 'Offer declined')
+      reload()
+    } catch (e) {
+      toast.error(e?.response?.data?.message || `Failed to ${action} offer`)
+    } finally {
+      setActing(null)
+    }
+  }
+
+  if (offers.length === 0) {
+    return (
+      <div className="glass-card p-10 text-center space-y-2">
+        <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">No offers yet</p>
+        <p className="text-xs text-gray-400">Offers appear here once a company selects you after your interviews.</p>
+      </div>
+    )
+  }
+
+  const filtered = offers.filter(o =>
+    !offerSearch || `${o.companyName} ${o.role}`.toLowerCase().includes(offerSearch.toLowerCase())
+  )
+
+  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
+  const offerPageEff = clampPage(filtered, offerPage, offerPageSize)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <SearchInput
+          value={offerSearch}
+          onChange={v => { setOfferSearch(v); setOfferPage(1) }}
+          placeholder="Search company or role..."
+          className="w-full sm:max-w-xs"
+        />
+        <span className="text-xs text-gray-500 dark:text-gray-400">{offers.length} offer{offers.length !== 1 ? 's' : ''}</span>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="glass-card p-10 text-center text-gray-400">No offers match your search.</div>
+      ) : (
+        filtered.slice((offerPageEff - 1) * offerPageSize, offerPageEff * offerPageSize).map(o => (
+        <div key={o.id} className="glass-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{o.offerNumber}</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${OFFER_STATUS_STYLES[o.status] || 'bg-gray-100 text-gray-500'}`}>{o.status}</span>
+            </div>
+            <p className="mt-2 text-lg font-bold text-gray-900 dark:text-white">{o.companyName}</p>
+            <p className="text-sm text-gray-500">{o.role} {o.ctc ? `· ${o.ctc}` : ''}</p>
+            <div className="mt-2 flex gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+              <span>Offered: {o.offerDate ? format(new Date(o.offerDate), 'dd MMM yyyy') : '—'}</span>
+              {o.joiningDate && <span>Joining: {format(new Date(o.joiningDate), 'dd MMM yyyy')}</span>}
+              {o.offerExpiry && <span>Expires: {format(new Date(o.offerExpiry), 'dd MMM yyyy')}</span>}
+            </div>
+            {o.offerLetterUrl && (
+              <a href={o.offerLetterUrl} target="_blank" rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-purple-600 hover:underline font-semibold">
+                <ExternalLink size={12} /> Offer Letter
+              </a>
+            )}
+          </div>
+          {o.status === 'OFFERED' && (
+            <div className="flex gap-2 flex-none">
+              <button onClick={() => respond(o, 'reject')} disabled={acting === o.id}
+                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:border-red-300 hover:text-red-500 transition-colors disabled:opacity-50">
+                Decline
+              </button>
+              <button onClick={() => respond(o, 'accept')} disabled={acting === o.id}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 text-white text-xs font-bold disabled:opacity-50">
+                {acting === o.id ? 'Processing...' : 'Accept Offer'}
+              </button>
+            </div>
+          )}
+        </div>
+        ))
+      )}
+      <Pagination
+        data={filtered}
+        page={offerPage}
+        pageSize={offerPageSize}
+        onPageChange={setOfferPage}
+        onPageSizeChange={v => { setOfferPageSize(v); setOfferPage(1) }}
+        label="offers"
+      />
+      {confirmModal}
+    </div>
+  )
+}
+
+// ─── INTERVIEWS TAB ───────────────────────────────────────────────────────────
+function InterviewsTab({ interviews, reload }) {
+  const [intSearch, setIntSearch] = useState('')
+  const [intPage, setIntPage] = useState(1)
+  const [intPageSize, setIntPageSize] = useState(6)
+
+  if (interviews.length === 0) {
+    return (
+      <div className="glass-card p-10 text-center space-y-2">
+        <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">No interviews scheduled</p>
+        <p className="text-xs text-gray-400">Once your placement coordinator shortlists you, interview slots appear here with joining links.</p>
+      </div>
+    )
+  }
+
+  const filtered = interviews.filter(iv =>
+    !intSearch || `${iv.roundName} ${iv.companyName || ''} ${iv.driveRole || ''}`.toLowerCase().includes(intSearch.toLowerCase())
+  )
+
+  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
+  const intPageEff = clampPage(filtered, intPage, intPageSize)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <SearchInput
+          value={intSearch}
+          onChange={v => { setIntSearch(v); setIntPage(1) }}
+          placeholder="Search round or company..."
+          className="w-full sm:max-w-xs"
+        />
+        <span className="text-xs text-gray-500 dark:text-gray-400">{interviews.length} interview{interviews.length !== 1 ? 's' : ''}</span>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="glass-card p-10 text-center text-gray-400">No interviews match your search.</div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.slice((intPageEff - 1) * intPageSize, intPageEff * intPageSize).map(iv => (
+            <div key={iv.id} className="glass-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    iv.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                    iv.status === 'CANCELLED' || iv.status === 'ABSENT' ? 'bg-red-100 text-red-500' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>{iv.status}</span>
+                  {iv.result && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      iv.result === 'PASS' ? 'bg-emerald-100 text-emerald-700' : iv.result === 'FAIL' ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-500'
+                    }`}>{iv.result}</span>
+                  )}
+                </div>
+                <p className="mt-2 text-base font-bold text-gray-900 dark:text-white">{iv.roundName}</p>
+                <div className="mt-1 flex gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+                  <span className="flex items-center gap-1"><Building2 size={12} /> {iv.companyName || 'Placement Drive'}{iv.driveRole ? ` · ${iv.driveRole}` : ''}</span>
+                  <span className="flex items-center gap-1"><Clock size={12} /> {iv.scheduledAt ? format(new Date(iv.scheduledAt), 'dd MMM yyyy, h:mm a') : '—'}</span>
+                  <span>{iv.online ? 'Online' : 'Offline'}{iv.location ? ` · ${iv.location}` : ''}</span>
+                </div>
+              </div>
+              {(iv.status === 'SCHEDULED' || iv.status === 'RESCHEDULED') && iv.meetingLink && (
+                <a href={iv.meetingLink} target="_blank" rel="noopener noreferrer"
+                  className="flex-none flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-xs font-bold">
+                  <ExternalLink size={12} /> Join Interview
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <Pagination
+        data={filtered}
+        page={intPage}
+        pageSize={intPageSize}
+        onPageChange={setIntPage}
+        onPageSizeChange={v => { setIntPageSize(v); setIntPage(1) }}
+        label="interviews"
+      />
     </div>
   )
 }
 
 // ─── INTERVIEW PREP TAB ───────────────────────────────────────────────────────
+// ─── PREP MATERIALS TAB ───────────────────────────────────────────────────────
+function PrepMaterialsTab({ list, reload }) {
+  const [detail, setDetail] = useState(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [downloading, setDownloading] = useState(null)
+  const [openQ, setOpenQ] = useState(null)
+  const [prepSearch, setPrepSearch] = useState('')
+  const [prepPage, setPrepPage] = useState(1)
+  const [prepPageSize, setPrepPageSize] = useState(6)
+
+  const openDetail = async (id) => {
+    setLoadingDetail(true)
+    try {
+      const res = await studentApi.getPreparationMaterial(id)
+      setDetail(res.data.data)
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to load material')
+    } finally { setLoadingDetail(false) }
+  }
+
+  const download = async (id, docId, fileName) => {
+    setDownloading(docId)
+    try {
+      const res = await studentApi.downloadPrepDocument(id, docId)
+      const blob = res.data instanceof Blob ? res.data : new Blob([res.data])
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName || `document-${docId}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Download failed')
+    } finally { setDownloading(null) }
+  }
+
+  if (detail) {
+    return (
+      <div className="space-y-5">
+        <button onClick={() => setDetail(null)} className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:underline">
+          <ArrowRight size={12} className="rotate-180" /> Back to materials
+        </button>
+
+        <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-6 space-y-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{detail.title}</h2>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 uppercase">{detail.interviewType || 'Interview'}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">{detail.course ? detail.course.title : 'General'}</span>
+                {detail.publishedByName ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{detail.publishedByName}</span> : null}
+              </div>
+            </div>
+          </div>
+          {detail.instructions ? <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{detail.instructions}</p> : null}
+
+          {/* Documents */}
+          <div>
+            <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3">Documents ({detail.documents?.length || 0})</h3>
+            {detail.documents?.length === 0 ? (
+              <p className="text-xs text-gray-400">No documents attached to this material.</p>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-2">
+                {detail.documents.map(d => (
+                  <div key={d.id} className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText size={15} className="text-purple-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{d.fileName}</p>
+                        <p className="text-[10px] text-gray-400">{Math.round(d.fileSize / 1024)} KB</p>
+                      </div>
+                    </div>
+                    <button onClick={() => download(detail.id, d.id, d.fileName)} disabled={downloading === d.id}
+                      className="flex-none flex items-center gap-1 text-xs bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg font-semibold transition-colors">
+                      {downloading === d.id ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} Download
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Questions */}
+          <div>
+            <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3">Practice Questions ({detail.questions?.length || 0})</h3>
+            {detail.questions?.length === 0 ? (
+              <p className="text-xs text-gray-400">No practice questions yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {detail.questions.map(q => (
+                  <div key={q.id} className="border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
+                    <button onClick={() => setOpenQ(openQ === q.id ? null : q.id)}
+                      className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-purple-50/40 dark:hover:bg-purple-900/10 transition-colors">
+                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{q.questionText}</span>
+                      {openQ === q.id ? <ChevronUp size={14} className="text-gray-400 shrink-0" /> : <ChevronDown size={14} className="text-gray-400 shrink-0" />}
+                    </button>
+                    {openQ === q.id && q.answerText && (
+                      <div className="px-4 pb-3 -mt-1">
+                        <p className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap"><span className="font-bold text-emerald-600 dark:text-emerald-400">Answer: </span>{q.answerText}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const filteredPrep = list.filter(p =>
+    !prepSearch || `${p.title} ${p.interviewType || ''} ${p.course?.title || ''}`.toLowerCase().includes(prepSearch.toLowerCase())
+  )
+
+  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
+  const prepPageEff = clampPage(filteredPrep, prepPage, prepPageSize)
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <SearchInput
+          value={prepSearch}
+          onChange={v => { setPrepSearch(v); setPrepPage(1) }}
+          placeholder="Search materials..."
+          className="w-full sm:max-w-xs"
+        />
+        <span className="text-xs text-gray-500 dark:text-gray-400">{list.length} material{list.length !== 1 ? 's' : ''}</span>
+      </div>
+      {loadingDetail ? (
+        <div className="py-16 text-center text-gray-400">Loading...</div>
+      ) : filteredPrep.length === 0 ? (
+        <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-12 text-center text-gray-400">
+          <BookOpen size={32} className="mx-auto mb-3 text-purple-200" />
+          {list.length === 0
+            ? <p className="text-sm">No preparation materials available for you yet.</p>
+            : <p className="text-sm">No materials match your search.</p>}
+        </div>
+      ) : (
+        <>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredPrep.slice((prepPageEff - 1) * prepPageSize, prepPageEff * prepPageSize).map(p => (
+            <div key={p.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5 space-y-3 flex flex-col">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-gray-800 dark:text-white">{p.title}</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">{p.interviewType || 'Interview'} {p.course ? <span>• {p.course.title}</span> : <span className="text-purple-500 font-medium">• General</span>}</p>
+                </div>
+                <BookOpen size={18} className="text-purple-300 shrink-0" />
+              </div>
+              {p.instructions ? <p className="text-xs text-gray-500 line-clamp-2">{p.instructions}</p> : null}
+              <div className="flex gap-2 text-[11px] text-gray-500">
+                <span>{p.documentCount || 0} docs</span>
+                <span>•</span>
+                <span>{p.questionsCount || 0} questions</span>
+              </div>
+              <button onClick={() => openDetail(p.id)} className="mt-auto flex items-center justify-center gap-1.5 w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors">
+                Open Material <ArrowRight size={12} />
+              </button>
+            </div>
+          ))}
+          </div>
+          <Pagination
+            data={filteredPrep}
+            page={prepPage}
+            pageSize={prepPageSize}
+            onPageChange={setPrepPage}
+            onPageSizeChange={v => { setPrepPageSize(v); setPrepPage(1) }}
+            label="materials"
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
 function InterviewPrepTab({ hub }) {
-  const [subTab, setSubTab] = useState('HR Questions')
-  const [catFilter, setCatFilter] = useState('All')
-  const [techQuestions, setTechQuestions] = useState([])
-  const [techLoading, setTechLoading] = useState(false)
+  const [subTab, setSubTab] = useState('Interview Questions')
+  const [questions, setQuestions] = useState([])
+  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [aptTips, setAptTips] = useState([])
+  const [aptLoading, setAptLoading] = useState(false)
+  const [resList, setResList] = useState([])
+  const [resLoading, setResLoading] = useState(false)
   const [expanded, setExpanded] = useState(null)
 
-  const SUB_TABS = ['HR Questions', 'Technical', 'Aptitude Tips', 'Resources']
-  const HR_CATS = ['All', 'Introduction', 'Behavioural', 'Situational', 'Company-specific']
+  const [qSearch, setQSearch] = useState('')
+  const [qPage, setQPage] = useState(1)
+  const [qPageSize, setQPageSize] = useState(8)
+  const [aptSearch, setAptSearch] = useState('')
+  const [aptPage, setAptPage] = useState(1)
+  const [aptPageSize, setAptPageSize] = useState(6)
+  const [resSearch, setResSearch] = useState('')
+  const [resPage, setResPage] = useState(1)
+  const [resPageSize, setResPageSize] = useState(6)
+
+  const SUB_TABS = ['Interview Questions', 'Aptitude Tips', 'Resources']
+
+  const filteredQuestions = questions.filter(q =>
+    !qSearch || `${q.question} ${q.answer}`.toLowerCase().includes(qSearch.toLowerCase())
+  )
+  const filteredAptTips = aptTips.filter(t =>
+    !aptSearch || `${t.topic} ${t.formula} ${t.example}`.toLowerCase().includes(aptSearch.toLowerCase())
+  )
+  const filteredResList = resList.filter(r =>
+    !resSearch || `${r.title} ${r.description} ${r.tag}`.toLowerCase().includes(resSearch.toLowerCase())
+  )
+
+  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
+  const qPageEff = clampPage(filteredQuestions, qPage, qPageSize)
+  const aptPageEff = clampPage(filteredAptTips, aptPage, aptPageSize)
+  const resPageEff = clampPage(filteredResList, resPage, resPageSize)
 
   useEffect(() => {
-    if (subTab === 'Technical' && techQuestions.length === 0) {
-      setTechLoading(true)
+    if (subTab === 'Interview Questions' && questions.length === 0) {
+      setQuestionsLoading(true)
       studentApi.getInterviewPrep({ limit: 50 })
-        .then(r => setTechQuestions(r.data.data?.questions || []))
+        .then(r => setQuestions(r.data.data?.questions || []))
         .catch(() => toast.error('Failed to load questions'))
-        .finally(() => setTechLoading(false))
+        .finally(() => setQuestionsLoading(false))
+    }
+    if (subTab === 'Aptitude Tips' && aptTips.length === 0) {
+      setAptLoading(true)
+      studentApi.getAptitudeTips()
+        .then(r => setAptTips(r.data.data || []))
+        .catch(() => toast.error('Failed to load aptitude tips'))
+        .finally(() => setAptLoading(false))
+    }
+    if (subTab === 'Resources' && resList.length === 0) {
+      setResLoading(true)
+      studentApi.getInterviewResources()
+        .then(r => setResList(r.data.data || []))
+        .catch(() => toast.error('Failed to load resources'))
+        .finally(() => setResLoading(false))
     }
   }, [subTab])
-
-  const filteredHR = catFilter === 'All' ? HR_QUESTIONS : HR_QUESTIONS.filter(q => q.cat === catFilter)
 
   const DIFF_COLORS = {
     EASY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -1215,150 +1484,168 @@ function InterviewPrepTab({ hub }) {
         ))}
       </div>
 
-      {/* HR Questions */}
-      {subTab === 'HR Questions' && (
-        <div className="space-y-4">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {HR_CATS.map(c => (
-              <button key={c} onClick={() => setCatFilter(c)}
-                className={`flex-none px-3 py-1.5 rounded-full text-[11px] font-medium transition-all ${
-                  catFilter === c ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-                }`}>
-                {c}
-              </button>
-            ))}
-          </div>
-          <div className="space-y-3">
-            {filteredHR.map((q, i) => (
-              <div key={i} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
-                <button onClick={() => setExpanded(expanded === `hr-${i}` ? null : `hr-${i}`)}
-                  className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-sm font-medium text-gray-800 dark:text-white">{q.q}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${DIFF_COLORS[q.diff]}`}>{q.diff}</span>
-                    {expanded === `hr-${i}` ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-                  </div>
-                </button>
-                {expanded === `hr-${i}` && (
-                  <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-gray-800">
-                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 mt-3">
-                      <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Model Answer Framework</p>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{q.ans}</p>
-                    </div>
-                    {q.tips && (
-                      <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-3 mt-2">
-                        <p className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-400 mb-1">💡 Pro Tips</p>
-                        <p className="text-xs text-gray-700 dark:text-gray-300">{q.tips}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Technical Questions */}
-      {subTab === 'Technical' && (
+{/* Interview Questions */}
+      {subTab === 'Interview Questions' && (
         <div className="space-y-3">
-          {techLoading ? (
+          <SearchInput
+            value={qSearch}
+            onChange={v => { setQSearch(v); setQPage(1) }}
+            placeholder="Search questions..."
+            className="w-full sm:max-w-xs"
+          />
+          {questionsLoading ? (
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
             </div>
-          ) : techQuestions.length === 0 ? (
+          ) : filteredQuestions.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <Brain size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
-              <p className="text-sm">No technical questions available yet</p>
+              <p className="text-sm">{questions.length === 0 ? 'No interview questions available yet' : 'No questions match your search'}</p>
             </div>
           ) : (
-            techQuestions.map((q, i) => (
-              <div key={q.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
-                <button onClick={() => setExpanded(expanded === `tech-${i}` ? null : `tech-${i}`)}
-                  className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold shrink-0">
-                      {i + 1}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 dark:text-white">{q.question}</p>
-                      <span className="text-[10px] text-gray-400">{q.category}</span>
+            <>
+              {filteredQuestions.slice((qPageEff - 1) * qPageSize, qPageEff * qPageSize).map((q, i) => (
+                <div key={q.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+                  <button onClick={() => setExpanded(expanded === `q-${qPageEff}-${i}` ? null : `q-${qPageEff}-${i}`)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold shrink-0">
+                        {(qPageEff - 1) * qPageSize + i + 1}
+                      </span>
+                      <span className="text-sm font-medium text-gray-800 dark:text-white">{q.question}</span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${DIFF_COLORS[q.difficulty]}`}>{q.difficulty}</span>
-                    {expanded === `tech-${i}` ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-                  </div>
-                </button>
-                {expanded === `tech-${i}` && (
-                  <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-gray-800">
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 mt-3">
-                      <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Answer</p>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{q.answer}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${DIFF_COLORS[q.difficulty]}`}>{q.difficulty}</span>
+                      {expanded === `q-${qPageEff}-${i}` ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                     </div>
-                    {q.tags?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {q.tags.map((tag, ti) => (
-                          <span key={ti} className="bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full text-[10px]">{tag}</span>
-                        ))}
+                  </button>
+                  {expanded === `q-${qPageEff}-${i}` && (
+                    <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-gray-800">
+                      <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 mt-3">
+                        <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Answer</p>
+                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{q.answer}</p>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
+                    </div>
+                  )}
+                </div>
+              ))}
+              <Pagination
+                data={filteredQuestions}
+                page={qPage}
+                pageSize={qPageSize}
+                onPageChange={setQPage}
+                onPageSizeChange={v => { setQPageSize(v); setQPage(1) }}
+                label="questions"
+              />
+            </>
           )}
         </div>
       )}
 
       {/* Aptitude Tips */}
       {subTab === 'Aptitude Tips' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {APT_TIPS.map((tip, i) => (
-            <div key={i} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-sm p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-[10px] font-bold">{i + 1}</div>
-                <h3 className="font-bold text-gray-800 dark:text-white text-sm">{tip.topic}</h3>
-              </div>
-              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-2.5 mb-2">
-                <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 mb-0.5">Formula</p>
-                <p className="text-xs text-gray-700 dark:text-gray-300 font-mono">{tip.formula}</p>
-              </div>
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-2.5">
-                <p className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-400 mb-0.5">Example</p>
-                <p className="text-xs text-gray-700 dark:text-gray-300">{tip.example}</p>
-              </div>
+        <div className="space-y-4">
+          <SearchInput
+            value={aptSearch}
+            onChange={v => { setAptSearch(v); setAptPage(1) }}
+            placeholder="Search topic, formula or example..."
+            className="w-full sm:max-w-xs"
+          />
+          {aptLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-40 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
             </div>
-          ))}
+          ) : filteredAptTips.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <Brain size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
+              <p className="text-sm">{aptTips.length === 0 ? 'No aptitude tips available yet' : 'No tips match your search'}</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredAptTips.slice((aptPageEff - 1) * aptPageSize, aptPageEff * aptPageSize).map((tip, i) => (
+                  <div key={tip.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-sm p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-[10px] font-bold">{(aptPageEff - 1) * aptPageSize + i + 1}</div>
+                      <h3 className="font-bold text-gray-800 dark:text-white text-sm">{tip.topic}</h3>
+                    </div>
+                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-2.5 mb-2">
+                      <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 mb-0.5">Formula</p>
+                      <p className="text-xs text-gray-700 dark:text-gray-300 font-mono">{tip.formula}</p>
+                    </div>
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-2.5">
+                      <p className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-400 mb-0.5">Example</p>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">{tip.example}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Pagination
+                data={filteredAptTips}
+                page={aptPage}
+                pageSize={aptPageSize}
+                onPageChange={setAptPage}
+                onPageSizeChange={v => { setAptPageSize(v); setAptPage(1) }}
+                label="tips"
+              />
+            </>
+          )}
         </div>
       )}
 
       {/* Resources */}
       {subTab === 'Resources' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {RESOURCES.map((res, i) => (
-            <div key={i} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-4 flex gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shrink-0">
-                <res.icon size={18} className="text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <h3 className="font-bold text-gray-900 dark:text-white text-sm leading-tight">{res.title}</h3>
-                  <span className="flex-none text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium">{res.tag}</span>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-2">{res.desc}</p>
-                <a href={res.link} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:text-purple-700">
-                  Open Resource <ExternalLink size={10} />
-                </a>
-              </div>
+        <div className="space-y-4">
+          <SearchInput
+            value={resSearch}
+            onChange={v => { setResSearch(v); setResPage(1) }}
+            placeholder="Search resources..."
+            className="w-full sm:max-w-xs"
+          />
+          {resLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
             </div>
-          ))}
+          ) : filteredResList.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <BookOpen size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
+              <p className="text-sm">{resList.length === 0 ? 'No resources available yet' : 'No resources match your search'}</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredResList.slice((resPageEff - 1) * resPageSize, resPageEff * resPageSize).map(res => {
+                  const ResIcon = RESOURCE_ICONS[res.tag] || BookOpen
+                  return (
+                    <div key={res.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-4 flex gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shrink-0">
+                        <ResIcon size={18} className="text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h3 className="font-bold text-gray-900 dark:text-white text-sm leading-tight">{res.title}</h3>
+                          <span className="flex-none text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium">{res.tag}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-2">{res.description}</p>
+                        <a href={res.url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:text-purple-700">
+                          Open Resource <ExternalLink size={10} />
+                        </a>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <Pagination
+                data={filteredResList}
+                page={resPage}
+                pageSize={resPageSize}
+                onPageChange={setResPage}
+                onPageSizeChange={v => { setResPageSize(v); setResPage(1) }}
+                label="resources"
+              />
+            </>
+          )}
         </div>
       )}
     </div>

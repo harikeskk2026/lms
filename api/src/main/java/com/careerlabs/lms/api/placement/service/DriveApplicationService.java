@@ -10,6 +10,7 @@ import java.util.List;
 public interface DriveApplicationService {
 
     DriveApplicationResponse expressInterest(Long driveId, Long userId);
+    DriveApplicationResponse withdraw(Long driveId, Long userId);
 
     List<AdminDriveApplicationResponse> listForDrive(Long driveId);
 

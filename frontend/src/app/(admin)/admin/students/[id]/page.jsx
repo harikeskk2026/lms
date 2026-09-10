@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, User, Mail, Phone, MapPin, Linkedin, Github, Award, Building2, BookOpen, Calendar, GraduationCap,
+  FileText, ExternalLink,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -261,6 +262,25 @@ export default function StudentDetailPage() {
                 )}
               </div>
             ) : <p className="text-sm text-gray-400">Not enrolled in any batch</p>}
+          </div>
+          <div className="glass-card p-6">
+            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+              <FileText size={16} className="text-purple-600" /> Resume
+            </h3>
+            {student.resumeUrl ? (
+              <div className="flex items-center justify-between gap-3 bg-purple-50 dark:bg-purple-900/30 rounded-xl px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{student.resumeUrl.split('/').pop() || 'Resume'}</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Resume attached</p>
+                </div>
+                <a href={student.resumeUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex-none flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold transition-colors">
+                  Open <ExternalLink size={11} />
+                </a>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Student has not uploaded a resume yet.</p>
+            )}
           </div>
           <div className="glass-card p-6">
             <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Placement Status</h3>

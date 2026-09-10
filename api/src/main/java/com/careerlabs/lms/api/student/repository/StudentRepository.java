@@ -22,6 +22,12 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     List<Student> findByCourseIdIn(List<Long> courseIds);
 
+    List<Student> findByUser_ActiveTrue();
+
+    List<Student> findByUser_ActiveTrueAndBatchIdIn(List<Long> batchIds);
+
+    List<Student> findByUser_ActiveTrueAndCourseIdIn(List<Long> courseIds);
+
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "batch", "college", "course"})
     Optional<Student> findByUserId(Long userId);
 

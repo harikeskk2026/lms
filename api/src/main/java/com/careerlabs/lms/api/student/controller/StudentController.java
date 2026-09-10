@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping({"/api/students", "/api/admin/students"})
 public class StudentController {
@@ -73,6 +75,14 @@ public class StudentController {
     public ResponseEntity<ApiResponse<StudentResponse>> toggleStatus(@PathVariable Long id) {
         StudentResponse response = studentService.toggleStatus(id);
         return ResponseEntity.ok(ApiResponse.of("Student status updated", response));
+    }
+
+    @PatchMapping("/{id}/placement-status")
+    public ResponseEntity<ApiResponse<StudentResponse>> updatePlacementStatus(@PathVariable Long id,
+                                                                              @RequestBody Map<String, PlacementStatus> body) {
+        PlacementStatus status = body.get("placementStatus");
+        StudentResponse response = studentService.updatePlacementStatus(id, status);
+        return ResponseEntity.ok(ApiResponse.of("Placement status updated", response));
     }
 
     @DeleteMapping("/{id}")

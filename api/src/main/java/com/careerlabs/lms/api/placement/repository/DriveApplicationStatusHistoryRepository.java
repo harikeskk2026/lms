@@ -10,4 +10,6 @@ public interface DriveApplicationStatusHistoryRepository extends JpaRepository<D
     List<DriveApplicationStatusHistory> findByApplication_IdOrderByChangedAtDesc(Long applicationId);
 
     void deleteAllByApplication_Student_Id(Long studentId);
+
+    void deleteAllByApplication_Drive_Id(Long driveId);
 }

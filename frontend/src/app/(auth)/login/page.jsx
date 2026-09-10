@@ -226,6 +226,11 @@ export default function LoginPage() {
             </div>
             <p className="text-[11px] text-slate-400 mt-2">Click any row to auto-fill credentials</p>
           </div>
+
+          {/* Support hint */}
+          <p className="text-center text-xs text-slate-400 mt-4">
+            Need access? Contact your institute administrator.
+          </p>
         </div>
       </div>
     </div>

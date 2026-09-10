@@ -25,6 +25,8 @@ public interface StudentService {
 
     StudentResponse toggleStatus(Long id);
 
+    StudentResponse updatePlacementStatus(Long id, PlacementStatus placementStatus);
+
     StudentResponse assignToBatch(Long studentId, Long batchId);
 
     void delete(Long id);

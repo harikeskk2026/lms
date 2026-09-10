@@ -1,6 +1,5 @@
 package com.careerlabs.lms.api.placement.dto.request;
 
-import com.careerlabs.lms.api.placement.entity.DriveStatus;
 import com.careerlabs.lms.api.placement.entity.DriveType;
 import com.careerlabs.lms.api.placement.validation.DriveValidationMessages;
 import jakarta.validation.constraints.NotBlank;
@@ -36,9 +35,6 @@ public class UpdateDriveRequest {
 
     @NotNull(message = DriveValidationMessages.DRIVE_TYPE_REQUIRED)
     private DriveType driveType;
-
-    @NotNull(message = DriveValidationMessages.STATUS_REQUIRED)
-    private DriveStatus status;
 
     private String applyLink;
 
@@ -132,14 +128,6 @@ public class UpdateDriveRequest {
 
     public void setDriveType(DriveType driveType) {
         this.driveType = driveType;
-    }
-
-    public DriveStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(DriveStatus status) {
-        this.status = status;
     }
 
     public String getApplyLink() {

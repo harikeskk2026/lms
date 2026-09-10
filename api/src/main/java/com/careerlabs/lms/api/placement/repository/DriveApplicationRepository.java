@@ -31,4 +31,6 @@ public interface DriveApplicationRepository extends JpaRepository<DriveApplicati
     long countDistinctStudents();
 
     void deleteAllByStudent_Id(Long studentId);
+
+    void deleteAllByDrive_Id(Long driveId);
 }

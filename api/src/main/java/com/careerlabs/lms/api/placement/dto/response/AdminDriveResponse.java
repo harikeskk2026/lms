@@ -1,7 +1,6 @@
 package com.careerlabs.lms.api.placement.dto.response;
 
 import com.careerlabs.lms.api.placement.entity.Drive;
-import com.careerlabs.lms.api.placement.entity.DriveStatus;
 import com.careerlabs.lms.api.placement.entity.DriveType;
 
 import java.time.Instant;
@@ -20,7 +19,6 @@ public record AdminDriveResponse(
         List<String> requirements,
         List<String> skills,
         DriveType driveType,
-        DriveStatus status,
         String applyLink,
         Double minCgpa,
         Double minPercentage,
@@ -50,7 +48,6 @@ public record AdminDriveResponse(
                 drive.getRequirements(),
                 drive.getSkills(),
                 drive.getDriveType(),
-                drive.getStatus(),
                 drive.getApplyLink(),
                 drive.getMinCgpa(),
                 drive.getMinPercentage(),

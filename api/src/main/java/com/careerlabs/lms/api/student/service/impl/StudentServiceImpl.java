@@ -252,6 +252,15 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     @Transactional
+    public StudentResponse updatePlacementStatus(Long id, PlacementStatus placementStatus) {
+        Student student = findOrThrow(id);
+        student.setPlacementStatus(placementStatus);
+        student = studentRepository.save(student);
+        return StudentResponse.from(student);
+    }
+
+    @Override
+    @Transactional
     public StudentResponse assignToBatch(Long studentId, Long batchId) {
         Student student = findOrThrow(studentId);
         assignBatch(student, batchId);

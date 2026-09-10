@@ -2,7 +2,6 @@ package com.careerlabs.lms.api.placement.service;
 
 import com.careerlabs.lms.api.placement.dto.request.CreateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateDriveRequest;
-import com.careerlabs.lms.api.placement.dto.request.UpdateDriveStatusRequest;
 import com.careerlabs.lms.api.placement.dto.response.AdminDriveResponse;
 import com.careerlabs.lms.api.placement.dto.response.StudentDriveResponse;
 
@@ -18,7 +17,7 @@ public interface DriveService {
 
     AdminDriveResponse update(Long id, UpdateDriveRequest request);
 
-    AdminDriveResponse updateStatus(Long id, UpdateDriveStatusRequest request);
+    void delete(Long id);
 
     List<StudentDriveResponse> listForStudent(Long userId);
 }

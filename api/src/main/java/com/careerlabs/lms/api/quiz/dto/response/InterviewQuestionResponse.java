@@ -14,6 +14,8 @@ public record InterviewQuestionResponse(
         QuizDifficulty difficulty,
         List<String> tags,
         boolean active,
+        Long courseId,
+        String courseName,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -21,6 +23,9 @@ public record InterviewQuestionResponse(
     public static InterviewQuestionResponse from(InterviewQuestion q) {
         return new InterviewQuestionResponse(
                 q.getId(), q.getCategory(), q.getQuestionText(), q.getAnswerText(), q.getDifficulty(),
-                q.getTagList(), q.isActive(), q.getCreatedAt(), q.getUpdatedAt());
+                q.getTagList(), q.isActive(),
+                q.getCourse() != null ? q.getCourse().getId() : null,
+                q.getCourse() != null ? q.getCourse().getTitle() : null,
+                q.getCreatedAt(), q.getUpdatedAt());
     }
 }

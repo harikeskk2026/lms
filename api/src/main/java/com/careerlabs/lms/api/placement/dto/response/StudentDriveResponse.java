@@ -2,7 +2,6 @@ package com.careerlabs.lms.api.placement.dto.response;
 
 import com.careerlabs.lms.api.placement.entity.Drive;
 import com.careerlabs.lms.api.placement.entity.DriveApplicationStatus;
-import com.careerlabs.lms.api.placement.entity.DriveStatus;
 import com.careerlabs.lms.api.placement.entity.DriveType;
 
 import java.time.LocalDate;
@@ -20,7 +19,6 @@ public record StudentDriveResponse(
         List<String> requirements,
         List<String> skills,
         DriveType driveType,
-        DriveStatus status,
         String applyLink,
         boolean isEligible,
         List<String> ineligibilityReasons,
@@ -44,7 +42,6 @@ public record StudentDriveResponse(
                 drive.getRequirements(),
                 drive.getSkills(),
                 drive.getDriveType(),
-                drive.getStatus(),
                 drive.getApplyLink(),
                 isEligible,
                 ineligibilityReasons,

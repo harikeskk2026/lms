@@ -13,7 +13,6 @@ import com.careerlabs.lms.api.placement.entity.Drive;
 import com.careerlabs.lms.api.placement.entity.DriveApplication;
 import com.careerlabs.lms.api.placement.entity.DriveApplicationStatus;
 import com.careerlabs.lms.api.placement.entity.DriveApplicationStatusHistory;
-import com.careerlabs.lms.api.placement.entity.DriveStatus;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationStatusHistoryRepository;
 import com.careerlabs.lms.api.placement.repository.DriveRepository;
@@ -44,16 +43,22 @@ public class DriveApplicationServiceImpl implements DriveApplicationService {
     private static final Map<DriveApplicationStatus, Set<DriveApplicationStatus>> ALLOWED_TRANSITIONS = new EnumMap<>(DriveApplicationStatus.class);
 
     static {
-        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.INTERESTED, Set.of(DriveApplicationStatus.UNDER_REVIEW));
+        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.INTERESTED,
+                Set.of(DriveApplicationStatus.UNDER_REVIEW, DriveApplicationStatus.WITHDRAWN));
         ALLOWED_TRANSITIONS.put(DriveApplicationStatus.UNDER_REVIEW,
-                Set.of(DriveApplicationStatus.SHORTLISTED, DriveApplicationStatus.REJECTED));
+                Set.of(DriveApplicationStatus.SHORTLISTED, DriveApplicationStatus.REJECTED, DriveApplicationStatus.WITHDRAWN));
         ALLOWED_TRANSITIONS.put(DriveApplicationStatus.SHORTLISTED,
-                Set.of(DriveApplicationStatus.RESUME_SHARED, DriveApplicationStatus.REJECTED));
+                Set.of(DriveApplicationStatus.RESUME_SHARED, DriveApplicationStatus.REJECTED, DriveApplicationStatus.WITHDRAWN));
         ALLOWED_TRANSITIONS.put(DriveApplicationStatus.RESUME_SHARED,
-                Set.of(DriveApplicationStatus.SELECTED, DriveApplicationStatus.NOT_SELECTED));
-        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.SELECTED, Set.of());
+                Set.of(DriveApplicationStatus.SELECTED, DriveApplicationStatus.NOT_SELECTED, DriveApplicationStatus.WITHDRAWN));
+        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.SELECTED,
+                Set.of(DriveApplicationStatus.OFFERED));
+        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.OFFERED,
+                Set.of(DriveApplicationStatus.ACCEPTED));
+        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.ACCEPTED, Set.of());
         ALLOWED_TRANSITIONS.put(DriveApplicationStatus.NOT_SELECTED, Set.of());
         ALLOWED_TRANSITIONS.put(DriveApplicationStatus.REJECTED, Set.of());
+        ALLOWED_TRANSITIONS.put(DriveApplicationStatus.WITHDRAWN, Set.of());
     }
 
     private final DriveRepository driveRepository;
@@ -89,10 +94,6 @@ public class DriveApplicationServiceImpl implements DriveApplicationService {
         Drive drive = driveRepository.findById(driveId)
                 .orElseThrow(() -> new ResourceNotFoundException("Drive not found: " + driveId));
 
-        if (drive.getStatus() == DriveStatus.CLOSED || drive.getStatus() == DriveStatus.CANCELLED) {
-            throw new ForbiddenException("This opportunity is no longer accepting applications");
-        }
-
         if (drive.getApplyDeadline() != null && LocalDate.now().isAfter(drive.getApplyDeadline())) {
             throw new ForbiddenException("The application deadline for this opportunity has passed");
         }
@@ -117,6 +118,35 @@ public class DriveApplicationServiceImpl implements DriveApplicationService {
                 student.getUser().getName() + " expressed interest in " + drive.getCompanyName()
                         + " (" + drive.getRole() + ").",
                 NotificationType.DRIVE,
+                "/admin/placement");
+
+        return DriveApplicationResponse.from(application);
+    }
+
+    @Override
+    @Transactional
+    public DriveApplicationResponse withdraw(Long driveId, Long userId) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
+
+        DriveApplication application = driveApplicationRepository.findByDrive_IdAndStudent_Id(driveId, student.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Application not found for this opportunity"));
+
+        DriveApplicationStatus current = application.getStatus();
+        if (!ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(DriveApplicationStatus.WITHDRAWN)) {
+            throw new BadRequestException("This application can no longer be withdrawn from " + current);
+        }
+
+        DriveApplicationStatus fromStatus = application.getStatus();
+        application.setStatus(DriveApplicationStatus.WITHDRAWN);
+        application = driveApplicationRepository.save(application);
+
+        recordHistory(application, fromStatus, DriveApplicationStatus.WITHDRAWN, "Withdrawn by student", student.getUser());
+        notificationService.notifyAdmins(
+                "↩️ Application Withdrawn: " + application.getDrive().getCompanyName(),
+                student.getUser().getName() + " withdrew their application for "
+                        + application.getDrive().getCompanyName() + " (" + application.getDrive().getRole() + ").",
+                NotificationType.STATUS,
                 "/admin/placement");
 
         return DriveApplicationResponse.from(application);
@@ -199,6 +229,14 @@ public class DriveApplicationServiceImpl implements DriveApplicationService {
             case SELECTED -> notificationService.notifyUser(studentUserId,
                     "🎉 You've Been Selected!",
                     "Congratulations! You've been selected for " + company + " (" + role + ").",
+                    NotificationType.SUCCESS, "/student/placement");
+            case OFFERED -> notificationService.notifyUser(studentUserId,
+                    "📄 Offer Released",
+                    "An offer has been generated for " + company + " (" + role + "). Check your offers.",
+                    NotificationType.SUCCESS, "/student/offers");
+            case ACCEPTED -> notificationService.notifyUser(studentUserId,
+                    "🎊 Offer Accepted",
+                    "You have accepted the offer from " + company + " (" + role + ").",
                     NotificationType.SUCCESS, "/student/placement");
             case NOT_SELECTED -> notificationService.notifyUser(studentUserId,
                     "Application Update",

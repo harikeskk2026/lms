@@ -131,21 +131,19 @@ export default function DateTimePicker12h({
             min={effectiveMinDate}
             value={date}
             onChange={handleDateChange}
-            onClick={(e) => { try { e.target.showPicker?.() } catch {} }}
-            className={`w-full h-11 pl-9 pr-3 rounded-xl border bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all cursor-pointer min-w-0 ${
-              hasError
+            onClick={(e) => { try { e.target.showPicker?.() } catch { } }}
+            className={`w-full h-11 pl-9 pr-3 rounded-xl border bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all cursor-pointer min-w-0 ${hasError
                 ? 'border-red-500 dark:border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
                 : 'border-slate-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600'
-            }`}
+              }`}
           />
         </div>
 
         {/* 12-Hour Time Section with AM/PM */}
-        <div className={`flex items-center gap-1.5 h-11 px-2.5 rounded-xl border bg-slate-50 dark:bg-gray-800 transition-all min-w-0 ${
-          hasError
+        <div className={`flex items-center gap-1.5 h-11 px-2.5 rounded-xl border bg-slate-50 dark:bg-gray-800 transition-all min-w-0 ${hasError
             ? 'border-red-500 dark:border-red-500 focus-within:border-red-500 focus-within:ring-2 focus-within:ring-red-500/20'
             : 'border-slate-200 dark:border-gray-700 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600'
-        }`}>
+          }`}>
           <Clock size={15} className="text-slate-400 shrink-0 ml-0.5" />
 
           {/* Hour Select */}
@@ -184,11 +182,10 @@ export default function DateTimePicker12h({
               type="button"
               disabled={disabled}
               onClick={() => handlePeriodChange('AM')}
-              className={`px-2.5 py-0.5 text-xs font-bold rounded-md transition-all ${
-                period === 'AM'
+              className={`px-2.5 py-0.5 text-xs font-bold rounded-md transition-all ${period === 'AM'
                   ? 'bg-purple-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-              }`}
+                }`}
             >
               AM
             </button>
@@ -196,11 +193,10 @@ export default function DateTimePicker12h({
               type="button"
               disabled={disabled}
               onClick={() => handlePeriodChange('PM')}
-              className={`px-2.5 py-0.5 text-xs font-bold rounded-md transition-all ${
-                period === 'PM'
+              className={`px-2.5 py-0.5 text-xs font-bold rounded-md transition-all ${period === 'PM'
                   ? 'bg-purple-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-              }`}
+                }`}
             >
               PM
             </button>

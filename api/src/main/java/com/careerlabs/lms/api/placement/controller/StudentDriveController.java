@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,5 +44,12 @@ public class StudentDriveController {
             @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {
         DriveApplicationResponse response = driveApplicationService.expressInterest(id, principal.id());
         return ResponseEntity.status(201).body(ApiResponse.of("Interest recorded", response));
+    }
+
+    @DeleteMapping("/{id}/interest")
+    public ResponseEntity<ApiResponse<DriveApplicationResponse>> withdrawInterest(
+            @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {
+        DriveApplicationResponse response = driveApplicationService.withdraw(id, principal.id());
+        return ResponseEntity.ok(ApiResponse.of("Application withdrawn", response));
     }
 }

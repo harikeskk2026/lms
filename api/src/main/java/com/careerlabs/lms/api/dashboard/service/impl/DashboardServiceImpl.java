@@ -19,7 +19,6 @@ import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.placement.dto.response.AdminDriveResponse;
 import com.careerlabs.lms.api.placement.dto.response.StudentDriveResponse;
-import com.careerlabs.lms.api.placement.entity.DriveStatus;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
 import com.careerlabs.lms.api.placement.service.DriveService;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
@@ -379,12 +378,11 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private AdminDashboardResponse.Placement buildAdminPlacement(List<AdminDriveResponse> drives) {
-        long activeDrives = drives.stream().filter(d -> d.status() == DriveStatus.ACTIVE).count();
-        long availableDrives = drives.stream()
-                .filter(d -> d.status() == DriveStatus.ACTIVE || d.status() == DriveStatus.UPCOMING)
+        long openDrives = drives.stream()
+                .filter(d -> d.applyDeadline() != null && !LocalDate.now().isAfter(d.applyDeadline()))
                 .count();
         long interestedStudents = driveApplicationRepository.countDistinctStudents();
-        return new AdminDashboardResponse.Placement(activeDrives, interestedStudents, availableDrives);
+        return new AdminDashboardResponse.Placement(openDrives, interestedStudents, openDrives);
     }
 
     private List<AdminDashboardResponse.UpcomingSession> buildUpcomingSessions() {
@@ -554,7 +552,7 @@ public class DashboardServiceImpl implements DashboardService {
     private StudentDashboardResponse.Placement buildStudentPlacement(Student student, Long userId) {
         List<StudentDriveResponse> drives = driveService.listForStudent(userId);
         long availableDrives = drives.stream()
-                .filter(d -> d.status() == DriveStatus.ACTIVE || d.status() == DriveStatus.UPCOMING)
+                .filter(d -> d.applyDeadline() != null && !LocalDate.now().isAfter(d.applyDeadline()))
                 .count();
         long interestExpressed = driveApplicationRepository.findAllByStudent_IdOrderByCreatedAtDesc(student.getId()).size();
         return new StudentDashboardResponse.Placement(

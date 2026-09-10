@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.common.storage;
 
 import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -113,5 +114,40 @@ public class FileStorageService {
             throw new BadRequestException("File must have a valid extension");
         }
         return filename.substring(dot + 1).toLowerCase();
+    }
+
+    /**
+     * Reads a previously stored file back from disk for access-controlled serving.
+     * The stored URL is opaque ({@code /uploads/&lt;subDir&gt;/&lt;uuid&gt;.&lt;ext&gt;}), so only
+     * callers that already hold a reference to it (and have passed their own
+     * authorization layer) can resolve the underlying bytes.
+     */
+    public LoadedFile load(String storedUrl) {
+        if (storedUrl == null || storedUrl.isBlank() || !storedUrl.startsWith("/uploads/")) {
+            throw new BadRequestException("Invalid file reference");
+        }
+        String relative = storedUrl.substring("/uploads/".length());
+        Path target = root.resolve(relative).normalize();
+        if (!target.startsWith(root)) {
+            throw new BadRequestException("Invalid file reference");
+        }
+        try {
+            if (!Files.exists(target)) {
+                throw new ResourceNotFoundException("File not found on server");
+            }
+            return new LoadedFile(Files.readAllBytes(target), contentTypeFor(relative));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read stored file", e);
+        }
+    }
+
+    private String contentTypeFor(String filename) {
+        String ext = extensionOf(filename);
+        return switch (ext) {
+            case "pdf" -> "application/pdf";
+            case "doc" -> "application/msword";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            default -> "application/octet-stream";
+        };
     }
 }

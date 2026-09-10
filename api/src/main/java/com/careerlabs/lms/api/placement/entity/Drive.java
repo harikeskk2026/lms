@@ -76,10 +76,6 @@ public class Drive {
     @Column(name = "drive_type", nullable = false)
     private DriveType driveType = DriveType.CAMPUS;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private DriveStatus status = DriveStatus.UPCOMING;
-
     /** Informational company reference link only - never used by students to bypass the interest flow. */
     @Column(name = "apply_link")
     private String applyLink;
@@ -217,14 +213,6 @@ public class Drive {
 
     public void setDriveType(DriveType driveType) {
         this.driveType = driveType;
-    }
-
-    public DriveStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(DriveStatus status) {
-        this.status = status;
     }
 
     public String getApplyLink() {

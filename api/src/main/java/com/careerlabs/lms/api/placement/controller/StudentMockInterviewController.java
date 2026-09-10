@@ -4,6 +4,9 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.response.MockInterviewResponse;
 import com.careerlabs.lms.api.placement.entity.MockInterview;
+import com.careerlabs.lms.api.placement.entity.MockInterviewCandidate;
+import com.careerlabs.lms.api.placement.entity.MockInterviewCandidateStatus;
+import com.careerlabs.lms.api.placement.repository.MockInterviewCandidateRepository;
 import com.careerlabs.lms.api.placement.repository.MockInterviewRepository;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -24,11 +28,12 @@ import java.util.Map;
 @Transactional(readOnly = true)
 public class StudentMockInterviewController {
 
-    private final MockInterviewRepository mockInterviewRepository;
+    private final MockInterviewCandidateRepository candidateRepository;
     private final StudentRepository studentRepository;
 
-    public StudentMockInterviewController(MockInterviewRepository mockInterviewRepository, StudentRepository studentRepository) {
-        this.mockInterviewRepository = mockInterviewRepository;
+    public StudentMockInterviewController(MockInterviewCandidateRepository candidateRepository,
+                                          StudentRepository studentRepository) {
+        this.candidateRepository = candidateRepository;
         this.studentRepository = studentRepository;
     }
 
@@ -36,24 +41,40 @@ public class StudentMockInterviewController {
     public ResponseEntity<ApiResponse<List<MockInterviewResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal) {
         Student student = studentRepository.findByUserId(principal.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
-        List<MockInterview> list = mockInterviewRepository.findByStudent_IdOrderByScheduledAtDesc(student.getId());
-        return ResponseEntity.ok(ApiResponse.of(list.stream().map(MockInterviewResponse::from).toList()));
+
+        List<MockInterviewCandidate> candidates = candidateRepository.findByStudent_IdOrderByMockInterviewScheduledAtDesc(student.getId());
+        LinkedHashSet<MockInterview> mocks = new LinkedHashSet<>();
+        for (MockInterviewCandidate c : candidates) {
+            mocks.add(c.getMockInterview());
+        }
+
+        return ResponseEntity.ok(ApiResponse.of(mocks.stream()
+                .map(m -> MockInterviewResponse.forStudent(m, student.getId()))
+                .toList()));
     }
 
     @GetMapping("/mock-analytics")
     public ResponseEntity<ApiResponse<Map<String, Object>>> analytics(@AuthenticationPrincipal JwtUserPrincipal principal) {
         Student student = studentRepository.findByUserId(principal.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
-        List<MockInterview> list = mockInterviewRepository.findByStudent_IdOrderByScheduledAtDesc(student.getId());
 
-        double avgRating = list.stream().filter(m -> m.getRating() != null).mapToInt(MockInterview::getRating).average().orElse(0.0);
-        long completed = list.stream().filter(m -> m.getStatus() != null && m.getStatus().name().equals("COMPLETED")).count();
+        List<MockInterviewCandidate> candidates = candidateRepository.findByStudent_IdOrderByMockInterviewScheduledAtDesc(student.getId());
+
+        double avgRating = candidates.stream().filter(c -> c.getRating() != null).mapToInt(MockInterviewCandidate::getRating).average().orElse(0.0);
+        long completed = candidates.stream().filter(c -> c.getStatus() == MockInterviewCandidateStatus.COMPLETED).count();
+
+        LinkedHashSet<MockInterview> mockSet = new LinkedHashSet<>();
+        for (MockInterviewCandidate c : candidates) {
+            mockSet.add(c.getMockInterview());
+        }
 
         Map<String, Object> map = new HashMap<>();
-        map.put("totalMocks", list.size());
+        map.put("totalMocks", candidates.size());
         map.put("completedMocks", completed);
         map.put("averageRating", Math.round(avgRating * 10.0) / 10.0);
-        map.put("recentMocks", list.stream().limit(5).map(MockInterviewResponse::from).toList());
+        map.put("recentMocks", mockSet.stream().limit(5)
+                .map(m -> MockInterviewResponse.forStudent(m, student.getId()))
+                .toList());
 
         return ResponseEntity.ok(ApiResponse.of(map));
     }
