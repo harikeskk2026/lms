@@ -9,7 +9,6 @@ import java.time.Instant;
 public record CourseResponse(
         Long id,
         String title,
-        String slug,
         String courseCode,
         String description,
         String thumbnail,
@@ -29,7 +28,6 @@ public record CourseResponse(
         return new CourseResponse(
                 course.getId(),
                 course.getTitle(),
-                course.getSlug(),
                 course.getCourseCode(),
                 course.getDescription(),
                 course.getThumbnail(),

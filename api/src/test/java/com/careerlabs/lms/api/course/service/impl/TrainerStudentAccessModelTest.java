@@ -47,7 +47,7 @@ class TrainerStudentAccessModelTest {
     @Mock private UserRepository userRepository;
     @Mock private AssignmentRepository assignmentRepository;
     @Mock private DailyClassRepository dailyClassRepository;
-    @Mock private SlugGenerator slugGenerator;
+    @Mock private CourseCodeGenerator courseCodeGenerator;
     @Mock private SyllabusModuleRepository moduleRepository;
     @Mock private SyllabusService syllabusService;
     @Mock private MaterialRepository materialRepository;
@@ -79,7 +79,7 @@ class TrainerStudentAccessModelTest {
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
         batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard);
         courseService = new CourseServiceImpl(
-                courseRepository, slugGenerator, accessGuard,
+                courseRepository, courseCodeGenerator, accessGuard,
                 studentRepository, enrollmentRepository,
                 moduleRepository, syllabusService, materialRepository, batchRepository
         );

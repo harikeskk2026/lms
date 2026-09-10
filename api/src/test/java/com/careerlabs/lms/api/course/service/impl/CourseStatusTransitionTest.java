@@ -34,7 +34,7 @@ import static org.mockito.Mockito.*;
 class CourseStatusTransitionTest {
 
     @Mock private CourseRepository courseRepository;
-    @Mock private SlugGenerator slugGenerator;
+    @Mock private CourseCodeGenerator courseCodeGenerator;
     @Mock private CourseAccessGuard accessGuard;
     @Mock private StudentRepository studentRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
@@ -62,7 +62,6 @@ class CourseStatusTransitionTest {
         c.setDuration("3 months");
         c.setLevel(Level.BEGINNER);
         c.setStatus(status);
-        c.setSlug("test-course");
         return c;
     }
 
@@ -78,7 +77,7 @@ class CourseStatusTransitionTest {
 
     @BeforeEach
     void setUp() {
-        courseService = new CourseServiceImpl(courseRepository, slugGenerator, accessGuard, studentRepository, enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository);
+        courseService = new CourseServiceImpl(courseRepository, courseCodeGenerator, accessGuard, studentRepository, enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository);
         batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard);
     }
 

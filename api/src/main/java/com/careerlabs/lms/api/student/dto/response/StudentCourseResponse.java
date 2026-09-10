@@ -15,7 +15,6 @@ public record StudentCourseResponse(
     public record CourseInfo(
             Long id,
             String title,
-            String slug,
             String description,
             String duration,
             String level
@@ -25,7 +24,6 @@ public record StudentCourseResponse(
             return new CourseInfo(
                     c.getId(),
                     c.getTitle(),
-                    c.getSlug(),
                     c.getDescription(),
                     c.getDuration(),
                     c.getLevel() != null ? c.getLevel().name() : "BEGINNER"

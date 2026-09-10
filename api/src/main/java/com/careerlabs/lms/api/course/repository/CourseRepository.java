@@ -12,11 +12,11 @@ import java.util.Optional;
 
 public interface CourseRepository extends JpaRepository<Course, Long> {
 
-    boolean existsBySlug(String slug);
+    boolean existsByTitleIgnoreCase(String title);
 
-    boolean existsBySlugAndIdNot(String slug, Long id);
+    boolean existsByTitleIgnoreCaseAndIdNot(String title, Long id);
 
-    Optional<Course> findBySlug(String slug);
+    boolean existsByCourseCode(String courseCode);
 
     Optional<Course> findByTitleIgnoreCase(String title);
 

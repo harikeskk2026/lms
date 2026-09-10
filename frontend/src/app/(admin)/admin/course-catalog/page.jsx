@@ -26,7 +26,7 @@ const STATUS_COLORS = {
   ARCHIVED: 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
 }
 
-const EMPTY_FORM = { title: '', courseCode: '', slug: '', description: '', durationValue: '', durationUnit: 'months', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
+const EMPTY_FORM = { title: '', courseCode: '', description: '', durationValue: '', durationUnit: 'months', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
 
 export default function CourseCatalogPage() {
   const router = useRouter()
@@ -98,7 +98,6 @@ export default function CourseCatalogPage() {
     reset({
       title: course.title,
       courseCode: course.courseCode || '',
-      slug: course.slug || '',
       description: course.description,
       durationValue: parsed.durationValue,
       durationUnit: parsed.durationUnit,
@@ -179,9 +178,9 @@ export default function CourseCatalogPage() {
     if (!q) return matchesStatus
 
     const titleMatch = Boolean(c.title && c.title.toLowerCase().includes(q))
-    const slugMatch = Boolean(c.slug && c.slug.toLowerCase().includes(q))
+    const codeMatch = Boolean(c.courseCode && c.courseCode.toLowerCase().includes(q))
     const levelMatch = Boolean(c.level && c.level.toLowerCase().includes(q))
-    return matchesStatus && (titleMatch || slugMatch || levelMatch)
+    return matchesStatus && (titleMatch || codeMatch || levelMatch)
   })
 
   if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN' && user.role !== 'TRAINER') {
@@ -282,7 +281,7 @@ export default function CourseCatalogPage() {
               <p className="text-xs text-gray-500 line-clamp-2">{c.description}</p>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span className="flex items-center gap-1"><Clock size={11} /> {c.duration}</span>
-                <span className="flex items-center gap-1"><BarChart2 size={11} /> {c.slug}</span>
+                {c.courseCode && <span className="flex items-center gap-1"><BarChart2 size={11} /> {c.courseCode}</span>}
               </div>
               <Link href={`/admin/course-catalog/${c.id}`}
                 className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors">
@@ -344,15 +343,6 @@ export default function CourseCatalogPage() {
               <input {...register('courseCode')} placeholder="e.g. PY-101"
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 uppercase" />
               {errors.courseCode && <span className="text-xs text-red-500 mt-1 block">{errors.courseCode.message}</span>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Slug <span className="text-xs text-gray-400 font-normal">(URL Key)</span>
-              </label>
-              <input {...register('slug')} placeholder="e.g. python-2"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs lowercase" />
-              {errors.slug && <span className="text-xs text-red-500 mt-1 block">{errors.slug.message}</span>}
             </div>
           </div>
 

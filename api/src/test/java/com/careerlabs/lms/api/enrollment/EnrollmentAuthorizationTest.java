@@ -63,7 +63,6 @@ class EnrollmentAuthorizationTest {
         c.setStatus(status);
         c.setDescription("desc");
         c.setDuration("6 months");
-        c.setSlug("slug-" + id);
         return c;
     }
 

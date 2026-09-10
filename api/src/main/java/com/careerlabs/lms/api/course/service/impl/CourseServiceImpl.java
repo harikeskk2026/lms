@@ -30,7 +30,7 @@ import java.util.Set;
 public class CourseServiceImpl implements CourseService {
 
     private final CourseRepository courseRepository;
-    private final SlugGenerator slugGenerator;
+    private final CourseCodeGenerator courseCodeGenerator;
     private final CourseAccessGuard accessGuard;
     private final StudentRepository studentRepository;
     private final EnrollmentRepository enrollmentRepository;
@@ -39,13 +39,13 @@ public class CourseServiceImpl implements CourseService {
     private final MaterialRepository materialRepository;
     private final BatchRepository batchRepository;
 
-    public CourseServiceImpl(CourseRepository courseRepository, SlugGenerator slugGenerator,
+    public CourseServiceImpl(CourseRepository courseRepository, CourseCodeGenerator courseCodeGenerator,
                               CourseAccessGuard accessGuard, StudentRepository studentRepository,
                               EnrollmentRepository enrollmentRepository, SyllabusModuleRepository moduleRepository,
                               SyllabusService syllabusService, MaterialRepository materialRepository,
                               BatchRepository batchRepository) {
         this.courseRepository = courseRepository;
-        this.slugGenerator = slugGenerator;
+        this.courseCodeGenerator = courseCodeGenerator;
         this.accessGuard = accessGuard;
         this.studentRepository = studentRepository;
         this.enrollmentRepository = enrollmentRepository;
@@ -95,18 +95,18 @@ public class CourseServiceImpl implements CourseService {
         if (request.getStatus() == CourseStatus.ARCHIVED) {
             throw new BadRequestException("Courses cannot be created directly as ARCHIVED. Archive is available after the course is created.");
         }
+        if (courseRepository.existsByTitleIgnoreCase(request.getTitle().trim())) {
+            throw new BadRequestException("A course with this title already exists: " + request.getTitle().trim());
+        }
         Course course = new Course();
         applyRequest(course, request, true);
-        if (request.getSlug() != null && !request.getSlug().isBlank()) {
-            String cleanSlug = slugGenerator.clean(request.getSlug());
-            if (courseRepository.existsBySlug(cleanSlug)) {
-                throw new BadRequestException("Course slug is already in use: " + cleanSlug);
-            }
-            course.setSlug(cleanSlug);
+        if (course.getCourseCode() == null || course.getCourseCode().isBlank()) {
+            course.setCourseCode(courseCodeGenerator.generateUnique(request.getTitle()));
         } else {
-            course.setSlug(slugGenerator.generateUnique(request.getTitle()));
+            if (courseRepository.existsByCourseCode(course.getCourseCode().trim())) {
+                throw new BadRequestException("Course code is already in use: " + course.getCourseCode().trim());
+            }
         }
-
         return CourseResponse.from(courseRepository.save(course));
     }
 
@@ -115,17 +115,19 @@ public class CourseServiceImpl implements CourseService {
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public CourseResponse update(Long id, CourseRequest request) {
         Course course = findOrThrow(id);
-        // Content edit must not bypass status lifecycle - validate any status change via PUT as well
         if (request.getStatus() != null && request.getStatus() != course.getStatus()) {
             validateTransition(course.getStatus(), request.getStatus());
         }
+        if (!course.getTitle().equalsIgnoreCase(request.getTitle().trim())
+                && courseRepository.existsByTitleIgnoreCaseAndIdNot(request.getTitle().trim(), id)) {
+            throw new BadRequestException("A course with this title already exists: " + request.getTitle().trim());
+        }
         applyRequest(course, request, false);
-        if (request.getSlug() != null && !request.getSlug().isBlank()) {
-            String cleanSlug = slugGenerator.clean(request.getSlug());
-            if (courseRepository.existsBySlugAndIdNot(cleanSlug, id)) {
-                throw new BadRequestException("Course slug is already in use: " + cleanSlug);
+        if (request.getCourseCode() != null && !request.getCourseCode().isBlank()) {
+            String code = request.getCourseCode().trim();
+            if (!code.equals(course.getCourseCode()) && courseRepository.existsByCourseCode(code)) {
+                throw new BadRequestException("Course code is already in use: " + code);
             }
-            course.setSlug(cleanSlug);
         }
         return CourseResponse.from(courseRepository.save(course));
     }

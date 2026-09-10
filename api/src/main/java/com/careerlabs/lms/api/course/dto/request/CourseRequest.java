@@ -13,8 +13,6 @@ public class CourseRequest {
     @Size(min = 3, max = 150, message = CourseValidationMessages.TITLE_SIZE)
     private String title;
 
-    private String slug;
-
     private String courseCode;
 
     @NotBlank(message = CourseValidationMessages.DESCRIPTION_REQUIRED)
@@ -38,14 +36,6 @@ public class CourseRequest {
 
     public void setTitle(String title) {
         this.title = title;
-    }
-
-    public String getSlug() {
-        return slug;
-    }
-
-    public void setSlug(String slug) {
-        this.slug = slug;
     }
 
     public String getCourseCode() {

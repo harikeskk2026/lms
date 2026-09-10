@@ -739,7 +739,7 @@ public class StudentServiceImpl implements StudentService {
         }
         Optional<Course> byTitle = courseRepository.findByTitleIgnoreCase(val);
         if (byTitle.isPresent()) return byTitle.get();
-        return courseRepository.findBySlug(val.toLowerCase(Locale.ROOT).replace(" ", "-")).orElse(null);
+        return null;
     }
 
     private Batch resolveBatch(String val, Long courseId) {

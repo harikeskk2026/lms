@@ -21,11 +21,8 @@ public class Course {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String title;
-
     @Column(nullable = false, unique = true)
-    private String slug;
+    private String title;
 
     @Column(name = "course_code")
     private String courseCode;
@@ -74,14 +71,6 @@ public class Course {
 
     public void setTitle(String title) {
         this.title = title;
-    }
-
-    public String getSlug() {
-        return slug;
-    }
-
-    public void setSlug(String slug) {
-        this.slug = slug;
     }
 
     public String getCourseCode() {

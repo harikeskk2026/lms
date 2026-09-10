@@ -49,7 +49,6 @@ export default function CourseManagePage({ params }) {
   const [editForm, setEditForm] = useState({
     title: '',
     courseCode: '',
-    slug: '',
     description: '',
     duration: '',
     level: 'BEGINNER',
@@ -85,7 +84,6 @@ export default function CourseManagePage({ params }) {
           setEditForm({
             title: r.data.title || '',
             courseCode: r.data.courseCode || '',
-            slug: r.data.slug || '',
             description: r.data.description || '',
             duration: r.data.duration || '',
             level: r.data.level || 'BEGINNER',
@@ -105,7 +103,6 @@ export default function CourseManagePage({ params }) {
     setEditForm({
       title: course.title || '',
       courseCode: course.courseCode || '',
-      slug: course.slug || '',
       description: course.description || '',
       duration: course.duration || '',
       level: course.level || 'BEGINNER',
@@ -127,7 +124,6 @@ export default function CourseManagePage({ params }) {
       await courseService.update(course.id, {
         title: editForm.title.trim(),
         courseCode: editForm.courseCode?.trim() || null,
-        slug: editForm.slug?.trim() || null,
         description: editForm.description.trim(),
         duration: editForm.duration.trim(),
         level: editForm.level,
@@ -241,19 +237,6 @@ export default function CourseManagePage({ params }) {
                 onChange={e => setEditForm(f => ({ ...f, courseCode: e.target.value }))}
                 placeholder="e.g. PY-101"
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 uppercase"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Slug <span className="text-xs text-gray-400 font-normal">(URL Key)</span>
-              </label>
-              <input
-                type="text"
-                value={editForm.slug}
-                onChange={e => setEditForm(f => ({ ...f, slug: e.target.value }))}
-                placeholder="e.g. python-2"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs lowercase"
               />
             </div>
           </div>
@@ -448,12 +431,6 @@ function OverviewTab({ course, onEdit }) {
               ) : (
                 <span className="text-gray-400 italic text-xs">Not set</span>
               )}
-            </span>
-          </p>
-          <p className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/60">
-            <span className="text-gray-400">Slug:</span>
-            <span className="font-mono text-xs text-purple-700 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/30 px-2.5 py-0.5 rounded-lg">
-              {course.slug}
             </span>
           </p>
         </div>

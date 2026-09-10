@@ -45,7 +45,6 @@ public class SyllabusImportTest {
         course.setLevel(Level.BEGINNER);
         course.setDuration("4 Weeks");
         course.setStatus(CourseStatus.PUBLISHED);
-        course.setSlug("test-course-" + System.nanoTime());
         course = courseRepository.save(course);
     }
 

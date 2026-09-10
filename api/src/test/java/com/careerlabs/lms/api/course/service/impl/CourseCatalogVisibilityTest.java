@@ -36,7 +36,7 @@ import static org.mockito.Mockito.*;
 class CourseCatalogVisibilityTest {
 
     @Mock private CourseRepository courseRepository;
-    @Mock private SlugGenerator slugGenerator;
+    @Mock private CourseCodeGenerator courseCodeGenerator;
     @Mock private CourseAccessGuard accessGuard;
     @Mock private StudentRepository studentRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
@@ -61,7 +61,6 @@ class CourseCatalogVisibilityTest {
         c.setDescription("desc " + id);
         c.setDuration("6 months");
         c.setLevel(Level.BEGINNER);
-        c.setSlug("slug-" + id);
         return c;
     }
 
@@ -90,7 +89,7 @@ class CourseCatalogVisibilityTest {
 
     @BeforeEach
     void setUp() {
-        courseService = new CourseServiceImpl(courseRepository, slugGenerator, accessGuard, studentRepository,
+        courseService = new CourseServiceImpl(courseRepository, courseCodeGenerator, accessGuard, studentRepository,
                 enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository);
     }
 
