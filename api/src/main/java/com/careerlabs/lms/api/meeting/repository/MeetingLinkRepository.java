@@ -64,6 +64,9 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
     /** Scheduled classes that belong to a batch but don't yet have a DailyClass linked. */
     List<MeetingLink> findByDailyClassIsNullAndBatchIsNotNull();
 
+    /** All scheduled classes linked directly to the given list of DailyClasses. */
+    List<MeetingLink> findByDailyClassIn(List<com.careerlabs.lms.api.attendance.entity.DailyClass> dailyClasses);
+
     /** Same visibility rule as {@link #findVisibleToStudent}, narrowed to a single day —
      *  used to surface Scheduled Class sessions on the student's attendance calendar even
      *  when no DailyClass/attendance record exists for them yet. */
@@ -76,3 +79,4 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
     List<MeetingLink> findVisibleToStudentOnDate(@Param("batchId") Long batchId, @Param("courseId") Long courseId,
                                                   @Param("dayStart") LocalDateTime dayStart, @Param("dayEnd") LocalDateTime dayEnd);
 }
+

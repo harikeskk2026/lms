@@ -637,12 +637,12 @@ export default function PlacementPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Date *</label>
-              <input type="date" value={driveForm.driveDate} onChange={e => setDriveForm(f => ({ ...f, driveDate: e.target.value }))} required
+              <input type="date" min={new Date().toISOString().slice(0, 10)} value={driveForm.driveDate} onChange={e => setDriveForm(f => ({ ...f, driveDate: e.target.value }))} required
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Apply Deadline *</label>
-              <input type="date" value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
+              <input type="date" min={new Date().toISOString().slice(0, 10)} value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           </div>

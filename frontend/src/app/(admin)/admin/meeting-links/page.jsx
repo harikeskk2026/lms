@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import {
   Video, Plus, Copy, ExternalLink, Calendar, Clock, Users,
-  CheckCircle, PlayCircle, XCircle, Edit3, Trash2, Search, Filter, Shield, RefreshCw
+  CheckCircle, PlayCircle, XCircle, Edit3, Trash2, Search, Filter, Shield, RefreshCw, AlertCircle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -40,6 +40,7 @@ export default function AdminMeetingLinksPage() {
   const [meetings, setMeetings] = useState([])
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
+  const [trainers, setTrainers] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterCourse, setFilterCourse] = useState('')
   const [filterBatch, setFilterBatch] = useState('')
@@ -50,6 +51,7 @@ export default function AdminMeetingLinksPage() {
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [errors, setErrors] = useState({})
   const [deletingMeeting, setDeletingMeeting] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -84,15 +86,19 @@ export default function AdminMeetingLinksPage() {
 
   const loadBatchesAndCourses = async () => {
     try {
-      const [bRes, cRes] = await Promise.allSettled([
+      const [bRes, cRes, tRes] = await Promise.allSettled([
         batchService.list(),
-        courseService.list()
+        courseService.list(),
+        adminApi.getTrainers()
       ])
       if (bRes.status === 'fulfilled') {
         setBatches(extractList(bRes.value))
       }
       if (cRes.status === 'fulfilled') {
         setCourses(extractList(cRes.value))
+      }
+      if (tRes.status === 'fulfilled') {
+        setTrainers(extractList(tRes.value))
       }
     } catch {
       // ignore
@@ -126,12 +132,14 @@ export default function AdminMeetingLinksPage() {
     : batches
 
   const openCreate = () => {
+    setErrors({})
     setEditingId(null)
     setForm(emptyForm)
     setPanelOpen(true)
   }
 
   const openEdit = (m) => {
+    setErrors({})
     setEditingId(m.id)
     const matchingBatch = batches.find(b => String(b.id) === String(m.batchId))
     const courseId = m.courseId
@@ -158,13 +166,36 @@ export default function AdminMeetingLinksPage() {
     e.preventDefault()
     if (saving) return
 
-    if (!form.title?.trim() || !form.meetUrl?.trim() || !form.scheduledStart) {
-      toast.error('Please fill required fields (Title, Meeting URL, Start Time)', { id: 'save-meeting-toast' })
-      return
+    const newErrors = {}
+
+    if (!form.title?.trim()) {
+      newErrors.title = 'Title is required'
     }
 
-    if (form.scheduledEnd && new Date(form.scheduledEnd) <= new Date(form.scheduledStart)) {
-      toast.error('Scheduled End time must be after Scheduled Start time', { id: 'save-meeting-toast' })
+    if (!form.meetUrl?.trim()) {
+      newErrors.meetUrl = 'Meeting URL is required'
+    } else {
+      const urlStr = form.meetUrl.trim()
+      const urlPattern = /^(https?:\/\/)?([\w.-]+\.[a-z]{2,})(:[0-9]+)?(\/.*)?$/i
+      if (!urlPattern.test(urlStr)) {
+        newErrors.meetUrl = 'Please enter a valid meeting URL (e.g. https://zoom.us/j/...)'
+      }
+    }
+
+    if (!form.scheduledStart) {
+      newErrors.scheduledStart = 'Scheduled start date and time is required'
+    }
+
+    if (form.scheduledEnd && form.scheduledStart) {
+      if (new Date(form.scheduledEnd) <= new Date(form.scheduledStart)) {
+        newErrors.scheduledEnd = 'End time must be after Start time'
+      }
+    }
+
+    setErrors(newErrors)
+
+    if (Object.keys(newErrors).length > 0) {
+      toast.error('Please fix all highlighted required fields', { id: 'save-meeting-toast' })
       return
     }
 
@@ -537,32 +568,40 @@ export default function AdminMeetingLinksPage() {
         subtitle={editingId ? 'Update meeting details, date/time or batch targeting' : 'Publish a new live class meeting link'}
         width="w-full max-w-lg md:max-w-xl"
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Title *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. React & Next.js Live Class"
-              value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          {Object.keys(errors).length > 0 && (
+            <div className="p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl flex items-start gap-2.5 text-red-600 dark:text-red-400 text-xs animate-in fade-in duration-200">
+              <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
+              <div>
+                <p className="font-bold">Please fill in all mandatory fields</p>
+                <p className="text-[11px] text-red-500/90 mt-0.5">
+                  All mandatory fields highlighted in red below are required before scheduling.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Platform *
+              Title <span className="text-red-500">*</span>
             </label>
-            <select
-              value={form.platform}
-              onChange={e => setForm(f => ({ ...f, platform: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <option value="ZOOM">Zoom</option>
-            </select>
+            <input
+              type="text"
+              placeholder="e.g. React & Next.js Live Class"
+              value={form.title}
+              onChange={e => {
+                setForm(f => ({ ...f, title: e.target.value }))
+                if (errors.title) setErrors(err => ({ ...err, title: undefined }))
+              }}
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${
+                errors.title
+                  ? 'border-red-500 dark:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                  : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
+              }`}
+            />
+            {errors.title && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -599,10 +638,14 @@ export default function AdminMeetingLinksPage() {
                   if (batchId) {
                     const selectedBatch = batches.find(b => String(b.id) === String(batchId))
                     const bCourseId = getBatchCourseId(selectedBatch)
-                    if (bCourseId && !form.courseId) {
-                      setForm(f => ({ ...f, batchId, courseId: String(bCourseId) }))
-                      return
-                    }
+                    const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName
+                    setForm(f => ({
+                      ...f,
+                      batchId,
+                      ...(bCourseId && !f.courseId ? { courseId: String(bCourseId) } : {}),
+                      ...(batchTrainer && !f.hostName ? { hostName: batchTrainer } : {})
+                    }))
+                    return
                   }
                   setForm(f => ({ ...f, batchId }))
                 }}
@@ -622,25 +665,61 @@ export default function AdminMeetingLinksPage() {
 
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Meeting URL *
-            </label>
-            <input
-              type="url"
-              required
-              placeholder="https://zoom.us/j/123456789"
-              value={form.meetUrl}
-              onChange={e => setForm(f => ({ ...f, meetUrl: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Host Name
+              Meeting URL <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. Prof. Arjun"
+              placeholder="https://zoom.us/j/123456789"
+              value={form.meetUrl}
+              onChange={e => {
+                setForm(f => ({ ...f, meetUrl: e.target.value }))
+                if (errors.meetUrl) setErrors(err => ({ ...err, meetUrl: undefined }))
+              }}
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${
+                errors.meetUrl
+                  ? 'border-red-500 dark:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                  : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
+              }`}
+            />
+            {errors.meetUrl && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.meetUrl}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                Trainer / Host Name
+              </label>
+              {trainers.length > 0 && (
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
+                  Select or type custom
+                </span>
+              )}
+            </div>
+
+            {trainers.length > 0 && (
+              <select
+                value={trainers.some(t => (t.name || t.fullName) === form.hostName) ? form.hostName : ''}
+                onChange={e => {
+                  if (e.target.value) {
+                    setForm(f => ({ ...f, hostName: e.target.value }))
+                  }
+                }}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 mb-2"
+              >
+                <option value="">-- Select Registered Trainer --</option>
+                {trainers.map(t => (
+                  <option key={t.id} value={t.name || t.fullName}>
+                    {t.name || t.fullName} {t.email ? `(${t.email})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <input
+              type="text"
+              placeholder="e.g. David Kumar or John Mathew"
               value={form.hostName}
               onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
@@ -650,13 +729,19 @@ export default function AdminMeetingLinksPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Scheduled Start *
+                Scheduled Start <span className="text-red-500">*</span>
               </label>
               <DateTimePicker12h
-                required
                 value={form.scheduledStart}
-                onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
+                hasError={Boolean(errors.scheduledStart)}
+                onChange={val => {
+                  setForm(f => ({ ...f, scheduledStart: val }))
+                  if (errors.scheduledStart) setErrors(err => ({ ...err, scheduledStart: undefined }))
+                }}
               />
+              {errors.scheduledStart && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.scheduledStart}</p>
+              )}
             </div>
 
             <div>
@@ -665,8 +750,15 @@ export default function AdminMeetingLinksPage() {
               </label>
               <DateTimePicker12h
                 value={form.scheduledEnd}
-                onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
+                hasError={Boolean(errors.scheduledEnd)}
+                onChange={val => {
+                  setForm(f => ({ ...f, scheduledEnd: val }))
+                  if (errors.scheduledEnd) setErrors(err => ({ ...err, scheduledEnd: undefined }))
+                }}
               />
+              {errors.scheduledEnd && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.scheduledEnd}</p>
+              )}
             </div>
           </div>
 

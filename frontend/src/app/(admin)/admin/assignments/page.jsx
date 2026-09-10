@@ -497,6 +497,7 @@ export default function AssignmentsPage() {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish / Start Date</label>
               <input
                 type="date"
+                min={new Date().toISOString().slice(0, 10)}
                 value={form.startDate}
                 max={form.dueDate || undefined}
                 onChange={e => {
@@ -526,8 +527,8 @@ export default function AssignmentsPage() {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due / Close Date *</label>
               <input
                 type="date"
+                min={form.startDate || new Date().toISOString().slice(0, 10)}
                 value={form.dueDate}
-                min={form.startDate || undefined}
                 onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
                 className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
                   }`}

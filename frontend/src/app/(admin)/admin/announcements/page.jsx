@@ -429,7 +429,7 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Expires (optional)</label>
-            <input type="date" value={form.expiresAt} onChange={set('expiresAt')}
+            <input type="date" min={new Date().toISOString().slice(0, 10)} value={form.expiresAt} onChange={set('expiresAt')}
               className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
           </div>
         </div>

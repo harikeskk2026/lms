@@ -1,11 +1,14 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
   CheckSquare, Save, BarChart2, Bell, Users, BookOpen,
   ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
   FileDown, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Calendar, ClipboardList,
-  Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X
+  Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X,
+  Video, MapPin, Clock, User, Eye, ArrowRight, ExternalLink, Sparkles, CheckCircle2, Laptop,
+  Search, LayoutGrid, ListFilter
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
@@ -78,11 +81,11 @@ function PctBar({ pct }) {
 
 // ─── TAB 1: Mark Attendance ────────────────────────────────────────────────────
 
-function MarkAttendanceTab({ onAttendanceSaved }) {
+function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }) {
   const [batches, setBatches]             = useState([])
   const [classes, setClasses]             = useState([])
-  const [selectedBatch, setSelectedBatch] = useState('')
-  const [selectedClass, setSelectedClass] = useState('')
+  const [selectedBatch, setSelectedBatch] = useState(initialBatchId ? String(initialBatchId) : '')
+  const [selectedClass, setSelectedClass] = useState(initialClassId ? String(initialClassId) : '')
   const [sheet, setSheet]                 = useState(null)
   const [batchDetail, setBatchDetail]     = useState(null)
   const [statuses, setStatuses]           = useState({})
@@ -131,33 +134,49 @@ function MarkAttendanceTab({ onAttendanceSaved }) {
   }
 
   useEffect(() => {
-    adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
-  }, [])
+    adminApi.getBatches({ isActive: 'true' }).then(r => {
+      const batchList = r.data.data || []
+      setBatches(batchList)
+      if (initialBatchId) {
+        loadClasses(initialBatchId, initialClassId)
+      }
+    }).catch(() => {})
+  }, [initialBatchId, initialClassId])
 
-  const loadClasses = async (batchId) => {
+  const loadClasses = async (batchId, autoClassId = null) => {
     setSelectedBatch(batchId)
-    setSelectedClass('')
+    setSelectedClass(autoClassId ? String(autoClassId) : '')
     setSheet(null)
     setSaveResult(null)
     if (!batchId) return
-    const r = await adminApi.getClasses({ batchId })
-    setClasses(r.data.data || [])
+    try {
+      const r = await adminApi.getClasses({ batchId })
+      const clsList = r.data.data || []
+      setClasses(clsList)
+      if (autoClassId) {
+        setSelectedClass(String(autoClassId))
+        fetchAttendanceSheet(autoClassId, batchId, clsList)
+      }
+    } catch {
+      toast.error('Failed to load classes for batch')
+    }
   }
 
-  const loadSheet = async () => {
-    if (!selectedClass) return toast.error('Select a class')
+  const fetchAttendanceSheet = async (classId, batchId, classList = classes) => {
+    if (!classId) return toast.error('Select a class')
     setLoading(true)
     setSaveResult(null)
     try {
+      const targetBatchId = batchId || selectedBatch
       const [sheetRes, detailRes] = await Promise.allSettled([
-        adminApi.getAttendanceSheet(selectedClass),
-        adminApi.getBatchAttDetail(selectedBatch),
+        adminApi.getAttendanceSheet(classId),
+        targetBatchId ? adminApi.getBatchAttDetail(targetBatchId) : Promise.reject(),
       ])
       const rawSheet = sheetRes.status === 'fulfilled' ? sheetRes.value.data.data : null
       const detailData = detailRes.status === 'fulfilled' ? detailRes.value.data.data : null
 
-      const selectedClassObj = classes.find(c => String(c.id) === String(selectedClass))
-      const selectedBatchObj = batches.find(b => String(b.id) === String(selectedBatch))
+      const selectedClassObj = (classList || classes).find(c => String(c.id) === String(classId))
+      const selectedBatchObj = batches.find(b => String(b.id) === String(targetBatchId))
 
       const studentList = Array.isArray(rawSheet) ? rawSheet : (rawSheet?.students || [])
 
@@ -192,6 +211,8 @@ function MarkAttendanceTab({ onAttendanceSaved }) {
       setLoading(false)
     }
   }
+
+  const loadSheet = () => fetchAttendanceSheet(selectedClass, selectedBatch)
 
   const saveAttendance = async (submit = true) => {
     setSaving(true)
@@ -538,13 +559,26 @@ function MarkAttendanceTab({ onAttendanceSaved }) {
 
 // ─── TAB 2: Batch Overview ─────────────────────────────────────────────────────
 
+const STUDENT_AVATAR_PALETTE = [
+  'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
+  'bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300',
+  'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300',
+]
+
 function BatchOverviewTab() {
+  const router = useRouter()
   const [overview, setOverview]         = useState(null)
   const [loading, setLoading]           = useState(true)
   const [selectedBatch, setSelectedBatch] = useState(null)
   const [detail, setDetail]             = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [monthFilter, setMonthFilter]   = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
+  const [viewMode, setViewMode]         = useState('table') // 'table' | 'matrix'
 
   useEffect(() => {
     adminApi.getAttendanceOverview()
@@ -555,6 +589,8 @@ function BatchOverviewTab() {
 
   const openBatch = async (batch) => {
     setSelectedBatch(batch)
+    setStudentSearch('')
+    setViewMode('table')
     setDetailLoading(true)
     try {
       const r = await adminApi.getBatchAttDetail(batch.batchId, monthFilter ? { month: monthFilter } : {})
@@ -589,31 +625,225 @@ function BatchOverviewTab() {
 
   // Drilldown view
   if (selectedBatch) {
+    const studentList = detail?.matrix || []
+    const filteredStudents = studentList.filter(s => {
+      if (!studentSearch.trim()) return true
+      const q = studentSearch.toLowerCase()
+      return (s.name || '').toLowerCase().includes(q) ||
+             (s.email || '').toLowerCase().includes(q) ||
+             (s.enrollmentNo || '').toLowerCase().includes(q)
+    })
+
+    const totalClassesCount = detail?.classes?.length || selectedBatch.totalClasses || 0
+    const totalStudentsCount = studentList.length || selectedBatch.totalStudents || 0
+    const calculatedAvgPct = studentList.length
+      ? Math.round(studentList.reduce((acc, s) => acc + (s.pct || 0), 0) / studentList.length)
+      : (selectedBatch.avgAttendance || 0)
+
     return (
       <div className="space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        {/* Navigation & Filters Bar */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <button onClick={() => { setSelectedBatch(null); setDetail(null) }}
-            className="flex items-center gap-2 text-sm text-purple-600 font-semibold hover:text-purple-800 transition-colors">
+            className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 font-semibold hover:text-purple-800 dark:hover:text-purple-300 transition-colors">
             <ArrowLeft size={16} /> Back to Overview
           </button>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-500">Month:</label>
-            <input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* View switcher */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <ListFilter size={14} /> Student List
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('matrix')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === 'matrix'
+                    ? 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <LayoutGrid size={14} /> Daily Grid
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-500 font-medium">Month:</label>
+              <input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
+                className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 shadow-sm" />
+            </div>
           </div>
         </div>
 
-        <GlassCard className="p-5">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white">{selectedBatch.batchName}</h2>
-          <p className="text-sm text-gray-500">{selectedBatch.course}</p>
+        {/* Batch Info Header Card */}
+        <GlassCard className="p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2.5 mb-1.5">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{selectedBatch.batchName}</h2>
+                <span className="text-xs font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2.5 py-0.5 rounded-lg">
+                  {selectedBatch.course}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">Student Attendance & Performance Overview</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-50/80 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/40 px-4 py-2 rounded-xl text-center">
+                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Students</p>
+                <p className="text-lg font-bold text-purple-900 dark:text-purple-200 leading-tight">{totalStudentsCount}</p>
+              </div>
+              <div className="bg-purple-50/80 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/40 px-4 py-2 rounded-xl text-center">
+                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Classes</p>
+                <p className="text-lg font-bold text-purple-900 dark:text-purple-200 leading-tight">{totalClassesCount}</p>
+              </div>
+              <div className="bg-purple-50/80 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/40 px-4 py-2 rounded-xl text-center">
+                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Avg Attendance</p>
+                <p className="text-lg font-bold text-purple-900 dark:text-purple-200 leading-tight">{calculatedAvgPct}%</p>
+              </div>
+            </div>
+          </div>
         </GlassCard>
 
         {detailLoading ? (
-          <Skeleton className="h-64" />
+          <Skeleton className="h-72" />
         ) : detail ? (
-          <GlassCard className="p-5">
-            <AttendanceMatrix classes={detail.classes} matrix={detail.matrix} />
-          </GlassCard>
+          viewMode === 'table' ? (
+            /* Student Summary Table matching user reference */
+            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800/80 rounded-2xl shadow-xl overflow-hidden">
+              {/* Search & Filter sub-bar */}
+              <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4 flex-wrap bg-white dark:bg-gray-900">
+                <div className="relative w-full max-w-sm">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search student by name or email..."
+                    value={studentSearch}
+                    onChange={e => setStudentSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div className="text-xs text-gray-500 font-medium">
+                  Showing <span className="font-semibold text-gray-800 dark:text-gray-200">{filteredStudents.length}</span> of {studentList.length} students
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#fafbff] dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      <th className="px-6 py-4 w-14">#</th>
+                      <th className="px-6 py-4">Student Name</th>
+                      <th className="px-6 py-4">Email</th>
+                      <th className="px-6 py-4">Current Status</th>
+                      <th className="px-6 py-4">Attendance %</th>
+                      <th className="px-6 py-4">Classes Attended</th>
+                      <th className="px-6 py-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
+                    {filteredStudents.length > 0 ? (
+                      filteredStudents.map((row, idx) => {
+                        const avatarBg = STUDENT_AVATAR_PALETTE[idx % STUDENT_AVATAR_PALETTE.length]
+                        const firstChar = (row.name?.trim()?.charAt(0) || 'S').toUpperCase()
+                        
+                        // Status badge logic
+                        const pct = row.pct || 0
+                        const isActive = pct >= 75
+                        const isAtRisk = pct >= 50 && pct < 75
+
+                        const statusLabel = isActive ? 'Active' : isAtRisk ? 'At Risk' : 'Critical'
+                        const statusBadgeCls = isActive
+                          ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          : isAtRisk
+                          ? 'bg-amber-100/90 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                          : 'bg-rose-100/90 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+
+                        const attendedPresent = row.present || 0
+                        const attendedTotal = row.total || detail?.classes?.length || 0
+
+                        return (
+                          <tr
+                            key={row.studentId || idx}
+                            className="hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors"
+                          >
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-500 dark:text-gray-400">
+                              {idx + 1}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3.5">
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${avatarBg}`}>
+                                  {firstChar}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
+                                    {row.name}
+                                  </p>
+                                  {row.enrollmentNo && (
+                                    <p className="text-[11px] text-gray-400 mt-0.5">{row.enrollmentNo}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                              {row.email || '—'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold ${statusBadgeCls}`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm font-bold text-gray-800 dark:text-gray-100">
+                              {pct}%
+                            </td>
+                            <td className="px-6 py-4 text-sm font-medium text-gray-600 dark:text-gray-300">
+                              {attendedPresent} / {attendedTotal}
+                            </td>
+                            <td className="px-6 py-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (row.studentId) {
+                                    router.push(`/admin/students/${row.studentId}`)
+                                  } else {
+                                    router.push(`/admin/students?search=${encodeURIComponent(row.name)}`)
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 text-sm font-bold text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
+                              >
+                                <Eye size={16} />
+                                <span>View Profile</span>
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400">
+                          {studentSearch ? 'No students match your search filter.' : 'No students found in this batch.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* Daily Attendance Grid Matrix */
+            <GlassCard className="p-5">
+              <AttendanceMatrix classes={detail.classes} matrix={detail.matrix} />
+            </GlassCard>
+          )
         ) : null}
       </div>
     )
@@ -673,6 +903,7 @@ function AnalyticsTab() {
   const [days, setDays]       = useState(30)
   const [batchId, setBatchId] = useState('')
   const [batches, setBatches] = useState([])
+  const [showAllTrainers, setShowAllTrainers] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -755,10 +986,190 @@ function AnalyticsTab() {
           </div>
 
           {/* Area chart — Attendance Trend */}
-          <GlassCard className="p-5">
-            <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Attendance Trend</h3>
+          <GlassCard className="p-5 sm:p-6">
             <AttendanceDailyTrendChart data={data.dailyTrend} days={days} />
           </GlassCard>
+
+          {/* 1. Attendance by Class Mode */}
+          <GlassCard className="p-5 sm:p-6">
+            <div className="mb-4">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance by Class Mode</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Compare attendance by online and offline classes</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Online Classes Card */}
+              <div className="flex items-start gap-4 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-sm transition-all hover:shadow-md">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-100/80 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-500 dark:text-emerald-400 shrink-0 shadow-inner">
+                  <Laptop size={26} strokeWidth={2.2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
+                    Online Classes
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white leading-none mt-1">
+                    {data.modeAttendance?.onlineAvgPct ?? 0}%
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Avg Attendance
+                  </p>
+                  <p className="text-sm font-extrabold text-gray-800 dark:text-gray-100 leading-none mt-3">
+                    {data.modeAttendance?.onlineConducted ?? 0} / {data.modeAttendance?.onlineTotal ?? 0}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Classes Conducted
+                  </p>
+                </div>
+              </div>
+
+              {/* Offline Classes Card */}
+              <div className="flex items-start gap-4 p-5 rounded-2xl border border-blue-200 dark:border-blue-800/50 bg-blue-50/20 dark:bg-blue-950/10 shadow-sm transition-all hover:shadow-md">
+                <div className="w-14 h-14 rounded-2xl bg-blue-100/80 dark:bg-blue-900/40 flex items-center justify-center text-blue-500 dark:text-blue-400 shrink-0 shadow-inner">
+                  <Users size={26} strokeWidth={2.2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-blue-600 dark:text-blue-400 tracking-tight">
+                    Offline Classes
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white leading-none mt-1">
+                    {data.modeAttendance?.offlineAvgPct ?? 0}%
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Avg Attendance
+                  </p>
+                  <p className="text-sm font-extrabold text-gray-800 dark:text-gray-100 leading-none mt-3">
+                    {data.modeAttendance?.offlineConducted ?? 0} / {data.modeAttendance?.offlineTotal ?? 0}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Classes Conducted
+                  </p>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+
+
+          {/* 2. Trainer Performance & 3. Attendance by Batch */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Trainer Performance */}
+            <GlassCard className="p-5 sm:p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Trainer Performance</h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Attendance by trainer</p>
+                  </div>
+                  {data.trainerPerformance && data.trainerPerformance.length > 4 && (
+                    <button
+                      onClick={() => setShowAllTrainers(!showAllTrainers)}
+                      className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-800 transition-colors inline-flex items-center gap-1"
+                    >
+                      {showAllTrainers ? 'Show Top Trainers' : 'View All Trainers →'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        <th className="pb-3 font-semibold">Trainer</th>
+                        <th className="pb-3 font-semibold text-center">Classes Conducted</th>
+                        <th className="pb-3 font-semibold text-right">Attendance %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                      {(!data.trainerPerformance || data.trainerPerformance.length === 0) ? (
+                        <tr>
+                          <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No trainer attendance data for this period</td>
+                        </tr>
+                      ) : (
+                        (showAllTrainers ? data.trainerPerformance : data.trainerPerformance.slice(0, 5)).map((t, idx) => {
+                          const pct = t.attendancePct
+                          const badgeClass = pct >= 85
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            : pct >= 75
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                          return (
+                            <tr key={t.trainerId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                              <td className="py-3 font-bold text-gray-800 dark:text-gray-200">{t.trainerName}</td>
+                              <td className="py-3 text-center text-gray-600 dark:text-gray-300 font-medium">{t.classesConducted}</td>
+                              <td className="py-3 text-right">
+                                <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-extrabold ${badgeClass}`}>
+                                  {pct}%
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* Attendance by Batch */}
+            <GlassCard className="p-5 sm:p-6 flex flex-col justify-between">
+              <div>
+                <div className="mb-4">
+                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance by Batch</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Compare attendance across all batches</p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        <th className="pb-3 font-semibold">Batch Name</th>
+                        <th className="pb-3 font-semibold text-center">Classes Conducted</th>
+                        <th className="pb-3 font-semibold min-w-[140px] text-right">Attendance %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                      {(!data.batchAttendance || data.batchAttendance.length === 0) ? (
+                        <tr>
+                          <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No batch attendance data for this period</td>
+                        </tr>
+                      ) : (
+                        data.batchAttendance.map((b, idx) => {
+                          const colors = [
+                            'bg-emerald-500',
+                            'bg-purple-600',
+                            'bg-blue-500',
+                            'bg-amber-500',
+                            'bg-pink-500',
+                            'bg-indigo-500'
+                          ]
+                          const barColor = colors[idx % colors.length]
+                          return (
+                            <tr key={b.batchId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                              <td className="py-3.5 font-bold text-gray-800 dark:text-gray-200">{b.batchName}</td>
+                              <td className="py-3.5 text-center text-gray-600 dark:text-gray-300 font-medium">{b.classesConducted}</td>
+                              <td className="py-3.5">
+                                <div className="flex items-center justify-end gap-3">
+                                  <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden flex-1 max-w-[120px]">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                                      style={{ width: `${Math.min(100, Math.max(0, b.attendancePct))}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-extrabold text-xs text-gray-800 dark:text-gray-200 min-w-[32px] text-right">
+                                    {b.attendancePct}%
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
 
           {/* Weekly + Monthly charts */}
           <div className="grid sm:grid-cols-2 gap-4">
@@ -783,14 +1194,20 @@ function AnalyticsTab() {
   )
 }
 
+
 // ─── TAB 4: Alerts ─────────────────────────────────────────────────────────────
 
+// ─── TAB 5: Alerts ─────────────────────────────────────────────────────────────
+
 function AlertsTab({ onAlertsChanged }) {
-  const [alerts, setAlerts]         = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [threshold, setThreshold]   = useState(75)
+  const router = useRouter()
+  const [alerts, setAlerts]             = useState([])
+  const [loading, setLoading]           = useState(true)
+  const [threshold, setThreshold]       = useState(75)
   const [showResolved, setShowResolved] = useState(false)
-  const [generating, setGenerating] = useState(false)
+  const [generating, setGenerating]     = useState(false)
+  const [searchQuery, setSearchQuery]   = useState('')
+  const [riskFilter, setRiskFilter]     = useState('ALL') // 'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM'
 
   const load = async (resolved = false) => {
     setLoading(true)
@@ -811,8 +1228,8 @@ function AlertsTab({ onAlertsChanged }) {
     setGenerating(true)
     try {
       const r = await adminApi.generateAlerts({ threshold: numThreshold })
-      toast.success(`Generated ${r.data.data.generated} new alerts (checked ${r.data.data.checked} students)`)
-      load(false)
+      toast.success(`Generated ${r.data?.data?.generated ?? 0} new alerts (checked ${r.data?.data?.checked ?? 0} students)`)
+      await load(showResolved)
       onAlertsChanged?.()
     } catch { toast.error('Failed to generate alerts') } finally { setGenerating(false) }
   }
@@ -821,145 +1238,263 @@ function AlertsTab({ onAlertsChanged }) {
     try {
       await adminApi.resolveAlert(id)
       setAlerts(prev => prev.filter(a => a.id !== id))
-      toast.success('Alert resolved')
+      toast.success('Alert resolved successfully')
       onAlertsChanged?.()
-    } catch { toast.error('Failed to resolve') }
+    } catch { toast.error('Failed to resolve alert') }
   }
 
-  const RISK_COLOR = {
-    CRITICAL: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-    HIGH:     'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-    MEDIUM:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  const getRiskInfo = (pct) => {
+    if (pct < 50) {
+      return {
+        key: 'CRITICAL',
+        label: 'Critical Risk',
+        badgeCls: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40',
+        borderCls: 'border-l-rose-500',
+        iconColor: 'text-rose-500',
+      }
+    }
+    if (pct < 65) {
+      return {
+        key: 'HIGH',
+        label: 'High Risk',
+        badgeCls: 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
+        borderCls: 'border-l-orange-500',
+        iconColor: 'text-orange-500',
+      }
+    }
+    return {
+      key: 'MEDIUM',
+      label: 'Medium Risk',
+      badgeCls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40',
+      borderCls: 'border-l-amber-500',
+      iconColor: 'text-amber-500',
+    }
   }
 
-  // Compute risk from pct
-  const getRisk = (pct) => pct < 50 ? 'CRITICAL' : pct < 65 ? 'HIGH' : 'MEDIUM'
+  // Filter alerts by search query and risk filter
+  const filteredAlerts = alerts.filter(alert => {
+    const name = alert.studentName || alert.student?.user?.name || alert.student?.name || ''
+    const email = alert.studentEmail || alert.student?.user?.email || alert.student?.email || ''
+    const batch = alert.batchName || alert.batch?.name || ''
+    const course = alert.courseTitle || alert.batch?.course?.title || ''
+    const q = searchQuery.toLowerCase().trim()
+
+    const matchesSearch = !q || name.toLowerCase().includes(q) || email.toLowerCase().includes(q) || batch.toLowerCase().includes(q) || course.toLowerCase().includes(q)
+    const risk = getRiskInfo(alert.currentPct ?? 0).key
+    const matchesRisk = riskFilter === 'ALL' || risk === riskFilter
+
+    return matchesSearch && matchesRisk
+  })
+
+  // Quick stats
+  const criticalCount = alerts.filter(a => (a.currentPct ?? 0) < 50).length
+  const highCount     = alerts.filter(a => (a.currentPct ?? 0) >= 50 && (a.currentPct ?? 0) < 65).length
+  const mediumCount   = alerts.filter(a => (a.currentPct ?? 0) >= 65 && (a.currentPct ?? 0) < (a.threshold ?? 75)).length
 
   return (
-    <div className="space-y-5">
-      {/* Action bar */}
+    <div className="space-y-6">
+      {/* Risk Level Stat Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <GlassCard className="p-4 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-600 dark:text-purple-300 shrink-0">
+            <Bell size={18} />
+          </div>
+          <div>
+            <p className="text-xl font-extrabold text-gray-900 dark:text-white leading-none">{alerts.length}</p>
+            <p className="text-xs text-gray-500 mt-1 font-medium">{showResolved ? 'Resolved Alerts' : 'Active Alerts'}</p>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 flex items-center gap-3.5 cursor-pointer hover:border-rose-300 transition-all" onClick={() => setRiskFilter(riskFilter === 'CRITICAL' ? 'ALL' : 'CRITICAL')}>
+          <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 dark:text-rose-300 shrink-0">
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <p className="text-xl font-extrabold text-rose-600 dark:text-rose-400 leading-none">{criticalCount}</p>
+            <p className="text-xs text-gray-500 mt-1 font-medium">Critical (&lt;50%)</p>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 flex items-center gap-3.5 cursor-pointer hover:border-orange-300 transition-all" onClick={() => setRiskFilter(riskFilter === 'HIGH' ? 'ALL' : 'HIGH')}>
+          <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-300 shrink-0">
+            <TrendingDown size={18} />
+          </div>
+          <div>
+            <p className="text-xl font-extrabold text-orange-600 dark:text-orange-400 leading-none">{highCount}</p>
+            <p className="text-xs text-gray-500 mt-1 font-medium">High (50-64%)</p>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 flex items-center gap-3.5 cursor-pointer hover:border-amber-300 transition-all" onClick={() => setRiskFilter(riskFilter === 'MEDIUM' ? 'ALL' : 'MEDIUM')}>
+          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-300 shrink-0">
+            <Users size={18} />
+          </div>
+          <div>
+            <p className="text-xl font-extrabold text-amber-600 dark:text-amber-400 leading-none">{mediumCount}</p>
+            <p className="text-xs text-gray-500 mt-1 font-medium">Medium (65-74%)</p>
+          </div>
+        </GlassCard>
+      </div>
+
+      {/* Action and Filter bar */}
       <GlassCard className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600 dark:text-gray-400">Alert when below:</label>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-semibold">Alert when below:</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={threshold}
+                onChange={e => {
+                  const val = e.target.value
+                  if (val === '') { setThreshold(''); return }
+                  const clean = val.replace(/[^0-9]/g, '')
+                  if (clean === '') { setThreshold(''); return }
+                  const num = parseInt(clean, 10)
+                  setThreshold(num > 100 ? 100 : num < 0 ? 0 : num)
+                }}
+                onKeyDown={e => {
+                  if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault()
+                }}
+                onBlur={() => {
+                  if (threshold === '' || isNaN(Number(threshold))) setThreshold(75)
+                  else if (Number(threshold) < 0) setThreshold(0)
+                  else if (Number(threshold) > 100) setThreshold(100)
+                }}
+                placeholder="0-100"
+                className="w-16 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
+              />
+              <span className="text-sm font-semibold text-gray-500">%</span>
+            </div>
+
+            <button onClick={generate} disabled={generating}
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-xs sm:text-sm font-bold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all shadow-md shadow-purple-500/20">
+              <RefreshCw size={14} className={generating ? 'animate-spin' : ''} />
+              {generating ? 'Scanning & Generating...' : 'Generate Alerts'}
+            </button>
+
+            <button
+              onClick={() => setShowResolved(r => !r)}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all ${
+                showResolved
+                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 shadow-sm'
+                  : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-300 bg-white dark:bg-gray-800'
+              }`}>
+              {showResolved ? 'Showing Resolved' : 'Show Resolved'}
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <div className="relative w-full sm:w-64">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              inputMode="numeric"
-              value={threshold}
-              onChange={e => {
-                const val = e.target.value
-                if (val === '') {
-                  setThreshold('')
-                  return
-                }
-                const clean = val.replace(/[^0-9]/g, '')
-                if (clean === '') {
-                  setThreshold('')
-                  return
-                }
-                const num = parseInt(clean, 10)
-                if (num > 100) {
-                  setThreshold(100)
-                } else if (num < 0) {
-                  setThreshold(0)
-                } else {
-                  setThreshold(num)
-                }
-              }}
-              onKeyDown={e => {
-                if (['e', 'E', '+', '-', '.'].includes(e.key)) {
-                  e.preventDefault()
-                }
-              }}
-              onBlur={() => {
-                if (threshold === '' || isNaN(Number(threshold))) {
-                  setThreshold(75)
-                } else if (Number(threshold) < 0) {
-                  setThreshold(0)
-                } else if (Number(threshold) > 100) {
-                  setThreshold(100)
-                }
-              }}
-              placeholder="0-100"
-              className="w-16 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-sm text-center outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Search by student, batch, email..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-purple-500"
             />
-            <span className="text-sm text-gray-500">%</span>
           </div>
-          <button onClick={generate} disabled={generating}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
-            <RefreshCw size={14} className={generating ? 'animate-spin' : ''} />
-            {generating ? 'Generating...' : 'Generate Alerts'}
-          </button>
-          <button
-            onClick={() => setShowResolved(r => !r)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${showResolved ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-300'}`}>
-            {showResolved ? 'Showing Resolved' : 'Show Resolved'}
-          </button>
         </div>
       </GlassCard>
 
+      {/* Alert list content */}
       {loading ? (
         <div className="space-y-3">{Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-28" />)}</div>
-      ) : alerts.length === 0 ? (
-        <GlassCard className="p-8 text-center border-l-4 border-green-400">
-          <CheckCircle className="mx-auto mb-3 text-green-500" size={36} />
-          <p className="font-semibold text-green-700 dark:text-green-400">No low-attendance alerts</p>
-          <p className="text-sm text-gray-500 mt-1">All students are on track!</p>
+      ) : filteredAlerts.length === 0 ? (
+        <GlassCard className="p-10 text-center border-l-4 border-green-500 shadow-md">
+          <CheckCircle className="mx-auto mb-3 text-emerald-500" size={40} />
+          <p className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+            {searchQuery ? 'No alerts matching search filter' : 'No low-attendance alerts'}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {searchQuery ? 'Try clearing your search query.' : 'All students are currently maintaining attendance above threshold!'}
+          </p>
         </GlassCard>
       ) : (
-        <div className="space-y-3">
-          {alerts.map(alert => {
-            const pct  = alert.currentPct
-            const risk = getRisk(pct)
+        <div className="space-y-3.5">
+          {filteredAlerts.map((alert, idx) => {
+            const pct = Math.round(alert.currentPct ?? 0)
+            const risk = getRiskInfo(pct)
+            const studentName = alert.studentName || alert.student?.user?.name || alert.student?.name || 'Student'
+            const studentEmail = alert.studentEmail || alert.student?.user?.email || alert.student?.email || ''
+            const phone = alert.phone || alert.student?.phone || alert.student?.user?.phone || ''
+            const batchName = alert.batchName || alert.batch?.name || 'Batch'
+            const courseTitle = alert.courseTitle || alert.batch?.course?.title || ''
+            const studentId = alert.studentId || alert.student?.id || alert.userId || alert.student?.userId
+            const avatarBg = STUDENT_AVATAR_PALETTE[idx % STUDENT_AVATAR_PALETTE.length]
+            const firstChar = studentName.trim().charAt(0).toUpperCase() || 'S'
+
             return (
-              <GlassCard key={alert.id} className="p-5 border-l-4 border-yellow-400">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="text-yellow-500 flex-shrink-0 mt-0.5" size={18} />
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400 uppercase tracking-wide">Low Attendance</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase ${RISK_COLOR[risk]}`}>{risk}</span>
-                      </div>
-                      <p className="font-semibold text-gray-800 dark:text-white mt-1">
-                        {alert.student?.user?.name}
-                        {alert.student?.enrollmentNo && <span className="text-xs text-gray-400 ml-2">— {alert.student.enrollmentNo}</span>}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {alert.batch?.name} · {alert.batch?.course?.title}
-                      </p>
-                      <div className="mt-2 flex items-center gap-3">
-                        <div className="flex items-center gap-2 flex-1 max-w-xs">
-                          <span className="text-xs text-gray-500 w-16">Current: {pct}%</span>
-                          <PctBar pct={pct} />
-                          <span className="text-xs text-gray-500">Threshold: {alert.threshold}%</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{alert.message}</p>
-                      <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                        {alert.student?.user?.email && (
-                          <span>📧 {alert.student.user.email}</span>
-                        )}
-                        {alert.student?.user?.phone && (
-                          <span>📱 {alert.student.user.phone}</span>
-                        )}
-                      </div>
+              <GlassCard key={alert.id || idx} className={`p-5 border-l-4 ${risk.borderCls} transition-all hover:shadow-lg`}>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex items-start gap-3.5 flex-1 min-w-[280px]">
+                    <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${avatarBg}`}>
+                      {firstChar}
                     </div>
-                  </div>
-                  {!showResolved && (
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button onClick={() => resolve(alert.id)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 transition-colors">
-                        Resolve
-                      </button>
-                      {(alert.studentId || alert.student?.id || alert.student?.userId) && (
-                        <a href={`/admin/students/${alert.studentId || alert.student?.id || alert.student?.userId}`}
-                          className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 hover:bg-purple-200 transition-colors">
-                          View Student
-                        </a>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg uppercase tracking-wider ${risk.badgeCls}`}>
+                          {risk.label}
+                        </span>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                          {batchName} {courseTitle && `· ${courseTitle}`}
+                        </span>
+                      </div>
+
+                      <p className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+                        {studentName}
+                      </p>
+
+                      <div className="flex items-center gap-4 flex-wrap mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {studentEmail && <span>📧 {studentEmail}</span>}
+                        {phone && <span>📱 {phone}</span>}
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="mt-3 flex items-center gap-3 max-w-md">
+                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 w-16">
+                          {pct}%
+                        </span>
+                        <div className="flex-1">
+                          <PctBar pct={pct} />
+                        </div>
+                        <span className="text-xs text-gray-400 font-medium">
+                          Min: {alert.threshold ?? 75}%
+                        </span>
+                      </div>
+
+                      {alert.message && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic bg-gray-50 dark:bg-gray-800/40 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
+                          ⚠️ {alert.message}
+                        </p>
                       )}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0 self-center sm:self-start">
+                    {!showResolved && (
+                      <button
+                        onClick={() => resolve(alert.id)}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors shadow-sm"
+                      >
+                        Resolve Alert
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (studentId) router.push(`/admin/students/${studentId}`)
+                        else router.push(`/admin/students?search=${encodeURIComponent(studentName)}`)
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 transition-colors shadow-sm"
+                    >
+                      <Eye size={14} />
+                      <span>View Profile</span>
+                    </button>
+                  </div>
                 </div>
               </GlassCard>
             )
@@ -1041,10 +1576,13 @@ function CommandCenterStrip({ refreshKey = 0 }) {
 
 // ─── TAB 5: Today ───────────────────────────────────────────────────────────────
 
-function TodayTab() {
+function TodayTab({ onMarkAttendance, onViewAttendance }) {
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [detailsClass, setDetailsClass] = useState(null)
+  const [showAll, setShowAll] = useState(false)
+  const dateInputRef = useRef(null)
 
   const loadClasses = useCallback((dateStr) => {
     setLoading(true)
@@ -1070,10 +1608,17 @@ function TodayTab() {
     loadClasses(selectedDate)
   }, [selectedDate, loadClasses])
 
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const isPastDisabled = selectedDate <= todayStr
+
   const handlePrevDay = () => {
+    if (selectedDate <= todayStr) return
     const d = new Date(selectedDate + 'T00:00:00')
     d.setDate(d.getDate() - 1)
-    setSelectedDate(format(d, 'yyyy-MM-dd'))
+    const nextDateStr = format(d, 'yyyy-MM-dd')
+    if (nextDateStr >= todayStr) {
+      setSelectedDate(nextDateStr)
+    }
   }
 
   const handleNextDay = () => {
@@ -1083,7 +1628,6 @@ function TodayTab() {
   }
 
   const handleToday = () => {
-    const todayStr = format(new Date(), 'yyyy-MM-dd')
     if (selectedDate === todayStr) {
       loadClasses(todayStr)
     } else {
@@ -1091,88 +1635,179 @@ function TodayTab() {
     }
   }
 
-  const isToday = selectedDate === format(new Date(), 'yyyy-MM-dd')
+  const isToday = selectedDate === todayStr
   const dateObj = new Date(selectedDate + 'T00:00:00')
-  const formattedDateTitle = format(dateObj, 'EEEE, d MMMM yyyy')
+  const formattedHeaderDate = format(dateObj, 'EEE, MMM d, yyyy')
+
+  // Calculate timing & status helper
+  const getClassScheduleInfo = (c) => {
+    let startTimeStr = '—'
+    let endTimeStr = '—'
+    let isOngoing = false
+    let isUpcoming = true
+    let isCompleted = c.status === 'COMPLETED'
+
+    if (c.date) {
+      const dt = new Date(c.date)
+      startTimeStr = format(dt, 'hh:mm a')
+      const endDt = new Date(dt.getTime() + 60 * 60 * 1000)
+      endTimeStr = format(endDt, 'hh:mm a')
+
+      if (c.timing && c.timing.includes('-')) {
+        const parts = c.timing.split('-')
+        if (parts[0]?.trim()) startTimeStr = parts[0].trim()
+        if (parts[1]?.trim()) endTimeStr = parts[1].trim()
+      }
+
+      if (isToday) {
+        const now = new Date()
+        if (now >= dt && now <= endDt) {
+          isOngoing = true
+          isUpcoming = false
+        } else if (now > endDt) {
+          isUpcoming = false
+          isCompleted = true
+        }
+      } else {
+        const todayMid = new Date()
+        todayMid.setHours(0, 0, 0, 0)
+        if (dateObj < todayMid) {
+          isUpcoming = false
+          isCompleted = true
+        }
+      }
+    }
+
+    const hasAttendanceData = (c.present > 0 || c.absent > 0)
+    const isOnline = (c.mode || 'ONLINE').toUpperCase() === 'ONLINE'
+    const isOffline = (c.mode || '').toUpperCase() === 'OFFLINE'
+
+    return {
+      startTimeStr,
+      endTimeStr,
+      isOngoing,
+      isUpcoming,
+      isCompleted,
+      hasAttendanceData,
+      isOnline,
+      isOffline,
+      modeLabel: isOffline ? 'OFFLINE' : isOnline ? 'ONLINE' : (c.mode || 'HYBRID')
+    }
+  }
+
+  const displayedClasses = showAll ? classes : classes.slice(0, 6)
 
   return (
     <div className="space-y-4">
-      {/* Date Navigation Bar */}
-      <GlassCard className="p-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrevDay}
-            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors"
-            title="Previous Day"
-          >
-            <ChevronLeft size={18} />
-          </button>
-
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={e => e.target.value && setSelectedDate(e.target.value)}
-            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
-          />
-
-          <button
-            onClick={handleNextDay}
-            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors"
-            title="Next Day"
-          >
-            <ChevronRight size={18} />
-          </button>
-
-          <button
-            onClick={handleToday}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              isToday
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50'
-            }`}
-          >
-            Today
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
-              <span>{formattedDateTitle}</span>
-              {isToday && (
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  TODAY
-                </span>
-              )}
-            </p>
-            <p className="text-xs text-gray-400">
-              {classes.length} class{classes.length === 1 ? '' : 'es'} scheduled
+      {/* Header card */}
+      <GlassCard className="p-6 shadow-sm border border-purple-100 dark:border-purple-900/30">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">Today's Classes</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Classes scheduled for {isToday ? `today (${formattedHeaderDate})` : formattedHeaderDate}
             </p>
           </div>
-          <button
-            onClick={() => loadClasses(selectedDate)}
-            className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw size={15} />
-          </button>
+
+          {/* Date Picker Button / Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrevDay}
+              disabled={isPastDisabled}
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors shadow-sm ${
+                isPastDisabled
+                  ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-800 text-gray-300 dark:text-gray-600 bg-gray-50 dark:bg-gray-800/40'
+                  : 'border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40'
+              }`}
+              title={isPastDisabled ? 'Past dates are disabled' : 'Previous Day'}
+            >
+              <ChevronLeft size={17} />
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    dateInputRef.current?.showPicker?.()
+                  } catch {
+                    dateInputRef.current?.focus()
+                  }
+                }}
+                className="cursor-pointer inline-flex items-center gap-2.5 px-4 py-2 rounded-xl border border-purple-200 dark:border-purple-800/60 bg-white/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-200 text-xs font-semibold shadow-sm hover:border-purple-500 hover:bg-purple-50/50 dark:hover:bg-purple-900/20 transition-all focus:ring-2 focus:ring-purple-500/20"
+              >
+                <Calendar size={15} className="text-purple-600 dark:text-purple-400" />
+                <span>{formattedHeaderDate}</span>
+                <ChevronDown size={14} className="text-gray-400" />
+              </button>
+              <input
+                ref={dateInputRef}
+                type="date"
+                min={todayStr}
+                value={selectedDate}
+                onChange={e => {
+                  if (e.target.value) {
+                    if (e.target.value < todayStr) {
+                      setSelectedDate(todayStr)
+                    } else {
+                      setSelectedDate(e.target.value)
+                    }
+                  }
+                }}
+                onClick={e => {
+                  try {
+                    e.target.showPicker?.()
+                  } catch {}
+                }}
+                className="absolute inset-0 opacity-0 pointer-events-none w-full h-full"
+                tabIndex={-1}
+              />
+            </div>
+
+            <button
+              onClick={handleNextDay}
+              className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors shadow-sm"
+              title="Next Day"
+            >
+              <ChevronRight size={17} />
+            </button>
+
+            {!isToday && (
+              <button
+                onClick={handleToday}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white shadow-sm hover:bg-purple-700 transition-all"
+              >
+                Today
+              </button>
+            )}
+
+            <button
+              onClick={() => loadClasses(selectedDate)}
+              className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:text-purple-600 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
       </GlassCard>
 
       {/* Class List */}
       {loading ? (
         <div className="space-y-3">
-          {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}
+          {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-28" />)}
         </div>
       ) : classes.length === 0 ? (
-        <GlassCard className="p-8 text-center">
-          <Calendar className="mx-auto mb-3 text-gray-400" size={36} />
-          <p className="text-gray-700 dark:text-gray-300 font-semibold text-sm">No classes scheduled for {formattedDateTitle}</p>
-          <p className="text-gray-400 text-xs mt-1">Select another date or jump back to today to view scheduled sessions.</p>
+        <GlassCard className="p-12 text-center">
+          <Calendar className="mx-auto mb-3 text-purple-400 dark:text-purple-500" size={40} />
+          <h3 className="text-gray-800 dark:text-gray-200 font-bold text-base">No classes scheduled for {formattedHeaderDate}</h3>
+          <p className="text-gray-400 text-xs mt-1 max-w-md mx-auto">
+            There are no active classes or meeting sessions on this date. Select another date or return to today.
+          </p>
           {!isToday && (
             <button
               onClick={handleToday}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-all"
             >
               <Calendar size={14} /> View Today's Classes
             </button>
@@ -1180,39 +1815,258 @@ function TodayTab() {
         </GlassCard>
       ) : (
         <div className="space-y-3">
-          {classes.map((c, idx) => (
-            <GlassCard key={c.classId ? `class-${c.classId}` : `meeting-${c.title}-${c.date}-${idx}`} className="p-4 flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <p className="font-semibold text-gray-800 dark:text-white">{c.title}</p>
-                <p className="text-xs text-gray-500">{c.batchName} · {c.date ? format(new Date(c.date), 'h:mm a') : '—'}</p>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <p className="text-sm font-bold text-green-600">{c.present}</p>
-                  <p className="text-[10px] text-gray-400">Present</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-yellow-600">{c.absent}</p>
-                  <p className="text-[10px] text-gray-400">Absent</p>
-                </div>
-                {c.totalStudents > 0 && (
-                  <div className="text-center hidden sm:block">
-                    <p className="text-sm font-bold text-purple-600">{c.totalStudents}</p>
-                    <p className="text-[10px] text-gray-400">Total</p>
+          {displayedClasses.map((c, idx) => {
+            const info = getClassScheduleInfo(c)
+            const totalStudents = c.totalStudents ?? (c.present + c.absent) ?? 0
+            const presentCount = c.present || 0
+            const notJoinedCount = Math.max(0, totalStudents - presentCount)
+            const joinedCount = presentCount
+
+            // Left accent color line
+            const leftBorderColor = info.isOnline
+              ? 'border-l-purple-600 dark:border-l-purple-500'
+              : 'border-l-emerald-500 dark:border-l-emerald-400'
+
+            return (
+              <GlassCard
+                key={c.classId ? `class-${c.classId}` : `meeting-${c.title}-${c.date}-${idx}`}
+                className={`p-5 border-l-4 ${leftBorderColor} hover:shadow-md transition-all duration-200`}
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  
+                  {/* Left Column: Time */}
+                  <div className="w-28 shrink-0">
+                    <p className="text-sm font-extrabold text-gray-900 dark:text-white tracking-tight leading-tight">
+                      {info.startTimeStr}
+                    </p>
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 mt-0.5 leading-tight">
+                      {info.endTimeStr}
+                    </p>
                   </div>
-                )}
-                <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${c.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
-                  {c.status === 'COMPLETED' ? 'Completed' : 'Pending'}
+
+                  {/* Middle Column: Batch, Topic & Trainer */}
+                  <div className="flex-1 min-w-[200px]">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-base leading-snug">
+                      {c.batchName || 'Batch'}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+                      {c.title || c.courseTitle || 'Scheduled Class Session'}
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 mt-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 font-medium">
+                        <Users size={14} className="text-gray-400" />
+                        {totalStudents} Student{totalStudents === 1 ? '' : 's'}
+                      </span>
+                      {c.trainerName && (
+                        <span className="inline-flex items-center gap-1.5 font-medium">
+                          <User size={14} className="text-gray-400" />
+                          Trainer: <span className="text-gray-700 dark:text-gray-300 font-semibold">{c.trainerName}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Middle-Right Column: Badges & Attendance Summary */}
+                  <div className="shrink-0 min-w-[190px]">
+                    {/* Badges row */}
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {info.isOnline ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40">
+                          <Video size={11} /> ONLINE
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+                          <MapPin size={11} /> OFFLINE
+                        </span>
+                      )}
+
+                      {info.isOngoing ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> ONGOING
+                        </span>
+                      ) : info.isCompleted ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                          <CheckCircle2 size={11} /> COMPLETED
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                          <Clock size={11} /> UPCOMING
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Attendance Text */}
+                    {info.hasAttendanceData ? (
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white leading-tight">
+                          Joined: <span className="text-purple-600 dark:text-purple-400">{joinedCount}</span> / {totalStudents}
+                        </p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
+                          Present: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{presentCount}</span>
+                          {'  '}
+                          Not Joined: <span className="font-semibold text-gray-500">{notJoinedCount}</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                        Attendance: <span className="text-gray-700 dark:text-gray-300 font-semibold">{info.isOngoing || info.isCompleted ? 'Not Marked' : 'Not Started'}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Far Right Action Button */}
+                  <div className="shrink-0 flex items-center gap-2">
+                    {info.hasAttendanceData ? (
+                      <button
+                        onClick={() => {
+                          if (c.batchId && c.classId) {
+                            onViewAttendance?.(c.batchId, c.classId)
+                          } else {
+                            setDetailsClass(c)
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all shadow-sm"
+                      >
+                        <Eye size={14} /> View Attendance
+                      </button>
+                    ) : (info.isOngoing || (isToday && c.classId)) ? (
+                      <button
+                        onClick={() => {
+                          if (c.batchId && c.classId) {
+                            onMarkAttendance?.(c.batchId, c.classId)
+                          } else {
+                            setDetailsClass(c)
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-violet-600 text-white hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm"
+                      >
+                        <CheckSquare size={14} /> Mark Attendance
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setDetailsClass(c)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all shadow-sm"
+                      >
+                        View Details
+                      </button>
+                    )}
+
+                    {c.meetLink && (
+                      <a
+                        href={c.meetLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                        title="Open Meeting Link"
+                      >
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
+                  </div>
+
+                </div>
+              </GlassCard>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Footer bar */}
+      {classes.length > 0 && (
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 pt-2 px-2">
+          <p>
+            Showing <span className="font-semibold text-gray-800 dark:text-gray-200">{displayedClasses.length}</span> of <span className="font-semibold text-gray-800 dark:text-gray-200">{classes.length}</span> classes
+          </p>
+          {classes.length > 6 && (
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="font-bold text-purple-600 dark:text-purple-400 hover:text-purple-800 transition-colors inline-flex items-center gap-1"
+            >
+              {showAll ? 'Show Fewer Classes' : 'View All Classes →'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Class Details Modal */}
+      {detailsClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 border border-purple-100 dark:border-purple-900/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                  {detailsClass.batchName || 'Batch Session'}
                 </span>
-                {c.meetLink && (
-                  <a href={c.meetLink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Join</a>
-                )}
-                {c.recordingUrl && (
-                  <a href={c.recordingUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-purple-600 hover:underline">Recording</a>
-                )}
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mt-2">
+                  {detailsClass.title || detailsClass.courseTitle || 'Class Details'}
+                </h3>
               </div>
-            </GlassCard>
-          ))}
+              <button
+                onClick={() => setDetailsClass(null)}
+                className="p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 py-2 text-xs">
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                <p className="text-gray-400 uppercase font-semibold text-[10px]">Trainer</p>
+                <p className="text-gray-800 dark:text-gray-200 font-bold mt-0.5">{detailsClass.trainerName || 'Not Assigned'}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                <p className="text-gray-400 uppercase font-semibold text-[10px]">Total Enrolled</p>
+                <p className="text-gray-800 dark:text-gray-200 font-bold mt-0.5">{detailsClass.totalStudents || 0} Students</p>
+              </div>
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                <p className="text-gray-400 uppercase font-semibold text-[10px]">Scheduled Time</p>
+                <p className="text-gray-800 dark:text-gray-200 font-bold mt-0.5">{detailsClass.date ? format(new Date(detailsClass.date), 'h:mm a') : '—'}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                <p className="text-gray-400 uppercase font-semibold text-[10px]">Mode</p>
+                <p className="text-gray-800 dark:text-gray-200 font-bold mt-0.5">{detailsClass.mode || 'ONLINE'}</p>
+              </div>
+            </div>
+
+            {detailsClass.meetLink && (
+              <div className="p-3 rounded-xl bg-purple-50/70 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/40 flex items-center justify-between">
+                <div className="text-xs">
+                  <p className="font-bold text-purple-900 dark:text-purple-200">Online Meeting Link</p>
+                  <p className="text-gray-500 dark:text-gray-400 truncate max-w-xs">{detailsClass.meetLink}</p>
+                </div>
+                <a
+                  href={detailsClass.meetLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors shrink-0"
+                >
+                  Join Meeting
+                </a>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                onClick={() => setDetailsClass(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Close
+              </button>
+              {detailsClass.batchId && detailsClass.classId && (
+                <button
+                  onClick={() => {
+                    const bId = detailsClass.batchId
+                    const cId = detailsClass.classId
+                    setDetailsClass(null)
+                    onMarkAttendance?.(bId, cId)
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-violet-600 text-white hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm"
+                >
+                  Mark / View Attendance
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1387,8 +2241,10 @@ const TABS = [
 ]
 
 export default function AttendancePage() {
-  const [activeTab, setActiveTab] = useState('mark')
+  const [activeTab, setActiveTab] = useState('today')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [initialBatchId, setInitialBatchId] = useState(null)
+  const [initialClassId, setInitialClassId] = useState(null)
 
   const handleRefresh = useCallback(() => {
     setRefreshKey(k => k + 1)
@@ -1397,6 +2253,18 @@ export default function AttendancePage() {
   const handleTabChange = (key) => {
     setActiveTab(key)
     setRefreshKey(k => k + 1)
+  }
+
+  const handleMarkAttendanceFromToday = (batchId, classId) => {
+    setInitialBatchId(batchId)
+    setInitialClassId(classId)
+    setActiveTab('mark')
+  }
+
+  const handleViewAttendanceFromToday = (batchId, classId) => {
+    setInitialBatchId(batchId)
+    setInitialClassId(classId)
+    setActiveTab('mark')
   }
 
   const exportCSV = async () => {
@@ -1466,8 +2334,19 @@ export default function AttendancePage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'today'       && <TodayTab />}
-        {activeTab === 'mark'        && <MarkAttendanceTab onAttendanceSaved={handleRefresh} />}
+        {activeTab === 'today'       && (
+          <TodayTab
+            onMarkAttendance={handleMarkAttendanceFromToday}
+            onViewAttendance={handleViewAttendanceFromToday}
+          />
+        )}
+        {activeTab === 'mark'        && (
+          <MarkAttendanceTab
+            onAttendanceSaved={handleRefresh}
+            initialBatchId={initialBatchId}
+            initialClassId={initialClassId}
+          />
+        )}
         {activeTab === 'overview'    && <BatchOverviewTab />}
         {activeTab === 'analytics'   && <AnalyticsTab />}
         {activeTab === 'alerts'      && <AlertsTab onAlertsChanged={handleRefresh} />}

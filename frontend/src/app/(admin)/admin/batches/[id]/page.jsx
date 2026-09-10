@@ -974,6 +974,7 @@ export default function BatchDetailPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date *</label>
                   <input
                     type="date"
+                    min={new Date().toISOString().slice(0, 10)}
                     value={editForm.startDate}
                     onChange={e => {
                       const newStart = e.target.value

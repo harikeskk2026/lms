@@ -19,6 +19,8 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.meeting.entity.MeetingLink;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
+import com.careerlabs.lms.api.user.entity.User;
+import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +30,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,6 +46,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
     private final AttendancePolicyService attendancePolicyService;
     private final AttendanceRiskService attendanceRiskService;
     private final MeetingLinkRepository meetingLinkRepository;
+    private final UserRepository userRepository;
 
     public AttendanceAnalyticsServiceImpl(
             BatchRepository batchRepository,
@@ -50,7 +55,8 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             AttendanceRepository attendanceRepository,
             AttendancePolicyService attendancePolicyService,
             AttendanceRiskService attendanceRiskService,
-            MeetingLinkRepository meetingLinkRepository) {
+            MeetingLinkRepository meetingLinkRepository,
+            UserRepository userRepository) {
         this.batchRepository = batchRepository;
         this.studentRepository = studentRepository;
         this.dailyClassRepository = dailyClassRepository;
@@ -58,6 +64,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
         this.attendancePolicyService = attendancePolicyService;
         this.attendanceRiskService = attendanceRiskService;
         this.meetingLinkRepository = meetingLinkRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -204,24 +211,72 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
 
         List<DailyClass> classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
         List<MeetingLink> scheduledMeetings = meetingLinkRepository.findByScheduledStartBetweenOrderByScheduledStartAsc(startOfDay, endOfDay);
+        List<MeetingLink> classLinkedMeetings = classes.isEmpty() ? List.of() : meetingLinkRepository.findByDailyClassIn(classes);
+
+        // Merge all meetings for fast lookup
+        List<MeetingLink> allMeetings = new ArrayList<>(scheduledMeetings);
+        for (MeetingLink m : classLinkedMeetings) {
+            if (!allMeetings.contains(m)) {
+                allMeetings.add(m);
+            }
+        }
 
         List<Long> classIds = classes.stream().map(DailyClass::getId).toList();
         Map<Long, List<Attendance>> attendanceByClassId = classIds.isEmpty() ? Map.of() : attendanceRepository
                 .findByDailyClassIdIn(classIds).stream()
                 .collect(Collectors.groupingBy(a -> a.getDailyClass().getId()));
 
-        List<Long> batchIds = classes.stream()
-                .filter(cls -> cls.getBatch() != null)
-                .map(cls -> cls.getBatch().getId())
-                .distinct().toList();
+        List<Long> batchIds = new ArrayList<>();
+        for (DailyClass cls : classes) {
+            if (cls.getBatch() != null && !batchIds.contains(cls.getBatch().getId())) {
+                batchIds.add(cls.getBatch().getId());
+            }
+        }
+        for (MeetingLink m : allMeetings) {
+            if (m.getBatch() != null && !batchIds.contains(m.getBatch().getId())) {
+                batchIds.add(m.getBatch().getId());
+            }
+        }
+
         Map<Long, Integer> studentCountByBatchId = batchIds.isEmpty() ? Map.of() : studentRepository
                 .findByBatchIdIn(batchIds).stream()
                 .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.collectingAndThen(Collectors.counting(), Long::intValue)));
 
+        Set<Long> trainerIds = new HashSet<>();
+        for (DailyClass cls : classes) {
+            if (cls.getBatch() != null && cls.getBatch().getTrainerId() != null) {
+                trainerIds.add(cls.getBatch().getTrainerId());
+            }
+        }
+        for (MeetingLink m : allMeetings) {
+            if (m.getBatch() != null && m.getBatch().getTrainerId() != null) {
+                trainerIds.add(m.getBatch().getTrainerId());
+            }
+        }
+        Map<Long, String> trainerNameById = trainerIds.isEmpty() ? Map.of() : userRepository.findAllById(trainerIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(User::getId, User::getName, (existing, replacement) -> existing));
+
+        Map<Long, MeetingLink> meetingByDailyClassId = new java.util.HashMap<>();
+        Map<String, MeetingLink> meetingByBatchAndTitle = new java.util.HashMap<>();
+        Map<Long, MeetingLink> meetingByBatchId = new java.util.HashMap<>();
+        for (MeetingLink m : allMeetings) {
+            if (m.getDailyClass() != null) {
+                meetingByDailyClassId.put(m.getDailyClass().getId(), m);
+            }
+            if (m.getBatch() != null) {
+                String batchKey = m.getBatch().getId() + "|" + (m.getTitle() != null ? m.getTitle().trim().toLowerCase() : "");
+                meetingByBatchAndTitle.put(batchKey, m);
+                meetingByBatchId.putIfAbsent(m.getBatch().getId(), m);
+            }
+        }
+
         Set<String> seenKeys = new HashSet<>();
+        Set<Long> renderedDailyClassIds = new HashSet<>();
         List<TodayClassResponse> result = new ArrayList<>();
 
         for (DailyClass cls : classes) {
+            renderedDailyClassIds.add(cls.getId());
             String key = (cls.getBatch() != null ? cls.getBatch().getId() : "null")
                     + "|" + (cls.getTitle() != null ? cls.getTitle().trim().toLowerCase() : "")
                     + "|" + (cls.getDate() != null ? cls.getDate().toLocalDate() + "T" + cls.getDate().getHour() + ":" + cls.getDate().getMinute() : "");
@@ -234,6 +289,42 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             int absent = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
             int totalStudents = cls.getBatch() != null ? studentCountByBatchId.getOrDefault(cls.getBatch().getId(), 0) : 0;
 
+            String trainerName = null;
+            String courseTitle = null;
+            String mode = "ONLINE";
+            String timing = null;
+
+            if (cls.getBatch() != null) {
+                if (cls.getBatch().getTrainerId() != null) {
+                    trainerName = trainerNameById.get(cls.getBatch().getTrainerId());
+                }
+                if (cls.getBatch().getCourse() != null) {
+                    courseTitle = cls.getBatch().getCourse().getTitle();
+                }
+                if (cls.getBatch().getMode() != null) {
+                    mode = cls.getBatch().getMode().name();
+                }
+                timing = cls.getBatch().getTiming();
+            }
+
+            MeetingLink linkedMeeting = meetingByDailyClassId.get(cls.getId());
+            if (linkedMeeting == null && cls.getBatch() != null) {
+                String batchKey = cls.getBatch().getId() + "|" + (cls.getTitle() != null ? cls.getTitle().trim().toLowerCase() : "");
+                linkedMeeting = meetingByBatchAndTitle.get(batchKey);
+                if (linkedMeeting == null) {
+                    linkedMeeting = meetingByBatchId.get(cls.getBatch().getId());
+                }
+            }
+
+            if (linkedMeeting != null && linkedMeeting.getHostName() != null && !linkedMeeting.getHostName().isBlank()) {
+                trainerName = linkedMeeting.getHostName();
+            }
+
+            String meetLink = cls.getMeetLink();
+            if ((meetLink == null || meetLink.isBlank()) && linkedMeeting != null) {
+                meetLink = linkedMeeting.getMeetUrl();
+            }
+
             result.add(new TodayClassResponse(
                     cls.getId(),
                     cls.getBatch() != null ? cls.getBatch().getId() : null,
@@ -242,27 +333,64 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                     cls.getTitle(),
                     cls.getStatus(),
                     present, absent, totalStudents,
-                    cls.getMeetLink(),
-                    cls.getRecordingUrl()));
+                    meetLink,
+                    cls.getRecordingUrl(),
+                    trainerName,
+                    courseTitle,
+                    mode,
+                    timing));
         }
 
-        // Include any scheduled MeetingLinks that don't have a DailyClass linked or matched
-        for (MeetingLink m : scheduledMeetings) {
+        // Include any scheduled MeetingLinks that don't have a DailyClass already rendered
+        for (MeetingLink m : allMeetings) {
+            if (m.getDailyClass() != null && renderedDailyClassIds.contains(m.getDailyClass().getId())) {
+                continue;
+            }
             String key = (m.getBatch() != null ? m.getBatch().getId() : "null")
                     + "|" + (m.getTitle() != null ? m.getTitle().trim().toLowerCase() : "")
                     + "|" + (m.getScheduledStart() != null ? m.getScheduledStart().toLocalDate() + "T" + m.getScheduledStart().getHour() + ":" + m.getScheduledStart().getMinute() : "");
-            if (m.getDailyClass() == null && seenKeys.add(key)) {
+            if (seenKeys.add(key)) {
                 int totalStudents = m.getBatch() != null ? studentCountByBatchId.getOrDefault(m.getBatch().getId(), 0) : 0;
+                String trainerName = null;
+                String courseTitle = null;
+                String mode = "ONLINE";
+                String timing = null;
+
+                if (m.getBatch() != null) {
+                    if (m.getBatch().getTrainerId() != null) {
+                        trainerName = trainerNameById.get(m.getBatch().getTrainerId());
+                    }
+                    if (m.getBatch().getCourse() != null) {
+                        courseTitle = m.getBatch().getCourse().getTitle();
+                    }
+                    if (m.getBatch().getMode() != null) {
+                        mode = m.getBatch().getMode().name();
+                    }
+                    timing = m.getBatch().getTiming();
+                }
+
+                if (m.getHostName() != null && !m.getHostName().isBlank()) {
+                    trainerName = m.getHostName();
+                }
+
+                if (courseTitle == null && m.getCourse() != null) {
+                    courseTitle = m.getCourse().getTitle();
+                }
+
                 result.add(new TodayClassResponse(
-                        null,
+                        m.getDailyClass() != null ? m.getDailyClass().getId() : null,
                         m.getBatch() != null ? m.getBatch().getId() : null,
-                        m.getBatch() != null ? m.getBatch().getName() : (m.getCourse() != null ? m.getCourse().getTitle() : "All Batches"),
+                        m.getBatch() != null ? m.getBatch().getName() : (courseTitle != null ? courseTitle : "All Batches"),
                         m.getScheduledStart(),
                         m.getTitle(),
                         ClassStatus.SCHEDULED,
                         0, 0, totalStudents,
                         m.getMeetUrl(),
-                        null));
+                        null,
+                        trainerName,
+                        courseTitle,
+                        mode,
+                        timing));
             }
         }
 

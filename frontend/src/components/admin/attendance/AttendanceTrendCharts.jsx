@@ -2,20 +2,20 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine
+  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine, CartesianGrid
 } from 'recharts'
+import { ChevronDown } from 'lucide-react'
 
 const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
-const SKELETON = <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+const SKELETON = <div className="h-[260px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
 
-export function AttendanceDailyTrendChart({ data, days = 7 }) {
+export function AttendanceDailyTrendChart({ data, days = 30 }) {
   const [mounted, setMounted] = useState(false)
+  const [metric, setMetric] = useState('percentage')
   useEffect(() => { setMounted(true) }, [])
 
   const chartData = useMemo(() => {
-    if (!days || !Number.isInteger(Number(days)) || Number(days) <= 0) return data || []
-
-    const numDays = Number(days)
+    const numDays = Number(days) && Number(days) > 0 ? Number(days) : 30
     const dataByDate = {}
     if (Array.isArray(data)) {
       for (const item of data) {
@@ -28,6 +28,7 @@ export function AttendanceDailyTrendChart({ data, days = 7 }) {
             absent: item.absent || 0,
             late: item.late || 0,
             total: item.total || 0,
+            pct: item.pct !== undefined ? item.pct : 0,
           }
         } else {
           dataByDate[key].present += item.present || 0
@@ -51,18 +52,26 @@ export function AttendanceDailyTrendChart({ data, days = 7 }) {
       const month = String(d.getMonth() + 1).padStart(2, '0')
       const day = String(d.getDate()).padStart(2, '0')
       const key = `${year}-${month}-${day}`
-      const label = `${d.getDate()} ${monthNames[d.getMonth()]}`
+      const label = `${monthNames[d.getMonth()]} ${d.getDate()}`
+      const fullDateLabel = `${monthNames[d.getMonth()]} ${d.getDate()}, ${year}`
 
       if (dataByDate[key]) {
+        const itemPct = dataByDate[key].pct !== undefined
+          ? dataByDate[key].pct
+          : (dataByDate[key].total > 0 ? Math.round((dataByDate[key].present * 100) / dataByDate[key].total) : 0)
+
         fullList.push({
           ...dataByDate[key],
           date: key,
-          label: dataByDate[key].label || label
+          label: dataByDate[key].label || label,
+          fullDateLabel,
+          pct: itemPct
         })
       } else {
         fullList.push({
           date: key,
           label,
+          fullDateLabel,
           present: 0,
           absent: 0,
           late: 0,
@@ -76,33 +85,89 @@ export function AttendanceDailyTrendChart({ data, days = 7 }) {
 
   if (!mounted) return SKELETON
 
-  const numDays = Number(days) || 7
-  const tickInterval = numDays <= 7 ? 0 : numDays <= 30 ? 4 : 12
+  const numDays = Number(days) || 30
+  const tickInterval = numDays <= 7 ? 0 : numDays <= 30 ? 2 : 6
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload
+      return (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3.5 py-2 shadow-xl shadow-purple-950/10 text-xs">
+          <p className="font-medium text-gray-500 dark:text-gray-400 text-[11px]">{d.fullDateLabel}</p>
+          <p className="font-bold text-gray-900 dark:text-white mt-0.5">
+            Attendance: <span className="text-purple-600 dark:text-purple-400 font-extrabold">{metric === 'percentage' ? `${d.pct}%` : `${d.present} Students`}</span>
+          </p>
+        </div>
+      )
+    }
+    return null
+  }
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={chartData} margin={{ left: -10, right: 10 }}>
-        <defs>
-          <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#6d28d9" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id="colorAbsent" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#ffd668" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#ffd668" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={tickInterval} />
-        <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Area type="monotone" dataKey="present" name="Present" stroke="#6d28d9" fill="url(#colorPresent)" strokeWidth={2} />
-        <Area type="monotone" dataKey="absent"  name="Absent"  stroke="#ffd668" fill="url(#colorAbsent)"  strokeWidth={2} />
-        <Area type="monotone" dataKey="late"    name="Late"    stroke="#93c5fd" fill="none" strokeWidth={1.5} strokeDasharray="4 2" />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div className="w-full">
+      {/* Header section with Dropdown */}
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance Trend</h3>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            Overall attendance percentage across the selected period
+          </p>
+        </div>
+        <div className="relative shrink-0">
+          <select
+            value={metric}
+            onChange={e => setMetric(e.target.value)}
+            className="appearance-none rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-3.5 pr-8 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm outline-none hover:border-purple-300 focus:ring-2 focus:ring-purple-500 transition-all cursor-pointer"
+          >
+            <option value="percentage">Percentage</option>
+            <option value="headcount">Headcount</option>
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={260}>
+        <AreaChart data={chartData} margin={{ top: 10, left: -10, right: 10, bottom: 0 }}>
+          <defs>
+            <linearGradient id="purpleAttendanceGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
+              <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.12} />
+              <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:stroke-gray-800/80" />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+            axisLine={{ stroke: '#cbd5e1' }}
+            tickLine={{ stroke: '#cbd5e1' }}
+            interval={tickInterval}
+          />
+          <YAxis
+            domain={metric === 'percentage' ? [0, 100] : ['auto', 'auto']}
+            ticks={metric === 'percentage' ? [0, 25, 50, 75, 100] : undefined}
+            tickFormatter={metric === 'percentage' ? (v) => `${v}%` : undefined}
+            tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+            axisLine={{ stroke: '#cbd5e1' }}
+            tickLine={{ stroke: '#cbd5e1' }}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Area
+            type="monotone"
+            dataKey={metric === 'percentage' ? 'pct' : 'present'}
+            name="Attendance"
+            stroke="#7c3aed"
+            strokeWidth={2.5}
+            fill="url(#purpleAttendanceGrad)"
+            dot={{ r: 3, fill: '#7c3aed', stroke: '#7c3aed', strokeWidth: 1 }}
+            activeDot={{ r: 6.5, fill: '#7c3aed', stroke: '#ffffff', strokeWidth: 2.5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
+
 
 export function WeeklyAttendanceRateChart({ data }) {
   const [mounted, setMounted] = useState(false)

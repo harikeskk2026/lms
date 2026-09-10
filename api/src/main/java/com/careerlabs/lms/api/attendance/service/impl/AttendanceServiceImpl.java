@@ -452,9 +452,21 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (batchId != null) {
             classes = dailyClassRepository.findByBatchIdAndStatusAndDateGreaterThanEqualOrderByDateAsc(batchId, ClassStatus.COMPLETED, sinceDaily);
             historyClasses = dailyClassRepository.findByBatchIdAndStatusAndDateGreaterThanEqualOrderByDateAsc(batchId, ClassStatus.COMPLETED, sinceHistory);
+            if (classes.isEmpty()) {
+                classes = dailyClassRepository.findByBatchIdAndDateGreaterThanEqualOrderByDateAsc(batchId, sinceDaily);
+            }
+            if (historyClasses.isEmpty()) {
+                historyClasses = dailyClassRepository.findByBatchIdAndDateGreaterThanEqualOrderByDateAsc(batchId, sinceHistory);
+            }
         } else {
             classes = dailyClassRepository.findByStatusAndDateGreaterThanEqualOrderByDateAsc(ClassStatus.COMPLETED, sinceDaily);
             historyClasses = dailyClassRepository.findByStatusAndDateGreaterThanEqualOrderByDateAsc(ClassStatus.COMPLETED, sinceHistory);
+            if (classes.isEmpty()) {
+                classes = dailyClassRepository.findByDateGreaterThanEqualOrderByDateAsc(sinceDaily);
+            }
+            if (historyClasses.isEmpty()) {
+                historyClasses = dailyClassRepository.findByDateGreaterThanEqualOrderByDateAsc(sinceHistory);
+            }
         }
 
         Set<Long> allClassIdSet = new HashSet<>();
@@ -537,6 +549,122 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         int overallPct = totalAll > 0 ? (int) Math.round((totalPresent * 100.0) / totalAll) : 0;
 
+        // 1. Attendance by Class Mode (Online vs Offline)
+        int onlinePresent = 0, onlineAll = 0, onlineConducted = 0, onlineTotal = 0;
+        int offlinePresent = 0, offlineAll = 0, offlineConducted = 0, offlineTotal = 0;
+
+        List<DailyClass> allTimeframeClasses = batchId != null
+                ? dailyClassRepository.findByBatchIdAndDateGreaterThanEqualOrderByDateAsc(batchId, sinceDaily)
+                : dailyClassRepository.findByDateGreaterThanEqualOrderByDateAsc(sinceDaily);
+
+        if (allTimeframeClasses.isEmpty()) {
+            allTimeframeClasses = batchId != null
+                    ? dailyClassRepository.findByBatchIdOrderByDateDesc(batchId)
+                    : dailyClassRepository.findAll();
+        }
+
+        for (DailyClass cls : allTimeframeClasses) {
+            boolean isOnline = (cls.getBatch() != null && cls.getBatch().getMode() == com.careerlabs.lms.api.batch.entity.BatchMode.ONLINE)
+                    || (cls.getMeetLink() != null && !cls.getMeetLink().isBlank());
+            List<Attendance> classAtt = attByClass.getOrDefault(cls.getId(), List.of());
+            boolean isConducted = cls.getStatus() == ClassStatus.COMPLETED || !classAtt.isEmpty();
+
+            if (isOnline) {
+                onlineTotal++;
+                if (isConducted) {
+                    onlineConducted++;
+                    onlinePresent += (int) classAtt.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+                    onlineAll += classAtt.size();
+                }
+            } else {
+                offlineTotal++;
+                if (isConducted) {
+                    offlineConducted++;
+                    offlinePresent += (int) classAtt.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+                    offlineAll += classAtt.size();
+                }
+            }
+        }
+        int onlineAvgPct = onlineAll > 0 ? (int) Math.round((onlinePresent * 100.0) / onlineAll) : (onlineConducted > 0 ? overallPct : 0);
+        int offlineAvgPct = offlineAll > 0 ? (int) Math.round((offlinePresent * 100.0) / offlineAll) : (offlineConducted > 0 ? overallPct : 0);
+        AttendanceAnalyticsResponse.ModeAttendance modeAttendance = new AttendanceAnalyticsResponse.ModeAttendance(
+                onlineAvgPct, onlineConducted, Math.max(onlineTotal, onlineConducted),
+                offlineAvgPct, offlineConducted, Math.max(offlineTotal, offlineConducted)
+        );
+
+
+        // 2. Trainer Performance
+        Map<String, int[]> trainerStats = new HashMap<>(); // [conducted, present, total]
+        Map<String, Long> trainerIdsByName = new HashMap<>();
+
+        Set<Long> trainerIdSet = new HashSet<>();
+        for (DailyClass cls : classes) {
+            if (cls.getBatch() != null && cls.getBatch().getTrainerId() != null) {
+                trainerIdSet.add(cls.getBatch().getTrainerId());
+            }
+        }
+        Map<Long, String> trainerNames = trainerIdSet.isEmpty() ? Map.of() : userRepository.findAllById(trainerIdSet).stream()
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toMap(User::getId, User::getName, (e1, e2) -> e1));
+
+        for (DailyClass cls : classes) {
+            String trainerName = null;
+            Long tId = null;
+            if (cls.getBatch() != null && cls.getBatch().getTrainerId() != null) {
+                tId = cls.getBatch().getTrainerId();
+                trainerName = trainerNames.get(tId);
+            }
+            if (trainerName == null || trainerName.isBlank()) {
+                trainerName = "Assigned Trainer";
+            }
+            if (tId != null) trainerIdsByName.put(trainerName, tId);
+
+            int[] stats = trainerStats.computeIfAbsent(trainerName, k -> new int[3]);
+            stats[0]++; // conducted
+            List<Attendance> classAtt = attByClass.getOrDefault(cls.getId(), List.of());
+            int p = (int) classAtt.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+            stats[1] += p;
+            stats[2] += classAtt.size();
+        }
+
+        List<AttendanceAnalyticsResponse.TrainerPerformancePoint> trainerPerformance = trainerStats.entrySet().stream()
+                .map(e -> {
+                    int cond = e.getValue()[0];
+                    int p = e.getValue()[1];
+                    int tot = e.getValue()[2];
+                    int pct = tot > 0 ? (int) Math.round((p * 100.0) / tot) : 0;
+                    return new AttendanceAnalyticsResponse.TrainerPerformancePoint(trainerIdsByName.get(e.getKey()), e.getKey(), cond, pct);
+                })
+                .sorted((a, b) -> Integer.compare(b.attendancePct(), a.attendancePct()))
+                .toList();
+
+        // 3. Batch Attendance
+        Map<Long, String> batchNames = new HashMap<>();
+        Map<Long, int[]> batchStats = new HashMap<>(); // [conducted, present, total]
+
+        for (DailyClass cls : classes) {
+            if (cls.getBatch() != null) {
+                Long bId = cls.getBatch().getId();
+                batchNames.putIfAbsent(bId, cls.getBatch().getName());
+                int[] stats = batchStats.computeIfAbsent(bId, k -> new int[3]);
+                stats[0]++;
+                List<Attendance> classAtt = attByClass.getOrDefault(cls.getId(), List.of());
+                stats[1] += (int) classAtt.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+                stats[2] += classAtt.size();
+            }
+        }
+
+        List<AttendanceAnalyticsResponse.BatchAttendancePoint> batchAttendance = batchStats.entrySet().stream()
+                .map(e -> {
+                    int cond = e.getValue()[0];
+                    int p = e.getValue()[1];
+                    int tot = e.getValue()[2];
+                    int pct = tot > 0 ? (int) Math.round((p * 100.0) / tot) : 0;
+                    return new AttendanceAnalyticsResponse.BatchAttendancePoint(e.getKey(), batchNames.get(e.getKey()), cond, pct);
+                })
+                .sorted((a, b) -> Integer.compare(b.classesConducted(), a.classesConducted()))
+                .toList();
+
         return new AttendanceAnalyticsResponse(
                 dailyTrend,
                 new ArrayList<>(weeklyMap.values()),
@@ -545,9 +673,13 @@ public class AttendanceServiceImpl implements AttendanceService {
                 totalPresent,
                 totalAbsent,
                 totalLate,
-                totalAll
+                totalAll,
+                modeAttendance,
+                trainerPerformance,
+                batchAttendance
         );
     }
+
 
     @Override
     @Transactional(readOnly = true)
@@ -566,22 +698,31 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         for (Batch batch : batches) {
             List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<DailyClass> classes = dailyClassRepository.findByBatchIdAndStatusOrderByDateDesc(batch.getId(), ClassStatus.COMPLETED);
+            if (classes.isEmpty()) {
+                classes = dailyClassRepository.findByBatchIdOrderByDateDesc(batch.getId());
+            }
+            int totalBatchClasses = classes.size();
+            if (totalBatchClasses == 0) continue;
+
             List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
             Map<Long, List<Attendance>> byStudent = attendances.stream()
                     .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
 
             for (Student student : students) {
                 List<Attendance> sAtt = byStudent.getOrDefault(student.getId(), List.of());
-                int total = sAtt.size();
-                if (total < 3) continue;
+                int recordedTotal = sAtt.size();
+                int effectiveTotal = Math.max(recordedTotal, totalBatchClasses);
+                if (effectiveTotal == 0) continue;
 
                 int present = (int) sAtt.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
                 int absent = (int) sAtt.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
                 int late = (int) sAtt.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
 
-                int pct = (int) Math.round((present * 100.0) / total);
+                int pct = (int) Math.round((present * 100.0) / effectiveTotal);
                 if (pct < thresh) {
-                    int deficit = (int) Math.ceil((thresh / 100.0) * total - present);
+                    int deficit = (int) Math.ceil((thresh / 100.0) * effectiveTotal - present);
+                    if (deficit <= 0) deficit = 1;
                     String risk = pct < 50 ? "CRITICAL" : pct < 65 ? "HIGH" : "MEDIUM";
 
                     results.add(new LowAttendanceStudentResponse(
@@ -594,7 +735,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             batch.getId(),
                             batch.getName(),
                             batch.getCourse().getTitle(),
-                            present, absent, late, total,
+                            present, absent, late, effectiveTotal,
                             pct, deficit, risk
                     ));
                 }
@@ -764,9 +905,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AttendanceAlertResponse> getAttendanceAlerts(Boolean resolved, Long batchId) {
         boolean isRes = resolved != null && resolved;
+        if (!isRes) {
+            try {
+                generateAttendanceAlerts(75.0);
+            } catch (Exception ignored) {}
+        }
         List<AttendanceAlert> alerts = batchId != null ?
                 attendanceAlertRepository.findByBatchIdAndIsResolvedOrderByCurrentPctAsc(batchId, isRes) :
                 attendanceAlertRepository.findByIsResolvedOrderByCurrentPctAsc(isRes);
@@ -793,21 +939,25 @@ public class AttendanceServiceImpl implements AttendanceService {
                 alert.setBatch(batch);
                 alert.setThreshold(thresh);
                 alert.setCurrentPct((double) s.percentage());
-                alert.setMessage(s.name() + " has " + s.percentage() + "% attendance in " + s.batchName() + ". Needs " + s.deficit() + " more classes to reach " + (int) thresh + "%.");
+                alert.setMessage(s.name() + " has " + s.percentage() + "% attendance in " + s.batchName() + ". Needs " + s.deficit() + " more class" + (s.deficit() > 1 ? "es" : "") + " to reach " + (int) thresh + "%.");
                 attendanceAlertRepository.save(alert);
 
-                Notification notification = new Notification();
-                notification.setUser(student.getUser());
-                notification.setTitle("Low Attendance Alert");
-                notification.setBody("Your attendance is " + s.percentage() + "%. You need " + s.deficit() + " more classes to reach " + (int) thresh + "%. Please attend regularly.");
-                notification.setType(NotificationType.WARNING);
-                notification.setLink("/student/attendance");
-                notificationRepository.save(notification);
+                try {
+                    Notification notification = new Notification();
+                    notification.setUser(student.getUser());
+                    notification.setTitle("Low Attendance Alert");
+                    notification.setBody("Your attendance is " + s.percentage() + "%. You need " + s.deficit() + " more class" + (s.deficit() > 1 ? "es" : "") + " to reach " + (int) thresh + "%. Please attend regularly.");
+                    notification.setType(NotificationType.WARNING);
+                    notification.setLink("/student/attendance");
+                    notificationRepository.save(notification);
+                } catch (Exception ignored) {}
 
                 generated++;
             } else {
                 AttendanceAlert alert = existing.get();
                 alert.setCurrentPct((double) s.percentage());
+                alert.setThreshold(thresh);
+                alert.setMessage(s.name() + " has " + s.percentage() + "% attendance in " + s.batchName() + ". Needs " + s.deficit() + " more class" + (s.deficit() > 1 ? "es" : "") + " to reach " + (int) thresh + "%.");
                 attendanceAlertRepository.save(alert);
             }
         }

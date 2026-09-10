@@ -1966,6 +1966,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
             <input
               required
               type="date"
+              min={new Date().toISOString().slice(0, 10)}
               value={form.startDate}
               onChange={e => {
                 const newStart = e.target.value

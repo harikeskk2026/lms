@@ -57,8 +57,9 @@ export default function DateTimePicker12h({
   onChange,
   required = false,
   minDate,
-  disablePast = false,
+  disablePast = true,
   disabled = false,
+  hasError = false,
   className = '',
 }) {
   const { hasValue, date, hour12, minute, period } = useMemo(() => parseIso(value), [value])
@@ -121,7 +122,7 @@ export default function DateTimePicker12h({
         {/* Date Section */}
         <div className="relative flex items-center min-w-0">
           <div className="absolute left-3 text-slate-400 pointer-events-none z-10">
-            <Calendar size={15} />
+            <Calendar size={15} className={hasError ? 'text-red-500' : 'text-slate-400'} />
           </div>
           <input
             type="date"
@@ -131,12 +132,20 @@ export default function DateTimePicker12h({
             value={date}
             onChange={handleDateChange}
             onClick={(e) => { try { e.target.showPicker?.() } catch {} }}
-            className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all cursor-pointer min-w-0"
+            className={`w-full h-11 pl-9 pr-3 rounded-xl border bg-slate-50 dark:bg-gray-800 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all cursor-pointer min-w-0 ${
+              hasError
+                ? 'border-red-500 dark:border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                : 'border-slate-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600'
+            }`}
           />
         </div>
 
         {/* 12-Hour Time Section with AM/PM */}
-        <div className="flex items-center gap-1.5 h-11 px-2.5 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600 transition-all min-w-0">
+        <div className={`flex items-center gap-1.5 h-11 px-2.5 rounded-xl border bg-slate-50 dark:bg-gray-800 transition-all min-w-0 ${
+          hasError
+            ? 'border-red-500 dark:border-red-500 focus-within:border-red-500 focus-within:ring-2 focus-within:ring-red-500/20'
+            : 'border-slate-200 dark:border-gray-700 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 hover:border-slate-300 dark:hover:border-gray-600'
+        }`}>
           <Clock size={15} className="text-slate-400 shrink-0 ml-0.5" />
 
           {/* Hour Select */}

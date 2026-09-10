@@ -493,6 +493,7 @@ export default function BatchesPage() {
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
                 <input
                   type="date"
+                  min={new Date().toISOString().slice(0, 10)}
                   value={form.startDate}
                   onChange={e => {
                     const newStart = e.target.value

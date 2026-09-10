@@ -32,5 +32,10 @@ public interface DailyClassRepository extends JpaRepository<DailyClass, Long> {
 
     Optional<DailyClass> findFirstByBatchIdAndStatusAndDateLessThanOrderByDateDesc(Long batchId, ClassStatus status, LocalDateTime date);
 
+    List<DailyClass> findByDateGreaterThanEqualOrderByDateAsc(LocalDateTime since);
+
+    List<DailyClass> findByBatchIdAndDateGreaterThanEqualOrderByDateAsc(Long batchId, LocalDateTime since);
+
     long countByStatusAndDateLessThanEqual(ClassStatus status, LocalDateTime date);
 }
+
