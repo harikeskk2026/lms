@@ -20,6 +20,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "students")
@@ -66,6 +67,9 @@ public class Student {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id")
     private Course course;
+
+    @Column(name = "joining_date")
+    private LocalDate joiningDate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -191,5 +195,13 @@ public class Student {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public LocalDate getJoiningDate() {
+        return joiningDate;
+    }
+
+    public void setJoiningDate(LocalDate joiningDate) {
+        this.joiningDate = joiningDate;
     }
 }

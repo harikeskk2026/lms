@@ -16,11 +16,80 @@ import SlidePanel from '@/components/admin/SlidePanel'
 const PLATFORMS = ['ZOOM']
 const STATUSES = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED']
 
-const STATUS_BADGE = {
-  SCHEDULED: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-  LIVE: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 animate-pulse',
+// Display status badge styles (derived on the fly from timing)
+const DISPLAY_STATUS_BADGE = {
+  UPCOMING:  'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+  ONGOING:   'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 animate-pulse',
   COMPLETED: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700',
   CANCELLED: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
+}
+
+// Get the current local date-time as an ISO string "YYYY-MM-DDTHH:MM:SS"
+const getLocalISONow = () => {
+  const now = new Date()
+  const yr = now.getFullYear()
+  const mo = String(now.getMonth() + 1).padStart(2, '0')
+  const dy = String(now.getDate()).padStart(2, '0')
+  const hr = String(now.getHours()).padStart(2, '0')
+  const mn = String(now.getMinutes()).padStart(2, '0')
+  const sc = String(now.getSeconds()).padStart(2, '0')
+  return `${yr}-${mo}-${dy}T${hr}:${mn}:${sc}`
+}
+
+// Normalise a scheduledStart/scheduledEnd value to a comparable ISO string.
+// Handles: string "2026-09-10T12:00:00", array [2026,9,10,12,0], or null.
+const toISOStr = (val) => {
+  if (!val) return null
+  if (Array.isArray(val)) {
+    const [yr, mo, dy, hr = 0, mn = 0, sc = 0] = val
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${yr}-${pad(mo)}-${pad(dy)}T${pad(hr)}:${pad(mn)}:${pad(sc)}`
+  }
+  const s = String(val).replace('Z', '').replace(/[+-]\d{2}:\d{2}$/, '').replace(' ', 'T')
+  return s.slice(0, 19)
+}
+
+const getDisplayStatus = (m) => {
+  if (m.status === 'CANCELLED') return 'CANCELLED'
+
+  const startISO = toISOStr(m.scheduledStart)
+  if (!startISO) {
+    return m.status === 'COMPLETED' ? 'COMPLETED' : 'UPCOMING'
+  }
+
+  const endISO = toISOStr(m.scheduledEnd)
+  const nowISO = getLocalISONow()
+
+  const todayDate = nowISO.slice(0, 10)
+  const currentTime = nowISO.slice(11, 19)
+
+  const startDate = startISO.slice(0, 10)
+  const startTime = (startISO.slice(11, 19) || '00:00:00').padEnd(8, ':00')
+
+  const endDate = endISO ? endISO.slice(0, 10) : startDate
+  let endTime = endISO ? (endISO.slice(11, 19) || '23:59:59').padEnd(8, ':00') : null
+
+  if (!endTime) {
+    const [sh = '10', sm = '00', ss = '00'] = startTime.split(':')
+    const endH = String((parseInt(sh, 10) + 1) % 24).padStart(2, '0')
+    endTime = `${endH}:${sm}:${ss}`
+  }
+
+  if (todayDate < startDate) {
+    return 'UPCOMING'
+  }
+  if (todayDate > endDate) {
+    return 'COMPLETED'
+  }
+
+  // Today is within [startDate, endDate]
+  if (currentTime < startTime) {
+    return 'UPCOMING'
+  }
+  if (currentTime >= startTime && currentTime <= endTime) {
+    return 'ONGOING'
+  }
+  return 'COMPLETED'
 }
 
 const emptyForm = {
@@ -127,9 +196,17 @@ export default function AdminMeetingLinksPage() {
     return () => clearInterval(interval)
   }, [filterBatch, filterStatus])
 
+  const isOnlineOrHybridBatch = (b) => {
+    if (!b) return false
+    const mode = String(b.mode || 'ONLINE').toUpperCase()
+    return mode === 'ONLINE' || mode === 'HYBRID'
+  }
+
+  const onlineAndHybridBatches = batches.filter(isOnlineOrHybridBatch)
+
   const batchOptionsForForm = form.courseId
-    ? batches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
-    : batches
+    ? onlineAndHybridBatches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
+    : onlineAndHybridBatches
 
   const openCreate = () => {
     setErrors({})
@@ -155,8 +232,8 @@ export default function AdminMeetingLinksPage() {
       batchId: m.batchId ? String(m.batchId) : '',
       courseId: courseId,
       hostName: m.hostName || '',
-      scheduledStart: m.scheduledStart ? m.scheduledStart.slice(0, 16) : '',
-      scheduledEnd: m.scheduledEnd ? m.scheduledEnd.slice(0, 16) : '',
+      scheduledStart: toISOStr(m.scheduledStart)?.slice(0, 16) || '',
+      scheduledEnd: toISOStr(m.scheduledEnd)?.slice(0, 16) || '',
       passcode: m.passcode || '',
     })
     setPanelOpen(true)
@@ -249,8 +326,8 @@ export default function AdminMeetingLinksPage() {
       toast.success('Meeting deleted')
       setDeletingMeeting(null)
       loadData()
-    } catch {
-      toast.error('Failed to delete meeting')
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to delete meeting')
     } finally {
       setIsDeleting(false)
     }
@@ -294,11 +371,21 @@ export default function AdminMeetingLinksPage() {
   })
 
   const filterBatchesList = filterCourse
-    ? batches.filter(b => String(getBatchCourseId(b)) === String(filterCourse))
-    : batches
+    ? onlineAndHybridBatches.filter(b => String(getBatchCourseId(b)) === String(filterCourse))
+    : onlineAndHybridBatches
 
-  const liveCount = meetings.filter(m => m.status === 'LIVE').length
-  const scheduledCount = meetings.filter(m => m.status === 'SCHEDULED').length
+  const statusOrder = (m) => {
+    const s = getDisplayStatus(m)
+    if (s === 'ONGOING') return 0
+    if (s === 'UPCOMING') return 1
+    if (s === 'COMPLETED') return 2
+    return 3
+  }
+
+  const sortedMeetings = [...filteredMeetings].sort((a, b) => statusOrder(a) - statusOrder(b))
+
+  const ongoingCount  = meetings.filter(m => getDisplayStatus(m) === 'ONGOING').length
+  const upcomingCount = meetings.filter(m => getDisplayStatus(m) === 'UPCOMING').length
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -338,8 +425,8 @@ export default function AdminMeetingLinksPage() {
             <PlayCircle size={20} className="animate-pulse" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Live Now</p>
-            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{liveCount}</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Ongoing</p>
+            <p className="text-xl font-bold text-emerald-600">{ongoingCount}</p>
           </div>
         </div>
 
@@ -348,8 +435,8 @@ export default function AdminMeetingLinksPage() {
             <Calendar size={20} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scheduled</p>
-            <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{scheduledCount}</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Upcoming</p>
+            <p className="text-xl font-bold text-blue-600">{upcomingCount}</p>
           </div>
         </div>
 
@@ -360,7 +447,7 @@ export default function AdminMeetingLinksPage() {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Completed</p>
             <p className="text-xl font-bold text-gray-700 dark:text-gray-300">
-              {meetings.filter(m => m.status === 'COMPLETED').length}
+              {meetings.filter(m => getDisplayStatus(m) === 'COMPLETED').length}
             </p>
           </div>
         </div>
@@ -398,7 +485,9 @@ export default function AdminMeetingLinksPage() {
           >
             <option value="">All Batches</option>
             {filterBatchesList.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>
+                {b.name || b.title} {b.mode ? `· ${b.mode}` : ''}
+              </option>
             ))}
           </select>
 
@@ -430,7 +519,7 @@ export default function AdminMeetingLinksPage() {
             <div key={i} className="h-48 glass-card animate-pulse" />
           ))}
         </div>
-      ) : filteredMeetings.length === 0 ? (
+      ) : sortedMeetings.length === 0 ? (
         <div className="glass-card p-12 text-center text-gray-400">
           <Video size={40} className="mx-auto mb-3 text-purple-300 dark:text-purple-800" />
           <p className="font-semibold text-gray-700 dark:text-gray-300">No scheduled classes found</p>
@@ -438,16 +527,21 @@ export default function AdminMeetingLinksPage() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredMeetings.map(m => (
+          {sortedMeetings.map(m => (
             <div key={m.id} className="glass-card p-5 flex flex-col justify-between gap-4 border border-gray-100 dark:border-gray-800 hover:shadow-lg transition-all">
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-display font-bold text-base text-gray-900 dark:text-white leading-tight">
                     {m.title}
                   </h3>
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${STATUS_BADGE[m.status] || STATUS_BADGE.SCHEDULED}`}>
-                    {m.status}
-                  </span>
+                  {(() => {
+                    const ds = getDisplayStatus(m)
+                    return (
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border whitespace-nowrap ${DISPLAY_STATUS_BADGE[ds] || DISPLAY_STATUS_BADGE.UPCOMING}`}>
+                        {ds}
+                      </span>
+                    )
+                  })()}
                 </div>
 
                 {m.description && (
@@ -477,7 +571,27 @@ export default function AdminMeetingLinksPage() {
                 <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-800">
                   <div className="flex items-center gap-1.5">
                     <Calendar size={13} className="text-purple-500" />
-                    <span>{m.scheduledStart ? format(new Date(m.scheduledStart), 'dd MMM yyyy, hh:mm a') : 'TBD'}</span>
+                    <span>
+                      {(() => {
+                        const startISO = toISOStr(m.scheduledStart)
+                        const endISO = toISOStr(m.scheduledEnd)
+                        if (!startISO) return 'TBD'
+                        const sp = startISO.split(/[T:-]/).map(Number)
+                        const startDateObj = new Date(sp[0], sp[1]-1, sp[2], sp[3]||0, sp[4]||0, sp[5]||0)
+                        const startFormatted = format(startDateObj, 'dd MMM yyyy, hh:mm a')
+                        if (!endISO) return startFormatted
+
+                        const ep = endISO.split(/[T:-]/).map(Number)
+                        const endDateObj = new Date(ep[0], ep[1]-1, ep[2], ep[3]||0, ep[4]||0, ep[5]||0)
+
+                        const startDateStr = startISO.slice(0, 10)
+                        const endDateStr = endISO.slice(0, 10)
+                        if (startDateStr !== endDateStr) {
+                          return `${format(startDateObj, 'dd MMM yyyy')} – ${format(endDateObj, 'dd MMM yyyy')} · ${format(startDateObj, 'hh:mm a')} – ${format(endDateObj, 'hh:mm a')}`
+                        }
+                        return `${startFormatted} – ${format(endDateObj, 'hh:mm a')}`
+                      })()}
+                    </span>
                   </div>
                   {m.hostName && (
                     <div className="flex items-center gap-1.5">
@@ -513,10 +627,10 @@ export default function AdminMeetingLinksPage() {
                   </button>
                 </div>
 
-                {/* Status Switcher Quick Buttons */}
+                {/* Status Action Buttons */}
                 <div className="flex items-center justify-between text-[11px] font-semibold pt-1">
-                  <div className="flex gap-1">
-                    {m.status !== 'LIVE' && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {m.status !== 'LIVE' && m.status !== 'COMPLETED' && m.status !== 'CANCELLED' && (
                       <button
                         onClick={() => handleStatusChange(m.id, 'LIVE')}
                         className="text-emerald-600 dark:text-emerald-400 hover:underline"
@@ -524,7 +638,7 @@ export default function AdminMeetingLinksPage() {
                         Go Live
                       </button>
                     )}
-                    {m.status === 'LIVE' && (
+                    {m.status !== 'COMPLETED' && m.status !== 'CANCELLED' && (
                       <button
                         onClick={() => handleStatusChange(m.id, 'COMPLETED')}
                         className="text-gray-600 dark:text-gray-300 hover:underline"
@@ -535,7 +649,7 @@ export default function AdminMeetingLinksPage() {
                     {m.status !== 'CANCELLED' && m.status !== 'COMPLETED' && (
                       <button
                         onClick={() => handleStatusChange(m.id, 'CANCELLED')}
-                        className="text-red-500 dark:text-red-400 hover:underline ml-1"
+                        className="text-red-500 dark:text-red-400 hover:underline"
                       >
                         Cancel
                       </button>
@@ -549,9 +663,11 @@ export default function AdminMeetingLinksPage() {
                     <button onClick={() => openEdit(m)} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300">
                       <Edit3 size={13} />
                     </button>
-                    <button onClick={() => setDeletingMeeting(m)} className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">
-                      <Trash2 size={13} />
-                    </button>
+                    {getDisplayStatus(m) !== 'ONGOING' && (
+                      <button onClick={() => setDeletingMeeting(m)} title="Delete Class" className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -656,7 +772,7 @@ export default function AdminMeetingLinksPage() {
                 </option>
                 {batchOptionsForForm.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.name || b.title} {!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}
+                    {b.name || b.title} {b.mode ? `· ${b.mode}` : ''} {!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}
                   </option>
                 ))}
               </select>

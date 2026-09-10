@@ -34,17 +34,61 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
     List<MeetingLink> findVisibleToStudent(@Param("batchId") Long batchId, @Param("courseId") Long courseId);
 
     @Query("SELECT m FROM MeetingLink m WHERE " +
+            "(m.batch.id IN :batchIds) OR " +
+            "(m.course.id IN :courseIds) OR " +
+            "(m.batch IS NULL AND m.course IS NULL) " +
+            "ORDER BY m.scheduledStart DESC")
+    List<MeetingLink> findVisibleByBatchIdsOrCourseIds(@Param("batchIds") java.util.Collection<Long> batchIds, @Param("courseIds") java.util.Collection<Long> courseIds);
+
+    @Query("SELECT m FROM MeetingLink m WHERE " +
+            "(m.batch.id IN :batchIds) OR " +
+            "(m.batch IS NULL AND m.course IS NULL) " +
+            "ORDER BY m.scheduledStart DESC")
+    List<MeetingLink> findVisibleByBatchIds(@Param("batchIds") java.util.Collection<Long> batchIds);
+
+    @Query("SELECT m FROM MeetingLink m WHERE " +
+            "(m.course.id IN :courseIds) OR " +
+            "(m.batch IS NULL AND m.course IS NULL) " +
+            "ORDER BY m.scheduledStart DESC")
+    List<MeetingLink> findVisibleByCourseIds(@Param("courseIds") java.util.Collection<Long> courseIds);
+
+    @Query("SELECT m FROM MeetingLink m WHERE " +
             "((m.batch.id = :batchId) OR " +
             "(m.batch IS NULL AND m.course.id = :courseId) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +
             "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
     List<MeetingLink> findLiveMeetingsVisibleToStudent(@Param("batchId") Long batchId, @Param("courseId") Long courseId);
 
-    /** SCHEDULED or LIVE meetings whose scheduled end time has already passed. */
+    @Query("SELECT m FROM MeetingLink m WHERE " +
+            "((m.batch.id IN :batchIds) OR " +
+            "(m.course.id IN :courseIds) OR " +
+            "(m.batch IS NULL AND m.course IS NULL)) " +
+            "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
+    List<MeetingLink> findLiveVisibleByBatchIdsOrCourseIds(@Param("batchIds") java.util.Collection<Long> batchIds, @Param("courseIds") java.util.Collection<Long> courseIds);
+
+    @Query("SELECT m FROM MeetingLink m WHERE " +
+            "((m.batch.id IN :batchIds) OR " +
+            "(m.batch IS NULL AND m.course IS NULL)) " +
+            "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
+    List<MeetingLink> findLiveVisibleByBatchIds(@Param("batchIds") java.util.Collection<Long> batchIds);
+
+    @Query("SELECT m FROM MeetingLink m WHERE " +
+            "((m.course.id IN :courseIds) OR " +
+            "(m.batch IS NULL AND m.course IS NULL)) " +
+            "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
+    List<MeetingLink> findLiveVisibleByCourseIds(@Param("courseIds") java.util.Collection<Long> courseIds);
+
+    /** LIVE meetings (or SCHEDULED meetings whose start time has arrived) whose scheduled end time has passed. */
     @Query("SELECT m FROM MeetingLink m WHERE m.status IN :statuses " +
-            "AND m.scheduledEnd IS NOT NULL AND m.scheduledEnd < :now")
+            "AND (m.scheduledStart IS NULL OR m.scheduledStart <= :now) " +
+            "AND m.scheduledEnd IS NOT NULL AND m.scheduledEnd <= :now")
     List<MeetingLink> findDueForAutoComplete(@Param("statuses") List<MeetingStatus> statuses,
                                               @Param("now") LocalDateTime now);
+
+    /** Meetings marked COMPLETED but whose scheduled start time is still in the future. */
+    @Query("SELECT m FROM MeetingLink m WHERE m.status = 'COMPLETED' " +
+            "AND m.scheduledStart IS NOT NULL AND m.scheduledStart > :now")
+    List<MeetingLink> findPrematurelyCompleted(@Param("now") LocalDateTime now);
 
     /** SCHEDULED meetings whose scheduled start time has arrived and end time hasn't passed. */
     @Query("SELECT m FROM MeetingLink m WHERE m.status = 'SCHEDULED' " +
