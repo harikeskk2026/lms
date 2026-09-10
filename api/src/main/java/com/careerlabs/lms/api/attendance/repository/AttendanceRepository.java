@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.attendance.entity.Attendance;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -37,4 +38,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long>, J
     long countByStudentId(Long studentId);
 
     void deleteAllByStudentId(Long studentId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Attendance a WHERE a.dailyClass.id = :classId")
+    void deleteByDailyClassId(@Param("classId") Long classId);
 }

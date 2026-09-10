@@ -67,6 +67,24 @@ public record AttendanceHistoryResponse(
             String remarks,
             Long markedBy,
             String markedByName,
-            Instant markedAt
-    ) {}
+            Instant markedAt,
+            boolean correctionPending,
+            AttendStatus correctionRequestedStatus
+    ) {
+        public RecentRecordDto(
+                Long attendanceId,
+                Long classId,
+                LocalDateTime date,
+                String classTitle,
+                String batchName,
+                String courseTitle,
+                AttendStatus status,
+                String remarks,
+                Long markedBy,
+                String markedByName,
+                Instant markedAt
+        ) {
+            this(attendanceId, classId, date, classTitle, batchName, courseTitle, status, remarks, markedBy, markedByName, markedAt, false, null);
+        }
+    }
 }

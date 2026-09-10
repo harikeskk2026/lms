@@ -76,13 +76,37 @@ export default function StudentDashboardPage() {
   const { data: notifications } = useNotifications()
   const [materials, setMaterials] = useState([])
   const [refreshing, setRefreshing] = useState(false)
+  const [attSummary, setAttSummary] = useState(null)
+  const [attTrend, setAttTrend] = useState([])
+  const [attLoading, setAttLoading] = useState(true)
 
   const primaryCourseId = data?.continueLearning?.[0]?.courseId
+
+  const loadAttendance = () => {
+    setAttLoading(true)
+    Promise.all([
+      studentApi.getAttSummary().catch(() => null),
+      studentApi.getAttendanceTrend().catch(() => null),
+    ])
+      .then(([sumRes, trendRes]) => {
+        if (sumRes?.data?.data) setAttSummary(sumRes.data.data)
+        if (trendRes?.data?.data) setAttTrend(trendRes.data.data)
+      })
+      .finally(() => setAttLoading(false))
+  }
+
+  useEffect(() => {
+    loadAttendance()
+  }, [])
 
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await refetch(true)
+      await Promise.all([
+        refetch(true),
+        studentApi.getAttSummary().then(r => setAttSummary(r.data?.data || null)).catch(() => {}),
+        studentApi.getAttendanceTrend().then(r => setAttTrend(r.data?.data || [])).catch(() => {})
+      ])
       if (primaryCourseId) {
         studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
       }
@@ -160,15 +184,41 @@ export default function StudentDashboardPage() {
 
         {/* Attendance */}
         <div className="stat-card">
-          <div className="flex items-center gap-2 mb-1">
-            <Calendar size={16} className="text-green-500" />
-            <span className="text-xs text-gray-500 font-medium">Attendance</span>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <Calendar size={16} className="text-green-500" />
+              <span className="text-xs text-gray-500 font-medium">Attendance</span>
+            </div>
+            {attSummary?.neededFor75 > 0 && (
+              <span className="chip text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5">
+                Target: 75%
+              </span>
+            )}
           </div>
-          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">{overview.attendancePct}%</p>
-          <p className="text-xs text-gray-400 mt-0.5">{attendance.riskLevel}</p>
+          <p className="font-display text-3xl font-extrabold text-gray-800 dark:text-white">
+            {attSummary?.overallPercentage ?? overview.attendancePct}%
+          </p>
+          <div className="flex items-center justify-between text-xs mt-0.5">
+            <span className={`font-semibold ${
+              (attSummary?.riskLevel || attendance.riskLevel) === 'HEALTHY'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : (attSummary?.riskLevel || attendance.riskLevel) === 'AT_RISK'
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-rose-600 dark:text-rose-400'
+            }`}>
+              {attSummary?.riskLevel || attendance.riskLevel}
+            </span>
+            {attSummary?.total > 0 && (
+              <span className="text-gray-400 text-[11px]">
+                {attSummary.present}/{attSummary.total} attended
+              </span>
+            )}
+          </div>
           <div className="mt-2 flex items-center gap-1.5">
             <Flame size={14} className="text-orange-500" />
-            <span className="text-xs font-semibold text-orange-600">{overview.streak} day streak</span>
+            <span className="text-xs font-semibold text-orange-600">
+              {attSummary?.streak ?? attendance.streak ?? overview.streak} class streak
+            </span>
           </div>
         </div>
 
@@ -239,10 +289,16 @@ export default function StudentDashboardPage() {
 
       {/* ── ROW 3: Charts ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Attendance: current vs previous */}
+        {/* Attendance Performance & Trends */}
         <div className="glass-card p-5">
-          <h3 className="section-title"><Calendar size={16} /> Attendance: Current vs Previous</h3>
-          <AttendanceCompareChart data={attendanceCompareData} />
+          <AttendanceCompareChart
+            attendance={attendance}
+            overview={overview}
+            summary={attSummary}
+            trend={attTrend}
+            loading={attLoading}
+            data={attendanceCompareData}
+          />
         </div>
 
         {/* Quiz Topic Performance */}
@@ -323,10 +379,16 @@ export default function StudentDashboardPage() {
                       <p className="text-xs text-gray-400 mt-0.5">{cls.batchName}</p>
                     </div>
                     {classIsToday && cls.meetLink && (
-                      <a href={cls.meetLink} target="_blank" rel="noopener noreferrer"
-                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 whitespace-nowrap">
-                        Join →
-                      </a>
+                      new Date(cls.date).getTime() <= new Date().getTime() ? (
+                        <a href={cls.meetLink} target="_blank" rel="noopener noreferrer"
+                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 whitespace-nowrap">
+                          Join →
+                        </a>
+                      ) : (
+                        <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 whitespace-nowrap bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded">
+                          {format(new Date(cls.date), 'hh:mm a')}
+                        </span>
+                      )
                     )}
                   </div>
                 )

@@ -52,19 +52,19 @@ export default function AttendanceCalendar({ calendarData = [], activeMonth, onD
           return (
             <div
               key={key}
-              title={info?.classTitle || ''}
+              title={`${info?.classTitle || ''}${info?.correctionPending ? ' — Present Request Pending Admin Review' : ''}`}
               onClick={() => { if (!isFuture && onDayClick) onDayClick(key) }}
               className={`
                 relative min-h-[40px] rounded-xl flex flex-col items-center justify-center
                 text-xs font-medium transition-all
                 ${isToday ? 'ring-2 ring-brand-500 ring-offset-1' : ''}
-                ${status ? STATUS_STYLE[status] : isFuture ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}
+                ${info?.correctionPending ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : (status ? STATUS_STYLE[status] : isFuture ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500')}
                 ${!isFuture ? 'cursor-pointer hover:scale-105' : ''}
               `}
             >
               <span>{format(day, 'd')}</span>
               {status && (
-                <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${STATUS_DOT[status]}`} />
+                <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${info?.correctionPending ? 'bg-amber-500' : STATUS_DOT[status]}`} />
               )}
             </div>
           )
@@ -73,11 +73,10 @@ export default function AttendanceCalendar({ calendarData = [], activeMonth, onD
       {/* Legend */}
       <div className="flex items-center gap-4 mt-4 text-xs text-gray-500 flex-wrap">
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" />Present</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500" />Absent</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />Late</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" />Half Day</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-teal-500" />Leave</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-purple-500" />Excused</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" />Absent</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />Late</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" />Present Pending</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />Leave</span>
       </div>
     </div>
   )

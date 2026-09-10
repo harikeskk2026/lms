@@ -8,7 +8,7 @@ import {
   FileDown, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Calendar, ClipboardList,
   Copy, FileEdit, XCircle, History, Paperclip, Upload, FileText, X,
   Video, MapPin, Clock, User, Eye, ArrowRight, ExternalLink, Sparkles, CheckCircle2, Laptop,
-  Search, LayoutGrid, ListFilter
+  Search, LayoutGrid, ListFilter, Trash2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
@@ -578,7 +578,6 @@ function BatchOverviewTab() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [monthFilter, setMonthFilter]   = useState('')
   const [studentSearch, setStudentSearch] = useState('')
-  const [viewMode, setViewMode]         = useState('table') // 'table' | 'matrix'
 
   useEffect(() => {
     adminApi.getAttendanceOverview()
@@ -590,7 +589,6 @@ function BatchOverviewTab() {
   const openBatch = async (batch) => {
     setSelectedBatch(batch)
     setStudentSearch('')
-    setViewMode('table')
     setDetailLoading(true)
     try {
       const r = await adminApi.getBatchAttDetail(batch.batchId, monthFilter ? { month: monthFilter } : {})
@@ -649,38 +647,10 @@ function BatchOverviewTab() {
             <ArrowLeft size={16} /> Back to Overview
           </button>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* View switcher */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={() => setViewMode('table')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'table'
-                    ? 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-              >
-                <ListFilter size={14} /> Student List
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('matrix')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'matrix'
-                    ? 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-              >
-                <LayoutGrid size={14} /> Daily Grid
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-500 font-medium">Month:</label>
-              <input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
-                className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 shadow-sm" />
-            </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-500 font-medium">Month:</label>
+            <input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 shadow-sm" />
           </div>
         </div>
 
@@ -717,133 +687,126 @@ function BatchOverviewTab() {
         {detailLoading ? (
           <Skeleton className="h-72" />
         ) : detail ? (
-          viewMode === 'table' ? (
-            /* Student Summary Table matching user reference */
-            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800/80 rounded-2xl shadow-xl overflow-hidden">
-              {/* Search & Filter sub-bar */}
-              <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4 flex-wrap bg-white dark:bg-gray-900">
-                <div className="relative w-full max-w-sm">
-                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search student by name or email..."
-                    value={studentSearch}
-                    onChange={e => setStudentSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="text-xs text-gray-500 font-medium">
-                  Showing <span className="font-semibold text-gray-800 dark:text-gray-200">{filteredStudents.length}</span> of {studentList.length} students
-                </div>
+          /* Student Summary Table */
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800/80 rounded-2xl shadow-xl overflow-hidden">
+            {/* Search & Filter sub-bar */}
+            <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4 flex-wrap bg-white dark:bg-gray-900">
+              <div className="relative w-full max-w-sm">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search student by name or email..."
+                  value={studentSearch}
+                  onChange={e => setStudentSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
               </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-[#fafbff] dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                      <th className="px-6 py-4 w-14">#</th>
-                      <th className="px-6 py-4">Student Name</th>
-                      <th className="px-6 py-4">Email</th>
-                      <th className="px-6 py-4">Current Status</th>
-                      <th className="px-6 py-4">Attendance %</th>
-                      <th className="px-6 py-4">Classes Attended</th>
-                      <th className="px-6 py-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((row, idx) => {
-                        const avatarBg = STUDENT_AVATAR_PALETTE[idx % STUDENT_AVATAR_PALETTE.length]
-                        const firstChar = (row.name?.trim()?.charAt(0) || 'S').toUpperCase()
-                        
-                        // Status badge logic
-                        const pct = row.pct || 0
-                        const isActive = pct >= 75
-                        const isAtRisk = pct >= 50 && pct < 75
-
-                        const statusLabel = isActive ? 'Active' : isAtRisk ? 'At Risk' : 'Critical'
-                        const statusBadgeCls = isActive
-                          ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                          : isAtRisk
-                          ? 'bg-amber-100/90 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                          : 'bg-rose-100/90 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-
-                        const attendedPresent = row.present || 0
-                        const attendedTotal = row.total || detail?.classes?.length || 0
-
-                        return (
-                          <tr
-                            key={row.studentId || idx}
-                            className="hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors"
-                          >
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-500 dark:text-gray-400">
-                              {idx + 1}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3.5">
-                                <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${avatarBg}`}>
-                                  {firstChar}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
-                                    {row.name}
-                                  </p>
-                                  {row.enrollmentNo && (
-                                    <p className="text-[11px] text-gray-400 mt-0.5">{row.enrollmentNo}</p>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                              {row.email || '—'}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold ${statusBadgeCls}`}>
-                                {statusLabel}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm font-bold text-gray-800 dark:text-gray-100">
-                              {pct}%
-                            </td>
-                            <td className="px-6 py-4 text-sm font-medium text-gray-600 dark:text-gray-300">
-                              {attendedPresent} / {attendedTotal}
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (row.studentId) {
-                                    router.push(`/admin/students/${row.studentId}`)
-                                  } else {
-                                    router.push(`/admin/students?search=${encodeURIComponent(row.name)}`)
-                                  }
-                                }}
-                                className="inline-flex items-center gap-1.5 text-sm font-bold text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
-                              >
-                                <Eye size={16} />
-                                <span>View Profile</span>
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400">
-                          {studentSearch ? 'No students match your search filter.' : 'No students found in this batch.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="text-xs text-gray-500 font-medium">
+                Showing <span className="font-semibold text-gray-800 dark:text-gray-200">{filteredStudents.length}</span> of {studentList.length} students
               </div>
             </div>
-          ) : (
-            /* Daily Attendance Grid Matrix */
-            <GlassCard className="p-5">
-              <AttendanceMatrix classes={detail.classes} matrix={detail.matrix} />
-            </GlassCard>
-          )
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#fafbff] dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    <th className="px-6 py-4 w-14">#</th>
+                    <th className="px-6 py-4">Student Name</th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">Current Status</th>
+                    <th className="px-6 py-4">Attendance %</th>
+                    <th className="px-6 py-4">Classes Attended</th>
+                    <th className="px-6 py-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
+                  {filteredStudents.length > 0 ? (
+                    filteredStudents.map((row, idx) => {
+                      const avatarBg = STUDENT_AVATAR_PALETTE[idx % STUDENT_AVATAR_PALETTE.length]
+                      const firstChar = (row.name?.trim()?.charAt(0) || 'S').toUpperCase()
+                      
+                      // Status badge logic
+                      const pct = row.pct || 0
+                      const isActive = pct >= 75
+                      const isAtRisk = pct >= 50 && pct < 75
+
+                      const statusLabel = isActive ? 'Active' : isAtRisk ? 'At Risk' : 'Critical'
+                      const statusBadgeCls = isActive
+                        ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : isAtRisk
+                        ? 'bg-amber-100/90 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                        : 'bg-rose-100/90 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+
+                      const attendedPresent = row.present || 0
+                      const attendedTotal = row.total || detail?.classes?.length || 0
+
+                      return (
+                        <tr
+                          key={row.studentId || idx}
+                          className="hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors"
+                        >
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-500 dark:text-gray-400">
+                            {idx + 1}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3.5">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${avatarBg}`}>
+                                {firstChar}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
+                                  {row.name}
+                                </p>
+                                {row.enrollmentNo && (
+                                  <p className="text-[11px] text-gray-400 mt-0.5">{row.enrollmentNo}</p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                            {row.email || '—'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold ${statusBadgeCls}`}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm font-bold text-gray-800 dark:text-gray-100">
+                            {pct}%
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-600 dark:text-gray-300">
+                            {attendedPresent} / {attendedTotal}
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (row.studentId) {
+                                  router.push(`/admin/students/${row.studentId}`)
+                                } else {
+                                  router.push(`/admin/students?search=${encodeURIComponent(row.name)}`)
+                                }
+                              }}
+                              className="inline-flex items-center gap-1.5 text-sm font-bold text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
+                            >
+                              <Eye size={16} />
+                              <span>View Profile</span>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400">
+                        {studentSearch ? 'No students match your search filter.' : 'No students found in this batch.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : null}
       </div>
     )
@@ -1576,11 +1539,13 @@ function CommandCenterStrip({ refreshKey = 0 }) {
 
 // ─── TAB 5: Today ───────────────────────────────────────────────────────────────
 
-function TodayTab({ onMarkAttendance, onViewAttendance }) {
+function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [detailsClass, setDetailsClass] = useState(null)
+  const [deletingClass, setDeletingClass] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const dateInputRef = useRef(null)
 
@@ -1604,21 +1569,32 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const handleConfirmDelete = async () => {
+    if (!deletingClass?.classId) return
+    setIsDeleting(true)
+    try {
+      await adminApi.deleteClass(deletingClass.classId)
+      toast.success('Class deleted successfully')
+      setDeletingClass(null)
+      loadClasses(selectedDate)
+      onClassDeleted?.()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to delete class')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   useEffect(() => {
     loadClasses(selectedDate)
   }, [selectedDate, loadClasses])
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
-  const isPastDisabled = selectedDate <= todayStr
 
   const handlePrevDay = () => {
-    if (selectedDate <= todayStr) return
     const d = new Date(selectedDate + 'T00:00:00')
     d.setDate(d.getDate() - 1)
-    const nextDateStr = format(d, 'yyyy-MM-dd')
-    if (nextDateStr >= todayStr) {
-      setSelectedDate(nextDateStr)
-    }
+    setSelectedDate(format(d, 'yyyy-MM-dd'))
   }
 
   const handleNextDay = () => {
@@ -1640,6 +1616,30 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
   const formattedHeaderDate = format(dateObj, 'EEE, MMM d, yyyy')
 
   // Calculate timing & status helper
+  // Get current local time as "YYYY-MM-DDTHH:MM:SS" string (same format as backend).
+  // String comparison on ISO timestamps is perfectly correct and timezone-proof.
+  const getLocalISONow = () => {
+    const now = new Date()
+    const yr = now.getFullYear()
+    const mo = String(now.getMonth() + 1).padStart(2, '0')
+    const dy = String(now.getDate()).padStart(2, '0')
+    const hr = String(now.getHours()).padStart(2, '0')
+    const mn = String(now.getMinutes()).padStart(2, '0')
+    const sc = String(now.getSeconds()).padStart(2, '0')
+    return `${yr}-${mo}-${dy}T${hr}:${mn}:${sc}`
+  }
+  // Normalise backend value (string or array) to "YYYY-MM-DDTHH:MM:SS"
+  const toISOStr = (val) => {
+    if (!val) return null
+    if (Array.isArray(val)) {
+      const [yr, mo, dy, hr = 0, mn = 0, sc = 0] = val
+      const p = (n) => String(n).padStart(2, '0')
+      return `${yr}-${p(mo)}-${p(dy)}T${p(hr)}:${p(mn)}:${p(sc)}`
+    }
+    const s = String(val).replace('Z', '').replace(/[+-]\d{2}:\d{2}$/, '').replace(' ', 'T')
+    return s.slice(0, 19)
+  }
+
   const getClassScheduleInfo = (c) => {
     let startTimeStr = '—'
     let endTimeStr = '—'
@@ -1647,35 +1647,66 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
     let isUpcoming = true
     let isCompleted = c.status === 'COMPLETED'
 
-    if (c.date) {
-      const dt = new Date(c.date)
-      startTimeStr = format(dt, 'hh:mm a')
-      const endDt = new Date(dt.getTime() + 60 * 60 * 1000)
-      endTimeStr = format(endDt, 'hh:mm a')
+    const startISO = toISOStr(c.date)
+    const endISO   = toISOStr(c.scheduledEnd)
 
-      if (c.timing && c.timing.includes('-')) {
-        const parts = c.timing.split('-')
-        if (parts[0]?.trim()) startTimeStr = parts[0].trim()
-        if (parts[1]?.trim()) endTimeStr = parts[1].trim()
+    if (startISO) {
+      const sp = startISO.split(/[T:-]/).map(Number)
+      const startTime = new Date(sp[0], sp[1]-1, sp[2], sp[3]||0, sp[4]||0, sp[5]||0)
+      startTimeStr = format(startTime, 'hh:mm a')
+
+      if (endISO) {
+        const ep = endISO.split(/[T:-]/).map(Number)
+        const endTime = new Date(sp[0], sp[1]-1, sp[2], ep[3]||0, ep[4]||0, ep[5]||0)
+        endTimeStr = format(endTime, 'hh:mm a')
+      } else {
+        const endTime = new Date(sp[0], sp[1]-1, sp[2], (sp[3]||0)+1, sp[4]||0, sp[5]||0)
+        endTimeStr = format(endTime, 'hh:mm a')
       }
 
       if (isToday) {
-        const now = new Date()
-        if (now >= dt && now <= endDt) {
+        const now = getLocalISONow()
+        const todayClassDate = startISO.slice(0, 10)
+        const startTimeOnly = (startISO.slice(11, 19) || '00:00:00').padEnd(8, ':00')
+        let endTimeOnly = endISO ? (endISO.slice(11, 19) || '23:59:59').padEnd(8, ':00') : null
+        if (!endTimeOnly) {
+          const [sh = '10', sm = '00', ss = '00'] = startTimeOnly.split(':')
+          const endH = String((parseInt(sh, 10) + 1) % 24).padStart(2, '0')
+          endTimeOnly = `${endH}:${sm}:${ss}`
+        }
+
+        const todayStartISO = `${todayClassDate}T${startTimeOnly}`
+        const todayEndISO   = `${todayClassDate}T${endTimeOnly}`
+
+        if (now < todayStartISO) {
+          isUpcoming = true
+          isOngoing = false
+          isCompleted = false
+        } else if (now >= todayStartISO && now <= todayEndISO) {
           isOngoing = true
           isUpcoming = false
-        } else if (now > endDt) {
+          isCompleted = false
+        } else {
+          // now > todayEndISO
           isUpcoming = false
+          isOngoing = false
           isCompleted = true
         }
       } else {
-        const todayMid = new Date()
-        todayMid.setHours(0, 0, 0, 0)
-        if (dateObj < todayMid) {
+        const todayISO = getLocalISONow().slice(0, 10)
+        const classISO = startISO.slice(0, 10)
+        if (classISO < todayISO) {
           isUpcoming = false
           isCompleted = true
+        } else if (classISO > todayISO) {
+          isUpcoming = true
+          isCompleted = false
         }
       }
+    } else if (c.timing && c.timing.includes('-')) {
+      const parts = c.timing.split('-')
+      if (parts[0]?.trim()) startTimeStr = parts[0].trim()
+      if (parts[1]?.trim()) endTimeStr = parts[1].trim()
     }
 
     const hasAttendanceData = (c.present > 0 || c.absent > 0)
@@ -1695,7 +1726,16 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
     }
   }
 
-  const displayedClasses = showAll ? classes : classes.slice(0, 6)
+  // Sort classes: ONGOING first, then UPCOMING, then COMPLETED
+  const statusOrder = (c) => {
+    const info = getClassScheduleInfo(c)
+    if (info.isOngoing)   return 0
+    if (info.isUpcoming)  return 1
+    return 2 // completed / other
+  }
+
+  const sortedClasses = [...classes].sort((a, b) => statusOrder(a) - statusOrder(b))
+  const displayedClasses = showAll ? sortedClasses : sortedClasses.slice(0, 6)
 
   return (
     <div className="space-y-4">
@@ -1713,13 +1753,8 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrevDay}
-              disabled={isPastDisabled}
-              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors shadow-sm ${
-                isPastDisabled
-                  ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-800 text-gray-300 dark:text-gray-600 bg-gray-50 dark:bg-gray-800/40'
-                  : 'border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40'
-              }`}
-              title={isPastDisabled ? 'Past dates are disabled' : 'Previous Day'}
+              className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors shadow-sm"
+              title="Previous Day"
             >
               <ChevronLeft size={17} />
             </button>
@@ -1743,15 +1778,10 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
               <input
                 ref={dateInputRef}
                 type="date"
-                min={todayStr}
                 value={selectedDate}
                 onChange={e => {
                   if (e.target.value) {
-                    if (e.target.value < todayStr) {
-                      setSelectedDate(todayStr)
-                    } else {
-                      setSelectedDate(e.target.value)
-                    }
+                    setSelectedDate(e.target.value)
                   }
                 }}
                 onClick={e => {
@@ -1929,19 +1959,30 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
                       >
                         <Eye size={14} /> View Attendance
                       </button>
-                    ) : (info.isOngoing || (isToday && c.classId)) ? (
-                      <button
-                        onClick={() => {
-                          if (c.batchId && c.classId) {
-                            onMarkAttendance?.(c.batchId, c.classId)
-                          } else {
-                            setDetailsClass(c)
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-violet-600 text-white hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm"
-                      >
-                        <CheckSquare size={14} /> Mark Attendance
-                      </button>
+                    ) : c.classId ? (
+                      info.isUpcoming ? (
+                        // Upcoming class — attendance cannot be marked yet
+                        <button
+                          disabled
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed border border-gray-200 dark:border-gray-700"
+                          title="Cannot mark attendance for upcoming classes"
+                        >
+                          <CheckSquare size={14} /> Mark Attendance
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (c.batchId && c.classId) {
+                              onMarkAttendance?.(c.batchId, c.classId)
+                            } else {
+                              setDetailsClass(c)
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-violet-600 text-white hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm"
+                        >
+                          <CheckSquare size={14} /> Mark Attendance
+                        </button>
+                      )
                     ) : (
                       <button
                         onClick={() => setDetailsClass(c)}
@@ -1961,6 +2002,16 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
                       >
                         <ExternalLink size={14} />
                       </a>
+                    )}
+
+                    {c.classId && !info.isOngoing && (
+                      <button
+                        onClick={() => setDeletingClass(c)}
+                        className="p-2 rounded-xl border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-700 transition-colors"
+                        title="Delete Class"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     )}
                   </div>
 
@@ -2065,6 +2116,39 @@ function TodayTab({ onMarkAttendance, onViewAttendance }) {
                   Mark / View Attendance
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800 text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Class Session?</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Are you sure you want to delete <span className="font-semibold text-gray-700 dark:text-gray-300">"{deletingClass.title || deletingClass.courseTitle || 'this class'}"</span>? This will remove the class and its attendance records.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setDeletingClass(null)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold text-xs hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>
@@ -2338,6 +2422,7 @@ export default function AttendancePage() {
           <TodayTab
             onMarkAttendance={handleMarkAttendanceFromToday}
             onViewAttendance={handleViewAttendanceFromToday}
+            onClassDeleted={handleRefresh}
           />
         )}
         {activeTab === 'mark'        && (

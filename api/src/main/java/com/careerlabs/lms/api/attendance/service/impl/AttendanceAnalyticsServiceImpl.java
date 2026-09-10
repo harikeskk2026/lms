@@ -307,6 +307,9 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 timing = cls.getBatch().getTiming();
             }
 
+            LocalDateTime classStartTime = cls.getDate();
+            LocalDateTime classEndTime = null;
+
             MeetingLink linkedMeeting = meetingByDailyClassId.get(cls.getId());
             if (linkedMeeting == null && cls.getBatch() != null) {
                 String batchKey = cls.getBatch().getId() + "|" + (cls.getTitle() != null ? cls.getTitle().trim().toLowerCase() : "");
@@ -316,8 +319,14 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 }
             }
 
-            if (linkedMeeting != null && linkedMeeting.getHostName() != null && !linkedMeeting.getHostName().isBlank()) {
-                trainerName = linkedMeeting.getHostName();
+            if (linkedMeeting != null) {
+                if (linkedMeeting.getScheduledStart() != null) {
+                    classStartTime = linkedMeeting.getScheduledStart();
+                }
+                classEndTime = linkedMeeting.getScheduledEnd();
+                if (linkedMeeting.getHostName() != null && !linkedMeeting.getHostName().isBlank()) {
+                    trainerName = linkedMeeting.getHostName();
+                }
             }
 
             String meetLink = cls.getMeetLink();
@@ -325,11 +334,19 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 meetLink = linkedMeeting.getMeetUrl();
             }
 
+            if (classStartTime != null) {
+                java.time.format.DateTimeFormatter timeFmt = java.time.format.DateTimeFormatter.ofPattern("hh:mm a");
+                String startStr = classStartTime.format(timeFmt);
+                String endStr = classEndTime != null ? classEndTime.format(timeFmt) : classStartTime.plusHours(1).format(timeFmt);
+                timing = startStr + " - " + endStr;
+            }
+
             result.add(new TodayClassResponse(
                     cls.getId(),
                     cls.getBatch() != null ? cls.getBatch().getId() : null,
                     cls.getBatch() != null ? cls.getBatch().getName() : "All Batches",
-                    cls.getDate(),
+                    classStartTime,
+                    classEndTime,
                     cls.getTitle(),
                     cls.getStatus(),
                     present, absent, totalStudents,
@@ -377,11 +394,21 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                     courseTitle = m.getCourse().getTitle();
                 }
 
+                LocalDateTime classStartTime = m.getScheduledStart();
+                LocalDateTime classEndTime = m.getScheduledEnd();
+                if (classStartTime != null) {
+                    java.time.format.DateTimeFormatter timeFmt = java.time.format.DateTimeFormatter.ofPattern("hh:mm a");
+                    String startStr = classStartTime.format(timeFmt);
+                    String endStr = classEndTime != null ? classEndTime.format(timeFmt) : classStartTime.plusHours(1).format(timeFmt);
+                    timing = startStr + " - " + endStr;
+                }
+
                 result.add(new TodayClassResponse(
                         m.getDailyClass() != null ? m.getDailyClass().getId() : null,
                         m.getBatch() != null ? m.getBatch().getId() : null,
                         m.getBatch() != null ? m.getBatch().getName() : (courseTitle != null ? courseTitle : "All Batches"),
-                        m.getScheduledStart(),
+                        classStartTime,
+                        classEndTime,
                         m.getTitle(),
                         ClassStatus.SCHEDULED,
                         0, 0, totalStudents,

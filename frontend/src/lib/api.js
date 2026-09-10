@@ -160,6 +160,9 @@ export const adminApi = {
 
   // Classes
   getClasses: (params) => api.get('/admin/classes', { params }),
+  createClass: (data) => api.post('/admin/classes', data),
+  updateClass: (id, data) => api.patch(`/admin/classes/${id}`, data),
+  deleteClass: (id) => api.delete(`/admin/classes/${id}`),
 
   // Attendance
   getAttendanceSheet: (classId) => api.get(`/admin/attendance/${classId}`),
@@ -324,7 +327,7 @@ export const studentApi = {
   getMaterials: (id) => api.get(`/student/courses/${id}/materials`),
   getClasses: (status) => api.get(`/student/classes?status=${status || ''}`),
   getAttendance: (month) => api.get(`/student/attendance?month=${month || ''}`),
-  getAttSummary: () => api.get('/student/attendance/summary'),
+  getAttSummary: (month) => api.get('/student/attendance/summary', { params: month ? { month } : {} }),
   getAttendanceTrend: () => api.get('/student/attendance/trend'),
   getAttendanceHealth: () => api.get('/student/attendance/health'),
   getAttendanceGoal: () => api.get('/student/attendance/goal'),

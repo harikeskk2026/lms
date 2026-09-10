@@ -25,7 +25,15 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
         {loading ? (
           <div className="h-24 rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" />
         ) : records.length === 0 ? (
-          <p className="text-sm text-gray-400">No class was scheduled for your batch on this day.</p>
+          <div className="text-center py-6 space-y-2">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">
+              ☕
+            </div>
+            <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">No Class Scheduled</p>
+            <p className="text-xs text-gray-400 max-w-xs mx-auto">
+              No classes were scheduled for your batch on this date. This day does not count against your attendance rate.
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {records.map(r => (
@@ -40,14 +48,23 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
                 </div>
                 {r.trainerId && <p className="text-xs text-gray-500">Trainer #{r.trainerId}</p>}
                 <p className="text-xs text-gray-500">{format(new Date(r.date), 'h:mm a, d MMM yyyy')}</p>
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
                   {r.attendanceId ? (
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg ${
+                      r.attendanceStatus === 'PRESENT' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                      r.attendanceStatus === 'ABSENT' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                      'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                    }`}>
                       {r.attendanceStatus}
                     </span>
                   ) : (
                     <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
                       Not Marked
+                    </span>
+                  )}
+                  {r.correctionPending && (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                      ⏳ Pending Request: {r.correctionRequestedStatus || 'PRESENT'}
                     </span>
                   )}
                   {r.markedAt && (
@@ -66,10 +83,16 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
                     </a>
                   )}
                 </div>
-                <button onClick={() => onRequestCorrection(r)}
-                  className="mt-2 text-xs font-semibold text-purple-600 border border-purple-200 dark:border-purple-800 rounded-xl px-3 py-1.5 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
-                  {r.attendanceId ? 'Request Correction' : 'Report Missing Attendance'}
-                </button>
+                {r.correctionPending ? (
+                  <p className="mt-2 text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-900/20 rounded-xl px-3 py-1.5 border border-amber-200 dark:border-amber-800 inline-block">
+                    Request for {r.correctionRequestedStatus || 'PRESENT'} has been sent to Admin (Pending)
+                  </p>
+                ) : (
+                  <button onClick={() => onRequestCorrection(r)}
+                    className="mt-2 text-xs font-semibold text-purple-600 border border-purple-200 dark:border-purple-800 rounded-xl px-3 py-1.5 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
+                    {r.attendanceStatus === 'ABSENT' ? 'Request Present from Admin' : (r.attendanceId ? 'Request Correction' : 'Report Missing Attendance')}
+                  </button>
+                )}
               </div>
             ))}
           </div>

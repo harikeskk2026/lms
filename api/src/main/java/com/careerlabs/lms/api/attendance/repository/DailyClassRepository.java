@@ -26,6 +26,8 @@ public interface DailyClassRepository extends JpaRepository<DailyClass, Long> {
 
     List<DailyClass> findByBatchIdAndDateBetweenOrderByDateAsc(Long batchId, LocalDateTime startDate, LocalDateTime endDate);
 
+    List<DailyClass> findByBatchIdInAndDateBetweenOrderByDateAsc(java.util.Collection<Long> batchIds, LocalDateTime startDate, LocalDateTime endDate);
+
     long countByBatchIdAndStatus(Long batchId, ClassStatus status);
 
     List<DailyClass> findByDateBetweenOrderByDateAsc(LocalDateTime start, LocalDateTime end);

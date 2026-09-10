@@ -9,9 +9,7 @@ const STATUS_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE']
 
 export default function CorrectionRequestModal({ record, onClose, onSubmitted }) {
   const [mounted, setMounted] = useState(false)
-  const [requestedStatus, setRequestedStatus] = useState(
-    record.attendanceStatus === 'ABSENT' ? 'LEAVE' : 'PRESENT'
-  )
+  const [requestedStatus, setRequestedStatus] = useState('PRESENT')
   const [reason, setReason] = useState('')
   const [comment, setComment] = useState('')
   const [documentUrl, setDocumentUrl] = useState('')
@@ -32,7 +30,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
         comment: comment || undefined,
         documentUrl: documentUrl || undefined,
       })
-      toast.success('Correction request submitted')
+      toast.success(requestedStatus === 'PRESENT' ? 'Present request sent to admin' : 'Correction request submitted')
       onSubmitted()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to submit request')
@@ -49,7 +47,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
 
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-800 dark:text-white">
-            {record.attendanceId ? 'Request Correction' : 'Report Missing Attendance'}
+            {record.attendanceStatus === 'ABSENT' ? 'Request Present from Admin' : (record.attendanceId ? 'Request Correction' : 'Report Missing Attendance')}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
         </div>

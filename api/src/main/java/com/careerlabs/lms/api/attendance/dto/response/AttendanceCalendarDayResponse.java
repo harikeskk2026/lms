@@ -17,6 +17,23 @@ public record AttendanceCalendarDayResponse(
         Instant markedAt,
         String meetLink,
         String recordingUrl,
-        Long meetingLinkId
+        Long meetingLinkId,
+        boolean correctionPending,
+        AttendStatus correctionRequestedStatus
 ) {
+    public AttendanceCalendarDayResponse(
+            Long attendanceId,
+            Long classId,
+            String classTitle,
+            Long trainerId,
+            LocalDateTime date,
+            ClassStatus classStatus,
+            AttendStatus attendanceStatus,
+            Instant markedAt,
+            String meetLink,
+            String recordingUrl,
+            Long meetingLinkId
+    ) {
+        this(attendanceId, classId, classTitle, trainerId, date, classStatus, attendanceStatus, markedAt, meetLink, recordingUrl, meetingLinkId, false, null);
+    }
 }

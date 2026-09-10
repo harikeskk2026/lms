@@ -1,4 +1,4 @@
-export default function ProgressRing({ pct = 0, size = 90, strokeWidth = 8, color = '#6d28d9', label = '' }) {
+export default function ProgressRing({ pct = 0, size = 90, strokeWidth = 8, color = '#6d28d9', trackColor = '#e9d5ff', label = '' }) {
   const r   = (size - strokeWidth) / 2
   const circ = 2 * Math.PI * r
   const offset = circ - (pct / 100) * circ
@@ -7,7 +7,7 @@ export default function ProgressRing({ pct = 0, size = 90, strokeWidth = 8, colo
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
       <circle
         cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke="#e9d5ff" strokeWidth={strokeWidth}
+        fill="none" stroke={trackColor} strokeWidth={strokeWidth}
       />
       <circle
         cx={size / 2} cy={size / 2} r={r}

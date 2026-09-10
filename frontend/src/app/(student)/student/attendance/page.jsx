@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { format, addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight, Flame, AlertTriangle, TrendingUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Flame, AlertTriangle, TrendingUp, Calendar } from 'lucide-react'
 import { useAttendance } from '@/hooks/useStudentDashboard'
 import AttendanceCalendar from '@/components/student/AttendanceCalendar'
 import AttendanceHealthCard from '@/components/student/AttendanceHealthCard'
@@ -20,7 +20,14 @@ const AttendanceTrendChart = dynamic(
   { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" /> }
 )
 
-function StatusChip({ status }) {
+function StatusChip({ status, correctionPending, requestedStatus }) {
+  if (correctionPending) {
+    return (
+      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+        ⏳ {requestedStatus || 'PRESENT'} PENDING
+      </span>
+    )
+  }
   const cls =
     status === 'PRESENT' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
     status === 'ABSENT'  ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
@@ -34,13 +41,22 @@ function StatusChip({ status }) {
   )
 }
 
+const formatJoiningDate = (d) => {
+  if (!d) return null
+  try {
+    const dateObj = typeof d === 'string' && d.length === 10 ? new Date(d + 'T00:00:00') : new Date(d)
+    return format(dateObj, 'dd MMM yyyy')
+  } catch {
+    return d
+  }
+}
 
 export default function AttendancePage() {
   const [activeMonth, setActiveMonth] = useState(format(new Date(), 'yyyy-MM'))
   const [view, setView]               = useState('calendar')
   const [trend, setTrend]             = useState([])
   const [trendLoading, setTrendLoading] = useState(true)
-  const { data, loading } = useAttendance(activeMonth)
+  const { data, loading, refetch }    = useAttendance(activeMonth)
 
   const [selectedDate, setSelectedDate]   = useState(null)
   const [dayRecords, setDayRecords]       = useState([])
@@ -70,11 +86,13 @@ export default function AttendancePage() {
       .finally(() => setTrendLoading(false))
   }, [])
 
-  // Compute deficit for 75%
-  const pct     = summary.percentage || 0
+  // Compute metrics
+  const pct     = summary.percentage !== undefined ? summary.percentage : 0
   const total   = (summary.present || 0) + (summary.absent || 0) + (summary.late || 0) + (summary.excused || 0)
-  const needed  = Math.max(0, Math.ceil(0.75 * total - (summary.present || 0)))
-  const isLow   = pct < 75 && total > 0
+  const overallPct = summary.overallPercentage !== undefined ? summary.overallPercentage : pct
+  const overallTotal = summary.overallTotal !== undefined ? summary.overallTotal : total
+  const needed  = summary.neededFor75 !== undefined ? summary.neededFor75 : Math.max(0, Math.ceil(0.75 * (overallTotal || total) - (summary.present || 0)))
+  const isLow   = overallPct < 75 && overallTotal > 0
 
   return (
     <div className="page-wrapper space-y-5">
@@ -86,7 +104,7 @@ export default function AttendancePage() {
             <div>
               <p className="font-semibold text-yellow-800 dark:text-yellow-300 text-sm">Low Attendance Warning</p>
               <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
-                Your attendance is {pct}%. You need to attend {needed} more classes to reach 75%.
+                Your overall attendance is {overallPct}%. You need to attend {needed} more classes to reach 75%.
               </p>
             </div>
           </div>
@@ -96,8 +114,16 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Attendance</h1>
-          <p className="text-sm text-gray-500">Track your class attendance history</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Attendance</h1>
+            {summary.joiningDate && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-sm">
+                <Calendar size={13} className="text-purple-500" />
+                Joined on {formatJoiningDate(summary.joiningDate)}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-500 mt-0.5">Track your class attendance history</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={prev} className="w-8 h-8 rounded-xl bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-800 flex items-center justify-center text-gray-500 hover:text-purple-600 transition-colors">
@@ -118,8 +144,8 @@ export default function AttendancePage() {
 
       {/* Health Score + Goal Tracker */}
       <div className="grid md:grid-cols-2 gap-4">
-        <AttendanceHealthCard />
-        <AttendanceGoalTracker />
+        <AttendanceHealthCard summary={summary} />
+        <AttendanceGoalTracker summary={summary} />
       </div>
 
       {/* Summary Strip */}
@@ -158,10 +184,23 @@ export default function AttendancePage() {
           <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
             <TrendingUp size={14} className="text-purple-600" />
             <div>
-              <p className="text-xs text-gray-500">Percentage</p>
-              <p className={`font-bold ${pct >= 75 ? 'text-purple-700 dark:text-purple-400' : 'text-yellow-600 dark:text-yellow-400'}`}>{pct}%</p>
+              <p className="text-xs text-gray-500">Month Rate</p>
+              <p className={`font-bold ${total > 0 ? (pct >= 75 ? 'text-purple-700 dark:text-purple-400' : 'text-yellow-600 dark:text-yellow-400') : 'text-gray-400'}`}>
+                {total > 0 ? `${pct}%` : '—'}
+              </p>
             </div>
           </div>
+          {summary.overallPercentage !== undefined && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-violet-50 dark:bg-violet-900/20 rounded-xl">
+              <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />
+              <div>
+                <p className="text-xs text-gray-500">Overall Rate</p>
+                <p className={`font-bold ${overallTotal > 0 ? (overallPct >= 75 ? 'text-violet-700 dark:text-violet-400' : 'text-yellow-600 dark:text-yellow-400') : 'text-gray-400'}`}>
+                  {overallTotal > 0 ? `${overallPct}%` : '—'}
+                </p>
+              </div>
+            </div>
+          )}
           {isLow && needed > 0 && (
             <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl">
               <AlertTriangle size={14} className="text-yellow-500" />
@@ -218,7 +257,11 @@ export default function AttendancePage() {
                       <td className="py-2.5 px-3 text-gray-500">{format(new Date(c.date), 'EEEE')}</td>
                       <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate">{c.classTitle}</td>
                       <td className="py-2.5 px-3">
-                        {c.status ? <StatusChip status={c.status} /> : <span className="text-xs text-gray-400">—</span>}
+                        {c.status ? (
+                          <StatusChip status={c.status} correctionPending={c.correctionPending} requestedStatus={c.correctionRequestedStatus} />
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -231,13 +274,21 @@ export default function AttendancePage() {
 
       {/* Attendance Trend Chart */}
       <div className="glass-card p-5">
-        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Attendance Trend (Last 8 Weeks)</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Attendance Performance & Analytics</h3>
+            <p className="text-xs text-gray-500">Session progression & cumulative attendance rate tracking</p>
+          </div>
+          {summary.joiningDate && (
+            <span className="self-start sm:self-auto text-[11px] px-2.5 py-1 rounded-full font-semibold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+              Active since {formatJoiningDate(summary.joiningDate)}
+            </span>
+          )}
+        </div>
         {trendLoading ? (
           <div className="h-[220px] rounded-xl bg-purple-50 dark:bg-purple-900/20 animate-pulse" />
-        ) : trend.length > 0 ? (
-          <AttendanceTrendChart trend={trend} />
         ) : (
-          <p className="text-sm text-gray-400 text-center py-10">No attendance data available yet.</p>
+          <AttendanceTrendChart trend={trend} calendar={calendar} summary={summary} />
         )}
       </div>
 
@@ -266,7 +317,9 @@ export default function AttendancePage() {
                     <tr key={i} className="border-b border-purple-50 dark:border-purple-900/20 hover:bg-purple-50/30 dark:hover:bg-purple-900/10">
                       <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 text-xs">{format(new Date(c.date), 'MMM d, yyyy')}</td>
                       <td className="py-2.5 px-3 text-gray-600 dark:text-gray-400 text-xs max-w-xs truncate">{c.classTitle}</td>
-                      <td className="py-2.5 px-3"><StatusChip status={c.status} /></td>
+                      <td className="py-2.5 px-3">
+                        <StatusChip status={c.status} correctionPending={c.correctionPending} requestedStatus={c.correctionRequestedStatus} />
+                      </td>
                       <td className="py-2.5 px-3 text-gray-400 text-xs">
                         {c.markedAt ? format(new Date(c.markedAt), 'h:mm a') : '—'}
                       </td>
@@ -303,6 +356,7 @@ export default function AttendancePage() {
             setCorrectionRecord(null)
             setSelectedDate(null)
             correctionsRef.current?.reload()
+            refetch()
           }}
         />
       )}

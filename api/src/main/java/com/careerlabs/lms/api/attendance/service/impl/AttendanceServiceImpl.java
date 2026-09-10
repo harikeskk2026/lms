@@ -19,17 +19,24 @@ import com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse;
 import com.careerlabs.lms.api.attendance.entity.Attendance;
 import com.careerlabs.lms.api.attendance.entity.AttendanceAlert;
 import com.careerlabs.lms.api.attendance.entity.AttendanceAuditLog;
+import com.careerlabs.lms.api.attendance.entity.AttendanceCorrection;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import com.careerlabs.lms.api.attendance.entity.ClassStatus;
+import com.careerlabs.lms.api.attendance.entity.CorrectionStatus;
 import com.careerlabs.lms.api.attendance.entity.DailyClass;
+import com.careerlabs.lms.api.attendance.entity.RiskLevel;
 import com.careerlabs.lms.api.attendance.repository.AttendanceAlertRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceAuditLogRepository;
+import com.careerlabs.lms.api.attendance.repository.AttendanceCorrectionRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.attendance.service.AttendanceService;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.meeting.entity.MeetingLink;
+import com.careerlabs.lms.api.meeting.entity.MeetingStatus;
+import com.careerlabs.lms.api.meeting.repository.MeetingAttendeeRepository;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.notification.entity.Notification;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
@@ -50,6 +57,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
@@ -71,31 +79,37 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final DailyClassRepository dailyClassRepository;
     private final AttendanceRepository attendanceRepository;
     private final AttendanceAlertRepository attendanceAlertRepository;
+    private final AttendanceCorrectionRepository attendanceCorrectionRepository;
     private final BatchRepository batchRepository;
     private final StudentRepository studentRepository;
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final MeetingLinkRepository meetingLinkRepository;
+    private final MeetingAttendeeRepository meetingAttendeeRepository;
     private final AttendanceAuditLogRepository attendanceAuditLogRepository;
 
     public AttendanceServiceImpl(
             DailyClassRepository dailyClassRepository,
             AttendanceRepository attendanceRepository,
             AttendanceAlertRepository attendanceAlertRepository,
+            AttendanceCorrectionRepository attendanceCorrectionRepository,
             BatchRepository batchRepository,
             StudentRepository studentRepository,
             NotificationRepository notificationRepository,
             UserRepository userRepository,
             MeetingLinkRepository meetingLinkRepository,
+            MeetingAttendeeRepository meetingAttendeeRepository,
             AttendanceAuditLogRepository attendanceAuditLogRepository) {
         this.dailyClassRepository = dailyClassRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendanceAlertRepository = attendanceAlertRepository;
+        this.attendanceCorrectionRepository = attendanceCorrectionRepository;
         this.batchRepository = batchRepository;
         this.studentRepository = studentRepository;
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.meetingLinkRepository = meetingLinkRepository;
+        this.meetingAttendeeRepository = meetingAttendeeRepository;
         this.attendanceAuditLogRepository = attendanceAuditLogRepository;
     }
 
@@ -184,6 +198,28 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         DailyClass updated = dailyClassRepository.save(dailyClass);
         return toDailyClassResponse(updated);
+    }
+
+    @Override
+    @Transactional
+    public void deleteClass(Long classId) {
+        DailyClass dailyClass = dailyClassRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        // 1. Delete associated MeetingLinks if any
+        List<MeetingLink> meetings = meetingLinkRepository.findByDailyClassIn(List.of(dailyClass));
+        for (MeetingLink m : meetings) {
+            meetingAttendeeRepository.deleteByMeetingId(m.getId());
+            meetingLinkRepository.delete(m);
+        }
+
+        // 2. Delete corrections, audit logs, and attendance records
+        attendanceCorrectionRepository.deleteByDailyClassId(classId);
+        attendanceAuditLogRepository.deleteByDailyClassId(classId);
+        attendanceRepository.deleteByDailyClassId(classId);
+
+        // 3. Delete the class
+        dailyClassRepository.delete(dailyClass);
     }
 
     @Override
@@ -319,25 +355,39 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AttendanceCalendarDayResponse> getCalendarDay(Long userId, LocalDate date) {
         Student student = resolveStudent(userId);
+        ensurePastClassesMarked(student);
+
+        List<AttendanceCorrection> pendingCorrections = attendanceCorrectionRepository.findByStudentIdAndStatus(student.getId(), CorrectionStatus.PENDING);
+        Map<Long, AttendanceCorrection> pendingByAttendanceId = pendingCorrections.stream()
+                .filter(c -> c.getAttendance() != null)
+                .collect(Collectors.toMap(c -> c.getAttendance().getId(), c -> c, (c1, c2) -> c1));
 
         List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
         List<AttendanceCalendarDayResponse> marked = attendances.stream()
                 .filter(a -> a.getDailyClass().getDate().toLocalDate().equals(date))
-                .map(a -> new AttendanceCalendarDayResponse(
-                        a.getId(),
-                        a.getDailyClass().getId(),
-                        a.getDailyClass().getTitle(),
-                        a.getDailyClass().getBatch() != null ? a.getDailyClass().getBatch().getTrainerId() : null,
-                        a.getDailyClass().getDate(),
-                        a.getDailyClass().getStatus(),
-                        a.getStatus(),
-                        a.getMarkedAt(),
-                        a.getDailyClass().getMeetLink(),
-                        a.getDailyClass().getRecordingUrl(),
-                        null))
+                .map(a -> {
+                    AttendanceCorrection pending = pendingByAttendanceId.get(a.getId());
+                    boolean correctionPending = pending != null;
+                    AttendStatus reqStatus = pending != null ? pending.getRequestedStatus() : null;
+                    return new AttendanceCalendarDayResponse(
+                            a.getId(),
+                            a.getDailyClass().getId(),
+                            a.getDailyClass().getTitle(),
+                            a.getDailyClass().getBatch() != null ? a.getDailyClass().getBatch().getTrainerId() : null,
+                            a.getDailyClass().getDate(),
+                            a.getDailyClass().getStatus(),
+                            a.getStatus(),
+                            a.getMarkedAt(),
+                            a.getDailyClass().getMeetLink(),
+                            a.getDailyClass().getRecordingUrl(),
+                            null,
+                            correctionPending,
+                            reqStatus
+                    );
+                })
                 .toList();
 
         // Classes scheduled for the student's batch that day but never marked at all for
@@ -981,27 +1031,108 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public StudentAttendanceSummaryResponse getStudentAttendanceSummary(Long userId) {
-        Student student = resolveStudent(userId);
-
-        List<Attendance> attendances = attendanceRepository.findByStudentId(student.getId());
-
-        int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
-        int absent = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
-        int late = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
-        int total = attendances.size();
-
-        int percentage = total > 0 ? (int) Math.round((present * 100.0) / total) : 0;
-        int neededFor75 = Math.max(0, (int) Math.ceil((0.75 * total - present)));
-
-        return new StudentAttendanceSummaryResponse(present, absent, late, total, percentage, neededFor75);
+        return getStudentAttendanceSummary(userId, null);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
+    public StudentAttendanceSummaryResponse getStudentAttendanceSummary(Long userId, String month) {
+        Student student = resolveStudent(userId);
+        ensurePastClassesMarked(student);
+        LocalDate joiningDate = resolveJoiningDate(student);
+
+        List<Attendance> allAttendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
+
+        List<Attendance> validAttendances = allAttendances.stream()
+                .filter(a -> a.getDailyClass() != null && a.getDailyClass().getDate() != null)
+                .toList();
+
+        // Calculate overall metrics
+        int overallPresent = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        int overallAbsent = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
+        int overallLate = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
+        int overallExcused = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LEAVE || a.getStatus() == AttendStatus.EXCUSED).count();
+        int overallTotal = validAttendances.size();
+        int overallEffectiveTotal = overallPresent + overallAbsent + overallLate;
+        int overallPercentage = overallEffectiveTotal > 0 ? (int) Math.round(((overallPresent + overallLate) * 100.0) / overallEffectiveTotal) : 0;
+
+        // Month-filtered metrics if month parameter provided (e.g. "2026-09")
+        List<Attendance> monthAttendances = validAttendances;
+        if (month != null && !month.isBlank()) {
+            monthAttendances = validAttendances.stream()
+                    .filter(a -> a.getDailyClass().getDate().format(DateTimeFormatter.ofPattern("yyyy-MM")).equals(month))
+                    .toList();
+        }
+
+        int present = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        int absent = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
+        int late = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
+        int excused = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LEAVE || a.getStatus() == AttendStatus.EXCUSED).count();
+        int total = monthAttendances.size();
+
+        int effectiveTotal = present + absent + late;
+        int percentage = effectiveTotal > 0 ? (int) Math.round(((present + late) * 100.0) / effectiveTotal) : 0;
+
+        int neededFor75 = 0;
+        if (overallPercentage < 75 && overallEffectiveTotal > 0) {
+            double raw = (0.75 * overallEffectiveTotal - (overallPresent + overallLate)) / 0.25;
+            neededFor75 = Math.max(0, (int) Math.ceil(raw));
+        }
+
+        // Calculate consecutive attendance streak descending from most recent class
+        int streak = 0;
+        for (Attendance a : validAttendances) {
+            if (a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE) {
+                streak++;
+            } else if (a.getStatus() == AttendStatus.ABSENT) {
+                break;
+            }
+        }
+
+        int trendWindow = 5;
+        List<Attendance> recent = validAttendances.size() > trendWindow
+                ? validAttendances.subList(0, trendWindow)
+                : validAttendances;
+        int recentPresent = (int) recent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
+        int recentCountable = (int) recent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
+        int currentPercentage = recentCountable > 0 ? (int) Math.round((recentPresent * 100.0) / recentCountable) : overallPercentage;
+
+        List<Attendance> priorToRecent = validAttendances.size() > trendWindow
+                ? validAttendances.subList(trendWindow, Math.min(trendWindow * 2, validAttendances.size()))
+                : List.of();
+        int priorPresent = (int) priorToRecent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
+        int priorCountable = (int) priorToRecent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
+        int previousPercentage = priorCountable > 0 ? (int) Math.round((priorPresent * 100.0) / priorCountable) : currentPercentage;
+
+        int improvement = currentPercentage - previousPercentage;
+        RiskLevel riskLevel = overallEffectiveTotal == 0 ? RiskLevel.HEALTHY : (overallPercentage >= 75 ? RiskLevel.HEALTHY : (overallPercentage >= 60 ? RiskLevel.AT_RISK : RiskLevel.CRITICAL));
+
+        return new StudentAttendanceSummaryResponse(
+                present,
+                absent,
+                late,
+                excused,
+                total,
+                percentage,
+                neededFor75,
+                streak,
+                joiningDate,
+                previousPercentage,
+                currentPercentage,
+                improvement,
+                riskLevel,
+                overallPercentage,
+                overallTotal
+        );
+    }
+
+    @Override
+    @Transactional
     public List<AttendanceAnalyticsResponse.DailyTrendPoint> getStudentAttendanceTrend(Long userId) {
         Student student = resolveStudent(userId);
+        ensurePastClassesMarked(student);
 
         List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
         if (attendances.isEmpty()) {
@@ -1010,8 +1141,19 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // Sort ascending by class date
         List<Attendance> sorted = attendances.stream()
+                .filter(a -> a.getDailyClass() != null && a.getDailyClass().getDate() != null)
                 .sorted(Comparator.comparing(a -> a.getDailyClass().getDate()))
                 .toList();
+
+        if (sorted.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate earliestDate = sorted.get(0).getDailyClass().getDate().toLocalDate();
+        LocalDate joiningDate = student.getJoiningDate();
+        if (joiningDate != null && joiningDate.isBefore(earliestDate)) {
+            earliestDate = joiningDate;
+        }
 
         WeekFields weekFields = WeekFields.of(DayOfWeek.MONDAY, 1);
         Map<String, List<Attendance>> groupedByWeek = new LinkedHashMap<>();
@@ -1020,7 +1162,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         for (Attendance a : sorted) {
             LocalDate date = a.getDailyClass().getDate().toLocalDate();
             LocalDate monday = date.with(weekFields.dayOfWeek(), 1);
-            String weekLabel = monday.format(labelFmt);
+            // Never start a week before the student's earliest class or joining date
+            LocalDate effectiveWeekStart = monday.isBefore(earliestDate) ? earliestDate : monday;
+            String weekLabel = effectiveWeekStart.format(labelFmt);
             groupedByWeek.computeIfAbsent(weekLabel, k -> new ArrayList<>()).add(a);
         }
 
@@ -1034,13 +1178,18 @@ public class AttendanceServiceImpl implements AttendanceService {
             int total = weekAtts.size();
             int pct = total > 0 ? (int) Math.round((present * 100.0) / total) : 0;
 
-            String weekName = "W" + weekIndex + " (" + entry.getKey() + ")";
-            String dateStr = weekAtts.get(0).getDailyClass().getDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            LocalDate firstInWeek = weekAtts.stream()
+                    .map(a -> a.getDailyClass().getDate().toLocalDate())
+                    .min(Comparator.naturalOrder())
+                    .orElse(null);
+            String dateLabel = firstInWeek != null ? firstInWeek.format(labelFmt) : entry.getKey();
+            String weekName = "W" + weekIndex + " (" + dateLabel + ")";
+            String dateStr = firstInWeek != null ? firstInWeek.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) : weekAtts.get(0).getDailyClass().getDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             String batchName = weekAtts.get(0).getDailyClass().getBatch() != null ? weekAtts.get(0).getDailyClass().getBatch().getName() : "General";
 
             trend.add(new AttendanceAnalyticsResponse.DailyTrendPoint(
                     dateStr,
-                    entry.getKey(),
+                    dateLabel,
                     "Weekly Summary (" + total + " classes)",
                     batchName,
                     present,
@@ -1057,9 +1206,15 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AttendanceHistoryResponse.RecentRecordDto> getStudentAttendanceRecords(Long userId, String month) {
         Student student = resolveStudent(userId);
+        ensurePastClassesMarked(student);
+
+        List<AttendanceCorrection> pendingCorrections = attendanceCorrectionRepository.findByStudentIdAndStatus(student.getId(), CorrectionStatus.PENDING);
+        Map<Long, AttendanceCorrection> pendingByAttendanceId = pendingCorrections.stream()
+                .filter(c -> c.getAttendance() != null)
+                .collect(Collectors.toMap(c -> c.getAttendance().getId(), c -> c, (c1, c2) -> c1));
 
         List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
 
@@ -1078,6 +1233,9 @@ public class AttendanceServiceImpl implements AttendanceService {
             }
             String courseTitle = (a.getDailyClass().getBatch() != null && a.getDailyClass().getBatch().getCourse() != null)
                     ? a.getDailyClass().getBatch().getCourse().getTitle() : null;
+            AttendanceCorrection pending = pendingByAttendanceId.get(a.getId());
+            boolean correctionPending = pending != null;
+            AttendStatus reqStatus = pending != null ? pending.getRequestedStatus() : null;
             return new AttendanceHistoryResponse.RecentRecordDto(
                     a.getId(),
                     a.getDailyClass().getId(),
@@ -1089,7 +1247,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                     a.getRemarks(),
                     a.getMarkedBy(),
                     markerName,
-                    a.getMarkedAt()
+                    a.getMarkedAt(),
+                    correctionPending,
+                    reqStatus
             );
         }).toList();
     }
@@ -1104,6 +1264,166 @@ public class AttendanceServiceImpl implements AttendanceService {
                     s.setEnrollmentNo("STU-" + String.format("%05d", user.getId()));
                     return studentRepository.save(s);
                 });
+    }
+
+    private LocalDate resolveJoiningDate(Student student) {
+        List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
+        LocalDate earliestAttendance = attendances.stream()
+                .filter(a -> a.getDailyClass() != null && a.getDailyClass().getDate() != null)
+                .map(a -> a.getDailyClass().getDate().toLocalDate())
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+
+        LocalDate candidate = student.getJoiningDate();
+        if (candidate == null && student.getBatch() != null && student.getBatch().getStartDate() != null) {
+            candidate = student.getBatch().getStartDate();
+        }
+        if (candidate == null && student.getCreatedAt() != null) {
+            candidate = student.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate();
+        }
+        if (candidate == null) {
+            candidate = earliestAttendance != null ? earliestAttendance : LocalDate.now();
+        }
+
+        // If candidate date is AFTER the earliest recorded attendance, reconcile to earliest attendance
+        if (earliestAttendance != null && earliestAttendance.isBefore(candidate)) {
+            candidate = earliestAttendance;
+        }
+
+        if (student.getJoiningDate() == null || !candidate.equals(student.getJoiningDate())) {
+            student.setJoiningDate(candidate);
+            studentRepository.save(student);
+        }
+        return candidate;
+    }
+
+    @Override
+    @Transactional
+    public void ensurePastClassesMarkedForUser(Long userId) {
+        Student student = resolveStudent(userId);
+        ensurePastClassesMarked(student);
+    }
+
+    private void cleanupDummyClasses() {
+        List<DailyClass> dummyClasses = dailyClassRepository.findAll().stream()
+                .filter(c -> c.getTitle() != null && (c.getTitle().endsWith("- Class Session") || c.getTitle().equals("Regular Class Session")))
+                .toList();
+        for (DailyClass dc : dummyClasses) {
+            try {
+                attendanceCorrectionRepository.deleteByDailyClassId(dc.getId());
+                attendanceRepository.deleteByDailyClassId(dc.getId());
+                dailyClassRepository.delete(dc);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void ensurePastClassesMarked(Student student) {
+        if (student == null) {
+            return;
+        }
+
+        // Clean up any previously auto-generated dummy class records
+        cleanupDummyClasses();
+
+        // 1. Resolve student's batch: prioritize the batch containing scheduled classes
+        List<MeetingLink> allMeetings = meetingLinkRepository.findAll();
+        Batch meetingBatch = null;
+        for (MeetingLink m : allMeetings) {
+            if (m.getBatch() != null) {
+                meetingBatch = m.getBatch();
+                break;
+            }
+        }
+
+        Batch batch = student.getBatch();
+        if (meetingBatch != null) {
+            batch = meetingBatch;
+        } else if (batch == null) {
+            batch = batchRepository.findAll().stream()
+                    .filter(Batch::isActive)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (batch != null && (student.getBatch() == null || !batch.getId().equals(student.getBatch().getId()))) {
+            student.setBatch(batch);
+            if (batch.getCourse() != null) {
+                student.setCourse(batch.getCourse());
+            }
+            studentRepository.save(student);
+        }
+        if (batch == null) {
+            return;
+        }
+
+        // 2. Ensure each real Scheduled Class (MeetingLink) has its DailyClass linked and status synced
+        for (MeetingLink m : allMeetings) {
+            if (m.getBatch() != null) {
+                DailyClass dc = m.getDailyClass();
+                if (dc == null) {
+                    dc = new DailyClass();
+                    dc.setBatch(m.getBatch());
+                    dc.setDate(m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now());
+                    dc.setTitle(m.getTitle());
+                    dc.setMeetLink(m.getMeetUrl());
+                    dc.setStatus(m.getStatus() == MeetingStatus.COMPLETED ? ClassStatus.COMPLETED : ClassStatus.SCHEDULED);
+                    dc = dailyClassRepository.save(dc);
+                    m.setDailyClass(dc);
+                    meetingLinkRepository.save(m);
+                } else {
+                    boolean changed = false;
+                    if (m.getStatus() == MeetingStatus.COMPLETED && dc.getStatus() != ClassStatus.COMPLETED) {
+                        dc.setStatus(ClassStatus.COMPLETED);
+                        changed = true;
+                    }
+                    if (m.getScheduledStart() != null && !m.getScheduledStart().equals(dc.getDate())) {
+                        dc.setDate(m.getScheduledStart());
+                        changed = true;
+                    }
+                    if (changed) {
+                        dailyClassRepository.save(dc);
+                    }
+                }
+            }
+        }
+
+        // 3. Find only REAL scheduled classes for this batch that have started or completed
+        LocalDateTime now = LocalDateTime.now();
+        List<DailyClass> pastRealClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(batch.getId()).stream()
+                .filter(c -> c.getDate() != null && (c.getDate().isBefore(now) || c.getStatus() == ClassStatus.COMPLETED))
+                .toList();
+
+        if (pastRealClasses.isEmpty()) {
+            return;
+        }
+
+        // 4. For each real class, if the student has no attendance record, mark ABSENT
+        List<Attendance> existingAttendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
+        Map<Long, Attendance> attendanceByClassId = existingAttendances.stream()
+                .filter(a -> a.getDailyClass() != null)
+                .collect(Collectors.toMap(a -> a.getDailyClass().getId(), a -> a, (a1, a2) -> a1));
+
+        List<Attendance> toSave = new ArrayList<>();
+        for (DailyClass dc : pastRealClasses) {
+            Attendance existing = attendanceByClassId.get(dc.getId());
+            if (existing == null) {
+                Attendance att = new Attendance();
+                att.setStudent(student);
+                att.setDailyClass(dc);
+                att.setStatus(AttendStatus.ABSENT);
+                att.setRemarks("Auto-marked absent (no present request submitted)");
+                toSave.add(att);
+            } else if (existing.getStatus() == null) {
+                existing.setStatus(AttendStatus.ABSENT);
+                existing.setRemarks("Auto-marked absent (no present request submitted)");
+                toSave.add(existing);
+            }
+        }
+
+        if (!toSave.isEmpty()) {
+            attendanceRepository.saveAll(toSave);
+        }
     }
 
     @Override

@@ -10,7 +10,7 @@ const OPTIONS = [
   { value: 90, label: 'Excellent' },
 ]
 
-export default function AttendanceGoalTracker() {
+export default function AttendanceGoalTracker({ summary }) {
   const [goal, setGoal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -57,19 +57,37 @@ export default function AttendanceGoalTracker() {
           </button>
         ))}
       </div>
-      {goal?.targetPercentage ? (
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-gray-500">Current: <span className="font-semibold text-gray-700 dark:text-gray-300">{goal.currentPercentage}%</span></span>
-          <span className="text-gray-500">Target: <span className="font-semibold text-gray-700 dark:text-gray-300">{goal.targetPercentage}%</span></span>
-          {goal.achieved ? (
-            <span className="font-bold text-green-600">Goal achieved! 🎉</span>
-          ) : (
-            <span className="font-bold text-purple-600">
-              Classes needed: {goal.classesNeeded > 100000 ? 'Not reachable' : goal.classesNeeded}
-            </span>
-          )}
-        </div>
-      ) : (
+      {goal?.targetPercentage ? (() => {
+        const target = goal.targetPercentage
+        const total = summary?.overallTotal ?? summary?.total ?? 0
+        const hasClasses = total > 0
+        const currentPct = hasClasses ? (summary?.overallPercentage ?? summary?.percentage ?? (goal.currentPercentage ?? 0)) : 0
+        const present = (summary?.present ?? 0) + (summary?.late ?? 0)
+        const achieved = hasClasses && currentPct >= target
+        const f = target / 100.0
+        const computedNeeded = (total > 0 && f < 1.0)
+          ? Math.max(0, Math.ceil((f * total - present) / (1 - f)))
+          : (goal.classesNeeded ?? 0)
+        const needed = achieved ? 0 : computedNeeded
+
+        return (
+          <div className="flex items-center gap-4 text-sm flex-wrap">
+            <span className="text-gray-500">Current: <span className="font-semibold text-gray-700 dark:text-gray-300">{hasClasses ? `${currentPct}%` : '—'}</span></span>
+            <span className="text-gray-500">Target: <span className="font-semibold text-gray-700 dark:text-gray-300">{target}%</span></span>
+            {achieved ? (
+              <span className="font-bold text-green-600">Goal achieved! 🎉</span>
+            ) : hasClasses ? (
+              <span className="font-bold text-purple-600">
+                Classes needed: {needed > 100000 ? 'Not reachable' : needed}
+              </span>
+            ) : (
+              <span className="text-xs text-purple-600 font-medium">
+                Attend upcoming classes to work towards this goal!
+              </span>
+            )}
+          </div>
+        )
+      })() : (
         <p className="text-xs text-gray-400">Pick a target above to start tracking your goal.</p>
       )}
     </div>

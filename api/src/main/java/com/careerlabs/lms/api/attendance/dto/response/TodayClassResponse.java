@@ -9,6 +9,7 @@ public record TodayClassResponse(
         Long batchId,
         String batchName,
         LocalDateTime date,
+        LocalDateTime scheduledEnd,
         String title,
         ClassStatus status,
         int present,
@@ -32,9 +33,29 @@ public record TodayClassResponse(
             int absent,
             int totalStudents,
             String meetLink,
+            String recordingUrl,
+            String trainerName,
+            String courseTitle,
+            String mode,
+            String timing
+    ) {
+        this(classId, batchId, batchName, date, null, title, status, present, absent, totalStudents, meetLink, recordingUrl, trainerName, courseTitle, mode, timing);
+    }
+
+    public TodayClassResponse(
+            Long classId,
+            Long batchId,
+            String batchName,
+            LocalDateTime date,
+            String title,
+            ClassStatus status,
+            int present,
+            int absent,
+            int totalStudents,
+            String meetLink,
             String recordingUrl
     ) {
-        this(classId, batchId, batchName, date, title, status, present, absent, totalStudents, meetLink, recordingUrl, null, null, null, null);
+        this(classId, batchId, batchName, date, null, title, status, present, absent, totalStudents, meetLink, recordingUrl, null, null, null, null);
     }
 }
 

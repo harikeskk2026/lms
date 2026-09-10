@@ -47,12 +47,13 @@ export function useAttendance(month) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
+  const [refetchTick, setTick] = useState(0)
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
       studentApi.getAttendance(month),
-      studentApi.getAttSummary()
+      studentApi.getAttSummary(month)
     ])
       .then(([calRes, sumRes]) => setData({
         calendar: calRes.data.data,
@@ -60,9 +61,9 @@ export function useAttendance(month) {
       }))
       .catch(e => setError(e?.response?.data?.message || 'Failed to load attendance'))
       .finally(() => setLoading(false))
-  }, [month])
+  }, [month, refetchTick])
 
-  return { data, loading, error }
+  return { data, loading, error, refetch: () => setTick(t => t + 1) }
 }
 
 export function useAssignments() {

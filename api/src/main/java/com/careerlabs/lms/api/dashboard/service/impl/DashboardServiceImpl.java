@@ -560,15 +560,31 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private List<StudentDashboardResponse.UpcomingClass> buildUpcomingClasses(Student student) {
-        if (student.getBatch() == null) {
-            return List.of();
-        }
         LocalDateTime now = LocalDateTime.now();
-        List<DailyClass> classes = dailyClassRepository.findByBatchIdAndDateBetweenOrderByDateAsc(
-                student.getBatch().getId(), now, now.plusDays(UPCOMING_WINDOW_DAYS));
+        List<Long> batchIds = new java.util.ArrayList<>();
+        if (student.getBatch() != null) {
+            batchIds.add(student.getBatch().getId());
+        }
+        try {
+            List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+            if (enrollments != null) {
+                for (Enrollment e : enrollments) {
+                    if (e.getBatch() != null && !batchIds.contains(e.getBatch().getId())) {
+                        batchIds.add(e.getBatch().getId());
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        List<DailyClass> classes;
+        if (batchIds.isEmpty()) {
+            classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(now, now.plusDays(UPCOMING_WINDOW_DAYS));
+        } else {
+            classes = dailyClassRepository.findByBatchIdInAndDateBetweenOrderByDateAsc(batchIds, now, now.plusDays(UPCOMING_WINDOW_DAYS));
+        }
         return classes.stream()
                 .map(c -> new StudentDashboardResponse.UpcomingClass(
-                        c.getId(), c.getBatch().getName(), c.getTitle(), c.getDate(), c.getMeetLink()))
+                        c.getId(), c.getBatch() != null ? c.getBatch().getName() : "General", c.getTitle(), c.getDate(), c.getMeetLink()))
                 .toList();
     }
 }

@@ -15,6 +15,8 @@ import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -74,16 +76,46 @@ public class AttendanceGoalServiceImpl implements AttendanceGoalService {
     }
 
     private AttendanceGoalResponse buildResponse(Student student, Integer target) {
-        List<Attendance> attendances = attendanceRepository.findByStudentId(student.getId());
-        int total = attendances.size();
-        int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        List<Attendance> allAtt = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
+        LocalDate earliestAttendance = allAtt.stream()
+                .filter(a -> a.getDailyClass() != null && a.getDailyClass().getDate() != null)
+                .map(a -> a.getDailyClass().getDate().toLocalDate())
+                .min(java.util.Comparator.naturalOrder())
+                .orElse(null);
+
+        LocalDate joiningDate = student.getJoiningDate();
+        if (joiningDate == null) {
+            if (student.getBatch() != null && student.getBatch().getStartDate() != null) {
+                joiningDate = student.getBatch().getStartDate();
+            } else if (earliestAttendance != null) {
+                joiningDate = earliestAttendance;
+            } else if (student.getCreatedAt() != null) {
+                joiningDate = student.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate();
+            } else {
+                joiningDate = LocalDate.now();
+            }
+        }
+        if (earliestAttendance != null && earliestAttendance.isBefore(joiningDate)) {
+            joiningDate = earliestAttendance;
+        }
+        if (student.getJoiningDate() == null || !joiningDate.equals(student.getJoiningDate())) {
+            student.setJoiningDate(joiningDate);
+            studentRepository.save(student);
+        }
+
+        List<Attendance> attendances = allAtt.stream()
+                .filter(a -> a.getDailyClass() != null)
+                .toList();
+
+        int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
+        int total = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
         int currentPercentage = total > 0 ? (int) Math.round((present * 100.0) / total) : 0;
 
         if (target == null) {
             return new AttendanceGoalResponse(null, currentPercentage, 0, false);
         }
 
-        boolean achieved = currentPercentage >= target;
+        boolean achieved = total > 0 && currentPercentage >= target;
         int classesNeeded = achieved ? 0 : classesNeededFor(present, total, target);
         return new AttendanceGoalResponse(target, currentPercentage, classesNeeded, achieved);
     }

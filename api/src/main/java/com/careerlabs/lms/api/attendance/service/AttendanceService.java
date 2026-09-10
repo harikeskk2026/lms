@@ -29,6 +29,8 @@ public interface AttendanceService {
 
     DailyClassResponse updateClass(Long classId, DailyClassRequest request);
 
+    void deleteClass(Long classId);
+
     List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId);
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records);
@@ -61,6 +63,8 @@ public interface AttendanceService {
 
     StudentAttendanceSummaryResponse getStudentAttendanceSummary(Long userId);
 
+    StudentAttendanceSummaryResponse getStudentAttendanceSummary(Long userId, String month);
+
     List<AttendanceAnalyticsResponse.DailyTrendPoint> getStudentAttendanceTrend(Long userId);
 
     List<AttendanceHistoryResponse.RecentRecordDto> getStudentAttendanceRecords(Long userId, String month);
@@ -72,4 +76,6 @@ public interface AttendanceService {
     List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse> getStudentAuditLogs(Long studentIdOrUserId);
 
     List<com.careerlabs.lms.api.attendance.dto.AttendanceAuditLogResponse> getAuditLogs(Long studentId, Long classId);
+
+    void ensurePastClassesMarkedForUser(Long userId);
 }

@@ -79,14 +79,17 @@ public class StudentAttendanceController {
 
     @GetMapping("/attendance/summary")
     public ResponseEntity<ApiResponse<StudentAttendanceSummaryResponse>> getAttendanceSummary(
-            @AuthenticationPrincipal JwtUserPrincipal principal) {
-        StudentAttendanceSummaryResponse response = attendanceService.getStudentAttendanceSummary(principal.id());
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String month) {
+        attendanceService.ensurePastClassesMarkedForUser(principal.id());
+        StudentAttendanceSummaryResponse response = attendanceService.getStudentAttendanceSummary(principal.id(), month);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
     @GetMapping("/attendance/trend")
     public ResponseEntity<ApiResponse<List<AttendanceAnalyticsResponse.DailyTrendPoint>>> getAttendanceTrend(
             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        attendanceService.ensurePastClassesMarkedForUser(principal.id());
         List<AttendanceAnalyticsResponse.DailyTrendPoint> response = attendanceService.getStudentAttendanceTrend(principal.id());
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -94,12 +97,14 @@ public class StudentAttendanceController {
     @GetMapping("/attendance/health")
     public ResponseEntity<ApiResponse<AttendanceHealthResponse>> getHealth(
             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        attendanceService.ensurePastClassesMarkedForUser(principal.id());
         return ResponseEntity.ok(ApiResponse.of(attendanceRiskService.getHealth(principal.id())));
     }
 
     @GetMapping("/attendance/goal")
     public ResponseEntity<ApiResponse<AttendanceGoalResponse>> getGoal(
             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        attendanceService.ensurePastClassesMarkedForUser(principal.id());
         return ResponseEntity.ok(ApiResponse.of(attendanceGoalService.getGoal(principal.id())));
     }
 

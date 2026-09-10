@@ -16,6 +16,8 @@ import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -63,7 +65,36 @@ public class AttendanceRiskServiceImpl implements AttendanceRiskService {
                     return studentRepository.save(s);
                 });
 
-        List<Attendance> attendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
+        List<Attendance> allAtt = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
+        LocalDate earliestAttendance = allAtt.stream()
+                .filter(a -> a.getDailyClass() != null && a.getDailyClass().getDate() != null)
+                .map(a -> a.getDailyClass().getDate().toLocalDate())
+                .min(java.util.Comparator.naturalOrder())
+                .orElse(null);
+
+        LocalDate joiningDate = student.getJoiningDate();
+        if (joiningDate == null) {
+            if (student.getBatch() != null && student.getBatch().getStartDate() != null) {
+                joiningDate = student.getBatch().getStartDate();
+            } else if (earliestAttendance != null) {
+                joiningDate = earliestAttendance;
+            } else if (student.getCreatedAt() != null) {
+                joiningDate = student.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate();
+            } else {
+                joiningDate = LocalDate.now();
+            }
+        }
+        if (earliestAttendance != null && earliestAttendance.isBefore(joiningDate)) {
+            joiningDate = earliestAttendance;
+        }
+        if (student.getJoiningDate() == null || !joiningDate.equals(student.getJoiningDate())) {
+            student.setJoiningDate(joiningDate);
+            studentRepository.save(student);
+        }
+
+        List<Attendance> attendances = allAtt.stream()
+                .filter(a -> a.getDailyClass() != null)
+                .toList();
         int overallPercentage = percentageOf(attendances);
 
         List<Attendance> recent = attendances.size() > TREND_WINDOW
@@ -78,16 +109,17 @@ public class AttendanceRiskServiceImpl implements AttendanceRiskService {
 
         Long batchId = student.getBatch() != null ? student.getBatch().getId() : null;
         AttendancePolicy policy = attendancePolicyService.getEffectivePolicy(batchId);
-        RiskLevel riskLevel = classify(overallPercentage, policy);
+        RiskLevel riskLevel = attendances.isEmpty() ? RiskLevel.HEALTHY : classify(overallPercentage, policy);
 
         return new AttendanceHealthResponse(overallPercentage, currentPercentage, previousPercentage, currentPercentage - previousPercentage, riskLevel);
     }
 
     private int percentageOf(List<Attendance> attendances) {
-        if (attendances.isEmpty()) {
+        long present = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
+        long countable = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
+        if (countable == 0) {
             return 0;
         }
-        long present = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
-        return (int) Math.round((present * 100.0) / attendances.size());
+        return (int) Math.round((present * 100.0) / countable);
     }
 }
