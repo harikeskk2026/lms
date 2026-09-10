@@ -10,6 +10,8 @@ import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
+import { resolveFileUrl } from '@/lib/api'
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
@@ -75,6 +77,7 @@ export default function AssignmentsPage() {
   const [deletingAssignment, setDeletingAssignment] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [previewFile, setPreviewFile] = useState(null) // { url, name }
   const searchTimer = useRef(null)
 
   const dateError = validateAssignmentDates(form.startDate, form.publishTime, form.dueDate, form.closeTime)
@@ -577,13 +580,23 @@ export default function AssignmentsPage() {
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF, DOCX, or XLS only)</label>
             {form.attachmentName ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
-                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate">
-                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> {form.attachmentName}
+                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate min-w-0">
+                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> <span className="truncate">{form.attachmentName}</span>
                 </span>
-                <button type="button" onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentName: '' }))}
-                  className="text-gray-400 hover:text-red-500 flex-shrink-0">
-                  <X size={14} />
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFile({ url: resolveFileUrl(form.attachmentUrl), name: form.attachmentName })}
+                    className="flex items-center gap-1 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 px-2 py-1 rounded-lg transition-colors"
+                    title="Preview file"
+                  >
+                    <Eye size={13} /> Preview
+                  </button>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentName: '' }))}
+                    className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Remove file">
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
             ) : (
               <input
@@ -631,6 +644,14 @@ export default function AssignmentsPage() {
         itemName={deletingAssignment?.title}
         loading={isDeleting}
       />
+
+      {previewFile && (
+        <ViewAttachmentModal
+          url={previewFile.url}
+          name={previewFile.name}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
     </div>
   )
 }

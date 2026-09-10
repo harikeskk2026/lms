@@ -11,23 +11,26 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', 'recharts', 'date-fns']
   },
   async rewrites() {
-    const rawApiUrl = process.env.NEXT_PUBLIC_JAVA_API_URL
-    if (!rawApiUrl) {
-      console.warn('[next.config.js] Warning: NEXT_PUBLIC_JAVA_API_URL is not defined. API rewrites disabled.')
-      return []
-    }
+    const rawApiUrl = process.env.NEXT_PUBLIC_JAVA_API_URL || 'http://localhost:7000/api'
     const apiUrl = rawApiUrl.replace(/\/+$/, '')
-    const destination = apiUrl.endsWith('/api')
-      ? `${apiUrl}/:path*`
-      : `${apiUrl}/api/:path*`
+    const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`
+    // Derive the origin (strip /api suffix) for file serving
+    const origin = apiBase.replace(/\/api$/, '')
 
     return [
       {
+        // Proxy uploaded files so they are served same-origin (avoids cross-origin
+        // iframe restrictions that prevent inline PDF/Office preview)
+        source: '/uploads/:path*',
+        destination: `${origin}/uploads/:path*`,
+      },
+      {
         source: '/api/:path*',
-        destination,
+        destination: `${apiBase}/:path*`,
       },
     ]
-  }
+  },
 }
 
 module.exports = nextConfig
+

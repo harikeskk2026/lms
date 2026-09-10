@@ -45,6 +45,23 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // Sync session across multiple browser tabs (prevents stale/wrong role token contamination)
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'clms_at' || e.key === 'clms_user') {
+        const token = tokenStorage.getToken()
+        const storedUser = tokenStorage.getUser()
+        if (!token || !storedUser) {
+          setUser(null)
+        } else {
+          setUser(storedUser)
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
   const login = useCallback(async (email, password) => {
     const { data } = await authService.login(email, password)
     tokenStorage.setSession(data.accessToken, data.user)

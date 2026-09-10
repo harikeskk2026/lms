@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.common.storage;
 
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -10,14 +11,13 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Stores uploaded files on local disk under {@code app.upload.dir}, exposed back
- * to clients at {@code /uploads/**} (see WebConfig). Only PDF/DOCX/XLS/XLSX files
- * are accepted, matching the LMS-wide assignment/submission attachment policy.
+ * Stores uploaded files directly in the database (PostgreSQL bytea) via
+ * {@link StoredFileRepository}, with optional local disk caching. Files are
+ * served back to clients at {@code /uploads/**} by {@link FileServingController}.
  */
 @Service
 public class FileStorageService {
@@ -29,9 +29,12 @@ public class FileStorageService {
     private static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024;
 
     private final Path root;
+    private final StoredFileRepository storedFileRepository;
 
-    public FileStorageService(@Value("${app.upload.dir}") String uploadDir) {
+    public FileStorageService(@Value("${app.upload.dir:uploads}") String uploadDir,
+                             StoredFileRepository storedFileRepository) {
         this.root = Path.of(uploadDir).toAbsolutePath().normalize();
+        this.storedFileRepository = storedFileRepository;
     }
 
     public StoredFile store(MultipartFile file, String subDir) {
@@ -54,17 +57,54 @@ public class FileStorageService {
         }
 
         try {
-            Path targetDir = root.resolve(subDir);
-            Files.createDirectories(targetDir);
-
             String storedName = UUID.randomUUID() + "." + extension;
-            Path target = targetDir.resolve(storedName).normalize();
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            String url = "/uploads/" + subDir + "/" + storedName;
+            byte[] data = file.getBytes();
+            String contentType = resolveContentType(file, extension);
 
-            return new StoredFile("/uploads/" + subDir + "/" + storedName, originalName);
+            // Persist file binary data directly into the database
+            StoredFileEntity entity = new StoredFileEntity(url, originalName, contentType, file.getSize(), data);
+            storedFileRepository.save(entity);
+
+            // Optional secondary disk cache
+            try {
+                Path targetDir = root.resolve(subDir);
+                Files.createDirectories(targetDir);
+                Path target = targetDir.resolve(storedName).normalize();
+                Files.write(target, data);
+            } catch (Exception ignored) {
+                // Non-fatal if disk write fails because DB has the complete file
+            }
+
+            return new StoredFile(url, originalName);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store uploaded file", e);
         }
+    }
+
+    private String resolveContentType(MultipartFile file, String extension) {
+        String ct = file.getContentType();
+        if (StringUtils.hasText(ct) && !MediaType.APPLICATION_OCTET_STREAM_VALUE.equals(ct)) {
+            return ct;
+        }
+        return switch (extension.toLowerCase()) {
+            case "pdf" -> "application/pdf";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "doc" -> "application/msword";
+            case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "xls" -> "application/vnd.ms-excel";
+            case "csv" -> "text/csv";
+            case "txt" -> "text/plain";
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "webp" -> "image/webp";
+            case "gif" -> "image/gif";
+            case "svg" -> "image/svg+xml";
+            case "mp4" -> "video/mp4";
+            case "webm" -> "video/webm";
+            case "zip" -> "application/zip";
+            default -> "application/octet-stream";
+        };
     }
 
     private String extensionOf(String filename) {

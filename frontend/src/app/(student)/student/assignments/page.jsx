@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns'
-import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye, Download } from 'lucide-react'
+import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye } from 'lucide-react'
 import { useAssignments } from '@/hooks/useStudentDashboard'
 import { studentApi, resolveFileUrl } from '@/lib/api'
 import toast from 'react-hot-toast'
@@ -415,9 +415,50 @@ function AssignmentCard({ a, onSubmit }) {
   )
 }
 
+// ─── Board View Column ────────────────────────────────────────────────────────
+const BOARD_COLUMNS = [
+  {
+    id: 'pending',
+    label: 'Pending',
+    emoji: '📋',
+    color: 'from-yellow-400 to-amber-500',
+    bg: 'bg-yellow-50 dark:bg-yellow-950/20',
+    border: 'border-yellow-200 dark:border-yellow-800/40',
+    match: a => !a.submission || a.submission.status === 'PENDING',
+  },
+  {
+    id: 'review',
+    label: 'In Review',
+    emoji: '⏳',
+    color: 'from-amber-400 to-orange-500',
+    bg: 'bg-amber-50 dark:bg-amber-950/20',
+    border: 'border-amber-200 dark:border-amber-800/40',
+    match: a => a.submission?.status === 'PENDING_APPROVAL' || a.submission?.status === 'SUBMITTED',
+  },
+  {
+    id: 'completed',
+    label: 'Completed',
+    emoji: '✅',
+    color: 'from-emerald-400 to-green-500',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/20',
+    border: 'border-emerald-200 dark:border-emerald-800/40',
+    match: a => a.submission?.status === 'GRADED',
+  },
+  {
+    id: 'overdue',
+    label: 'Overdue',
+    emoji: '🔴',
+    color: 'from-red-400 to-rose-500',
+    bg: 'bg-red-50 dark:bg-red-950/20',
+    border: 'border-red-200 dark:border-red-800/40',
+    match: a => a.isOverdue && (!a.submission || a.submission.status === 'PENDING'),
+  },
+]
+
 export default function AssignmentsPage() {
   const { data: assignments, loading, error, refetch } = useAssignments()
   const [filter, setFilter] = useState('All')
+  const [view, setView] = useState('list') // 'list' | 'board'
   const [submitTarget, setSubmitTarget] = useState(null)
 
   const filtered = !assignments ? [] : assignments.filter(a => {
@@ -432,51 +473,143 @@ export default function AssignmentsPage() {
 
   return (
     <div className="page-wrapper">
+      {/* Header with view toggle */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Assignments</h1>
           <p className="text-sm text-gray-500">{assignments?.length || 0} total assignments</p>
         </div>
+        {/* View Toggle */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <button
+            id="view-toggle-list"
+            onClick={() => setView('list')}
+            title="List View"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+              view === 'list'
+                ? 'bg-white dark:bg-gray-900 text-purple-700 dark:text-purple-300 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+              <rect x="1" y="2" width="13" height="2.5" rx="1" fill="currentColor"/>
+              <rect x="1" y="6.25" width="13" height="2.5" rx="1" fill="currentColor"/>
+              <rect x="1" y="10.5" width="13" height="2.5" rx="1" fill="currentColor"/>
+            </svg>
+            List
+          </button>
+          <button
+            id="view-toggle-board"
+            onClick={() => setView('board')}
+            title="Board View"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+              view === 'board'
+                ? 'bg-white dark:bg-gray-900 text-purple-700 dark:text-purple-300 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+              <rect x="1" y="1" width="4" height="13" rx="1" fill="currentColor"/>
+              <rect x="5.5" y="1" width="4" height="13" rx="1" fill="currentColor"/>
+              <rect x="10" y="1" width="4" height="13" rx="1" fill="currentColor"/>
+            </svg>
+            Board
+          </button>
+        </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-1.5 flex-wrap">
-        {FILTERS.map(f => {
-          const count = !assignments ? 0 : f === 'All' ? assignments.length :
-            f === 'Pending'          ? assignments.filter(a => !a.submission || a.submission.status === 'PENDING').length :
-            f === 'Pending Approval' ? assignments.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
-            f === 'Submitted'        ? assignments.filter(a => a.submission?.status === 'SUBMITTED').length :
-            f === 'Graded'           ? assignments.filter(a => a.submission?.status === 'GRADED').length :
-            assignments.filter(a => a.isOverdue).length
-          return (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                filter === f ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-purple-100 dark:border-purple-800 hover:bg-brand-50 dark:hover:bg-brand-900/20'
-              }`}>
-              {f}
-              {count > 0 && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filter === f ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
+      {/* Filter tabs (only in list view) */}
+      {view === 'list' && (
+        <div className="flex gap-1.5 flex-wrap mb-4">
+          {FILTERS.map(f => {
+            const count = !assignments ? 0 : f === 'All' ? assignments.length :
+              f === 'Pending'          ? assignments.filter(a => !a.submission || a.submission.status === 'PENDING').length :
+              f === 'Pending Approval' ? assignments.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
+              f === 'Submitted'        ? assignments.filter(a => a.submission?.status === 'SUBMITTED').length :
+              f === 'Graded'           ? assignments.filter(a => a.submission?.status === 'GRADED').length :
+              assignments.filter(a => a.isOverdue).length
+            return (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  filter === f ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-purple-100 dark:border-purple-800 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+                }`}>
+                {f}
+                {count > 0 && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filter === f ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
-      {loading ? (
-        <div className="space-y-3">{[0,1,2,3].map(i => <SkeletonCard key={i} lines={3} />)}</div>
-      ) : filtered.length === 0 ? (
-        <div className="glass-card p-12 text-center">
-          <ClipboardList size={32} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500">No assignments in this category</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(a => (
-            <AssignmentCard key={a.id} a={a} onSubmit={setSubmitTarget} />
-          ))}
-        </div>
+      {/* ── LIST VIEW ────────────────────────────────────────────────────── */}
+      {view === 'list' && (
+        loading ? (
+          <div className="space-y-3">{[0,1,2,3].map(i => <SkeletonCard key={i} lines={3} />)}</div>
+        ) : filtered.length === 0 ? (
+          <div className="glass-card p-12 text-center">
+            <ClipboardList size={32} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500">No assignments in this category</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(a => (
+              <AssignmentCard key={a.id} a={a} onSubmit={setSubmitTarget} />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* ── BOARD VIEW ───────────────────────────────────────────────────── */}
+      {view === 'board' && (
+        loading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0,1,2,3].map(i => (
+              <div key={i} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-2 animate-pulse">
+                <div className="h-6 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+                {[0,1].map(j => <div key={j} className="h-20 bg-gray-200 dark:bg-gray-700 rounded-xl" />)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+            {BOARD_COLUMNS.map(col => {
+              const cards = (assignments || []).filter(col.match)
+              return (
+                <div
+                  key={col.id}
+                  className={`rounded-2xl border ${col.border} ${col.bg} p-3 flex flex-col gap-3`}
+                >
+                  {/* Column header */}
+                  <div className="flex items-center justify-between px-1 py-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none">{col.emoji}</span>
+                      <span className="font-bold text-sm text-gray-700 dark:text-gray-200">{col.label}</span>
+                    </div>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r ${col.color} text-white`}>
+                      {cards.length}
+                    </span>
+                  </div>
+
+                  {/* Cards */}
+                  {cards.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center opacity-40">
+                      <ClipboardList size={22} className="text-gray-400 mb-1.5" />
+                      <p className="text-xs text-gray-400">No assignments</p>
+                    </div>
+                  ) : (
+                    cards.map(a => (
+                      <BoardCard key={a.id} a={a} onSubmit={setSubmitTarget} />
+                    ))
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
       )}
 
       {submitTarget && (
@@ -489,3 +622,108 @@ export default function AssignmentsPage() {
     </div>
   )
 }
+
+// ─── Board Card (compact, used inside kanban columns) ─────────────────────────
+function BoardCard({ a, onSubmit }) {
+  const [viewingFile, setViewingFile] = useState(null)
+  const s = a.submission
+  const isOverdue = a.isOverdue
+  const { text: dueText, cls: dueCls } = dueDateLabel(a.dueDate, a.closeTime)
+
+  const statusColors = {
+    GRADED:           'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+    SUBMITTED:        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    PENDING_APPROVAL: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+    REJECTED:         'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+    PENDING:          'bg-yellow-100 text-yellow-800',
+    OVERDUE:          'bg-yellow-200 text-yellow-900',
+  }
+  const statusLabel = s ? s.status : isOverdue ? 'OVERDUE' : 'PENDING'
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col gap-2">
+      {/* Batch + status */}
+      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+        <span className="chip bg-brand-100 text-brand-700 text-[10px] leading-none">{a.batchName}</span>
+        <span className={`chip text-[10px] leading-none flex-shrink-0 ${statusColors[statusLabel] || 'bg-gray-100 text-gray-600'}`}>
+          {statusLabel === 'PENDING_APPROVAL' ? 'APPROVAL' : statusLabel}
+        </span>
+      </div>
+
+      {/* Title */}
+      <p className="font-semibold text-sm text-gray-800 dark:text-white leading-snug line-clamp-2">{a.title}</p>
+
+      {/* Due date */}
+      <p className={`text-[11px] font-medium ${dueCls}`}>{dueText}</p>
+
+      {/* Awaiting approval badge */}
+      {s?.status === 'PENDING_APPROVAL' && (
+        <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-2 py-1 border border-amber-100 dark:border-amber-800/40">
+          ⏳ Awaiting admin approval
+        </div>
+      )}
+
+      {/* Rejection notice */}
+      {s?.status === 'REJECTED' && (
+        <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-lg px-2 py-1 border border-red-100 dark:border-red-800/40">
+          ❌ {s.rejectionReason ? `Rejected: ${s.rejectionReason}` : 'Rejected — please resubmit'}
+        </div>
+      )}
+
+      {/* Grade */}
+      {s?.grade !== null && s?.grade !== undefined && (
+        <div className={`text-xs font-bold text-center py-1 rounded-lg ${s.grade >= 80 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+          {s.grade}/{a.maxMarks} · {gradeLabel(s.grade)}
+        </div>
+      )}
+
+      {/* Attachment files chip */}
+      {((a.attachments && a.attachments.length > 0) || a.attachmentUrl) && (
+        <div className="flex flex-wrap gap-1">
+          {((a.attachments && a.attachments.length > 0)
+            ? a.attachments
+            : [{ fileUrl: a.attachmentUrl, fileName: a.attachmentName }]
+          ).slice(0, 2).map((att, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setViewingFile({ url: resolveFileUrl(att.fileUrl), name: att.fileName })}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-900/30 text-[11px] font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors border border-purple-100 dark:border-purple-800/40"
+              title="Preview assignment file"
+            >
+              <Paperclip size={10} />
+              <span className="truncate max-w-[100px]">{att.fileName || `File ${idx+1}`}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Action button */}
+      {(!s || s.status === 'PENDING') && (
+        <button
+          onClick={() => onSubmit(a)}
+          className="w-full py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-all mt-auto"
+        >
+          {isOverdue ? 'Submit Late' : 'Upload Submission'}
+        </button>
+      )}
+      {s?.status === 'REJECTED' && (
+        <button
+          onClick={() => onSubmit(a)}
+          className="w-full py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-all mt-auto"
+        >
+          Resubmit
+        </button>
+      )}
+
+      {viewingFile && (
+        <ViewAttachmentModal
+          url={viewingFile.url}
+          name={viewingFile.name}
+          onClose={() => setViewingFile(null)}
+        />
+      )}
+    </div>
+  )
+}
+
