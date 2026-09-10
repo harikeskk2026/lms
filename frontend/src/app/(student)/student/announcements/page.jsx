@@ -1,8 +1,8 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { Pin, Megaphone, Search, MessageSquare, Send, CalendarDays, ChevronLeft, ChevronRight, ArrowLeft, X as XIcon, Paperclip } from 'lucide-react'
+import { Pin, Megaphone, Search, CalendarDays, ChevronLeft, ChevronRight, X as XIcon, Paperclip } from 'lucide-react'
 import { format, formatDistanceToNow, addMonths, subMonths } from 'date-fns'
 import toast from 'react-hot-toast'
 import { studentApi, resolveFileUrl } from '@/lib/api'
@@ -18,12 +18,7 @@ const CATEGORY_STYLES = {
   ATTENDANCE: 'bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40',
 }
 
-const PRIORITY_STYLES = {
-  LOW:      'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700',
-  NORMAL:   'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
-  HIGH:     'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
-  CRITICAL: 'bg-red-600 dark:bg-red-700 text-white shadow-sm',
-}
+
 
 const ACTION_ROUTES = {
   ASSIGNMENT: '/student/assignments',
@@ -41,7 +36,6 @@ export default function StudentAnnouncementsPage() {
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
-  const [openComments, setOpenComments] = useState(null)
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null)
 
   useEffect(() => {
@@ -86,10 +80,8 @@ export default function StudentAnnouncementsPage() {
       const q = search.toLowerCase()
       list = list.filter(a => a.title.toLowerCase().includes(q) || a.body.toLowerCase().includes(q))
     }
-    const priorityRank = { CRITICAL: 3, HIGH: 2, NORMAL: 1, LOW: 0 }
     list.sort((a, b) => {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
-      if (sortBy === 'priority') return (priorityRank[b.priority] ?? 1) - (priorityRank[a.priority] ?? 1)
       const diff = new Date(b.createdAt) - new Date(a.createdAt)
       return sortBy === 'oldest' ? -diff : diff
     })
@@ -97,7 +89,7 @@ export default function StudentAnnouncementsPage() {
   }, [announcements, filter, search, sortBy])
 
   return (
-    <div className="page-wrapper max-w-5xl mx-auto space-y-5">
+    <div className="page-wrapper max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="font-display text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
         <button
@@ -159,7 +151,6 @@ export default function StudentAnnouncementsPage() {
               >
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
-                <option value="priority">Priority Rank</option>
               </select>
             </div>
           </div>
@@ -179,8 +170,6 @@ export default function StudentAnnouncementsPage() {
                   a={a}
                   onAcknowledge={acknowledge}
                   onViewDetail={handleOpenDetail}
-                  commentsOpen={openComments === a.id}
-                  onToggleComments={() => setOpenComments(o => o === a.id ? null : a.id)}
                 />
               ))
             )}
@@ -199,7 +188,7 @@ export default function StudentAnnouncementsPage() {
   )
 }
 
-function AnnouncementCard({ a, onAcknowledge, onViewDetail, commentsOpen, onToggleComments }) {
+function AnnouncementCard({ a, onAcknowledge, onViewDetail }) {
   const route = a.actionType === 'CUSTOM' ? a.actionUrl : ACTION_ROUTES[a.actionType]
 
   return (
@@ -227,9 +216,6 @@ function AnnouncementCard({ a, onAcknowledge, onViewDetail, commentsOpen, onTogg
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> New
               </span>
             )}
-            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${PRIORITY_STYLES[a.priority] || PRIORITY_STYLES.NORMAL}`}>
-              {a.priority}
-            </span>
             {a.category && (
               <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${CATEGORY_STYLES[a.category] || CATEGORY_STYLES.GENERAL}`}>
                 {a.category.charAt(0) + a.category.slice(1).toLowerCase()}
@@ -238,11 +224,6 @@ function AnnouncementCard({ a, onAcknowledge, onViewDetail, commentsOpen, onTogg
             {a.requiresAcknowledgment && (
               <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${a.acknowledged ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40' : 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40'}`}>
                 {a.acknowledged ? '✓ Acknowledged' : 'Ack Required'}
-              </span>
-            )}
-            {a.allowComments && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700">
-                Comments On
               </span>
             )}
           </div>
@@ -262,7 +243,7 @@ function AnnouncementCard({ a, onAcknowledge, onViewDetail, commentsOpen, onTogg
             <span>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</span>
             {a.expiresAt && (
               <span className="text-amber-600 dark:text-amber-400 font-medium">
-                Expires {format(new Date(a.expiresAt), 'dd MMM yyyy')}
+                Expires {format(new Date(a.expiresAt.includes('T') ? a.expiresAt : a.expiresAt + 'T00:00:00'), 'dd MMM yyyy')}
               </span>
             )}
           </div>
@@ -278,20 +259,6 @@ function AnnouncementCard({ a, onAcknowledge, onViewDetail, commentsOpen, onTogg
               >
                 {a.actionLabel}
               </Link>
-            )}
-
-            {a.allowComments && (
-              <button
-                onClick={onToggleComments}
-                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-colors ${
-                  commentsOpen
-                    ? 'bg-purple-50 dark:bg-purple-950/60 border-purple-200 dark:border-purple-800/60 text-purple-600 dark:text-purple-300'
-                    : 'bg-gray-50 dark:bg-gray-800/80 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <MessageSquare size={13} />
-                <span>Comments</span>
-              </button>
             )}
 
             {a.requiresAcknowledgment && (
@@ -315,12 +282,6 @@ function AnnouncementCard({ a, onAcknowledge, onViewDetail, commentsOpen, onTogg
           </span>
         </div>
       </div>
-
-      {commentsOpen && (
-        <div onClick={e => e.stopPropagation()} className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
-          <CommentsThread announcementId={a.id} />
-        </div>
-      )}
     </div>
   )
 }
@@ -344,23 +305,13 @@ function StudentViewModal({ a, onClose, onAcknowledge }) {
                   {a.category.charAt(0) + a.category.slice(1).toLowerCase()}
                 </span>
               )}
-              {(a.priority === 'HIGH' || a.priority === 'CRITICAL') && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.priority === 'CRITICAL' ? 'bg-red-600 text-white' : 'bg-orange-100 text-orange-700'}`}>
-                  {a.priority}
-                </span>
-              )}
             </div>
             <h3 className="font-display font-bold text-gray-800 dark:text-white text-base sm:text-lg break-words">{a.title}</h3>
             <p className="text-[11px] sm:text-xs text-gray-400 mt-1">{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button onClick={onClose} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 transition-colors">
-              <ArrowLeft size={14} /> Back
-            </button>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
-              <XIcon size={16} />
-            </button>
-          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+            <XIcon size={16} />
+          </button>
         </div>
 
         <div>
@@ -380,32 +331,23 @@ function StudentViewModal({ a, onClose, onAcknowledge }) {
         )}
 
         {/* Action & Acknowledgment */}
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
-          <button onClick={onClose} className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-            <ArrowLeft size={14} /> Back
-          </button>
-          {route && a.actionLabel && (
-            <Link href={route} className="text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-3.5 py-2 transition-colors">
-              {a.actionLabel}
-            </Link>
-          )}
-          {a.requiresAcknowledgment && (
-            a.acknowledged ? (
-              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 py-1">✓ Acknowledged</span>
-            ) : (
-              <button onClick={() => onAcknowledge(a.id)}
-                className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-3.5 py-2 transition-colors shadow-sm">
-                I Understand / Acknowledge
-              </button>
-            )
-          )}
-        </div>
-
-        {/* Comments Section */}
-        {a.allowComments && (
-          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Comments & Discussion</p>
-            <CommentsThread announcementId={a.id} />
+        {Boolean((route && a.actionLabel) || a.requiresAcknowledgment) && (
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+            {route && a.actionLabel && (
+              <Link href={route} className="text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-3.5 py-2 transition-colors">
+                {a.actionLabel}
+              </Link>
+            )}
+            {a.requiresAcknowledgment && (
+              a.acknowledged ? (
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 py-1">✓ Acknowledged</span>
+              ) : (
+                <button onClick={() => onAcknowledge(a.id)}
+                  className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-3.5 py-2 transition-colors shadow-sm">
+                  I Understand / Acknowledge
+                </button>
+              )
+            )}
           </div>
         )}
       </div>
@@ -414,59 +356,31 @@ function StudentViewModal({ a, onClose, onAcknowledge }) {
   )
 }
 
-function CommentsThread({ announcementId }) {
-  const [comments, setComments] = useState(null)
-  const [text, setText] = useState('')
-  const [posting, setPosting] = useState(false)
-
-  useEffect(() => {
-    studentApi.getAnnouncementComments(announcementId).then(r => setComments(r.data.data || [])).catch(() => setComments([]))
-  }, [announcementId])
-
-  const post = async () => {
-    if (!text.trim()) return
-    setPosting(true)
-    try {
-      const r = await studentApi.addAnnouncementComment(announcementId, { content: text })
-      setComments(list => [...(list || []), r.data.data])
-      setText('')
-    } catch (err) { toast.error(err?.message || 'Failed to post comment') } finally { setPosting(false) }
-  }
-
-  return (
-    <div className="mt-3 border-t border-gray-100 dark:border-gray-800 pt-3 space-y-2.5">
-      {comments === null ? (
-        <p className="text-xs text-gray-400">Loading comments...</p>
-      ) : comments.length === 0 ? (
-        <p className="text-xs text-gray-400">No questions yet — ask one below.</p>
-      ) : (
-        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-          {comments.map(c => (
-            <div key={c.id} className="text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
-              <div className="flex items-center justify-between gap-1 mb-0.5">
-                <span className="font-semibold text-gray-700 dark:text-gray-200">{c.userName} <span className="text-gray-400 font-normal">({c.userRole})</span></span>
-                {c.createdAt && <span className="text-[10px] text-gray-400">{formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}</span>}
-              </div>
-              <p className="text-gray-600 dark:text-gray-300">{c.content}</p>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-2">
-        <input value={text} onChange={e => setText(e.target.value)} placeholder="Ask a question..."
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post() } }}
-          className="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200" />
-        <button onClick={post} disabled={posting || !text.trim()} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 flex items-center justify-center transition-colors">
-          <Send size={13} />
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function StudentCalendarView({ announcements, onViewDetail }) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState(new Date().getDate())
+
+  const calendarCardRef = useRef(null)
+  const listRef = useRef(null)
+  const [calendarHeight, setCalendarHeight] = useState(0)
+
+  useEffect(() => {
+    const el = calendarCardRef.current
+    if (!el) return
+    const updateHeight = () => {
+      if (el) setCalendarHeight(el.offsetHeight)
+    }
+    updateHeight()
+    const ro = new ResizeObserver(updateHeight)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = 0
+    }
+  }, [selectedDay])
 
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
@@ -478,7 +392,9 @@ function StudentCalendarView({ announcements, onViewDetail }) {
   announcements.forEach(a => {
     const mark = (dateStr, type) => {
       if (!dateStr) return
-      const d = new Date(dateStr)
+      const d = typeof dateStr === 'string' && dateStr.length === 10 && !dateStr.includes('T')
+        ? new Date(dateStr + 'T00:00:00')
+        : new Date(dateStr)
       if (d.getFullYear() !== year || d.getMonth() !== month) return
       const key = d.getDate()
       dayItems[key] = dayItems[key] || []
@@ -498,7 +414,7 @@ function StudentCalendarView({ announcements, onViewDetail }) {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 items-start">
-      <div className="glass-card p-4 sm:p-6 flex-1 min-w-0 w-full">
+      <div ref={calendarCardRef} className="glass-card p-4 sm:p-6 flex-1 min-w-0 w-full">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-y-3 gap-x-3 mb-4 sm:mb-5">
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <h2 className="font-display font-bold text-gray-800 dark:text-white text-base sm:text-lg">
@@ -596,7 +512,10 @@ function StudentCalendarView({ announcements, onViewDetail }) {
       </div>
 
       {selectedDay && (
-        <div className="glass-card p-5 w-full lg:w-80 flex-shrink-0 flex flex-col max-h-[500px]">
+        <div
+          style={calendarHeight ? { height: `${calendarHeight}px` } : undefined}
+          className="glass-card p-5 w-full lg:w-80 flex-shrink-0 flex flex-col shadow-sm max-lg:max-h-[500px]"
+        >
           <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800 mb-3 flex-shrink-0">
             <div>
               <p className="font-display font-bold text-gray-800 dark:text-white">
@@ -615,7 +534,7 @@ function StudentCalendarView({ announcements, onViewDetail }) {
               <p className="text-xs font-medium">No announcements scheduled or published on this date.</p>
             </div>
           ) : (
-            <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+            <div ref={listRef} className="space-y-3 overflow-y-auto pr-1 flex-1 min-h-0 overscroll-contain">
               {selectedItems.map((item, idx) => (
                 <div
                   key={idx}

@@ -60,7 +60,7 @@ public class AdminAnnouncementController {
     @PostMapping("/preview-placeholders")
     public ResponseEntity<ApiResponse<PlaceholderPreviewResponse>> previewPlaceholders(
             @RequestBody PlaceholderPreviewRequest request) {
-        var sample = placeholderResolver.sampleVariables();
+        var sample = placeholderResolver.sampleVariables(request.courseId(), request.batchId());
         String title = placeholderResolver.resolve(request.title(), sample);
         String body = placeholderResolver.resolve(request.body(), sample);
         return ResponseEntity.ok(ApiResponse.of(new PlaceholderPreviewResponse(title, body)));

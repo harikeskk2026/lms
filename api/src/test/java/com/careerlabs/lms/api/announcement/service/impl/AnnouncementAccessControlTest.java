@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.announcement.service.impl;
 
+import com.careerlabs.lms.api.announcement.dto.request.AnnouncementRequest;
 import com.careerlabs.lms.api.announcement.dto.request.AudiencePreviewRequest;
 import com.careerlabs.lms.api.announcement.dto.request.ScheduleRequest;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
@@ -8,6 +9,7 @@ import com.careerlabs.lms.api.announcement.entity.AnnouncementPriority;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementStatus;
 import com.careerlabs.lms.api.announcement.entity.AudienceRuleType;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementAcknowledgmentRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementCommentRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementVersionRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementViewRepository;
@@ -49,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,6 +70,8 @@ class AnnouncementAccessControlTest {
     private AnnouncementViewRepository viewRepository;
     @Mock
     private AnnouncementAcknowledgmentRepository acknowledgmentRepository;
+    @Mock
+    private AnnouncementCommentRepository commentRepository;
     @Mock
     private BatchRepository batchRepository;
     @Mock
@@ -366,5 +371,80 @@ class AnnouncementAccessControlTest {
         assertThrows(ResourceNotFoundException.class,
                 () -> announcementService.estimateAudience(
                         new AudiencePreviewRequest(99L, null, null, AudienceRuleType.NONE, null, null)));
+    }
+
+    @Test
+    @DisplayName("delete removes comments, acknowledgments, views, versions, and announcement")
+    void deleteCleansUpRelatedEntitiesBeforeDeletingAnnouncement() {
+        when(announcementRepository.existsById(2L)).thenReturn(true);
+
+        announcementService.delete(2L);
+
+        verify(commentRepository).clearParentCommentsByAnnouncementId(2L);
+        verify(commentRepository).deleteAllByAnnouncementId(2L);
+        verify(acknowledgmentRepository).deleteAllByAnnouncementId(2L);
+        verify(viewRepository).deleteAllByAnnouncementId(2L);
+        verify(versionRepository).deleteAllByAnnouncementId(2L);
+        verify(announcementRepository).deleteById(2L);
+    }
+
+    @Test
+    @DisplayName("delete throws ResourceNotFoundException when announcement does not exist")
+    void deleteThrowsWhenNotFound() {
+        when(announcementRepository.existsById(999L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class, () -> announcementService.delete(999L));
+        verify(announcementRepository, never()).deleteById(anyLong());
+        verify(commentRepository, never()).deleteAllByAnnouncementId(anyLong());
+    }
+
+    // ─── Expiry date validation ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("create rejects announcement when expiresAt is today or in the past for immediate publish")
+    void createRejectsExpiryDateOnOrBeforePublishedDate() {
+        User adminUser = new User();
+        setId(adminUser, 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
+
+        AnnouncementRequest req = new AnnouncementRequest(
+                "Title", "Body", null, false, LocalDate.now(), null,
+                AnnouncementStatus.PUBLISHED, null, null, false, false,
+                null, null, null, null, null, null, null, null, null);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> announcementService.create(req, 1L));
+        assertEquals("Expiry date must be after the published date", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("create rejects announcement when expiresAt is before or on scheduled date")
+    void createRejectsExpiryDateOnOrBeforeScheduledDate() {
+        User adminUser = new User();
+        setId(adminUser, 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
+
+        Instant scheduledTime = Instant.now().plusSeconds(86400 * 5);
+        LocalDate scheduledDate = scheduledTime.atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+
+        AnnouncementRequest req = new AnnouncementRequest(
+                "Title", "Body", null, false, scheduledDate, null,
+                AnnouncementStatus.SCHEDULED, null, scheduledTime, false, false,
+                null, null, null, null, null, null, null, null, null);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> announcementService.create(req, 1L));
+        assertTrue(ex.getMessage().contains("Expiry date must be after the scheduled publishing date"));
+    }
+
+    @Test
+    @DisplayName("schedule rejects new scheduled date when announcement expiresAt is on or before it")
+    void scheduleRejectsScheduledDateAfterExpiry() {
+        Announcement a = announcement(1L, AnnouncementStatus.DRAFT, LocalDate.now().plusDays(2));
+        when(announcementRepository.findById(1L)).thenReturn(Optional.of(a));
+
+        Instant scheduledTime = Instant.now().plusSeconds(86400 * 3);
+        assertThrows(BadRequestException.class,
+                () -> announcementService.schedule(1L, new ScheduleRequest(scheduledTime)));
     }
 }

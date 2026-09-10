@@ -2,13 +2,22 @@ package com.careerlabs.lms.api.announcement.service;
 
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
+import com.careerlabs.lms.api.batch.entity.Batch;
+import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.entity.Student;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,9 +29,28 @@ public class AnnouncementPlaceholderResolver {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     private final AttendanceRepository attendanceRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final CourseRepository courseRepository;
+    private final BatchRepository batchRepository;
+
+    @Autowired
+    public AnnouncementPlaceholderResolver(AttendanceRepository attendanceRepository,
+                                           EnrollmentRepository enrollmentRepository,
+                                           CourseRepository courseRepository,
+                                           BatchRepository batchRepository) {
+        this.attendanceRepository = attendanceRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
+    }
+
+    public AnnouncementPlaceholderResolver(AttendanceRepository attendanceRepository,
+                                           EnrollmentRepository enrollmentRepository) {
+        this(attendanceRepository, enrollmentRepository, null, null);
+    }
 
     public AnnouncementPlaceholderResolver(AttendanceRepository attendanceRepository) {
-        this.attendanceRepository = attendanceRepository;
+        this(attendanceRepository, null, null, null);
     }
 
     /** Generic substitution using an explicit variable map (used for admin template application). */
@@ -47,17 +75,32 @@ public class AnnouncementPlaceholderResolver {
         vars.put("studentName", student.getUser() != null ? student.getUser().getName() : "");
         vars.put("batchName", student.getBatch() != null ? student.getBatch().getName() : "");
 
-        // Collect all unique course names: direct course + batch's course
-        java.util.LinkedHashSet<String> courseNames = new java.util.LinkedHashSet<>();
-        if (student.getCourse() != null && student.getCourse().getTitle() != null) {
-            courseNames.add(student.getCourse().getTitle());
+        Set<String> courses = new LinkedHashSet<>();
+        if (enrollmentRepository != null && student.getId() != null) {
+            List<String> enrolled = enrollmentRepository.findActiveCourseTitlesByStudentId(student.getId());
+            if (enrolled == null || enrolled.isEmpty()) {
+                enrolled = enrollmentRepository.findAllCourseTitlesByStudentId(student.getId());
+            }
+            if (enrolled != null) {
+                for (String t : enrolled) {
+                    if (t != null && !t.isBlank()) {
+                        courses.add(t.trim());
+                    }
+                }
+            }
         }
-        if (student.getBatch() != null && student.getBatch().getCourse() != null
-                && student.getBatch().getCourse().getTitle() != null) {
-            courseNames.add(student.getBatch().getCourse().getTitle());
+        if (student.getCourse() != null && student.getCourse().getTitle() != null && !student.getCourse().getTitle().isBlank()) {
+            courses.add(student.getCourse().getTitle().trim());
         }
-        vars.put("courseName", String.join(", ", courseNames));
-
+        try {
+            if (student.getBatch() != null && student.getBatch().getCourse() != null
+                    && student.getBatch().getCourse().getTitle() != null
+                    && !student.getBatch().getCourse().getTitle().isBlank()) {
+                courses.add(student.getBatch().getCourse().getTitle().trim());
+            }
+        } catch (Exception ignored) {
+        }
+        vars.put("courseName", String.join(", ", courses));
         vars.put("date", LocalDate.now().format(DATE_FORMAT));
 
         long total = attendanceRepository.countByStudentId(student.getId());
@@ -72,12 +115,58 @@ public class AnnouncementPlaceholderResolver {
 
     /** Fixed mock values so an admin can preview how placeholders resolve without a real student. */
     public Map<String, String> sampleVariables() {
+        return sampleVariables(null, null);
+    }
+
+    /** Context-aware preview for announcement creation when admin selects target course or batch. */
+    public Map<String, String> sampleVariables(Long courseId, Long batchId) {
         Map<String, String> vars = new HashMap<>();
         vars.put("studentName", "Jane Student");
-        vars.put("batchName", "Demo Batch");
-        vars.put("courseName", "Java, Python");
+
+        String sampleBatch = "Demo Batch";
+        if (batchId != null && batchRepository != null) {
+            sampleBatch = batchRepository.findById(batchId)
+                    .map(Batch::getName)
+                    .filter(n -> n != null && !n.isBlank())
+                    .orElse(sampleBatch);
+        }
+        vars.put("batchName", sampleBatch);
+
+        String sampleCourse = resolveSampleCourses(courseId);
+        if (sampleCourse == null || sampleCourse.isBlank()) {
+            sampleCourse = "Java, Python";
+        }
+        vars.put("courseName", sampleCourse);
         vars.put("attendancePercentage", "82");
         vars.put("date", LocalDate.now().format(DATE_FORMAT));
         return vars;
+    }
+
+    private String resolveSampleCourses(Long courseId) {
+        if (courseId != null && courseRepository != null) {
+            String target = courseRepository.findById(courseId)
+                    .map(Course::getTitle)
+                    .filter(t -> t != null && !t.isBlank())
+                    .map(String::trim)
+                    .orElse(null);
+            if (target != null) {
+                return target;
+            }
+        }
+
+        // When "All Courses" (courseId == null) or unspecified, provide all active course names
+        if (courseRepository != null) {
+            List<String> titles = courseRepository.findAll().stream()
+                    .map(Course::getTitle)
+                    .filter(t -> t != null && !t.isBlank())
+                    .map(String::trim)
+                    .distinct()
+                    .toList();
+            if (!titles.isEmpty()) {
+                return String.join(", ", titles);
+            }
+        }
+
+        return "Sample Course";
     }
 }

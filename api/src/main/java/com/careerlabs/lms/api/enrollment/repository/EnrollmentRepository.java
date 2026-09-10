@@ -7,11 +7,22 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Long>, JpaSpecificationExecutor<Enrollment> {
+
+    @Query("SELECT DISTINCT e.course.title FROM Enrollment e WHERE e.student.id = :studentId AND e.active = true AND e.course.title IS NOT NULL ORDER BY e.course.title ASC")
+    List<String> findActiveCourseTitlesByStudentId(@Param("studentId") Long studentId);
+
+    @Query("SELECT DISTINCT e.course.title FROM Enrollment e WHERE e.student.id = :studentId AND e.course.title IS NOT NULL ORDER BY e.course.title ASC")
+    List<String> findAllCourseTitlesByStudentId(@Param("studentId") Long studentId);
+
+    @Query("SELECT DISTINCT e.student.id FROM Enrollment e WHERE e.course.id = :courseId AND e.active = true")
+    List<Long> findActiveStudentIdsByCourseId(@Param("courseId") Long courseId);
 
     boolean existsByStudentIdAndCourseId(Long studentId, Long courseId);
 

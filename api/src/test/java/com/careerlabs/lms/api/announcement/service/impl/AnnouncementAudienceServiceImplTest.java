@@ -40,6 +40,8 @@ class AnnouncementAudienceServiceImplTest {
     private AttendanceRepository attendanceRepository;
     @Mock
     private AssignmentSubmissionRepository submissionRepository;
+    @Mock
+    private com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository enrollmentRepository;
 
     @InjectMocks
     private AnnouncementAudienceServiceImpl audienceService;
@@ -121,6 +123,19 @@ class AnnouncementAudienceServiceImplTest {
         a.setCourse(other);
 
         assertFalse(audienceService.isEligible(a, student));
+    }
+
+    @Test
+    @DisplayName("Student is eligible for course announcement if enrolled via enrollments table")
+    void eligibleWhenEnrolledInCourseViaEnrollment() {
+        Course otherCourse = new Course();
+        setId(otherCourse, 97L);
+        Announcement a = new Announcement();
+        a.setCourse(otherCourse);
+
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(100L, 97L)).thenReturn(true);
+
+        assertTrue(audienceService.isEligible(a, student));
     }
 
     @Test

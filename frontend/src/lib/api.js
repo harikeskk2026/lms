@@ -302,7 +302,13 @@ export const adminApi = {
   getAnnouncementSuggestions: () => api.get('/admin/announcements/suggestions'),
   getAnnouncementComments: (id) => api.get(`/admin/announcements/${id}/comments`),
   addAnnouncementComment: (id, data) => api.post(`/admin/announcements/${id}/comments`, data),
-  previewAnnouncementPlaceholders: (title, body) => api.post('/admin/announcements/preview-placeholders', { title, body }),
+  previewAnnouncementPlaceholders: (title, body, courseId, batchId) =>
+    api.post('/admin/announcements/preview-placeholders', {
+      title,
+      body,
+      courseId: courseId ? Number(courseId) : null,
+      batchId: batchId ? Number(batchId) : null,
+    }),
   getAnnouncementAudienceCount: (data) => api.post('/admin/announcements/audience-count', data),
 
   // Announcement Templates

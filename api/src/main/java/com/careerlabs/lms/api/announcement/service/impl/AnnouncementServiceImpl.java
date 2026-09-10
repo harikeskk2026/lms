@@ -16,6 +16,7 @@ import com.careerlabs.lms.api.announcement.entity.AnnouncementVersion;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementView;
 import com.careerlabs.lms.api.announcement.entity.AudienceRuleType;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementAcknowledgmentRepository;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementCommentRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementVersionRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementViewRepository;
@@ -46,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -58,6 +60,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     private final AnnouncementVersionRepository versionRepository;
     private final AnnouncementViewRepository viewRepository;
     private final AnnouncementAcknowledgmentRepository acknowledgmentRepository;
+    private final AnnouncementCommentRepository commentRepository;
     private final BatchRepository batchRepository;
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
@@ -73,6 +76,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                                     AnnouncementVersionRepository versionRepository,
                                     AnnouncementViewRepository viewRepository,
                                     AnnouncementAcknowledgmentRepository acknowledgmentRepository,
+                                    AnnouncementCommentRepository commentRepository,
                                     BatchRepository batchRepository,
                                     CollegeRepository collegeRepository,
                                     CourseRepository courseRepository,
@@ -87,6 +91,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         this.versionRepository = versionRepository;
         this.viewRepository = viewRepository;
         this.acknowledgmentRepository = acknowledgmentRepository;
+        this.commentRepository = commentRepository;
         this.batchRepository = batchRepository;
         this.collegeRepository = collegeRepository;
         this.courseRepository = courseRepository;
@@ -195,6 +200,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
         AnnouncementStatus status = request.status() != null ? request.status() : AnnouncementStatus.PUBLISHED;
         validateScheduling(status, announcement.getScheduledAt());
+        validateExpiry(status, announcement.getScheduledAt(), announcement.getExpiresAt());
         announcement.setStatus(status);
 
         Announcement saved = announcementRepository.save(announcement);
@@ -218,6 +224,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
         AnnouncementStatus newStatus = request.status() != null ? request.status() : previousStatus;
         validateScheduling(newStatus, announcement.getScheduledAt());
+        validateExpiry(newStatus, announcement.getScheduledAt(), announcement.getExpiresAt());
         announcement.setStatus(newStatus);
 
         Announcement saved = announcementRepository.save(announcement);
@@ -241,6 +248,24 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         }
     }
 
+    private void validateExpiry(AnnouncementStatus status, Instant scheduledAt, LocalDate expiresAt) {
+        if (expiresAt == null) {
+            return;
+        }
+        LocalDate publishDate;
+        if (status == AnnouncementStatus.SCHEDULED && scheduledAt != null) {
+            publishDate = scheduledAt.atZone(ZoneId.systemDefault()).toLocalDate();
+            if (!expiresAt.isAfter(publishDate)) {
+                throw new BadRequestException("Expiry date must be after the scheduled publishing date (" + publishDate + ")");
+            }
+        } else {
+            publishDate = LocalDate.now();
+            if (!expiresAt.isAfter(publishDate)) {
+                throw new BadRequestException("Expiry date must be after the published date");
+            }
+        }
+    }
+
     // ─── Lifecycle actions ───────────────────────────────────────────────────
 
     @Override
@@ -250,6 +275,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if (announcement.getStatus() == AnnouncementStatus.PUBLISHED) {
             throw new BadRequestException("Announcement is already published");
         }
+        validateExpiry(AnnouncementStatus.PUBLISHED, null, announcement.getExpiresAt());
         announcement.setStatus(AnnouncementStatus.PUBLISHED);
         Announcement saved = announcementRepository.save(announcement);
         fanOut(saved);
@@ -269,6 +295,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if (request.scheduledAt().isBefore(Instant.now().minusSeconds(60))) {
             throw new BadRequestException("Scheduled time must be in the future");
         }
+        validateExpiry(AnnouncementStatus.SCHEDULED, request.scheduledAt(), announcement.getExpiresAt());
         announcement.setScheduledAt(request.scheduledAt());
         announcement.setStatus(AnnouncementStatus.SCHEDULED);
         return AnnouncementResponse.from(announcementRepository.save(announcement));
@@ -298,10 +325,12 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         boolean scheduledForLater = announcement.getScheduledAt() != null
                 && announcement.getScheduledAt().isAfter(Instant.now());
         if (scheduledForLater) {
+            validateExpiry(AnnouncementStatus.SCHEDULED, announcement.getScheduledAt(), announcement.getExpiresAt());
             announcement.setStatus(AnnouncementStatus.SCHEDULED);
             return AnnouncementResponse.from(announcementRepository.save(announcement));
         }
 
+        validateExpiry(AnnouncementStatus.PUBLISHED, null, announcement.getExpiresAt());
         announcement.setStatus(AnnouncementStatus.PUBLISHED);
         Announcement saved = announcementRepository.save(announcement);
         fanOut(saved);
@@ -331,7 +360,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         copy.setBody(source.getBody());
         copy.setBatch(source.getBatch());
         copy.setPinned(false);
-        copy.setExpiresAt(source.getExpiresAt());
+        copy.setExpiresAt(source.getExpiresAt() != null && source.getExpiresAt().isAfter(LocalDate.now())
+                ? source.getExpiresAt() : null);
         copy.setCategory(source.getCategory());
         copy.setPriority(source.getPriority());
         copy.setRequiresAcknowledgment(source.isRequiresAcknowledgment());
@@ -358,6 +388,11 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if (!announcementRepository.existsById(id)) {
             throw new ResourceNotFoundException("Announcement not found: " + id);
         }
+        commentRepository.clearParentCommentsByAnnouncementId(id);
+        commentRepository.deleteAllByAnnouncementId(id);
+        acknowledgmentRepository.deleteAllByAnnouncementId(id);
+        viewRepository.deleteAllByAnnouncementId(id);
+        versionRepository.deleteAllByAnnouncementId(id);
         announcementRepository.deleteById(id);
     }
 

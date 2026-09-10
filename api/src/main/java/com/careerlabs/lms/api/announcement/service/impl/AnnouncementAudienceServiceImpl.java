@@ -9,7 +9,9 @@ import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,13 +25,23 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
     private final StudentRepository studentRepository;
     private final AttendanceRepository attendanceRepository;
     private final AssignmentSubmissionRepository submissionRepository;
+    private final EnrollmentRepository enrollmentRepository;
+
+    @Autowired
+    public AnnouncementAudienceServiceImpl(StudentRepository studentRepository,
+                                            AttendanceRepository attendanceRepository,
+                                            AssignmentSubmissionRepository submissionRepository,
+                                            EnrollmentRepository enrollmentRepository) {
+        this.studentRepository = studentRepository;
+        this.attendanceRepository = attendanceRepository;
+        this.submissionRepository = submissionRepository;
+        this.enrollmentRepository = enrollmentRepository;
+    }
 
     public AnnouncementAudienceServiceImpl(StudentRepository studentRepository,
                                             AttendanceRepository attendanceRepository,
                                             AssignmentSubmissionRepository submissionRepository) {
-        this.studentRepository = studentRepository;
-        this.attendanceRepository = attendanceRepository;
-        this.submissionRepository = submissionRepository;
+        this(studentRepository, attendanceRepository, submissionRepository, null);
     }
 
     @Override
@@ -65,7 +77,9 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                 boolean directMatch = student.getCourse() != null && targetCourseId.equals(student.getCourse().getId());
                 boolean batchMatch = student.getBatch() != null && student.getBatch().getCourse() != null
                         && targetCourseId.equals(student.getBatch().getCourse().getId());
-                if (!directMatch && !batchMatch) {
+                boolean enrollmentMatch = enrollmentRepository != null && student.getId() != null
+                        && enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), targetCourseId);
+                if (!directMatch && !batchMatch && !enrollmentMatch) {
                     return false;
                 }
             }
@@ -118,7 +132,14 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                         cb.isNotNull(root.get("batch").get("course")),
                         cb.equal(root.get("batch").get("course").get("id"), targetCourseId)
                 );
-                predicates.add(cb.or(directCourse, batchCourse));
+                Predicate coursePredicate = cb.or(directCourse, batchCourse);
+                if (enrollmentRepository != null) {
+                    List<Long> enrolledStudentIds = enrollmentRepository.findActiveStudentIdsByCourseId(targetCourseId);
+                    if (enrolledStudentIds != null && !enrolledStudentIds.isEmpty()) {
+                        coursePredicate = cb.or(coursePredicate, root.get("id").in(enrolledStudentIds));
+                    }
+                }
+                predicates.add(coursePredicate);
             }
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };

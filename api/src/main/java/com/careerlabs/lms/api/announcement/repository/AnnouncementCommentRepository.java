@@ -24,5 +24,13 @@ public interface AnnouncementCommentRepository extends JpaRepository<Announcemen
     @Query("UPDATE AnnouncementComment c SET c.parentComment = NULL WHERE c.parentComment.id IN :commentIds")
     void clearParentCommentIn(@Param("commentIds") List<Long> commentIds);
 
+    @Modifying
+    @Query("UPDATE AnnouncementComment c SET c.parentComment = NULL WHERE c.announcement.id = :announcementId")
+    void clearParentCommentsByAnnouncementId(@Param("announcementId") Long announcementId);
+
+    @Modifying
+    @Query("DELETE FROM AnnouncementComment c WHERE c.announcement.id = :announcementId")
+    void deleteAllByAnnouncementId(@Param("announcementId") Long announcementId);
+
     void deleteAllByUser_Id(Long userId);
 }
