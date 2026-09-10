@@ -125,8 +125,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/batches", "/api/batches/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/colleges/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/colleges/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/students", "/api/students/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
-                        .requestMatchers("/api/students", "/api/students/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/students", "/api/students/**", "/api/admin/students", "/api/admin/students/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers("/api/students", "/api/students/**", "/api/admin/students", "/api/admin/students/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/trainers", "/api/trainers/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/reports", "/api/reports/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/reports", "/api/reports/**").hasAnyRole("ADMIN", "SUPERADMIN")
@@ -141,8 +141,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/student/notifications/**").hasRole("STUDENT")
                         .requestMatchers("/api/admin/notifications/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         // Attendance endpoints
-                        .requestMatchers("/api/admin/attendance/**", "/api/admin/classes/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
-                        .requestMatchers("/api/student/attendance/**", "/api/student/classes/**").hasRole("STUDENT")
+                        .requestMatchers("/api/admin/attendance", "/api/admin/attendance/**", "/api/admin/classes", "/api/admin/classes/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
+                        .requestMatchers("/api/student/attendance", "/api/student/attendance/**", "/api/student/classes", "/api/student/classes/**").hasRole("STUDENT")
                         // Meeting link endpoints
                         .requestMatchers("/api/admin/meetings/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/meetings/**").hasRole("STUDENT")
@@ -221,6 +221,7 @@ public class SecurityConfig {
         configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Authorization", "Content-Disposition", "Content-Type", "Content-Length"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
