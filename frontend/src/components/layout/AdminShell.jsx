@@ -59,6 +59,12 @@ function Sidebar({ open, onClose, badges }) {
     TRAINER:    'bg-green-400/20 text-green-300',
   }
 
+  const handleNavClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      onClose()
+    }
+  }
+
   return (
     <>
       {open && (
@@ -67,9 +73,9 @@ function Sidebar({ open, onClose, badges }) {
       <aside
         className={clsx(
           'fixed top-0 left-0 h-screen w-64 z-30 flex flex-col',
-          'transition-transform duration-300',
+          'transition-transform duration-300 ease-in-out',
           'lg:translate-x-0 lg:relative lg:z-auto',
-          open ? 'translate-x-0' : '-translate-x-full'
+          open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         style={{ background: 'linear-gradient(180deg, #3b0764 0%, #1e0538 100%)' }}
       >
@@ -128,7 +134,7 @@ function Sidebar({ open, onClose, badges }) {
                     ? 'bg-white/15 border-l-2 border-yellow-400 text-white pl-2.5'
                     : 'text-purple-200 hover:bg-white/5 hover:text-white'
                 )}
-                onClick={onClose}
+                onClick={handleNavClick}
               >
                 <Icon size={18} className={active ? 'text-yellow-300' : ''} />
                 <span className="flex-1">{displayLabel}</span>
@@ -287,7 +293,7 @@ export default function AdminShell({ children }) {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} badges={badges} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopBar
-          onMenuClick={() => setSidebarOpen(true)}
+          onMenuClick={() => setSidebarOpen(p => !p)}
           user={user}
           darkMode={darkMode}
           toggleDark={toggleDark}

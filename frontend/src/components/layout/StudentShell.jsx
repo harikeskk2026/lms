@@ -30,6 +30,12 @@ function Sidebar({ open, onClose, badges }) {
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
+  const handleNavClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      onClose()
+    }
+  }
+
   return (
     <>
       {open && (
@@ -38,9 +44,9 @@ function Sidebar({ open, onClose, badges }) {
       <aside
         className={clsx(
           'fixed top-0 left-0 h-screen w-64 z-30 flex flex-col',
-          'transition-transform duration-300',
+          'transition-transform duration-300 ease-in-out',
           'lg:translate-x-0 lg:relative lg:z-auto',
-          open ? 'translate-x-0' : '-translate-x-full'
+          open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         style={{ background: 'linear-gradient(180deg, #3b0764 0%, #1e0538 100%)' }}
       >
@@ -94,7 +100,7 @@ function Sidebar({ open, onClose, badges }) {
                     ? 'bg-white/10 border-l-2 border-yellow-400 text-white'
                     : 'text-purple-200 hover:bg-white/5 hover:text-white'
                 )}
-                onClick={onClose}
+                onClick={handleNavClick}
               >
                 <Icon size={17} />
                 <span className="flex-1">{label}</span>
@@ -245,7 +251,7 @@ export default function StudentShell({ children }) {
     <div className="flex h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-[#0f0a1e] dark:via-[#1a0f35] dark:to-[#0f0a1e] overflow-hidden">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} badges={badges} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} user={user} unreadCount={badges.notifications} />
+        <TopBar onMenuClick={() => setSidebarOpen(p => !p)} user={user} unreadCount={badges.notifications} />
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           {children}
         </main>

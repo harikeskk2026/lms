@@ -439,7 +439,32 @@ export default function BatchDetailPage() {
     } catch { toast.error('Failed to remove') }
   }
 
-  if (loading) return <div className="max-w-5xl mx-auto"><div className="glass-card p-6 animate-pulse h-40" /></div>
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const tabParam = params.get('tab')
+      const validTabs = ['Overview', 'Students', 'Attendance', 'Assignments']
+      const match = validTabs.find(t => t.toLowerCase() === (tabParam || '').toLowerCase())
+      if (match) {
+        setTab(match)
+      } else {
+        const saved = sessionStorage.getItem(`batch_tab_${id}`)
+        if (saved && validTabs.includes(saved)) setTab(saved)
+      }
+    } catch {}
+  }, [id])
+
+  const handleTabChange = (t) => {
+    setTab(t)
+    try {
+      sessionStorage.setItem(`batch_tab_${id}`, t)
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', t)
+      window.history.replaceState(null, '', url.pathname + url.search)
+    } catch {}
+  }
+
+  if (loading) return <div className="max-w-7xl mx-auto"><div className="glass-card p-6 animate-pulse h-40" /></div>
   if (!batch) return <div className="text-center py-20 text-gray-400">Batch not found</div>
 
   const totalClasses = classes.length
@@ -450,7 +475,7 @@ export default function BatchDetailPage() {
   const progressPct = Math.round((elapsedDays / totalDays) * 100)
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
         <button onClick={() => router.back()} className="w-9 h-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50">
           <ArrowLeft size={16} />
@@ -480,7 +505,7 @@ export default function BatchDetailPage() {
       {/* Tabs */}
       <div className="flex gap-1 bg-white/80 dark:bg-gray-900/70 border border-purple-100 dark:border-purple-900/30 rounded-2xl p-1 overflow-x-auto">
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} onClick={() => handleTabChange(t)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${tab === t ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-purple-600 hover:bg-purple-50'}`}>
             {t}
           </button>

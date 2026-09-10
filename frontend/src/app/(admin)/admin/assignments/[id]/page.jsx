@@ -185,7 +185,7 @@ export default function AssignmentDetailPage() {
   }
 
   if (loading) return (
-    <div className="max-w-6xl mx-auto space-y-4">
+    <div className="max-w-7xl mx-auto space-y-4">
       {[...Array(3)].map((_, i) => <div key={i} className="glass-card p-6 animate-pulse h-24" />)}
     </div>
   )
@@ -193,7 +193,7 @@ export default function AssignmentDetailPage() {
   if (!assignment) return <div className="text-center py-20 text-gray-400">Assignment not found</div>
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <div className="max-w-7xl mx-auto space-y-5">
       {/* Back + Header */}
       <div className="flex items-start gap-4">
         <button onClick={() => router.back()}

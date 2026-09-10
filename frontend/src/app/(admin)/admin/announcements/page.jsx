@@ -186,7 +186,7 @@ export default function AnnouncementsPage() {
     onDetails: setDetailsFor, onView: setViewingAnnouncement }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="font-display text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">

@@ -133,6 +133,18 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
+  const syncUrlParams = (bId, cId) => {
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', 'mark')
+      if (bId) url.searchParams.set('batchId', String(bId))
+      else url.searchParams.delete('batchId')
+      if (cId) url.searchParams.set('classId', String(cId))
+      else url.searchParams.delete('classId')
+      window.history.replaceState(null, '', url.pathname + url.search)
+    } catch {}
+  }
+
   useEffect(() => {
     adminApi.getBatches({ isActive: 'true' }).then(r => {
       const batchList = r.data.data || []
@@ -148,6 +160,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
     setSelectedClass(autoClassId ? String(autoClassId) : '')
     setSheet(null)
     setSaveResult(null)
+    syncUrlParams(batchId, autoClassId)
     if (!batchId) return
     try {
       const r = await adminApi.getClasses({ batchId })
@@ -334,15 +347,28 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Class</label>
-            <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} disabled={!selectedBatch}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50">
+            <select
+              value={selectedClass}
+              onChange={e => {
+                setSelectedClass(e.target.value)
+                syncUrlParams(selectedBatch, e.target.value)
+              }}
+              disabled={!selectedBatch}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+            >
               <option value="">Select class</option>
               {classes.map(c => <option key={c.id} value={c.id}>{new Date(c.date).toLocaleDateString('en-IN')} — {c.title}</option>)}
             </select>
           </div>
         </div>
-        <button onClick={loadSheet} disabled={!selectedClass || loading}
-          className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all">
+        <button
+          onClick={() => {
+            syncUrlParams(selectedBatch, selectedClass)
+            fetchAttendanceSheet(selectedClass)
+          }}
+          disabled={!selectedClass || loading}
+          className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all"
+        >
           <CheckSquare size={16} />
           {loading ? 'Loading...' : 'Load Attendance Sheet'}
         </button>
@@ -526,7 +552,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
 
           {/* Sticky save bar */}
           <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl -mx-6 -mb-6 px-6 py-4 border-t border-purple-100 dark:border-purple-900/30 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
-            <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
               <p className="text-sm text-gray-500">
                 <span className="text-green-600 font-semibold">{counts.PRESENT || 0} present</span>
                 {' · '}
@@ -2330,6 +2356,41 @@ export default function AttendancePage() {
   const [initialBatchId, setInitialBatchId] = useState(null)
   const [initialClassId, setInitialClassId] = useState(null)
 
+  // Restore active tab and optional batch/class from URL search params or sessionStorage on load/refresh
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const tabParam = params.get('tab')
+      const batchParam = params.get('batchId')
+      const classParam = params.get('classId')
+
+      const validTabs = ['today', 'mark', 'overview', 'analytics', 'alerts', 'history', 'corrections']
+
+      let targetTab = 'today'
+      if (tabParam && validTabs.includes(tabParam)) {
+        targetTab = tabParam
+      } else {
+        const savedTab = sessionStorage.getItem('attendance_active_tab')
+        if (savedTab && validTabs.includes(savedTab)) {
+          targetTab = savedTab
+        }
+      }
+
+      setActiveTab(targetTab)
+      if (batchParam) setInitialBatchId(batchParam)
+      if (classParam) setInitialClassId(classParam)
+
+      // Sync URL without reloading
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', targetTab)
+      if (batchParam) url.searchParams.set('batchId', batchParam)
+      if (classParam) url.searchParams.set('classId', classParam)
+      window.history.replaceState(null, '', url.pathname + url.search)
+    } catch (e) {
+      console.error('Failed to restore attendance tab:', e)
+    }
+  }, [])
+
   const handleRefresh = useCallback(() => {
     setRefreshKey(k => k + 1)
   }, [])
@@ -2337,18 +2398,48 @@ export default function AttendancePage() {
   const handleTabChange = (key) => {
     setActiveTab(key)
     setRefreshKey(k => k + 1)
+    try {
+      sessionStorage.setItem('attendance_active_tab', key)
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', key)
+      if (key !== 'mark') {
+        url.searchParams.delete('batchId')
+        url.searchParams.delete('classId')
+        setInitialBatchId(null)
+        setInitialClassId(null)
+      }
+      window.history.replaceState(null, '', url.pathname + url.search)
+    } catch (e) {
+      console.error('Failed to sync tab to URL:', e)
+    }
   }
 
   const handleMarkAttendanceFromToday = (batchId, classId) => {
     setInitialBatchId(batchId)
     setInitialClassId(classId)
     setActiveTab('mark')
+    try {
+      sessionStorage.setItem('attendance_active_tab', 'mark')
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', 'mark')
+      if (batchId) url.searchParams.set('batchId', String(batchId))
+      if (classId) url.searchParams.set('classId', String(classId))
+      window.history.replaceState(null, '', url.pathname + url.search)
+    } catch {}
   }
 
   const handleViewAttendanceFromToday = (batchId, classId) => {
     setInitialBatchId(batchId)
     setInitialClassId(classId)
     setActiveTab('mark')
+    try {
+      sessionStorage.setItem('attendance_active_tab', 'mark')
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', 'mark')
+      if (batchId) url.searchParams.set('batchId', String(batchId))
+      if (classId) url.searchParams.set('classId', String(classId))
+      window.history.replaceState(null, '', url.pathname + url.search)
+    } catch {}
   }
 
   const exportCSV = async () => {
@@ -2379,9 +2470,8 @@ export default function AttendancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-[#0f0a1e] dark:via-[#1a0f35] dark:to-[#0f0a1e]">
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Attendance Management</h1>
@@ -2437,7 +2527,6 @@ export default function AttendancePage() {
         {activeTab === 'alerts'      && <AlertsTab onAlertsChanged={handleRefresh} />}
         {activeTab === 'history'     && <HistoryTab />}
         {activeTab === 'corrections' && <CorrectionsTab onCorrectionsChanged={handleRefresh} />}
-      </div>
     </div>
   )
 }
