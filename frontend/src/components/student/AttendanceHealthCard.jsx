@@ -46,17 +46,17 @@ export default function AttendanceHealthCard({ summary }) {
 
   return (
     <div className="glass-card p-5">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-xs text-gray-500 uppercase font-semibold tracking-wide">Attendance Health</p>
-          <p className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1">
+          <p className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white mt-1">
             {health.hasClasses ? `${health.overallPercentage ?? health.currentPercentage}%` : '—'}
           </p>
           <span className={`inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-xl text-xs font-bold ${cfg.bg} ${cfg.text}`}>
             {cfg.emoji} {cfg.label}
           </span>
         </div>
-        <div className="text-right text-sm">
+        <div className="text-left sm:text-right text-sm">
           {health.hasClasses ? (
             <>
               <p className="text-gray-500">Previous: <span className="font-semibold text-gray-700 dark:text-gray-300">{health.previousPercentage}%</span></p>

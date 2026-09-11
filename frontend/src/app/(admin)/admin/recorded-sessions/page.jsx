@@ -8,6 +8,7 @@ import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const STATUS_STYLES = {
   DRAFT: 'bg-gray-100 text-gray-600',
@@ -238,7 +239,7 @@ export default function RecordedSessionsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Recorded Sessions</h1>
           <p className="text-sm text-gray-500 mt-0.5">Private, encrypted video — never a public URL.</p>
@@ -254,7 +255,7 @@ export default function RecordedSessionsPage() {
           <div className="p-6 space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 border-b border-purple-100 dark:bg-purple-900/20 dark:border-purple-900/30">
                   {['Title', 'Course', 'Batch', 'Duration', 'Status', 'Created', 'Actions'].map(h => (
@@ -267,7 +268,7 @@ export default function RecordedSessionsPage() {
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No recorded sessions yet</td></tr>
                 ) : sessions.map(s => (
                   <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/20 dark:hover:bg-purple-900/10">
-                    <td className="px-3 py-3 font-semibold text-gray-800 dark:text-white max-w-[200px] truncate">{s.title}</td>
+                    <td className="px-3 py-3 font-semibold text-gray-800 dark:text-white break-words">{s.title}</td>
                     <td className="px-3 py-3 text-xs text-gray-500">{s.courseName}</td>
                     <td className="px-3 py-3 text-xs text-gray-500">{s.batchId || '—'}</td>
                     <td className="px-3 py-3 text-xs text-gray-500">{s.durationSeconds ? `${Math.round(s.durationSeconds / 60)}m` : '—'}</td>
@@ -276,7 +277,7 @@ export default function RecordedSessionsPage() {
                         {s.effectiveStatus}
                       </span>
                       {s.status === 'FAILED' && s.processingError && (
-                        <p className="text-[10px] text-red-500 mt-1 max-w-[160px] truncate" title={s.processingError}>{s.processingError}</p>
+                        <p className="text-[10px] text-red-500 mt-1 break-words" title={s.processingError}>{s.processingError}</p>
                       )}
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-400">{s.sessionDate || '—'}</td>
@@ -328,24 +329,29 @@ export default function RecordedSessionsPage() {
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Course</label>
-              <select value={form.courseId} onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">Select course</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
+              <CustomSelect
+                value={form.courseId}
+                onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
+                options={courses.map(c => ({ value: c.id, label: c.title }))}
+                placeholder="Select course"
+                searchable={courses.length >= 10}
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Batch (optional)</label>
-              <select value={form.batchId} onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">All batches</option>
-                {batches.filter(b => !form.courseId || String(b.course?.id) === String(form.courseId)).map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
+              <CustomSelect
+                value={form.batchId}
+                onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
+                options={batches.filter(b => !form.courseId || String(b.course?.id) === String(form.courseId)).map(b => ({
+                  value: b.id,
+                  label: b.name
+                }))}
+                placeholder="All batches"
+                searchable={batches.length >= 10}
+              />
             </div>
           </div>
           <div>
@@ -353,7 +359,7 @@ export default function RecordedSessionsPage() {
             <input value={form.instructorName} onChange={e => setForm(f => ({ ...f, instructorName: e.target.value }))}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Session Date</label>
               <input type="date" value={form.sessionDate} onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
@@ -428,7 +434,7 @@ export default function RecordedSessionsPage() {
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-gray-800 dark:text-white">{analyticsTarget.title}</h3>
             {analytics ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { label: 'Assigned', val: analytics.totalAssigned },
                   { label: 'Started', val: analytics.uniqueStudentsStarted },

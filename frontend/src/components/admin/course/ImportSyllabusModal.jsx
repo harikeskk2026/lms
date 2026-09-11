@@ -185,7 +185,7 @@ export default function ImportSyllabusModal({ courseId, open, onClose, onImporte
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Import Syllabus</h2>
+          <h2 className="text-sm sm:text-lg font-bold text-gray-900 dark:text-white">Import Syllabus</h2>
           <button
             onClick={handleClose}
             aria-label="Close dialog"
@@ -345,7 +345,7 @@ export default function ImportSyllabusModal({ courseId, open, onClose, onImporte
                           <span className="text-gray-400 shrink-0">
                             {expandedModules[mi] ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
                           </span>
-                          <span className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                          <span className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">
                             {m.title}
                           </span>
                         </div>

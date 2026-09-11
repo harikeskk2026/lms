@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -92,6 +92,7 @@ export default function PlacementPage() {
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
   const [prepMaterials, setPrepMaterials] = useState([])
+  const [trainers, setTrainers] = useState([])
   const [prepPanel, setPrepPanel] = useState(false)
   const [prepForm, setPrepForm] = useState({ title: '', interviewType: 'TECHNICAL', instructions: '', courseId: '' })
   const [editPrep, setEditPrep] = useState(null)
@@ -233,10 +234,15 @@ export default function PlacementPage() {
       adminApi.getBatches().catch(() => null),
       adminApi.getCourses().catch(() => null),
       adminApi.getPreparationMaterials().catch(() => null),
-    ]).then(([b, c, p]) => {
+      adminApi.getTrainers({ limit: 200, status: 'active' }).catch(() => null),
+    ]).then(([b, c, p, t]) => {
       if (b?.status === 'fulfilled') setBatches(Array.isArray(b.value.data.data) ? b.value.data.data : [])
       if (c?.status === 'fulfilled') setCourses(Array.isArray(c.value.data.data) ? c.value.data.data : [])
       if (p?.status === 'fulfilled') setPrepMaterials(Array.isArray(p.value.data.data) ? p.value.data.data : [])
+      if (t?.status === 'fulfilled') {
+        const tList = t.value?.data?.data?.trainers || t.value?.data?.data || []
+        setTrainers(Array.isArray(tList) ? tList : [])
+      }
     })
   }, [])
 
@@ -910,7 +916,7 @@ export default function PlacementPage() {
             </div>
           </div>
           <div className="overflow-x-auto mt-3">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 border-b border-purple-100">
                   {['Student', 'Status', 'Mocks', 'Avg Rating', 'Last Update', 'Action'].map(h => (
@@ -1018,7 +1024,7 @@ export default function PlacementPage() {
           </div>
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[500px] text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 border-b border-purple-100">
                     {['Candidates', 'Date/Time', 'Mode', 'Duration', 'Interviewer', 'Status', 'Actions'].map(h => (
@@ -1051,7 +1057,7 @@ export default function PlacementPage() {
                             {m.mode}
                           </span>
                           {m.mode === 'ONLINE' && m.meetLink ? (
-                            <a href={m.meetLink} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-purple-600 mt-1 hover:underline truncate max-w-[140px]">Join</a>
+                            <a href={m.meetLink} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-purple-600 mt-1 hover:underline break-words">Join</a>
                           ) : m.mode === 'OFFLINE' && m.location ? (
                             <span className="block text-[10px] text-gray-500 mt-1">{m.location}</span>
                           ) : null}
@@ -1067,11 +1073,17 @@ export default function PlacementPage() {
                           {m.status === 'SCHEDULED' && (m.candidates || []).length > 0 ? (
                             <div className="flex flex-col gap-1.5 items-start">
                               {(m.candidates || []).map(c => c.status === 'SCHEDULED' ? (
-                                <button key={c.id}
-                                  onClick={() => { setFeedbackPanel({ mockId: m.id, candidateId: c.id }); setFeedbackForm({ feedback: c.feedback || '', rating: c.rating || 5, status: 'COMPLETED', strengths: (c.strengths || []).join(', '), improvements: (c.improvements || []).join(', ') }) }}
-                                  className="text-xs text-purple-600 font-semibold hover:underline">
-                                  Give feedback — {c.student?.user?.name || `Student #${c.student?.id}`}
-                                </button>
+                                new Date(m.scheduledAt).getTime() > Date.now() ? (
+                                  <span key={c.id} className="text-xs text-gray-400 cursor-not-allowed" title="Feedback available after scheduled time">
+                                    {c.student?.user?.name || `Student #${c.student?.id}`} — awaiting scheduled time
+                                  </span>
+                                ) : (
+                                  <button key={c.id}
+                                    onClick={() => { setFeedbackPanel({ mockId: m.id, candidateId: c.id }); setFeedbackForm({ feedback: c.feedback || '', rating: c.rating || 5, status: 'COMPLETED', strengths: (c.strengths || []).join(', '), improvements: (c.improvements || []).join(', ') }) }}
+                                    className="text-xs text-purple-600 font-semibold hover:underline">
+                                    Give feedback — {c.student?.user?.name || `Student #${c.student?.id}`}
+                                  </button>
+                                )
                               ) : null)}
                               <button
                                 onClick={async () => {
@@ -1454,7 +1466,7 @@ export default function PlacementPage() {
 
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[500px] text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 border-b border-purple-100">
                     {['Company', 'Role', 'Package', 'Drive Date', 'Deadline', 'Applied', 'Actions'].map(h => (
@@ -1553,7 +1565,7 @@ export default function PlacementPage() {
           </div>
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[500px] text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 border-b border-purple-100">
                     {['Student', 'Company', 'Role', 'CTC', 'Offered On', 'Expires', 'Status', 'Actions'].map(h => (
@@ -1690,7 +1702,7 @@ export default function PlacementPage() {
                   </button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[500px] text-sm">
                     <thead>
                       <tr className="bg-purple-50/50 border-b border-purple-100">
                         {['Candidate', 'Round', 'Date/Time', 'Mode', 'Link', 'Status', 'Result', 'Actions'].map(h => (
@@ -1883,7 +1895,7 @@ export default function PlacementPage() {
         title={mockForm.lockedStudent ? `Schedule Mock Interview - ${mockForm.lockedStudent.name}` : "Schedule Mock Interview"}
       >
         <form onSubmit={handleScheduleMock} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Mode *</label>
               <CustomSelect
@@ -1929,9 +1941,22 @@ export default function PlacementPage() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Interviewer Name</label>
-            <input value={mockForm.interviewerName} onChange={e => setMockForm(f => ({ ...f, interviewerName: e.target.value }))} placeholder="Rajesh Kumar"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
+              Interviewer (Trainer)
+            </label>
+            <CustomSelect
+              value={mockForm.interviewerName}
+              onChange={v => setMockForm(f => ({ ...f, interviewerName: v }))}
+              options={trainers.map(t => ({
+                value: t.name,
+                label: `${t.name}${t.designation ? ` (${t.designation})` : (t.email ? ` · ${t.email}` : '')}`
+              }))}
+              placeholder="Select a trainer..."
+              searchable
+            />
+            {trainers.length === 0 && (
+              <p className="text-[11px] text-gray-400 mt-1">No registered trainers found. You can add trainers under the Trainers menu.</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Select Candidates</label>
@@ -2099,7 +2124,7 @@ export default function PlacementPage() {
       {/* Create Drive Panel */}
       <SlidePanel open={drivePanel} onClose={() => { setDrivePanel(false); setEditingDrive(null) }} title={editingDrive ? 'Edit Company Drive' : 'Create Company Drive'}>
         <form onSubmit={handleCreateDrive} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: 'Company Name *', key: 'companyName', placeholder: 'TCS Digital' },
               { label: 'Role *', key: 'role', placeholder: 'Junior Developer' },
@@ -2113,7 +2138,7 @@ export default function PlacementPage() {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Date *</label>
               <input type="date" value={driveForm.driveDate} onChange={e => {
@@ -2324,7 +2349,7 @@ export default function PlacementPage() {
             <input value={offerForm.ctc} onChange={e => setOfferForm(f => ({ ...f, ctc: e.target.value }))} placeholder="8 - 10 LPA"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Joining Date</label>
               <input type="date" value={offerForm.joiningDate} onChange={e => setOfferForm(f => ({ ...f, joiningDate: e.target.value }))}
@@ -2378,7 +2403,7 @@ export default function PlacementPage() {
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Min Score</label>
               <input type="number" min={0} max={100} value={roundForm.minimumScore} onChange={e => setRoundForm(f => ({ ...f, minimumScore: e.target.value }))}
@@ -2463,7 +2488,7 @@ export default function PlacementPage() {
               onChange={val => setIntForm(f => ({ ...f, scheduledAt: val }))}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Meeting Link</label>
               <input value={intForm.meetingLink} onChange={e => setIntForm(f => ({ ...f, meetingLink: e.target.value }))} placeholder="https://meet.google.com/..."
@@ -2566,7 +2591,7 @@ function DriveAppsModal({ viewingApps, driveApplications, onClose, handleUpdateA
           ) : driveApplications[viewingApps].length === 0 ? (
             <div className="p-6 text-center text-gray-400 text-sm">No applications yet</div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                   {['Student', 'Email', 'Applied', 'Status'].map(h => (

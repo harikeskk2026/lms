@@ -55,7 +55,7 @@ export default function ChangePasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4 p-3 sm:p-0">
       <div>
         <label className={LABEL_CLS}>Current Password *</label>
         <input type="password" value={form.currentPassword}

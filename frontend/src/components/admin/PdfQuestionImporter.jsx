@@ -375,7 +375,7 @@ Explanation: <optional>`}
         <div className="text-center py-8 text-sm text-gray-500 animate-pulse">Reading and extracting questions from PDF...</div>
       ) : extracted.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
               Extracted Questions
               <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-bold">{extracted.length} Ready</span>
@@ -401,7 +401,7 @@ Explanation: <optional>`}
                   {paginated.map((q, idx) => (
                     <tr key={q.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
                       <td className="px-3 py-2 text-gray-400 font-bold">{startIdx + idx + 1}</td>
-                      <td className="px-3 py-2 text-gray-800 dark:text-gray-100 font-medium max-w-xs truncate">{q.questionText}</td>
+                      <td className="px-3 py-2 text-gray-800 dark:text-gray-100 font-medium break-words">{q.questionText}</td>
                       <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold text-[10px]">{q.questionType}</span></td>
                       <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold text-[10px]">{q.difficulty}</span></td>
                       <td className="px-3 py-2">
@@ -416,7 +416,7 @@ Explanation: <optional>`}
                           : <span className="text-gray-300 text-[10px]">—</span>
                         }
                       </td>
-                      <td className="px-3 py-2 max-w-xs text-gray-500 truncate">
+                      <td className="px-3 py-2 text-gray-500 break-words">
                         {q.options.map(o => (o.correct ? `✓ ${o.optionText}` : o.optionText)).join(' | ')}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -442,7 +442,7 @@ Explanation: <optional>`}
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
             <button type="button" onClick={onCancel} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50">
               Cancel
             </button>

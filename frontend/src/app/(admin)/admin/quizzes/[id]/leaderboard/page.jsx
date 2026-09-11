@@ -82,7 +82,7 @@ export default function AdminLeaderboardPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-5 p-4">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()}
             className="w-9 h-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:text-purple-600 transition-colors shadow-sm">

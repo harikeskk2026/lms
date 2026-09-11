@@ -20,6 +20,7 @@ import {
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import { isValidEmail, isValidPhone, isValidPassword } from '@/utilities/validators'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 /**
  * Parses a simple CSV string on the client side for instant preview and validation.
@@ -336,20 +337,20 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-purple-100 dark:border-purple-900/40 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
-        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-purple-50/50 via-white to-violet-50/50 dark:from-purple-950/20 dark:via-gray-900 dark:to-violet-950/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-purple-600/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
-              <FileSpreadsheet size={20} />
+        <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 bg-gradient-to-r from-purple-50/50 via-white to-violet-50/50 dark:from-purple-950/20 dark:via-gray-900 dark:to-violet-950/20">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-purple-600/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400 flex-shrink-0">
+              <FileSpreadsheet size={18} />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Bulk Import Students</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Upload a CSV file to onboard multiple students seamlessly</p>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white break-words">Bulk Import Students</h2>
+              <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Upload a CSV file to onboard multiple students seamlessly</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={downloadSampleTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors border border-purple-200 dark:border-purple-800/40"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors border border-purple-200 dark:border-purple-800/40"
               title="Download formatted sample CSV file"
             >
               <FileDown size={14} /> {enrollMode ? 'Download Enrollment Template' : 'Download Template (Students Only)'}
@@ -508,19 +509,13 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                         Course * <span className="text-gray-400 font-normal">(Only Published)</span>
                       </label>
-                      <select
+                      <CustomSelect
                         value={selectedCourseId}
-                        onChange={(e) => handleCourseChange(e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-                        required
-                      >
-                        <option value="">Select Published Course...</option>
-                        {publishedCourses.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.title}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={handleCourseChange}
+                        options={publishedCourses.map((c) => ({ value: c.id, label: c.title }))}
+                        placeholder="Select Published Course..."
+                        searchable
+                      />
                       <p className="text-[11px] text-gray-500 mt-1">
                         Applied when row's Course column is empty in CSV.
                       </p>
@@ -530,19 +525,14 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                         Batch <span className="text-gray-400 font-normal">(Optional)</span>
                       </label>
-                      <select
+                      <CustomSelect
                         value={selectedBatchId}
-                        onChange={(e) => setSelectedBatchId(e.target.value)}
+                        onChange={setSelectedBatchId}
+                        options={batchesForCourse.map((b) => ({ value: b.id, label: `${b.name} (Max ${b.maxStudents})` }))}
+                        placeholder="No Batch / Direct Course Enrollment"
                         disabled={!selectedCourseId}
-                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                      >
-                        <option value="">No Batch / Direct Course Enrollment</option>
-                        {batchesForCourse.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name} (Max {b.maxStudents})
-                          </option>
-                        ))}
-                      </select>
+                        clearable
+                      />
                       <p className="text-[11px] text-gray-500 mt-1">
                         Filtered strictly to batches of the selected course.
                       </p>

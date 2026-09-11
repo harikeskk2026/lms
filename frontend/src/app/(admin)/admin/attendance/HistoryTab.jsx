@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const STATUS_BADGE = {
   PRESENT: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/40',
@@ -136,8 +137,8 @@ function StudentDetailModal({ studentId, onClose }) {
                     <div key={b.batchId} className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{b.batchName}</p>
-                          {b.course && <p className="text-[11px] text-gray-400 truncate">{b.course}</p>}
+                          <p className="text-xs font-bold text-gray-900 dark:text-white break-words">{b.batchName}</p>
+                           {b.course && <p className="text-[11px] text-gray-400 break-words">{b.course}</p>}
                         </div>
                         <span className="text-xs font-extrabold text-purple-600 dark:text-purple-400 shrink-0">{b.percentage}%</span>
                       </div>
@@ -393,27 +394,35 @@ export default function HistoryTab() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Batch</label>
-            <select value={filters.batchId} onChange={e => updateFilter('batchId', e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">All Batches</option>
-              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <CustomSelect
+              value={filters.batchId}
+              onChange={(val) => updateFilter('batchId', val)}
+              options={batches.map(b => ({ value: b.id, label: b.name }))}
+              placeholder="All Batches"
+              searchable={batches.length >= 10}
+              compact
+            />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Course</label>
-            <select value={filters.courseId} onChange={e => updateFilter('courseId', e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">All Courses</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
+            <CustomSelect
+              value={filters.courseId}
+              onChange={(val) => updateFilter('courseId', val)}
+              options={courses.map(c => ({ value: c.id, label: c.title }))}
+              placeholder="All Courses"
+              searchable={courses.length >= 10}
+              compact
+            />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Status</label>
-            <select value={filters.status} onChange={e => updateFilter('status', e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">All Statuses</option>
-              {Object.keys(STATUS_BADGE).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <CustomSelect
+              value={filters.status}
+              onChange={(val) => updateFilter('status', val)}
+              options={Object.keys(STATUS_BADGE).map(s => ({ value: s, label: s }))}
+              placeholder="All Statuses"
+              compact
+            />
           </div>
           <div className="sm:col-span-2 lg:col-span-2">
             <label className="block text-xs text-gray-500 mb-1">Search Student</label>
@@ -439,7 +448,7 @@ export default function HistoryTab() {
       ) : (
         <GlassCard className="overflow-hidden">
           <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead className="sticky top-0 z-10 bg-purple-50/95 dark:bg-purple-950/95 backdrop-blur border-b border-purple-100 dark:border-purple-900/30">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase">Date</th>
@@ -462,7 +471,7 @@ export default function HistoryTab() {
                     <td className="px-4 py-3 text-gray-800 dark:text-white font-medium text-xs">{row.studentName}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{row.batchName || '—'}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{row.courseTitle || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[160px] truncate">{row.classTitle}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs break-words">{row.classTitle}</td>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg ${STATUS_BADGE[row.status] || ''}`}>{row.status}</span>
                     </td>
@@ -492,16 +501,16 @@ export default function HistoryTab() {
           </p>
           <div className="flex items-center gap-1.5 text-gray-500 pl-3 border-l border-gray-200 dark:border-gray-700">
             <span>Rows:</span>
-            <select
+            <CustomSelect
               value={pageSize}
-              onChange={e => {
-                setPageSize(Number(e.target.value))
+              onChange={(val) => {
+                setPageSize(Number(val))
                 setPage(1)
               }}
-              className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer"
-            >
-              {[10, 20, 50, 100].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+              options={[10, 20, 50, 100].map(s => ({ value: s, label: s }))}
+              compact
+              clearable={false}
+            />
           </div>
         </div>
 

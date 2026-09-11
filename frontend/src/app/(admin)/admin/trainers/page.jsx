@@ -9,6 +9,7 @@ import courseService from '@/services/courseService'
 import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
 import SearchableSelect from '@/components/admin/SearchableSelect'
+import CustomSelect from '@/components/ui/CustomSelect'
 import clsx from 'clsx'
 
 const EMPTY_FORM = {
@@ -341,15 +342,16 @@ export default function TrainersPage() {
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <select
+          <CustomSelect
             value={statusFilter}
-            onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-            className="rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900/80 px-4 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-          >
-            <option value="" className="bg-white dark:bg-gray-900 text-slate-900 dark:text-white">All Statuses</option>
-            <option value="active" className="bg-white dark:bg-gray-900 text-slate-900 dark:text-white">Active Only</option>
-            <option value="inactive" className="bg-white dark:bg-gray-900 text-slate-900 dark:text-white">Inactive Only</option>
-          </select>
+            onChange={(val) => { setStatusFilter(val); setPage(1) }}
+            options={[
+              { value: 'active', label: 'Active Only' },
+              { value: 'inactive', label: 'Inactive Only' },
+            ]}
+            placeholder="All Statuses"
+            compact
+          />
 
           <button
             onClick={fetchTrainers}
@@ -379,7 +381,7 @@ export default function TrainersPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[500px] text-left text-sm">
               <thead className="bg-purple-50/60 dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="py-3.5 px-6">Trainer</th>
@@ -442,7 +444,7 @@ export default function TrainersPage() {
                               title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || 'No time set'}`}
                             >
                               <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
-                              <span className="truncate max-w-[130px]">{b.name}</span>
+                              <span className="break-words">{b.name}</span>
                             </Link>
                           ))}
                         </div>
@@ -586,7 +588,7 @@ export default function TrainersPage() {
                 {formErr.password && <p className="text-xs text-red-500 mt-1">{formErr.password}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
                   <input
@@ -623,7 +625,7 @@ export default function TrainersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
                     Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
@@ -710,7 +712,7 @@ export default function TrainersPage() {
                 {formErr.email && <p className="text-xs text-red-500 mt-1">{formErr.email}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
                   <input
@@ -745,7 +747,7 @@ export default function TrainersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
                     Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
@@ -794,7 +796,7 @@ export default function TrainersPage() {
                         title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || ''}`}
                       >
                         <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
-                        <span className="truncate max-w-[140px]">{b.name}</span>
+                        <span className="break-words">{b.name}</span>
                       </Link>
                     ))}
                   </div>

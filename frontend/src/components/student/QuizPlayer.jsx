@@ -170,7 +170,7 @@ function InfoPanel({ quiz, phase, starting, onStart, answered, totalQ }) {
               <s.icon size={15} className={s.color} />
             </div>
             <div className="min-w-0">
-              <p className="text-white font-bold text-sm leading-tight truncate">{s.value}</p>
+              <p className="text-white font-bold text-sm leading-tight break-words">{s.value}</p>
               <p className="text-white/40 text-[10px] leading-tight">{s.label}</p>
             </div>
           </div>
@@ -356,7 +356,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-purple-950 to-violet-950 z-50 overflow-y-auto">
         <Confetti />
-        <div className="max-w-2xl mx-auto px-4 py-8 animate-fadeInUp">
+        <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 animate-fadeInUp">
           <div className="flex flex-col items-center mb-6">
             <ScoreRing pct={scorePct} size={160} />
             <p className="text-white/60 text-sm mt-3">{result.score} / {result.totalScore} points · {Math.round(result.accuracy)}% accuracy</p>
@@ -489,7 +489,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
             <ChevronLeft size={18} />
           </button>
           <div className="min-w-0">
-            <p className="text-white font-bold text-sm truncate">{quiz.title}</p>
+            <p className="text-white font-bold text-sm break-words">{quiz.title}</p>
             {phase === 'playing' && <p className="text-white/40 text-xs">Question {current + 1} of {totalQ}</p>}
           </div>
         </div>
@@ -543,7 +543,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
           ) : (
             <>
               <div className="flex-1 overflow-y-auto">
-                <div key={`${current}-${animDir}`} className="animate-quizSlideInRight px-6 py-5 max-w-2xl mx-auto">
+                <div key={`${current}-${animDir}`} className="animate-quizSlideInRight px-3 py-3 sm:px-6 sm:py-5 max-w-2xl mx-auto">
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <div className="flex items-center gap-2 text-white/50 text-xs font-semibold">
                       <List size={14} />
@@ -592,16 +592,16 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                           key={opt.id}
                           onClick={() => selectAnswer(q, opt.id)}
                           className={`
-                            w-full text-left rounded-2xl p-4 transition-all duration-200 border-2
-                            flex items-center gap-4 group
+                            w-full text-left rounded-2xl p-3 sm:p-4 transition-all duration-200 border-2
+                            flex items-center gap-3 sm:gap-4 group
                             ${isSelected
                               ? 'border-purple-400 bg-purple-500/20 shadow-lg shadow-purple-500/10'
                               : 'border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10'
                             }
                           `}
                         >
-                          <span className={`
-                            w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all
+                           <span className={`
+                            w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all
                             ${isSelected ? 'bg-purple-500 text-white' : 'bg-white/10 text-white/60 group-hover:bg-white/20'}
                           `}>
                             {String.fromCharCode(65 + i)}
@@ -617,7 +617,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
               </div>
 
               {/* BOTTOM NAV */}
-              <div className="border-t border-white/10 px-6 py-3.5 bg-purple-950/60 shrink-0">
+              <div className="border-t border-white/10 px-3 py-3 sm:px-6 sm:py-3.5 bg-purple-950/60 shrink-0">
                 <div className="flex justify-center flex-wrap gap-1.5 mb-3">
                   {questions.map((question, i) => {
                     const done = (answers[question.id] || []).length > 0
@@ -626,7 +626,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                       <button
                         key={question.id}
                         onClick={() => goToQuestion(i)}
-                        className={`relative w-8 h-8 rounded-full text-xs font-bold transition-all border ${
+                        className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full text-[10px] sm:text-xs font-bold transition-all border ${
                           i === current
                             ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-purple-950 bg-purple-700 border-purple-500 text-white'
                             : done
@@ -644,7 +644,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                   <button
                     onClick={() => goToQuestion(Math.max(0, current - 1))}
                     disabled={current === 0}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-white/15 text-white/60 text-sm font-semibold hover:border-white/30 hover:text-white/80 transition-all disabled:opacity-30"
+                    className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl border border-white/15 text-white/60 text-xs sm:text-sm font-semibold hover:border-white/30 hover:text-white/80 transition-all disabled:opacity-30"
                   >
                     <ChevronLeft size={16} /> Prev
                   </button>
@@ -652,7 +652,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                   {current < totalQ - 1 ? (
                     <button
                       onClick={() => goToQuestion(current + 1)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-700/60 border border-purple-500/30 text-white text-sm font-semibold hover:bg-purple-700/80 transition-all"
+                      className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-purple-700/60 border border-purple-500/30 text-white text-xs sm:text-sm font-semibold hover:bg-purple-700/80 transition-all"
                     >
                       Next <ChevronRight size={16} />
                     </button>
@@ -660,7 +660,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                     <button
                       onClick={handleSubmit}
                       disabled={submitting}
-                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-400 text-gray-900 font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-yellow-400/20"
+                      className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-400 text-gray-900 font-bold text-xs sm:text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-yellow-400/20"
                     >
                       Submit ({answered}/{totalQ} answered)
                     </button>

@@ -182,7 +182,7 @@ function TopBar({ onMenuClick, user, darkMode, toggleDark }) {
   }, [])
 
   return (
-    <header className="h-16 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm border-b border-purple-100 dark:border-purple-900/30 flex items-center justify-between px-6 sticky top-0 z-10">
+    <header className="h-14 sm:h-16 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm border-b border-purple-100 dark:border-purple-900/30 flex items-center justify-between px-3 sm:px-6 sticky top-0 z-10">
       <div className="flex items-center gap-4">
         <button onClick={onMenuClick} className="text-slate-500 hover:text-purple-700 lg:hidden transition-colors">
           <Menu size={22} />

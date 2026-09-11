@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import reportService from '@/services/reportService'
 import batchService from '@/services/batchService'
 import courseService from '@/services/courseService'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const TABS = ['Attendance', 'Performance', 'Placement', 'Export']
 
@@ -268,7 +269,7 @@ export default function ReportsPage() {
       <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Reports & Analytics</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white/80 dark:bg-gray-900/70 border border-purple-100 dark:border-purple-900/30 rounded-2xl p-1">
+      <div className="flex gap-1 bg-white/80 dark:bg-gray-900/70 border border-purple-100 dark:border-purple-900/30 rounded-2xl p-1 overflow-x-auto scrollbar-hide">
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === t ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-purple-600 hover:bg-purple-50'}`}>
@@ -280,22 +281,28 @@ export default function ReportsPage() {
       {/* Attendance Report */}
       {tab === 'Attendance' && (
         <div className="space-y-4">
-          <div className="glass-card p-5 flex flex-wrap gap-4 items-end">
+          <div className="glass-card p-5 flex flex-col sm:flex-row flex-wrap gap-4 items-end">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Batch</label>
-              <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">All Batches</option>
-                {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <CustomSelect
+                value={batchFilter}
+                onChange={(val) => setBatchFilter(val)}
+                options={batches.map(b => ({ value: b.id, label: b.name }))}
+                placeholder="All Batches"
+                compact
+                searchable={batches.length >= 10}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Course</label>
-              <select value={courseFilter} onChange={e => setCourseFilter(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">All Courses</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
+              <CustomSelect
+                value={courseFilter}
+                onChange={(val) => setCourseFilter(val)}
+                options={courses.map(c => ({ value: c.id, label: c.title }))}
+                placeholder="All Courses"
+                compact
+                searchable={courses.length >= 10}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
@@ -321,7 +328,7 @@ export default function ReportsPage() {
 
           {attData && (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard label="Average Attendance" value={attData.summary?.averageScorePct != null ? `${attData.summary.averageScorePct}%` : '—'} color="text-purple-600" />
                 <StatCard label="Total Students" value={attData.summary?.totalStudents ?? '—'} color="text-blue-600" />
                 <StatCard label="Total Classes" value={attData.totalClasses ?? '—'} color="text-green-600" />
@@ -388,22 +395,28 @@ export default function ReportsPage() {
       {/* Performance Report */}
       {tab === 'Performance' && (
         <div className="space-y-4">
-          <div className="glass-card p-5 flex flex-wrap gap-4 items-end">
+          <div className="glass-card p-5 flex flex-col sm:flex-row flex-wrap gap-4 items-end">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Batch</label>
-              <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">All Batches</option>
-                {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <CustomSelect
+                value={batchFilter}
+                onChange={(val) => setBatchFilter(val)}
+                options={batches.map(b => ({ value: b.id, label: b.name }))}
+                placeholder="All Batches"
+                compact
+                searchable={batches.length >= 10}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Course</label>
-              <select value={courseFilter} onChange={e => setCourseFilter(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="">All Courses</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
+              <CustomSelect
+                value={courseFilter}
+                onChange={(val) => setCourseFilter(val)}
+                options={courses.map(c => ({ value: c.id, label: c.title }))}
+                placeholder="All Courses"
+                compact
+                searchable={courses.length >= 10}
+              />
             </div>
             <button onClick={loadPerformance} disabled={loading}
               className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl text-sm font-semibold disabled:opacity-60">
@@ -419,7 +432,7 @@ export default function ReportsPage() {
 
           {perfData && (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard label="Average Score" value={perfData.summary?.averageScorePct != null ? `${perfData.summary.averageScorePct}%` : '—'} color="text-purple-600" />
                 <StatCard label="Assignment Completion" value={perfData.summary?.averageCompletionPct != null ? `${perfData.summary.averageCompletionPct}%` : '—'} color="text-blue-600" />
                 <StatCard label="Quiz Average" value={perfData.summary?.averageQuizScorePct != null ? `${perfData.summary.averageQuizScorePct}%` : '—'} color="text-amber-600" />
@@ -447,11 +460,14 @@ export default function ReportsPage() {
               <div className="glass-card p-5">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h3 className="font-display font-bold text-gray-800 dark:text-white">Student Performance</h3>
-                  <select value={selectedStudentId} onChange={e => loadStudentDetail(e.target.value)}
-                    className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500">
-                    <option value="">Select a student…</option>
-                    {perfReport.map(s => <option key={s.studentId} value={s.studentId}>{s.studentName}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={selectedStudentId}
+                    onChange={(val) => loadStudentDetail(val)}
+                    options={perfReport.map(s => ({ value: s.studentId, label: s.studentName }))}
+                    placeholder="Select a student…"
+                    searchable={perfReport.length >= 10}
+                    compact
+                  />
                 </div>
                 {!studentDetail ? (
                   <div className="h-[200px] flex items-center justify-center">
@@ -502,7 +518,7 @@ export default function ReportsPage() {
                 <BatchHealthChart data={batchHealth} />
               </ChartCard>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard label="Quiz Avg Score" value={quizData?.averageScorePct != null ? `${quizData.averageScorePct}%` : '—'} color="text-purple-600" />
                 <StatCard label="Quiz Pass Rate" value={quizData?.passRatePct != null ? `${quizData.passRatePct}%` : '—'} color="text-green-600" />
                 <StatCard label="Quiz Fail Rate" value={quizData?.failRatePct != null ? `${quizData.failRatePct}%` : '—'} color="text-red-500" />
@@ -516,7 +532,7 @@ export default function ReportsPage() {
               <div className="grid sm:grid-cols-2 gap-5">
                 <div className="glass-card p-5">
                   <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Assignment Analytics</h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <StatCard label="Submission Rate" value={assignmentData?.submissionRatePct != null ? `${assignmentData.submissionRatePct}%` : '—'} color="text-green-600" />
                     <StatCard label="Late Rate" value={assignmentData?.lateRatePct != null ? `${assignmentData.lateRatePct}%` : '—'} color="text-amber-600" />
                     <StatCard label="Missing Rate" value={assignmentData?.missingRatePct != null ? `${assignmentData.missingRatePct}%` : '—'} color="text-red-500" />
@@ -636,7 +652,7 @@ export default function ReportsPage() {
       {/* Placement Report */}
       {tab === 'Placement' && (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard label="Total Students" value={placementTotal} color="text-gray-700 dark:text-gray-200" />
             <StatCard label="Eligible (Seeking)" value={placementSeeking} color="text-blue-600" />
             <StatCard label="Interviewing" value={placementInterviewing} color="text-amber-600" />

@@ -143,13 +143,13 @@ export default function AttendancePage() {
       </div>
 
       {/* Health Score + Goal Tracker */}
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <AttendanceHealthCard summary={summary} />
         <AttendanceGoalTracker summary={summary} />
       </div>
 
       {/* Summary Strip */}
-      <div className="glass-card p-4">
+      <div className="glass-card p-3 sm:p-4">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-900/20 rounded-xl">
             <span className="text-green-500 font-bold text-lg">✓</span>
@@ -236,12 +236,12 @@ export default function AttendancePage() {
       {loading ? (
         <SkeletonCard lines={5} />
       ) : (
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           {view === 'calendar' ? (
             <AttendanceCalendar calendarData={calendar} activeMonth={activeMonth} onDayClick={openDay} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[500px]">
                 <thead>
                   <tr className="border-b border-purple-100 dark:border-purple-900/30">
                     <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Date</th>
@@ -255,7 +255,7 @@ export default function AttendancePage() {
                     <tr key={i} className="border-b border-purple-50 dark:border-purple-900/20 hover:bg-purple-50/40 dark:hover:bg-purple-900/10">
                       <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300">{format(new Date(c.date), 'MMM d, yyyy')}</td>
                       <td className="py-2.5 px-3 text-gray-500">{format(new Date(c.date), 'EEEE')}</td>
-                      <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate">{c.classTitle}</td>
+                      <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 break-words">{c.classTitle}</td>
                       <td className="py-2.5 px-3">
                         {c.status ? (
                           <StatusChip status={c.status} correctionPending={c.correctionPending} requestedStatus={c.correctionRequestedStatus} />
@@ -273,7 +273,7 @@ export default function AttendancePage() {
       )}
 
       {/* Attendance Trend Chart */}
-      <div className="glass-card p-5">
+      <div className="glass-card p-3 sm:p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <div>
             <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Attendance Performance & Analytics</h3>
@@ -293,13 +293,13 @@ export default function AttendancePage() {
       </div>
 
       {/* Recent Records */}
-      <div className="glass-card p-5">
+      <div className="glass-card p-3 sm:p-5">
         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Recent Attendance Records</h3>
         {loading ? (
           <SkeletonCard lines={4} />
         ) : calendar.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-purple-100 dark:border-purple-900/30">
                   <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Date</th>
@@ -316,7 +316,7 @@ export default function AttendancePage() {
                   .map((c, i) => (
                     <tr key={i} className="border-b border-purple-50 dark:border-purple-900/20 hover:bg-purple-50/30 dark:hover:bg-purple-900/10">
                       <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 text-xs">{format(new Date(c.date), 'MMM d, yyyy')}</td>
-                      <td className="py-2.5 px-3 text-gray-600 dark:text-gray-400 text-xs max-w-xs truncate">{c.classTitle}</td>
+                      <td className="py-2.5 px-3 text-gray-600 dark:text-gray-400 text-xs break-words">{c.classTitle}</td>
                       <td className="py-2.5 px-3">
                         <StatusChip status={c.status} correctionPending={c.correctionPending} requestedStatus={c.correctionRequestedStatus} />
                       </td>

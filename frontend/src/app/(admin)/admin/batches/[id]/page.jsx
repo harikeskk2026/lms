@@ -13,6 +13,7 @@ import courseService from '@/services/courseService'
 import assignmentService from '@/services/assignmentService'
 import submissionService from '@/services/submissionService'
 import SlidePanel from '@/components/admin/SlidePanel'
+import CustomSelect from '@/components/ui/CustomSelect'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const TABS = ['Overview', 'Students', 'Attendance', 'Assignments']
@@ -551,18 +552,17 @@ export default function BatchDetailPage() {
               {['SUPERADMIN', 'ADMIN'].includes(user?.role) && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 whitespace-nowrap">Assign:</span>
-                  <select
+                  <CustomSelect
                     value={trainers.some(t => t.id === (batch.trainer?.id || batch.trainerId)) ? (batch.trainer?.id || batch.trainerId) : ''}
-                    onChange={e => handleAssignTrainer(e.target.value)}
-                    className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                  >
-                    <option value="">-- No Trainer Assigned --</option>
-                    {trainers.filter(t => t.active !== false).map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}{t.designation ? ` · ${t.designation}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => handleAssignTrainer(val)}
+                    options={trainers.filter(t => t.active !== false).map(t => ({
+                      value: t.id,
+                      label: `${t.name}${t.designation ? ` · ${t.designation}` : ''}`
+                    }))}
+                    placeholder="-- No Trainer Assigned --"
+                    searchable={trainers.length >= 10}
+                    compact
+                  />
                 </div>
               )}
             </div>
@@ -626,7 +626,7 @@ export default function BatchDetailPage() {
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[500px] text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 dark:bg-gray-800/50 border-b border-purple-100 dark:border-gray-800">
                     {['Student', 'Enrollment', 'Attendance', 'Avg Quiz', 'Placement', ...(isAdmin ? ['Action'] : [])].map(h => (
@@ -765,7 +765,7 @@ export default function BatchDetailPage() {
       {tab === 'Assignments' && (
         <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 border-b border-purple-100">
                   {['Title', 'Due Date', 'Max Marks', 'Submissions'].map(h => (
@@ -940,7 +940,7 @@ export default function BatchDetailPage() {
                                   title="Preview file within platform"
                                 >
                                   <Paperclip size={12} className="text-purple-500" />
-                                  <span className="truncate max-w-[180px]">{f.fileName || `File ${fIdx + 1}`}</span>
+                                   <span className="break-words">{f.fileName || `File ${fIdx + 1}`}</span>
                                   <Eye size={12} className="text-purple-600 ml-0.5" />
                                 </button>
                               ))}
@@ -1192,11 +1192,16 @@ export default function BatchDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
-                <select value={editForm.courseId} onChange={e => setEditForm(f => ({ ...f, courseId: e.target.value }))} required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                  <option value="">Select course</option>
-                  {courses.filter(c => c.status === 'PUBLISHED').map(c => <option key={c.id} value={c.id}>{c.title} — {c.duration}</option>)}
-                </select>
+                <CustomSelect
+                  value={editForm.courseId}
+                  onChange={(val) => setEditForm(f => ({ ...f, courseId: val }))}
+                  options={courses.filter(c => c.status === 'PUBLISHED').map(c => ({
+                    value: c.id,
+                    label: `${c.title} — ${c.duration}`
+                  }))}
+                  placeholder="Select course"
+                  clearable={false}
+                />
                 {selectedForEdit && (
                   <p className="text-xs text-gray-500 mt-1">Course duration: <span className="font-semibold text-purple-600">{selectedForEdit.duration}</span></p>
                 )}
@@ -1248,10 +1253,16 @@ export default function BatchDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Mode</label>
-                  <select value={editForm.mode} onChange={e => setEditForm(f => ({ ...f, mode: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                    <option>ONLINE</option><option>OFFLINE</option><option>HYBRID</option>
-                  </select>
+                  <CustomSelect
+                    value={editForm.mode}
+                    onChange={(val) => setEditForm(f => ({ ...f, mode: val }))}
+                    options={[
+                      { value: 'ONLINE', label: 'ONLINE' },
+                      { value: 'OFFLINE', label: 'OFFLINE' },
+                      { value: 'HYBRID', label: 'HYBRID' },
+                    ]}
+                    clearable={false}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Max Students</label>

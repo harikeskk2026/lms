@@ -39,7 +39,7 @@ export default function AttendanceMatrix({ classes = [], matrix = [] }) {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-purple-100 dark:border-purple-900/30">
-      <table className="w-full text-xs min-w-max">
+      <table className="w-full text-xs min-w-[600px]">
         <thead>
           <tr className="bg-purple-50/70 dark:bg-purple-900/20">
             <th className="sticky left-0 z-10 bg-purple-50 dark:bg-[#1a0f35] px-4 py-3 text-left font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap min-w-[160px]">
@@ -48,7 +48,7 @@ export default function AttendanceMatrix({ classes = [], matrix = [] }) {
             {classes.map(cls => (
               <th key={cls.classId} className="px-2 py-3 text-center font-semibold text-purple-600 dark:text-purple-400 whitespace-nowrap min-w-[52px]">
                 <div>{format(new Date(cls.date), 'MMM d')}</div>
-                <div className="text-[9px] text-gray-400 font-normal truncate max-w-[48px]">{cls.title?.slice(0, 8)}</div>
+                <div className="text-[9px] text-gray-400 font-normal break-words">{cls.title}</div>
               </th>
             ))}
             <th className="sticky right-0 z-10 bg-purple-50 dark:bg-[#1a0f35] px-4 py-3 text-center font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">

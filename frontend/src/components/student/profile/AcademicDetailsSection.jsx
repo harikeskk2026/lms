@@ -45,7 +45,7 @@ function AccordionCard({ title, optional, isExpanded, onToggle, summaryText, isF
           <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{title}</span>
           {optional && <span className="text-[10px] text-gray-400 font-normal">(optional)</span>}
           {summaryText && (
-            <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-900/50 px-2 py-0.5 rounded-md truncate max-w-[220px]">
+            <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-900/50 px-2 py-0.5 rounded-md break-words">
               {summaryText}
             </span>
           )}

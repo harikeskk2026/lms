@@ -6,6 +6,7 @@ import { Pin, Megaphone, Search, CalendarDays, ChevronLeft, ChevronRight, X as X
 import { format, formatDistanceToNow, addMonths, subMonths } from 'date-fns'
 import toast from 'react-hot-toast'
 import { studentApi, resolveFileUrl } from '@/lib/api'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const FILTERS = ['All', 'Unread', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 
@@ -106,7 +107,7 @@ export default function StudentAnnouncementsPage() {
       ) : (
         <>
           {/* Clean Navigation Tabs matching Admin Style */}
-          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto pb-1 -mx-1 px-1">
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
             {tabs.map(t => (
               <button
                 key={t.key}
@@ -144,14 +145,15 @@ export default function StudentAnnouncementsPage() {
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <span className="text-xs text-gray-400 font-medium whitespace-nowrap hidden sm:inline">Sort:</span>
-              <select
+              <CustomSelect
                 value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                className="w-full sm:w-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 shadow-sm"
-              >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-              </select>
+                onChange={setSortBy}
+                options={[
+                  { value: 'newest', label: 'Newest First' },
+                  { value: 'oldest', label: 'Oldest First' },
+                ]}
+                compact
+              />
             </div>
           </div>
 

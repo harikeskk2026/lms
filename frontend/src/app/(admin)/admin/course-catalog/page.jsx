@@ -13,6 +13,7 @@ import { resolveFileUrl } from '@/lib/api'
 import { courseSchema } from '@/validations/courseValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const LEVEL_COLORS = {
   BEGINNER: 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
@@ -191,7 +192,7 @@ export default function CourseCatalogPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">
             {isTrainer ? 'My Courses' : 'Courses'}
@@ -358,46 +359,52 @@ export default function CourseCatalogPage() {
             <div className="flex gap-2">
               <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="e.g. 3"
                 className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <select {...register('durationUnit', { required: 'Required' })}
-                className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="days">Days</option>
-                <option value="weeks">Weeks</option>
-                <option value="months">Months</option>
-                <option value="years">Years</option>
-              </select>
+              <CustomSelect
+                value={watch('durationUnit')}
+                onChange={(val) => setValue('durationUnit', val, { shouldValidate: true })}
+                options={[
+                  { value: 'days', label: 'Days' },
+                  { value: 'weeks', label: 'Weeks' },
+                  { value: 'months', label: 'Months' },
+                  { value: 'years', label: 'Years' },
+                ]}
+              />
             </div>
             {(errors.durationValue || errors.durationUnit) && <span className="text-xs text-red-500 mt-1 block">Duration is required</span>}
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Level *</label>
-            <select {...register('level')}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="BEGINNER">BEGINNER</option>
-              <option value="INTERMEDIATE">INTERMEDIATE</option>
-              <option value="ADVANCED">ADVANCED</option>
-            </select>
+            <CustomSelect
+              value={watch('level')}
+              onChange={(val) => setValue('level', val, { shouldValidate: true })}
+              options={[
+                { value: 'BEGINNER', label: 'BEGINNER' },
+                { value: 'INTERMEDIATE', label: 'INTERMEDIATE' },
+                { value: 'ADVANCED', label: 'ADVANCED' },
+              ]}
+            />
             {errors.level && <span className="text-xs text-red-500 mt-1 block">{errors.level.message}</span>}
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status *</label>
-            <select {...register('status')}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              {!editingId && (
-                <>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                </>
-              )}
-              {editingId && (
-                <>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                  <option value="ARCHIVED">ARCHIVED</option>
-                </>
-              )}
-            </select>
+            <CustomSelect
+              value={watch('status')}
+              onChange={(val) => setValue('status', val, { shouldValidate: true })}
+              options={
+                editingId
+                  ? [
+                      { value: 'DRAFT', label: 'DRAFT' },
+                      { value: 'PUBLISHED', label: 'PUBLISHED' },
+                      { value: 'ARCHIVED', label: 'ARCHIVED' },
+                    ]
+                  : [
+                      { value: 'DRAFT', label: 'DRAFT' },
+                      { value: 'PUBLISHED', label: 'PUBLISHED' },
+                    ]
+              }
+            />
             {errors.status && <span className="text-xs text-red-500 mt-1 block">{errors.status.message}</span>}
           </div>
 

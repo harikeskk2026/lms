@@ -127,7 +127,7 @@ export default function AdminDashboardView() {
       {/* Summary Cards */}
       <div>
         <SectionHeader label="Platform Summary" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
           {loading ? [...Array(7)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <StatCard title="Total Students"   value={stats?.overview?.totalStudents ?? 0}   subtitle={`${stats?.overview?.activeStudents ?? 0} active`} icon={GraduationCap} color="purple" />
@@ -145,7 +145,7 @@ export default function AdminDashboardView() {
       {/* Student Performance */}
       <div>
         <SectionHeader label="Student Performance" />
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {loading ? [...Array(3)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <StatCard title="Average Performance"  value={`${Math.round(stats?.performance?.averagePerformancePct ?? 0)}%`} icon={TrendingUp}    color="purple" />
@@ -159,7 +159,7 @@ export default function AdminDashboardView() {
       {/* Attendance & Assignments */}
       <div>
         <SectionHeader label="Attendance & Assignments" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {loading ? [...Array(4)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <StatCard title="Overall Attendance"   value={`${stats?.attendance?.overallPct ?? 0}%`}        icon={Calendar}      color="blue"   />
@@ -221,7 +221,7 @@ export default function AdminDashboardView() {
                   <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{s.date ? format(new Date(s.date), 'dd') : ''}</p>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{s.title}</p>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{s.title}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{s.batchName} · {s.date ? format(new Date(s.date), 'h:mm a') : ''}</p>
                 </div>
                 {s.meetLink && (
@@ -256,7 +256,7 @@ export default function AdminDashboardView() {
                       <Icon size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{item.label}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 break-words">{item.label}</p>
                       <p className="text-xs text-gray-400">{item.time ? formatDistanceToNow(new Date(item.time), { addSuffix: true }) : ''}</p>
                     </div>
                   </div>

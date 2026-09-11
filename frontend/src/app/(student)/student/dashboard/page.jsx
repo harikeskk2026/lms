@@ -251,7 +251,7 @@ export default function StudentDashboardPage() {
 
       {/* ── ROW 2: Today's Class Banner ───────────────────────────── */}
       {todayClass ? (
-        <div className="glass-card p-5 border-l-4 border-brand-600 animate-fadeInUp delay-200">
+        <div className="glass-card p-3 sm:p-5 border-l-4 border-brand-600 animate-fadeInUp delay-200">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
@@ -277,7 +277,7 @@ export default function StudentDashboardPage() {
           </div>
         </div>
       ) : (
-        <div className="glass-card p-5 border-l-4 border-gray-300 dark:border-gray-600">
+        <div className="glass-card p-3 sm:p-5 border-l-4 border-gray-300 dark:border-gray-600">
           <p className="text-gray-500 font-medium">No class scheduled today.</p>
           {upcomingClasses[0] && (
             <p className="text-sm text-gray-400 mt-1">
@@ -290,7 +290,7 @@ export default function StudentDashboardPage() {
       {/* ── ROW 3: Charts ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Attendance Performance & Trends */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <AttendanceCompareChart
             attendance={attendance}
             overview={overview}
@@ -302,7 +302,7 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Quiz Topic Performance */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <h3 className="section-title"><Brain size={16} /> Topic Performance</h3>
           {topicPerformanceData.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">Take a few quizzes to see topic-level performance</p>
@@ -313,7 +313,7 @@ export default function StudentDashboardPage() {
                 return (
                   <div key={t.name + i}>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-600 dark:text-gray-300 font-medium truncate">{t.name}</span>
+                      <span className="text-gray-600 dark:text-gray-300 font-medium break-words">{t.name}</span>
                       <span className="text-brand-600 font-semibold ml-2">{t.pct}%</span>
                     </div>
                     <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
@@ -333,7 +333,7 @@ export default function StudentDashboardPage() {
       {/* ── ROW 4: Continue Learning + Upcoming Classes ───────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Continue Learning */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <h3 className="section-title"><BookOpen size={16} /> Continue Learning</h3>
           {continueLearning.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">Enroll in a course to get started</p>
@@ -342,8 +342,8 @@ export default function StudentDashboardPage() {
               {continueLearning.map(c => (
                 <div key={c.courseId} className="flex items-center justify-between p-3 rounded-xl bg-purple-50/60 dark:bg-purple-900/10">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{c.courseTitle}</p>
-                    <p className="text-xs text-gray-400 truncate">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{c.courseTitle}</p>
+                    <p className="text-xs text-gray-400 break-words">
                       {[c.moduleTitle, c.topicTitle, c.sessionTitle].filter(Boolean).join(' · ') || 'No content yet'}
                     </p>
                   </div>
@@ -360,7 +360,7 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Upcoming Classes */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <h3 className="section-title"><Calendar size={16} /> Upcoming Classes</h3>
           {upcomingClasses.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">No upcoming classes</p>
@@ -375,7 +375,7 @@ export default function StudentDashboardPage() {
                       {!classIsToday && <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{format(new Date(cls.date), 'dd')}</p>}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{cls.title}</p>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{cls.title}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{cls.batchName}</p>
                     </div>
                     {classIsToday && cls.meetLink && (
@@ -404,7 +404,7 @@ export default function StudentDashboardPage() {
       {/* ── ROW 5: Assignments + Quizzes ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Assignments */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title mb-0"><ClipboardList size={16} /> Assignments</h3>
             <Link href="/student/assignments" className="text-xs text-brand-600 hover:underline">View all →</Link>
@@ -413,7 +413,7 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Quizzes */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title mb-0"><Brain size={16} /> Quizzes & Scores</h3>
             <Link href="/student/quizzes" className="text-xs text-brand-600 hover:underline">View all →</Link>
@@ -423,7 +423,7 @@ export default function StudentDashboardPage() {
       </div>
 
       {/* ── ROW 6: Course Materials ─────────────────────────────────── */}
-      <div className="glass-card p-5">
+      <div className="glass-card p-3 sm:p-5">
         <h3 className="section-title"><FileText size={16} /> Course Materials</h3>
         <div className="space-y-2.5 max-h-80 overflow-y-auto scrollbar-thin">
           {materials.length === 0 ? (
@@ -434,7 +434,7 @@ export default function StudentDashboardPage() {
                 <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-purple-50/70 dark:hover:bg-purple-900/10 transition-colors group border border-purple-50 dark:border-purple-900/20">
                   <MaterialIcon type={m.type} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{m.title}</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{m.title}</p>
                     <span className="chip bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] px-2 py-0.5">{m.type}</span>
                   </div>
                   <a
@@ -453,7 +453,7 @@ export default function StudentDashboardPage() {
       {/* ── ROW 7: Gamification + Placement ───────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Gamification */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title mb-0"><Trophy size={16} /> Gamification</h3>
             <Link href="/student/quizzes/leaderboard" className="text-xs text-brand-600 hover:underline">View Leaderboard →</Link>
@@ -489,7 +489,7 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Placement */}
-        <div className="glass-card p-5">
+        <div className="glass-card p-3 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title mb-0"><Star size={16} /> Placement</h3>
             <Link href="/student/placement" className="text-xs text-brand-600 hover:underline">View Drives →</Link>
@@ -503,7 +503,7 @@ export default function StudentDashboardPage() {
               <span className="chip bg-blue-100 text-blue-700 text-xs">{placement.status}</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
               <p className="font-display font-bold text-lg text-gray-800 dark:text-white">{placement.availableDrives}</p>
               <p className="text-[11px] text-gray-400">Available Drives</p>
@@ -517,7 +517,7 @@ export default function StudentDashboardPage() {
       </div>
 
       {/* ── ROW 8: Notifications ──────────────────────────────────── */}
-      <div className="glass-card p-5">
+      <div className="glass-card p-3 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="section-title mb-0">
             <Bell size={16} /> Recent Notifications
@@ -536,8 +536,8 @@ export default function StudentDashboardPage() {
             <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-purple-50/60 dark:hover:bg-purple-900/10 transition-colors">
               <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!n.isRead ? 'bg-brand-600' : 'bg-gray-300'}`} />
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${n.isRead ? 'text-gray-500' : 'text-gray-800 dark:text-gray-100'}`}>{n.title}</p>
-                <p className="text-xs text-gray-400 truncate">{n.body}</p>
+                <p className={`text-sm font-medium break-words ${n.isRead ? 'text-gray-500' : 'text-gray-800 dark:text-gray-100'}`}>{n.title}</p>
+                <p className="text-xs text-gray-400 break-words">{n.body}</p>
               </div>
               <span className="text-xs text-gray-400 whitespace-nowrap">
                 {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
@@ -576,7 +576,7 @@ function AssignmentsDashboard() {
         return (
           <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors">
             <div className="flex-1 min-w-0 mr-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{a.title}</p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{a.title}</p>
               <p className="text-xs text-gray-400">Due {formatAssignmentDueDate(a.dueDate, a.closeTime, a.closeTime ? 'MMM d, h:mm a' : 'MMM d')}</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -608,7 +608,7 @@ function QuizzesDashboard() {
       {data.slice(0, 4).map(q => (
         <div key={q.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors">
           <div className="flex-1 min-w-0 mr-2">
-            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{q.title}</p>
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{q.title}</p>
             <p className="text-xs text-gray-400">{q.totalQuestions} questions · {q.duration}min</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

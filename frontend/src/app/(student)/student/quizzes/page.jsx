@@ -362,7 +362,7 @@ function AnalyticsTab({ onStartQuiz }) {
             <div className="space-y-2.5">
               {improvementHistory.map(i => (
                 <div key={i.quizId} className="flex items-center justify-between text-xs sm:text-sm p-2.5 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
-                  <span className="font-bold text-gray-900 dark:text-white truncate max-w-[180px]">{i.quizTitle}</span>
+                  <span className="font-bold text-gray-900 dark:text-white break-words">{i.quizTitle}</span>
                   <span className={`font-extrabold ${i.improvementPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
                     {i.firstScorePct}% → {i.currentScorePct}% ({i.improvementPct >= 0 ? '+' : ''}{i.improvementPct}%)
                   </span>
@@ -381,7 +381,7 @@ function AnalyticsTab({ onStartQuiz }) {
           <div className="space-y-2.5">
             {recentAttempts.map(a => (
               <div key={a.id} className="flex items-center justify-between text-xs sm:text-sm p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
-                <span className="font-bold text-gray-900 dark:text-white truncate max-w-[220px]">{a.quizTitle}</span>
+                <span className="font-bold text-gray-900 dark:text-white break-words">{a.quizTitle}</span>
                 <span className="font-extrabold text-purple-600 dark:text-purple-400">{a.score}/{a.totalScore} ({Math.round(a.accuracy)}%)</span>
               </div>
             ))}
@@ -786,7 +786,7 @@ function LeaderboardTab() {
                         </div>
                       </div>
 
-                      <p className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm truncate max-w-full text-center">
+                      <p className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm break-words text-center">
                         {entry.studentName}
                       </p>
 
@@ -839,7 +839,7 @@ function LeaderboardTab() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                      <p className="text-sm font-bold text-gray-900 dark:text-white break-words">
                         {e.studentName}
                       </p>
                       {e.isCurrentUser && (
@@ -1140,7 +1140,7 @@ function BadgeCaseItem({ achievement }) {
     <div className="flex flex-col items-center shrink-0 w-32 text-center group transition-transform duration-200 hover:-translate-y-1">
       <BadgeMedallion unlocked={isUnlocked} style={style} size={96} />
       <div className="min-w-0 mt-3.5 flex flex-col items-center">
-        <p className="text-sm font-bold text-gray-900 dark:text-white truncate max-w-full tracking-tight">
+        <p className="text-sm font-bold text-gray-900 dark:text-white break-words tracking-tight">
           {achievement.name}
         </p>
         <p className={`text-xs font-bold mt-1 ${style.textColor}`}>
@@ -1259,14 +1259,14 @@ export default function QuizzesPage() {
   return (
     <div className="page-wrapper space-y-6">
       {/* Top Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 shadow-sm">
+      <div className="flex items-center justify-between flex-wrap gap-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-4 sm:p-6 shadow-sm">
         <div>
           <h1 className="font-display font-extrabold text-2xl text-gray-900 dark:text-white tracking-tight">Quiz Hub</h1>
           <p className="text-xs font-medium text-gray-500 mt-1">Master topics, attempt challenges & track your skill growth</p>
         </div>
 
         {/* Tab Switcher Pills */}
-        <div className="flex gap-1.5 p-1.5 bg-gray-100/90 dark:bg-gray-800/90 rounded-full flex-wrap">
+        <div className="flex gap-1.5 p-1.5 bg-gray-100/90 dark:bg-gray-800/90 rounded-full overflow-x-auto scrollbar-hide">
           {[
             { id: 'quizzes', label: 'All Quizzes', icon: Brain },
             { id: 'analytics', label: 'Analytics', icon: BarChart3 },

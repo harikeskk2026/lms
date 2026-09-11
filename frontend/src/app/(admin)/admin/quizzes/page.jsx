@@ -11,6 +11,7 @@ import QuestionForm from '@/components/admin/QuestionForm'
 import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const STEP_LABELS = ['Basic Details', 'Questions', 'Preview']
 
@@ -438,52 +439,47 @@ export default function QuizzesPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap shrink-0">
-            {/* Course Filter Dropdown */}
-            <select
+            <CustomSelect
               value={courseFilter}
-              onChange={e => { setCourseFilter(e.target.value); setQuizPage(1); }}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
-            >
-              <option value="">All Courses</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
-
-            {/* Batch Filter Dropdown */}
-            <select
+              onChange={(val) => { setCourseFilter(val); setQuizPage(1); }}
+              options={courses.map(c => ({ value: c.id, label: c.title }))}
+              placeholder="All Courses"
+              searchable
+              compact
+            />
+            <CustomSelect
               value={batchFilter}
-              onChange={e => { setBatchFilter(e.target.value); setQuizPage(1); }}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
-            >
-              <option value="">All Batches</option>
-              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-
-            {/* Type Filter Dropdown */}
-            <select
+              onChange={(val) => { setBatchFilter(val); setQuizPage(1); }}
+              options={batches.map(b => ({ value: b.id, label: b.name }))}
+              placeholder="All Batches"
+              searchable
+              compact
+            />
+            <CustomSelect
               value={typeFilter}
-              onChange={e => { setTypeFilter(e.target.value); setQuizPage(1); }}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
-            >
-              <option value="">All Types</option>
-              <option value="MCQ">MCQ</option>
-              <option value="APTITUDE">Aptitude</option>
-              <option value="CODING">Coding</option>
-              <option value="INTERVIEW_PREP">Interview Prep</option>
-            </select>
-
-            {/* Status Filter Dropdown */}
-            <select
+              onChange={(val) => { setTypeFilter(val); setQuizPage(1); }}
+              options={[
+                { value: 'MCQ', label: 'MCQ' },
+                { value: 'APTITUDE', label: 'Aptitude' },
+                { value: 'CODING', label: 'Coding' },
+                { value: 'INTERVIEW_PREP', label: 'Interview Prep' },
+              ]}
+              placeholder="All Types"
+              compact
+            />
+            <CustomSelect
               value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setQuizPage(1); }}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
-            >
-              <option value="">All Statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="SCHEDULED">Scheduled</option>
-              <option value="LIVE">Live</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="ARCHIVED">Archived</option>
-            </select>
+              onChange={(val) => { setStatusFilter(val); setQuizPage(1); }}
+              options={[
+                { value: 'DRAFT', label: 'Draft' },
+                { value: 'SCHEDULED', label: 'Scheduled' },
+                { value: 'LIVE', label: 'Live' },
+                { value: 'COMPLETED', label: 'Completed' },
+                { value: 'ARCHIVED', label: 'Archived' },
+              ]}
+              placeholder="All Statuses"
+              compact
+            />
           </div>
         </div>
       </div>
@@ -504,7 +500,7 @@ export default function QuizzesPage() {
             ) : (
               <div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[500px] text-sm">
                     <thead>
                       <tr className="bg-purple-50/50 border-b border-purple-100 dark:bg-purple-900/20 dark:border-purple-900/30">
                         {['Title', 'Type', 'Difficulty', 'Course / Batch', 'Questions', 'Duration', 'Passing', 'Max Attempts', 'Status', 'Actions'].map(h => (
@@ -528,7 +524,7 @@ export default function QuizzesPage() {
                       ) : (
                         paginatedQuizzes.map(q => (
                           <tr key={q.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
-                            <td className="px-3 py-3 font-semibold text-gray-800 dark:text-white max-w-[160px] truncate">{q.title}</td>
+                            <td className="px-3 py-3 font-semibold text-gray-800 dark:text-white break-words">{q.title}</td>
                             <td className="px-3 py-3">
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TYPE_STYLES[q.type] || TYPE_STYLES.MCQ}`}>
                                 {TYPE_LABELS[q.type] || q.type}
@@ -540,8 +536,8 @@ export default function QuizzesPage() {
                             <td className="px-3 py-3 text-xs text-gray-500 max-w-[160px]">
                               {q.courseName || q.batchName ? (
                                 <div className="flex flex-col gap-0.5">
-                                  {q.courseName && <span className="truncate">{q.courseName}</span>}
-                                  {q.batchName && <span className="text-gray-400 truncate">{q.batchName}</span>}
+                                   {q.courseName && <span className="break-words">{q.courseName}</span>}
+                                   {q.batchName && <span className="text-gray-400 break-words">{q.batchName}</span>}
                                 </div>
                               ) : <span className="text-gray-300">All students</span>}
                             </td>
@@ -600,15 +596,16 @@ export default function QuizzesPage() {
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 flex-wrap gap-3">
                   <div className="flex items-center gap-2">
                     <span>Per page:</span>
-                    <select
+                    <CustomSelect
                       value={quizPageSize}
-                      onChange={e => { setQuizPageSize(Number(e.target.value)); setQuizPage(1); }}
-                      className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 outline-none focus:ring-2 focus:ring-purple-500 text-xs dark:bg-gray-800 dark:border-gray-700 dark:text-white font-semibold"
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                    </select>
+                      onChange={(val) => { setQuizPageSize(Number(val)); setQuizPage(1); }}
+                      options={[
+                        { value: 10, label: '10' },
+                        { value: 25, label: '25' },
+                        { value: 50, label: '50' },
+                      ]}
+                      compact
+                    />
                     <span className="ml-2 font-medium">
                       Showing {filtered.length > 0 ? quizStartIndex + 1 : 0}–{quizEndIndex} of {filtered.length} quizzes
                     </span>
@@ -666,7 +663,7 @@ export default function QuizzesPage() {
         <div className="flex mb-5 gap-1.5">
           {STEP_LABELS.map((l, i) => (
             <button key={l} onClick={() => setStep(i)}
-              className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold transition-all truncate text-center ${step === i ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold transition-all break-words text-center ${step === i ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
               {i + 1}. {l}
             </button>
           ))}
@@ -695,67 +692,66 @@ export default function QuizzesPage() {
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Quiz Type</label>
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                  <option value="MCQ">MCQ</option>
-                  <option value="APTITUDE">Aptitude</option>
-                  <option value="CODING">Coding</option>
-                  <option value="INTERVIEW_PREP">Interview Prep</option>
-                  <option value="ADAPTIVE">Adaptive</option>
-                </select>
+                <CustomSelect
+                  value={form.type}
+                  onChange={(val) => setForm(f => ({ ...f, type: val }))}
+                  options={[
+                    { value: 'MCQ', label: 'MCQ' },
+                    { value: 'APTITUDE', label: 'Aptitude' },
+                    { value: 'CODING', label: 'Coding' },
+                    { value: 'INTERVIEW_PREP', label: 'Interview Prep' },
+                    { value: 'ADAPTIVE', label: 'Adaptive' },
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty</label>
-                <select value={form.difficulty} onChange={e => setForm(f => ({ ...f, difficulty: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                  <option value="EASY">Easy</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HARD">Hard</option>
-                </select>
+                <CustomSelect
+                  value={form.difficulty}
+                  onChange={(val) => setForm(f => ({ ...f, difficulty: val }))}
+                  options={[
+                    { value: 'EASY', label: 'Easy' },
+                    { value: 'MEDIUM', label: 'Medium' },
+                    { value: 'HARD', label: 'Hard' },
+                  ]}
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Course</label>
-                <select
+                <CustomSelect
                   value={form.courseId}
-                  onChange={e => {
-                    const courseId = e.target.value
+                  onChange={(val) => {
                     setForm(f => {
-                      const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(b.course?.id) === String(courseId))
-                      return { ...f, courseId, batchId: stillValid ? f.batchId : '' }
+                      const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(b.course?.id) === String(val))
+                      return { ...f, courseId: val, batchId: stillValid ? f.batchId : '' }
                     })
                   }}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">All courses</option>
-                  {courses.map(c => (
-                    <option key={c.id} value={c.id}>{c.title || c.name}</option>
-                  ))}
-                </select>
+                  options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+                  placeholder="All courses"
+                  searchable
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Batch</label>
-                <select
+                <CustomSelect
                   value={form.batchId}
-                  onChange={e => setForm(f => ({ ...f, batchId: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">All batches</option>
-                  {batches
+                  onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
+                  options={batches
                     .filter(b => !form.courseId || String(b.course?.id) === String(form.courseId))
-                    .map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                </select>
+                    .map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All batches"
+                  searchable
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Duration (min) *</label>
                 <input
@@ -841,12 +837,15 @@ export default function QuizzesPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility</label>
-              <select value={form.resultVisibility} onChange={e => setForm(f => ({ ...f, resultVisibility: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                <option value="IMMEDIATE">Show result immediately</option>
-                <option value="AFTER_CLOSE">Show result after quiz closes</option>
-                <option value="MANUAL">Release result manually</option>
-              </select>
+              <CustomSelect
+                value={form.resultVisibility}
+                onChange={(val) => setForm(f => ({ ...f, resultVisibility: val }))}
+                options={[
+                  { value: 'IMMEDIATE', label: 'Show result immediately' },
+                  { value: 'AFTER_CLOSE', label: 'Show result after quiz closes' },
+                  { value: 'MANUAL', label: 'Release result manually' },
+                ]}
+              />
             </div>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -958,43 +957,45 @@ export default function QuizzesPage() {
                   />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <select
+                  <CustomSelect
                     value={pickerTopicFilter}
-                    onChange={e => { setPickerTopicFilter(e.target.value); setPickerPage(1); }}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
-                  >
-                    <option value="">All Topics</option>
-                    {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <select
+                    onChange={(val) => { setPickerTopicFilter(val); setPickerPage(1); }}
+                    options={topics.map(t => ({ value: t.id, label: t.name }))}
+                    placeholder="All Topics"
+                    searchable
+                    compact
+                  />
+                  <CustomSelect
                     value={pickerCourseFilter}
-                    onChange={e => { setPickerCourseFilter(e.target.value); setPickerPage(1); }}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
-                  >
-                    <option value="">All Courses</option>
-                    {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
-                  </select>
-                  <select
+                    onChange={(val) => { setPickerCourseFilter(val); setPickerPage(1); }}
+                    options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+                    placeholder="All Courses"
+                    searchable
+                    compact
+                  />
+                  <CustomSelect
                     value={pickerDifficultyFilter}
-                    onChange={e => { setPickerDifficultyFilter(e.target.value); setPickerPage(1); }}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
-                  >
-                    <option value="">All Levels</option>
-                    <option value="EASY">Easy</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HARD">Hard</option>
-                  </select>
-                  <select
+                    onChange={(val) => { setPickerDifficultyFilter(val); setPickerPage(1); }}
+                    options={[
+                      { value: 'EASY', label: 'Easy' },
+                      { value: 'MEDIUM', label: 'Medium' },
+                      { value: 'HARD', label: 'Hard' },
+                    ]}
+                    placeholder="All Levels"
+                    compact
+                  />
+                  <CustomSelect
                     value={pickerTypeFilter}
-                    onChange={e => { setPickerTypeFilter(e.target.value); setPickerPage(1); }}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer truncate"
-                  >
-                    <option value="">All Types</option>
-                    <option value="MCQ">MCQ</option>
-                    <option value="MULTIPLE_CORRECT">Multi-Select</option>
-                    <option value="TRUE_FALSE">True/False</option>
-                    <option value="SHORT_ANSWER">Short Answer</option>
-                  </select>
+                    onChange={(val) => { setPickerTypeFilter(val); setPickerPage(1); }}
+                    options={[
+                      { value: 'MCQ', label: 'MCQ' },
+                      { value: 'MULTIPLE_CORRECT', label: 'Multi-Select' },
+                      { value: 'TRUE_FALSE', label: 'True/False' },
+                      { value: 'SHORT_ANSWER', label: 'Short Answer' },
+                    ]}
+                    placeholder="All Types"
+                    compact
+                  />
                 </div>
               </div>
 
@@ -1030,7 +1031,7 @@ export default function QuizzesPage() {
                       <input type="checkbox" checked={selectedQuestionIds.includes(q.id)} onChange={() => toggleQuestion(q.id)}
                         className="w-4 h-4 mt-0.5 accent-purple-600 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 dark:text-white truncate">{q.questionText}</p>
+                        <p className="text-sm text-gray-800 dark:text-white break-words">{q.questionText}</p>
                         <div className="flex gap-1.5 mt-1 flex-wrap">
                           {q.topicName && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
@@ -1179,7 +1180,7 @@ export default function QuizzesPage() {
                           {q.options.map((o, oIdx) => (
                             <div key={o.id || oIdx} className={`text-[11px] px-2 py-0.5 rounded-md border flex items-center gap-1 ${o.correct ? 'bg-green-50 text-green-700 border-green-200 font-medium' : 'bg-gray-50 text-gray-500 border-gray-100'}`}>
                               <span>{o.correct ? '✓' : '•'}</span>
-                              <span className="truncate">{o.optionText}</span>
+                               <span className="break-words">{o.optionText}</span>
                             </div>
                           ))}
                         </div>
@@ -1291,7 +1292,7 @@ export default function QuizzesPage() {
             {loadingAnalytics ? (
               <div className="space-y-3">{[0,1].map(i => <div key={i} className="h-16 glass-card animate-pulse" />)}</div>
             ) : quizAnalytics ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { label: 'Total Attempts', val: quizAnalytics.totalAttempts },
                   { label: 'Average Score', val: `${quizAnalytics.averageScore}%` },

@@ -222,7 +222,7 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
                   <div key={`${f.name}-${i}`} className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/30 text-xs">
                     <div className="flex items-center gap-2 min-w-0 mr-2">
                       <Paperclip size={14} className="text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{f.name}</span>
+                      <span className="font-medium text-gray-800 dark:text-gray-200 break-words">{f.name}</span>
                       <span className="text-[10px] text-gray-400 flex-shrink-0">({formatFileSize(f.size)})</span>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -344,7 +344,7 @@ function AssignmentCard({ a, onSubmit }) {
                   title="Preview assignment file"
                 >
                   <Paperclip size={12} className="text-purple-500" />
-                  <span className="truncate max-w-[180px]">{att.fileName || `Attachment ${idx + 1}`}</span>
+                  <span className="break-words">{att.fileName || `Attachment ${idx + 1}`}</span>
                   <Eye size={12} className="text-purple-500 flex-shrink-0" />
                 </button>
               ))}
@@ -421,7 +421,7 @@ function AssignmentCard({ a, onSubmit }) {
                   className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-purple-600 hover:text-purple-700 font-medium"
                 >
                   <Paperclip size={12} />
-                  <span className="truncate max-w-[150px]">{sf.fileName || `File ${i + 1}`}</span>
+                  <span className="break-words">{sf.fileName || `File ${i + 1}`}</span>
                   <Eye size={11} className="text-gray-400" />
                 </button>
               ))
@@ -432,7 +432,7 @@ function AssignmentCard({ a, onSubmit }) {
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-purple-600 hover:text-purple-700 font-medium"
               >
                 <Paperclip size={12} />
-                <span className="truncate max-w-[150px]">{s.fileName || 'Submitted File'}</span>
+                <span className="break-words">{s.fileName || 'Submitted File'}</span>
                 <Eye size={11} className="text-gray-400" />
               </button>
             ) : null}
@@ -546,7 +546,7 @@ export default function AssignmentsPage() {
   return (
     <div className="page-wrapper">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Assignments</h1>
           <p className="text-sm text-gray-500">{assignments?.length || 0} total assignments</p>

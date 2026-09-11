@@ -156,7 +156,7 @@ function TopBar({ onMenuClick, user, unreadCount }) {
   }
 
   return (
-    <header className="h-16 bg-white dark:bg-gray-900 border-b border-slate-200 dark:border-gray-800 flex items-center justify-between px-6 sticky top-0 z-10">
+    <header className="h-14 sm:h-16 bg-white dark:bg-gray-900 border-b border-slate-200 dark:border-gray-800 flex items-center justify-between px-3 sm:px-6 sticky top-0 z-10">
       <button onClick={onMenuClick} className="text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-white lg:hidden">
         <Menu size={22} />
       </button>

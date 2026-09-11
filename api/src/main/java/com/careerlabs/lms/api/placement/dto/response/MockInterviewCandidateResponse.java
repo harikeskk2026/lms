@@ -23,15 +23,11 @@ public record MockInterviewCandidateResponse(
         Student s = c.getStudent();
         MockInterviewResponse.UserRef uRef = null;
         try {
-            if (s.getUser() != null) {
-                if (Hibernate.isInitialized(s.getUser())) {
-                    uRef = new MockInterviewResponse.UserRef(s.getUser().getId(), s.getUser().getName(), s.getUser().getEmail());
-                } else {
-                    uRef = new MockInterviewResponse.UserRef(s.getUser().getId(), null, null);
-                }
+            if (s != null && s.getUser() != null) {
+                uRef = new MockInterviewResponse.UserRef(s.getUser().getId(), s.getUser().getName(), s.getUser().getEmail());
             }
         } catch (Exception e) {
-            uRef = null;
+            uRef = (s != null && s.getUser() != null) ? new MockInterviewResponse.UserRef(s.getUser().getId(), null, null) : null;
         }
         StudentRef sRef = new StudentRef(s.getId(), uRef);
 

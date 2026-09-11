@@ -70,7 +70,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="page-wrapper">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Notifications</h1>
           {unreadCount > 0 && (

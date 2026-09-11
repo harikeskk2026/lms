@@ -120,7 +120,7 @@ export default function NotificationDropdown({
       {open && (
         <div
           id="notification-dropdown-panel"
-          className="absolute right-0 top-11 w-80 rounded-2xl shadow-2xl border border-purple-100 dark:border-purple-900/30 z-50 overflow-hidden"
+          className="absolute right-0 top-11 w-80 max-w-[calc(100vw-2rem)] rounded-2xl shadow-2xl border border-purple-100 dark:border-purple-900/30 z-50 overflow-hidden"
           style={{ background: 'var(--panel-bg, white)' }}
         >
           <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden">
@@ -193,7 +193,7 @@ export default function NotificationDropdown({
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs leading-snug truncate ${
+                        <p className={`text-xs leading-snug break-words ${
                           n.isRead ? 'text-gray-500 dark:text-gray-400 font-normal' : 'text-gray-800 dark:text-gray-100 font-semibold'
                         }`}>
                           {n.title}

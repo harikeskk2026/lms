@@ -4,6 +4,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, X, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import { QUESTION_TYPES, QUESTION_DIFFICULTIES } from '@/validations/questionValidation'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const SINGLE_CORRECT_TYPES = ['MCQ', 'TRUE_FALSE']
 
@@ -220,7 +221,7 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
 
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
 
-      <div className="space-y-4 max-h-[580px] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[580px] overflow-y-auto pr-1">
         {questions.map((q, qIndex) => {
           const qErrs = errors[qIndex] || {}
           const isSingle = SINGLE_CORRECT_TYPES.includes(q.questionType)
@@ -236,11 +237,11 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
             >
               {/* Question Header Card */}
               <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={() => toggleCollapse(qIndex)}>
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
                   <span className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold shrink-0">
                     {qIndex + 1}
                   </span>
-                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">
                     {q.questionText || `Untitled Question ${qIndex + 1}`}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
@@ -288,27 +289,19 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Type *</label>
-                      <select
+                      <CustomSelect
                         value={q.questionType}
-                        onChange={e => updateQuestion(qIndex, 'questionType', e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
-                      >
-                        {QUESTION_TYPES.map(t => (
-                          <option key={t} value={t}>{TYPE_DISPLAY_NAMES[t] || t}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => updateQuestion(qIndex, 'questionType', val)}
+                        options={QUESTION_TYPES.map(t => ({ value: t, label: TYPE_DISPLAY_NAMES[t] || t }))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Difficulty *</label>
-                      <select
+                      <CustomSelect
                         value={q.difficulty}
-                        onChange={e => updateQuestion(qIndex, 'difficulty', e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
-                      >
-                        {QUESTION_DIFFICULTIES.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => updateQuestion(qIndex, 'difficulty', val)}
+                        options={QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Points *</label>
@@ -325,33 +318,22 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Topic</label>
-                      <select
+                      <CustomSelect
                         value={q.topicId}
-                        onChange={e => updateQuestion(qIndex, 'topicId', e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
-                      >
-                        <option value="">No topic</option>
-                        {topics.map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => updateQuestion(qIndex, 'topicId', val)}
+                        options={topics.map(t => ({ value: t.id, label: t.name }))}
+                        placeholder="No topic"
+                        clearable
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-                      <select
+                      <CustomSelect
                         value={q.courseId}
-                        onChange={e => updateQuestion(qIndex, 'courseId', e.target.value)}
-                        className={`w-full rounded-xl border px-3 py-2 text-xs outline-none focus:ring-2 ${
-                          errors[qIndex]?.courseId
-                            ? 'border-red-500 focus:ring-red-400 bg-red-50/20'
-                            : 'border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:ring-purple-500'
-                        } dark:text-white`}
-                      >
-                        <option value="">Select Course</option>
-                        {courses.map(c => (
-                          <option key={c.id} value={c.id}>{c.title || c.name}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => updateQuestion(qIndex, 'courseId', val)}
+                        options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+                        placeholder="Select Course"
+                      />
                       {errors[qIndex]?.courseId && (
                         <span className="text-xs text-red-500 mt-1 block">{errors[qIndex].courseId}</span>
                       )}
@@ -410,7 +392,7 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
         })}
       </div>
 
-      <div className="flex items-center justify-between gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
         <button
           type="button"
           onClick={addQuestionCard}

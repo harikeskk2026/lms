@@ -12,10 +12,10 @@ export default function StatCard({ title, value, subtitle, icon: Icon, color = '
   const c = colors[color] || colors.purple
 
   return (
-    <div className={`glass-card p-5 hover:scale-[1.02] transition-transform duration-200 border ${c.border}`}>
+    <div className={`glass-card p-4 sm:p-5 hover:scale-[1.02] transition-transform duration-200 border ${c.border}`}>
       <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-xl ${c.bg} flex items-center justify-center`}>
-          {Icon && <Icon size={20} className={c.text} />}
+        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${c.bg} flex items-center justify-center`}>
+          {Icon && <Icon size={18} className={c.text} />}
         </div>
         {trend && (
           <div className={`flex items-center gap-1 text-xs font-semibold ${
@@ -26,7 +26,7 @@ export default function StatCard({ title, value, subtitle, icon: Icon, color = '
           </div>
         )}
       </div>
-      <p className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">{value}</p>
+      <p className="text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white font-display">{value}</p>
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mt-0.5">{title}</p>
       {subtitle && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{subtitle}</p>}
     </div>

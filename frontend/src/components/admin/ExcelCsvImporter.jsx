@@ -4,6 +4,7 @@ import { Upload, FileSpreadsheet, Download, CheckCircle, AlertCircle, Trash2, Ar
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const SAMPLE_CSV = `Question,Type,Difficulty,Points,Option 1,Option 2,Option 3,Option 4,Correct Options,Explanation,Topic,Course
 "Which keyword is used to inherit a class in Java?",MCQ,EASY,1,extends,implements,inherits,super,extends,"extends is used for class inheritance",Java Basics,Java Full Stack
@@ -500,7 +501,7 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
         </div>
       ) : extractedQuestions.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
               Extracted Questions Data
               <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-bold">
@@ -528,7 +529,7 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
                   {paginatedExtracted.map((q, idx) => (
                     <tr key={q.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
                       <td className="px-3 py-2 text-gray-400 font-bold">{previewStartIndex + idx + 1}</td>
-                      <td className="px-3 py-2 text-gray-800 dark:text-gray-100 font-medium max-w-xs truncate">
+                      <td className="px-3 py-2 text-gray-800 dark:text-gray-100 font-medium break-words">
                         {q.questionText}
                       </td>
                       <td className="px-3 py-2">
@@ -553,7 +554,7 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
                           : <span className="text-gray-300 text-[10px]">—</span>
                         }
                       </td>
-                      <td className="px-3 py-2 max-w-xs text-gray-500 truncate">
+                      <td className="px-3 py-2 text-gray-500 break-words">
                         {q.options.map(o => (o.correct ? `✓ ${o.optionText}` : o.optionText)).join(' | ')}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -575,15 +576,12 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
             <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 bg-gray-50/50 dark:bg-gray-800/40">
               <div className="flex items-center gap-1.5">
                 <span>Per page:</span>
-                <select
+                <CustomSelect
                   value={previewPageSize}
-                  onChange={e => { setPreviewPageSize(Number(e.target.value)); setPreviewPage(1); }}
-                  className="rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-1 py-0.5 text-[11px]"
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                </select>
+                  onChange={(val) => { setPreviewPageSize(Number(val)); setPreviewPage(1); }}
+                  options={[{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]}
+                  compact
+                />
                 <span className="ml-1">Showing {extractedQuestions.length > 0 ? previewStartIndex + 1 : 0}–{previewEndIndex} of {extractedQuestions.length}</span>
               </div>
               <div className="flex items-center gap-1">
@@ -608,7 +606,7 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
             <button
               type="button"
               onClick={onCancel}

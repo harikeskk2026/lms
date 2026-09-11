@@ -22,6 +22,7 @@ import courseService from '@/services/courseService'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 import { useAuth } from '@/context/AuthContext'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatus }) {
   const { user } = useAuth()
@@ -283,7 +284,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
   const selectedBatchObj = batches.find(b => String(b.id) === String(selectedBatchId))
 
   return (
-    <div className="glass-card p-5 space-y-5">
+    <div className="glass-card p-3 sm:p-5 space-y-5">
       {/* Header Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -338,32 +339,27 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
           />
         </div>
 
-        <select
+        <CustomSelect
           value={batchFilter}
-          onChange={e => {
-            setBatchFilter(e.target.value)
+          onChange={val => {
+            setBatchFilter(val)
             setPage(1)
           }}
-          className="bg-white dark:bg-gray-900 text-xs text-gray-700 dark:text-gray-300 rounded-xl px-3 py-1.5 outline-none border border-gray-200 dark:border-gray-800"
-        >
-          <option value="">All Batches</option>
-          {batches.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
+          options={[{ value: '', label: 'All Batches' }, ...batches.map(b => ({ value: b.id, label: b.name }))]}
+          placeholder="All Batches"
+          compact
+          clearable
+        />
 
-        <select
+        <CustomSelect
           value={statusFilter}
-          onChange={e => {
-            setStatusFilter(e.target.value)
+          onChange={val => {
+            setStatusFilter(val)
             setPage(1)
           }}
-          className="bg-white dark:bg-gray-900 text-xs text-gray-700 dark:text-gray-300 rounded-xl px-3 py-1.5 outline-none border border-gray-200 dark:border-gray-800"
-        >
-          <option value="active">Active Enrollments</option>
-          <option value="inactive">Unenrolled / Inactive</option>
-          <option value="all">All Status</option>
-        </select>
+          options={[{ value: 'active', label: 'Active Enrollments' }, { value: 'inactive', label: 'Unenrolled / Inactive' }, { value: 'all', label: 'All Status' }]}
+          compact
+        />
 
         {(search || batchFilter || statusFilter !== 'active') && (
           <button
@@ -717,18 +713,13 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
                   Assign Course Batch (Optional)
                 </label>
-                <select
+                <CustomSelect
                   value={selectedBatchId}
-                  onChange={e => setSelectedBatchId(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                >
-                  <option value="">No Batch (Assign later)</option>
-                  {batches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.mode || 'HYBRID'}) · Max {b.maxStudents || 30} seats
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedBatchId}
+                  options={[{ value: '', label: 'No Batch (Assign later)' }, ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.mode || 'HYBRID'}) · Max ${b.maxStudents || 30} seats` }))]}
+                  placeholder="No Batch (Assign later)"
+                  clearable
+                />
                 {selectedBatchObj && (
                   <p className="text-[11px] text-gray-500 mt-1">
                     Timing: {selectedBatchObj.timing || 'TBD'} &bull; Max capacity: {selectedBatchObj.maxStudents} students

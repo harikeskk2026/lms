@@ -4,7 +4,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine, CartesianGrid
 } from 'recharts'
-import { ChevronDown } from 'lucide-react'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const TOOLTIP_STYLE = { background: '#1e1b4b', border: 'none', borderRadius: 12, color: '#fff', fontSize: 12 }
 const SKELETON = <div className="h-[260px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
@@ -104,9 +104,9 @@ export function AttendanceDailyTrendChart({ data, days = 30 }) {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       {/* Header section with Dropdown */}
-      <div className="flex items-start justify-between gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4 mb-4">
         <div>
           <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance Trend</h3>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
@@ -114,15 +114,12 @@ export function AttendanceDailyTrendChart({ data, days = 30 }) {
           </p>
         </div>
         <div className="relative shrink-0">
-          <select
+          <CustomSelect
             value={metric}
-            onChange={e => setMetric(e.target.value)}
-            className="appearance-none rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-3.5 pr-8 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm outline-none hover:border-purple-300 focus:ring-2 focus:ring-purple-500 transition-all cursor-pointer"
-          >
-            <option value="percentage">Percentage</option>
-            <option value="headcount">Headcount</option>
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            onChange={setMetric}
+            options={[{ value: 'percentage', label: 'Percentage' }, { value: 'headcount', label: 'Headcount' }]}
+            compact
+          />
         </div>
       </div>
 
@@ -183,15 +180,17 @@ export function WeeklyAttendanceRateChart({ data }) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={data} margin={{ left: -10, right: 10 }}>
-        <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-        <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, 'Attendance']} />
-        <ReferenceLine y={75} stroke="#ffd668" strokeDasharray="4 2" label={{ value: '75% min', fill: '#ffd668', fontSize: 10 }} />
-        <Line type="monotone" dataKey="pct" name="Rate" stroke="#6d28d9" strokeWidth={2.5} dot={{ fill: '#6d28d9', r: 5, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 7 }} />
-      </LineChart>
-    </ResponsiveContainer>
+    <div className="min-w-0">
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ left: -10, right: 10 }}>
+          <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+          <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, 'Attendance']} />
+          <ReferenceLine y={75} stroke="#ffd668" strokeDasharray="4 2" label={{ value: '75% min', fill: '#ffd668', fontSize: 10 }} />
+          <Line type="monotone" dataKey="pct" name="Rate" stroke="#6d28d9" strokeWidth={2.5} dot={{ fill: '#6d28d9', r: 5, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 7 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -209,16 +208,18 @@ export function MonthlyAttendanceBreakdownChart({ data }) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} barSize={16} margin={{ left: -10, right: 10 }}>
-        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-        <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="present" name="Present" fill="#6d28d9" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="absent"  name="Absent"  fill="#ffd668" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="late"    name="Late"    fill="#93c5fd" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="min-w-0">
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} barSize={16} margin={{ left: -10, right: 10 }}>
+          <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+          <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Bar dataKey="present" name="Present" fill="#6d28d9" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="absent"  name="Absent"  fill="#ffd668" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="late"    name="Late"    fill="#93c5fd" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   )
 }

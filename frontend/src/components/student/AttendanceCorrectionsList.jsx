@@ -34,7 +34,7 @@ const AttendanceCorrectionsList = forwardRef(function AttendanceCorrectionsList(
       ) : (
         <div className="space-y-2">
           {corrections.map(c => (
-            <div key={c.id} className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-purple-50 dark:border-purple-900/20 p-3">
+            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 rounded-xl border border-purple-50 dark:border-purple-900/20 p-3">
               <div>
                 <p className="text-sm font-semibold text-gray-800 dark:text-white">{c.classTitle}</p>
                 <p className="text-xs text-gray-500">
@@ -42,7 +42,7 @@ const AttendanceCorrectionsList = forwardRef(function AttendanceCorrectionsList(
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">{c.reason}</p>
               </div>
-              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg ${STATUS_STYLE[c.status]}`}>
+              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg self-start sm:self-auto ${STATUS_STYLE[c.status]}`}>
                 {c.status}
               </span>
             </div>

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { studentApi } from '@/lib/api'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const STATUS_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE']
 
@@ -43,7 +44,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fadeIn" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-4 sm:p-6 shadow-2xl space-y-4 mx-4" onClick={e => e.stopPropagation()}>
 
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-800 dark:text-white">
@@ -63,10 +64,8 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Expected Status</label>
-            <select value={requestedStatus} onChange={e => setRequestedStatus(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <CustomSelect value={requestedStatus} onChange={setRequestedStatus}
+              options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))} />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Reason *</label>

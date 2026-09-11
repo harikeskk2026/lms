@@ -132,7 +132,7 @@ export default function TrainerDashboardView() {
       {/* Summary Cards */}
       <div>
         <SectionHeader label="My Overview" />
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {loading ? [...Array(6)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <TrainerStatCard title="My Batches"       value={stats?.overview?.myBatchesCount     ?? 0} icon={Layers}        accent="purple"  />
@@ -148,15 +148,15 @@ export default function TrainerDashboardView() {
 
       {/* Today's Schedule */}
       <div className="glass-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Clock size={18} className="text-purple-600 dark:text-purple-400" />
-            <h3 className="font-display font-bold text-gray-800 dark:text-white">Today&apos;s Live Schedule</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Clock size={18} className="text-purple-600 dark:text-purple-400" />
+              <h3 className="font-display font-bold text-gray-800 dark:text-white">Today&apos;s Live Schedule</h3>
+            </div>
+            <span className="text-xs text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg font-mono">
+              {clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
-          <span className="text-xs text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg font-mono">
-            {clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        </div>
 
         {loading ? (
           <div className="space-y-3">{[...Array(2)].map((_, i) => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
@@ -197,15 +197,15 @@ export default function TrainerDashboardView() {
 
       {/* My Assigned Batches */}
       <div className="glass-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Layers size={18} className="text-purple-600 dark:text-purple-400" />
-            <h3 className="font-display font-bold text-gray-800 dark:text-white">My Assigned Batches</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Layers size={18} className="text-purple-600 dark:text-purple-400" />
+              <h3 className="font-display font-bold text-gray-800 dark:text-white">My Assigned Batches</h3>
+            </div>
+            <button onClick={() => router.push('/admin/batches')} className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
+              View All <ArrowRight size={13} />
+            </button>
           </div>
-          <button onClick={() => router.push('/admin/batches')} className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
-            View All <ArrowRight size={13} />
-          </button>
-        </div>
 
         {loading ? (
           <div className="grid md:grid-cols-2 gap-4">{[...Array(2)].map((_, i) => <div key={i} className="h-28 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
@@ -222,10 +222,10 @@ export default function TrainerDashboardView() {
                 className="p-4 rounded-xl border border-purple-100 dark:border-purple-900/40 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-md transition-all cursor-pointer bg-white dark:bg-gray-900"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider truncate">{b.courseName}</span>
+                   <span className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider break-words">{b.courseName}</span>
                   <span className="text-xs text-gray-400 font-medium ml-2 flex-shrink-0">{b.studentCount} Students</span>
                 </div>
-                <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100 mb-3 truncate">{b.batchName}</h4>
+                 <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100 mb-3 break-words">{b.batchName}</h4>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Attendance</span>
@@ -258,7 +258,7 @@ export default function TrainerDashboardView() {
       {/* Pending Evaluations & Quick Actions */}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="glass-card p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <PenLine size={17} className="text-purple-600 dark:text-purple-400" />
               <h3 className="font-display font-bold text-gray-800 dark:text-white">Pending Assignments to Grade</h3>
@@ -281,7 +281,7 @@ export default function TrainerDashboardView() {
               {stats.pendingGrading.map(item => (
                 <div key={item.submissionId} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors">
                   <div className="min-w-0 mr-3">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.assignmentTitle}</p>
+                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 break-words">{item.assignmentTitle}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {item.studentName} · {item.batchName}
                       {item.submittedAt && <span className="ml-1 text-gray-300 dark:text-gray-600">· {formatDistanceToNow(new Date(item.submittedAt), { addSuffix: true })}</span>}

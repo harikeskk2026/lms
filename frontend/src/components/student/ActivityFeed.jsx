@@ -26,8 +26,8 @@ export default function ActivityFeed({ items = [] }) {
           const Icon = iconMap[item.icon] || Bell
           const colCls = colorMap[item.color] || colorMap.purple
           return (
-            <div key={i} className="relative flex gap-3 items-start pl-9 group hover:bg-purple-50/50 dark:hover:bg-purple-900/10 rounded-xl p-2 -ml-2 transition-colors">
-              <div className={`absolute left-1.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${colCls}`}>
+            <div key={i} className="relative flex gap-2 sm:gap-3 items-start pl-8 sm:pl-9 group hover:bg-purple-50/50 dark:hover:bg-purple-900/10 rounded-xl p-2 -ml-2 transition-colors">
+              <div className={`absolute left-0 sm:left-1.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${colCls}`}>
                 <Icon size={11} />
               </div>
               <div className="flex-1 min-w-0">

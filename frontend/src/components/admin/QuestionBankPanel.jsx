@@ -11,6 +11,7 @@ import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
 import ExcelCsvImporter from '@/components/admin/ExcelCsvImporter'
 import PdfQuestionImporter from '@/components/admin/PdfQuestionImporter'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const DIFFICULTY_COLORS = {
   EASY: 'bg-green-100 text-green-700',
@@ -178,7 +179,7 @@ export default function QuestionBankPanel({ onChange }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <p className="text-sm text-gray-500">Reusable quiz questions, shared across quizzes.</p>
         </div>
@@ -204,7 +205,7 @@ export default function QuestionBankPanel({ onChange }) {
         </div>
       </div>
 
-      <div className="glass-card p-4 flex flex-wrap items-center gap-3">
+      <div className="glass-card p-3 sm:p-4 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -217,32 +218,16 @@ export default function QuestionBankPanel({ onChange }) {
             className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
-        <select value={filters.topicId} onChange={e => { setFilters(f => ({ ...f, topicId: e.target.value })); setCurrentPage(1); }}
-          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">All Topics</option>
-          {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select value={filters.courseId} onChange={e => { setFilters(f => ({ ...f, courseId: e.target.value })); setCurrentPage(1); }}
-          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">All Courses</option>
-          {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
-        </select>
-        <select value={filters.difficulty} onChange={e => { setFilters(f => ({ ...f, difficulty: e.target.value })); setCurrentPage(1); }}
-          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">All Difficulties</option>
-          {QUESTION_DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <select value={filters.questionType} onChange={e => { setFilters(f => ({ ...f, questionType: e.target.value })); setCurrentPage(1); }}
-          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">All Types</option>
-          {QUESTION_TYPES.map(t => <option key={t} value={t}>{t === 'MULTIPLE_CORRECT' ? 'MULTIPLE_CORRECT (Multi-Select)' : t}</option>)}
-        </select>
-        <select value={filters.active} onChange={e => { setFilters(f => ({ ...f, active: e.target.value })); setCurrentPage(1); }}
-          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">All Statuses</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
+        <CustomSelect value={filters.topicId} onChange={val => { setFilters(f => ({ ...f, topicId: val })); setCurrentPage(1); }}
+          options={[{ value: '', label: 'All Topics' }, ...topics.map(t => ({ value: t.id, label: t.name }))]} placeholder="All Topics" compact clearable />
+        <CustomSelect value={filters.courseId} onChange={val => { setFilters(f => ({ ...f, courseId: val })); setCurrentPage(1); }}
+          options={[{ value: '', label: 'All Courses' }, ...courses.map(c => ({ value: c.id, label: c.title || c.name }))]} placeholder="All Courses" compact clearable />
+        <CustomSelect value={filters.difficulty} onChange={val => { setFilters(f => ({ ...f, difficulty: val })); setCurrentPage(1); }}
+          options={[{ value: '', label: 'All Difficulties' }, ...QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))]} placeholder="All Difficulties" compact clearable />
+        <CustomSelect value={filters.questionType} onChange={val => { setFilters(f => ({ ...f, questionType: val })); setCurrentPage(1); }}
+          options={[{ value: '', label: 'All Types' }, ...QUESTION_TYPES.map(t => ({ value: t, label: t === 'MULTIPLE_CORRECT' ? 'MULTIPLE_CORRECT (Multi-Select)' : t }))]} placeholder="All Types" compact clearable />
+        <CustomSelect value={filters.active} onChange={val => { setFilters(f => ({ ...f, active: val })); setCurrentPage(1); }}
+          options={[{ value: '', label: 'All Statuses' }, { value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }]} placeholder="All Statuses" compact clearable />
       </div>
 
       {/* Floating Bulk Actions Bar */}
@@ -279,7 +264,7 @@ export default function QuestionBankPanel({ onChange }) {
       ) : (
         <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="text-left text-xs text-gray-400 border-b border-gray-100 dark:border-gray-800">
                   <th className="px-4 py-3 font-semibold w-10">
@@ -311,7 +296,7 @@ export default function QuestionBankPanel({ onChange }) {
                         className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3 max-w-xs truncate text-gray-800 dark:text-gray-100 font-medium">{q.questionText}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-100 font-medium break-words">{q.questionText}</td>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TYPE_BADGES[q.questionType] || 'bg-gray-100 text-gray-600'}`}>
                         {q.questionType === 'MULTIPLE_CORRECT' ? 'Multi-Select' : q.questionType}
@@ -358,16 +343,12 @@ export default function QuestionBankPanel({ onChange }) {
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <span>Per page:</span>
-              <select
+              <CustomSelect
                 value={pageSize}
-                onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 outline-none focus:ring-2 focus:ring-purple-500 text-xs dark:bg-gray-800 dark:border-gray-700 dark:text-white font-semibold"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
+                onChange={(val) => { setPageSize(Number(val)); setCurrentPage(1); }}
+                options={[{ value: 10, label: '10' }, { value: 25, label: '25' }, { value: 50, label: '50' }, { value: 100, label: '100' }]}
+                compact
+              />
               <span className="ml-2 font-medium">
                 Showing {questions.length > 0 ? startIndex + 1 : 0}–{endIndex} of {questions.length} questions
               </span>

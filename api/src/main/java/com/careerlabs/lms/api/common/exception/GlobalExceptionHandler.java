@@ -60,9 +60,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
         log.error("Data integrity violation on {}", request.getRequestURI(), ex);
-        return buildResponse(HttpStatus.CONFLICT,
-                "That change conflicts with existing data. Please review your input and try again.",
-                request.getRequestURI(), null);
+        String rootMsg = ex.getRootCause() != null ? ex.getRootCause().getMessage() : ex.getMessage();
+        String userMessage;
+        if (rootMsg != null && rootMsg.contains("duplicate key")) {
+            userMessage = "A record with that value already exists. Please choose a different value and try again.";
+        } else if (rootMsg != null && rootMsg.contains("NOT NULL")) {
+            userMessage = "A required field is missing. Please fill in all required fields and try again.";
+        } else if (rootMsg != null && rootMsg.contains("unique constraint") || rootMsg != null && rootMsg.contains("Unique")) {
+            userMessage = "A record with that value already exists. Please choose a different value and try again.";
+        } else if (rootMsg != null && rootMsg.contains("foreign key")) {
+            userMessage = "This record is referenced by other data and cannot be modified as requested.";
+        } else {
+            userMessage = "That change conflicts with existing data. Root cause: " + rootMsg;
+        }
+        return buildResponse(HttpStatus.CONFLICT, userMessage, request.getRequestURI(), null);
     }
 
     @ExceptionHandler(EmptyResultDataAccessException.class)

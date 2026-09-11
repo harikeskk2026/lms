@@ -72,7 +72,7 @@ export default function ResetPasswordModal({ open, onClose, user, onSuccess }) {
 
   const content = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-5 animate-scaleUp mx-4">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600">

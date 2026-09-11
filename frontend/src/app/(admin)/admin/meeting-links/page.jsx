@@ -12,6 +12,7 @@ import batchService from '@/services/batchService'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import SlidePanel from '@/components/admin/SlidePanel'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const PLATFORMS = ['ZOOM']
 const STATUSES = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED']
@@ -390,7 +391,7 @@ export default function AdminMeetingLinksPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
             <Video className="text-purple-600 dark:text-purple-400" size={26} />
@@ -467,40 +468,34 @@ export default function AdminMeetingLinksPage() {
             />
           </div>
 
-          <select
+          <CustomSelect
             value={filterCourse}
-            onChange={e => { setFilterCourse(e.target.value); setFilterBatch('') }}
-            className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">All Courses</option>
-            {courses.map(c => (
-              <option key={c.id} value={c.id}>{c.title}</option>
-            ))}
-          </select>
+            onChange={(val) => { setFilterCourse(val); setFilterBatch('') }}
+            options={courses.map(c => ({ value: c.id, label: c.title }))}
+            placeholder="All Courses"
+            compact
+            searchable={courses.length >= 10}
+          />
 
-          <select
+          <CustomSelect
             value={filterBatch}
-            onChange={e => setFilterBatch(e.target.value)}
-            className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">All Batches</option>
-            {filterBatchesList.map(b => (
-              <option key={b.id} value={b.id}>
-                {b.name || b.title} {b.mode ? `· ${b.mode}` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => setFilterBatch(val)}
+            options={filterBatchesList.map(b => ({
+              value: b.id,
+              label: `${b.name || b.title} ${b.mode ? `· ${b.mode}` : ''}`
+            }))}
+            placeholder="All Batches"
+            compact
+            searchable={filterBatchesList.length >= 10}
+          />
 
-          <select
+          <CustomSelect
             value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">All Statuses</option>
-            {STATUSES.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+            onChange={(val) => setFilterStatus(val)}
+            options={STATUSES.map(s => ({ value: s, label: s }))}
+            placeholder="All Statuses"
+            compact
+          />
         </div>
 
         <button
@@ -725,57 +720,48 @@ export default function AdminMeetingLinksPage() {
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                 Course
               </label>
-              <select
+              <CustomSelect
                 value={form.courseId}
-                onChange={e => {
-                  const courseId = e.target.value
+                onChange={(val) => {
                   setForm(f => {
-                    const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(courseId))
-                    return { ...f, courseId, batchId: stillValid ? f.batchId : '' }
+                    const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(val))
+                    return { ...f, courseId: val, batchId: stillValid ? f.batchId : '' }
                   })
                 }}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="">Select Course</option>
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>{c.title || c.name}</option>
-                ))}
-              </select>
+                options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+                placeholder="Select Course"
+                searchable={courses.length >= 10}
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                 Target Batch
               </label>
-              <select
+              <CustomSelect
                 value={form.batchId}
-                onChange={e => {
-                  const batchId = e.target.value
-                  if (batchId) {
-                    const selectedBatch = batches.find(b => String(b.id) === String(batchId))
+                onChange={(val) => {
+                  if (val) {
+                    const selectedBatch = batches.find(b => String(b.id) === String(val))
                     const bCourseId = getBatchCourseId(selectedBatch)
                     const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName
                     setForm(f => ({
                       ...f,
-                      batchId,
+                      batchId: val,
                       ...(bCourseId && !f.courseId ? { courseId: String(bCourseId) } : {}),
                       ...(batchTrainer && !f.hostName ? { hostName: batchTrainer } : {})
                     }))
                     return
                   }
-                  setForm(f => ({ ...f, batchId }))
+                  setForm(f => ({ ...f, batchId: val }))
                 }}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="">
-                  {form.courseId ? 'Select Batch (or all batches in course)' : 'Select Batch'}
-                </option>
-                {batchOptionsForForm.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.name || b.title} {b.mode ? `· ${b.mode}` : ''} {!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}
-                  </option>
-                ))}
-              </select>
+                options={batchOptionsForForm.map(b => ({
+                  value: b.id,
+                  label: `${b.name || b.title} ${b.mode ? `· ${b.mode}` : ''} ${!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}`
+                }))}
+                placeholder={form.courseId ? 'Select Batch (or all batches in course)' : 'Select Batch'}
+                searchable={batchOptionsForForm.length >= 10}
+              />
             </div>
           </div>
 
@@ -815,22 +801,20 @@ export default function AdminMeetingLinksPage() {
             </div>
 
             {trainers.length > 0 && (
-              <select
+              <CustomSelect
                 value={trainers.some(t => (t.name || t.fullName) === form.hostName) ? form.hostName : ''}
-                onChange={e => {
-                  if (e.target.value) {
-                    setForm(f => ({ ...f, hostName: e.target.value }))
+                onChange={(val) => {
+                  if (val) {
+                    setForm(f => ({ ...f, hostName: val }))
                   }
                 }}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 mb-2"
-              >
-                <option value="">-- Select Registered Trainer --</option>
-                {trainers.map(t => (
-                  <option key={t.id} value={t.name || t.fullName}>
-                    {t.name || t.fullName} {t.email ? `(${t.email})` : ''}
-                  </option>
-                ))}
-              </select>
+                options={trainers.map(t => ({
+                  value: t.name || t.fullName,
+                  label: `${t.name || t.fullName}${t.email ? ` (${t.email})` : ''}`
+                }))}
+                placeholder="-- Select Registered Trainer --"
+                searchable={trainers.length >= 10}
+              />
             )}
 
             <input
@@ -954,8 +938,8 @@ export default function AdminMeetingLinksPage() {
             {attendees.map(a => (
               <div key={a.studentUserId} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{a.name}</p>
-                  {a.email && <p className="text-xs text-gray-400 truncate">{a.email}</p>}
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{a.name}</p>
+                  {a.email && <p className="text-xs text-gray-400 break-words">{a.email}</p>}
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-xs text-gray-500 dark:text-gray-400">{format(new Date(a.firstJoinedAt), 'dd MMM, hh:mm a')}</p>

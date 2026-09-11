@@ -31,11 +31,11 @@ function MaterialItem({ material, compact = false, onView }) {
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <span className="text-lg flex-shrink-0">{MATERIAL_ICONS[material.type] || '📁'}</span>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-gray-800 dark:text-gray-100 text-xs truncate" title={material.title}>
+          <p className="font-medium text-gray-800 dark:text-gray-100 text-xs break-words" title={material.title}>
             {material.title}
           </p>
           {material.description && (
-            <p className="text-[11px] text-gray-400 truncate">{material.description}</p>
+            <p className="text-[11px] text-gray-400 break-words">{material.description}</p>
           )}
         </div>
         <span className="chip bg-purple-100/70 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[9px] uppercase px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
@@ -186,7 +186,7 @@ export default function MyCourseDetailPage({ params }) {
   return (
     <div className="page-wrapper">
       <div className="glass-card overflow-hidden">
-        <div className="h-32 bg-gradient-to-br from-purple-700 via-violet-700 to-indigo-700 p-6 relative overflow-hidden">
+        <div className="h-32 bg-gradient-to-br from-purple-700 via-violet-700 to-indigo-700 p-4 sm:p-6 relative overflow-hidden">
           <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/10" />
           <div className="relative">
             <span className="chip bg-white/20 text-white text-xs mb-2">{course.level}</span>
@@ -202,7 +202,7 @@ export default function MyCourseDetailPage({ params }) {
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-1">
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${tab === t ? 'bg-brand-600 text-white' : 'text-gray-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
@@ -297,8 +297,8 @@ export default function MyCourseDetailPage({ params }) {
                               {m.type}
                             </span>
                           </div>
-                          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm truncate" title={m.title}>{m.title}</p>
-                          {m.description && <p className="text-xs text-gray-400 truncate mt-0.5">{m.description}</p>}
+                          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm break-words" title={m.title}>{m.title}</p>
+                          {m.description && <p className="text-xs text-gray-400 break-words mt-0.5">{m.description}</p>}
                         </div>
                         <button
                           type="button"

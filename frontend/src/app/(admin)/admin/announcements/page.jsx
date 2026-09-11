@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import assignmentService from '@/services/assignmentService'
 import DateTimePicker from '@/components/ui/DateTimePicker'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 
@@ -558,20 +559,11 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">
                 Category
               </label>
-              <div className="relative">
-                <select
+              <CustomSelect
                   value={form.category}
-                  onChange={set('category')}
-                  className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 pr-8 text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 text-gray-800 dark:text-gray-200 shadow-2xs transition-all cursor-pointer appearance-none"
-                >
-                  {CATEGORIES.map(c => (
-                    <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                  <ChevronDown size={14} />
-                </div>
-              </div>
+                  onChange={(val) => setForm(f => ({ ...f, category: val }))}
+                  options={CATEGORIES.map(c => ({ value: c, label: c.charAt(0) + c.slice(1).toLowerCase() }))}
+                />
             </div>
 
             <div>
@@ -691,19 +683,12 @@ function Select({ label, value, onChange, options, allLabel }) {
       <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">
         {label}
       </label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={onChange}
-          className="w-full h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 pr-8 text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 text-gray-800 dark:text-gray-200 shadow-2xs transition-all cursor-pointer appearance-none"
-        >
-          <option value="">{allLabel}</option>
-          {options.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-          <ChevronDown size={14} />
-        </div>
-      </div>
+      <CustomSelect
+        value={value}
+        onChange={onChange}
+        options={options.map(([id, name]) => ({ value: id, label: name }))}
+        placeholder={allLabel}
+      />
     </div>
   )
 }
@@ -1238,7 +1223,7 @@ function CalendarView({
                             setSelectedDay(d)
                             handleOpenAnnouncement(item.a)
                           }}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium truncate flex items-center gap-1 cursor-pointer transition-all hover:ring-1 hover:ring-purple-400 ${
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium break-words flex items-center gap-1 cursor-pointer transition-all hover:ring-1 hover:ring-purple-400 ${
                             item.type === 'published' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
                             : item.type === 'scheduled' ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
                             : item.type === 'expiring' ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
@@ -1247,7 +1232,7 @@ function CalendarView({
                           title={`Click to view announcement: ${item.a.title}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${TYPE_DOT[item.type] || 'bg-gray-400'}`} />
-                          <span className="truncate font-semibold">{item.a.title}</span>
+                          <span className="break-words font-semibold">{item.a.title}</span>
                         </div>
                       ))}
                       {itemsOnDay.length > 2 && (

@@ -11,6 +11,7 @@ import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 import { resolveFileUrl } from '@/lib/api'
 
@@ -276,7 +277,7 @@ export default function AssignmentsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Assignments</h1>
           <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
@@ -288,7 +289,7 @@ export default function AssignmentsPage() {
       </div>
 
       {/* Filters */}
-      <div className="glass-card p-4 flex flex-wrap items-center gap-3">
+      <div className="glass-card p-4 flex flex-col sm:flex-row flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 flex-1 min-w-[200px]">
           <Search size={15} className="text-purple-400 flex-shrink-0" />
           <input
@@ -297,29 +298,33 @@ export default function AssignmentsPage() {
             onChange={e => handleSearch(e.target.value)}
           />
         </div>
-        <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
-          value={courseFilter} onChange={e => { setCourseFilter(e.target.value); setPage(1) }}
-        >
-          <option value="">All Courses</option>
-          {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-        </select>
-        <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
-          value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1) }}
-        >
-          <option value="">All Batches</option>
-          {headerFilterBatches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0 font-medium"
-          value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-        >
-          <option value="">All Status</option>
-          <option value="DRAFT">Draft</option>
-          <option value="PUBLISHED">Published</option>
-          <option value="CLOSED">Closed</option>
-        </select>
+        <CustomSelect
+          value={courseFilter}
+          onChange={(val) => { setCourseFilter(val); setPage(1) }}
+          options={courses.map(c => ({ value: c.id, label: c.title }))}
+          placeholder="All Courses"
+          searchable={courses.length >= 10}
+          compact
+        />
+        <CustomSelect
+          value={batchFilter}
+          onChange={(val) => { setBatchFilter(val); setPage(1) }}
+          options={headerFilterBatches.map(b => ({ value: b.id, label: b.name }))}
+          placeholder="All Batches"
+          searchable={headerFilterBatches.length >= 10}
+          compact
+        />
+        <CustomSelect
+          value={statusFilter}
+          onChange={(val) => { setStatusFilter(val); setPage(1) }}
+          options={[
+            { value: 'DRAFT', label: 'Draft' },
+            { value: 'PUBLISHED', label: 'Published' },
+            { value: 'CLOSED', label: 'Closed' },
+          ]}
+          placeholder="All Status"
+          compact
+        />
         <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
           <Calendar size={14} className="text-purple-400 flex-shrink-0" />
           <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">From:</span>
@@ -360,7 +365,7 @@ export default function AssignmentsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
                   {['Assignment', 'Course', 'Batch', 'Due Date', 'Marks', 'Status', 'Actions'].map(h => (
@@ -502,7 +507,7 @@ export default function AssignmentsPage() {
               searchPlaceholder="Search batch..."
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish / Start Date</label>
               <input
@@ -532,7 +537,7 @@ export default function AssignmentsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due / Close Date *</label>
               <input
@@ -587,8 +592,8 @@ export default function AssignmentsPage() {
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF or DOCX only)</label>
             {form.attachmentName ? (
               <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
-                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 truncate min-w-0">
-                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> <span className="truncate">{form.attachmentName}</span>
+                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 min-w-0">
+                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> <span className="break-words">{form.attachmentName}</span>
                 </span>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button

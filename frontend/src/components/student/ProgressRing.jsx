@@ -1,16 +1,17 @@
 export default function ProgressRing({ pct = 0, size = 90, strokeWidth = 8, color = '#6d28d9', trackColor = '#e9d5ff', label = '' }) {
-  const r   = (size - strokeWidth) / 2
+  const responsiveSize = typeof size === 'number' && size >= 90 ? size : 90
+  const r   = (responsiveSize - strokeWidth) / 2
   const circ = 2 * Math.PI * r
   const offset = circ - (pct / 100) * circ
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
+    <svg width={responsiveSize} height={responsiveSize} viewBox={`0 0 ${responsiveSize} ${responsiveSize}`} className="rotate-[-90deg] max-w-full">
       <circle
-        cx={size / 2} cy={size / 2} r={r}
+        cx={responsiveSize / 2} cy={responsiveSize / 2} r={r}
         fill="none" stroke={trackColor} strokeWidth={strokeWidth}
       />
       <circle
-        cx={size / 2} cy={size / 2} r={r}
+        cx={responsiveSize / 2} cy={responsiveSize / 2} r={r}
         fill="none" stroke={color} strokeWidth={strokeWidth}
         strokeDasharray={circ} strokeDashoffset={offset}
         strokeLinecap="round"
@@ -20,7 +21,7 @@ export default function ProgressRing({ pct = 0, size = 90, strokeWidth = 8, colo
         x="50%" y="50%"
         dominantBaseline="middle" textAnchor="middle"
         className="rotate-90 fill-gray-800 dark:fill-white font-bold"
-        style={{ fontSize: size * 0.22, transform: 'rotate(90deg)', transformOrigin: '50% 50%', fontFamily: 'Outfit, sans-serif' }}
+        style={{ fontSize: responsiveSize * 0.22, transform: 'rotate(90deg)', transformOrigin: '50% 50%', fontFamily: 'Outfit, sans-serif' }}
       >
         {pct}%
       </text>
@@ -28,7 +29,7 @@ export default function ProgressRing({ pct = 0, size = 90, strokeWidth = 8, colo
         <text
           x="50%" y="65%"
           dominantBaseline="middle" textAnchor="middle"
-          style={{ fontSize: size * 0.12, transform: 'rotate(90deg)', transformOrigin: '50% 50%', fill: '#9ca3af', fontFamily: 'Plus Jakarta Sans, sans-serif' }}
+          style={{ fontSize: responsiveSize * 0.12, transform: 'rotate(90deg)', transformOrigin: '50% 50%', fill: '#9ca3af', fontFamily: 'Plus Jakarta Sans, sans-serif' }}
         >
           {label}
         </text>

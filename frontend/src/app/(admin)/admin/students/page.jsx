@@ -12,6 +12,7 @@ import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import BulkImportModal from '@/components/admin/BulkImportModal'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
@@ -289,7 +290,7 @@ export default function StudentsPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Students</h1>
           <span className="inline-flex items-center gap-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-3 py-1.5 rounded-full">
@@ -306,7 +307,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Filters */}
-      <div className="glass-card p-4 flex flex-wrap gap-3">
+      <div className="glass-card p-4 flex flex-col sm:flex-row flex-wrap gap-3">
         <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 flex-1 min-w-[200px]">
           <Search size={15} className="text-purple-400 flex-shrink-0" />
           <input
@@ -315,31 +316,36 @@ export default function StudentsPage() {
             onChange={e => handleSearch(e.target.value)}
           />
         </div>
-        <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-          value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1) }}
-        >
-          <option value="">All Batches</option>
-          {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-          value={placementFilter} onChange={e => { setPlacementFilter(e.target.value); setPage(1) }}
-        >
-          <option value="">All Placement</option>
-          <option value="SEEKING">Seeking</option>
-          <option value="INTERVIEWING">Interviewing</option>
-          <option value="PLACED">Placed</option>
-          <option value="NOT_SEEKING">Not Seeking</option>
-        </select>
-        <select
-          className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-          value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-        >
-          <option value="">All Login Access</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+        <CustomSelect
+          value={batchFilter}
+          onChange={(val) => { setBatchFilter(val); setPage(1) }}
+          options={batches.map(b => ({ value: b.id, label: b.name }))}
+          placeholder="All Batches"
+          searchable={batches.length >= 10}
+          compact
+        />
+        <CustomSelect
+          value={placementFilter}
+          onChange={(val) => { setPlacementFilter(val); setPage(1) }}
+          options={[
+            { value: 'SEEKING', label: 'Seeking' },
+            { value: 'INTERVIEWING', label: 'Interviewing' },
+            { value: 'PLACED', label: 'Placed' },
+            { value: 'NOT_SEEKING', label: 'Not Seeking' },
+          ]}
+          placeholder="All Placement"
+          compact
+        />
+        <CustomSelect
+          value={statusFilter}
+          onChange={(val) => { setStatusFilter(val); setPage(1) }}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
+          ]}
+          placeholder="All Login Access"
+          compact
+        />
         <button
           onClick={() => setImportModalOpen(true)}
           className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl px-3 py-2 text-sm font-semibold transition-colors border border-purple-200 dark:border-purple-800/40"
@@ -611,16 +617,17 @@ export default function StudentsPage() {
           {editStudent && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Placement Status</label>
-              <select
+              <CustomSelect
                 value={form.placementStatus}
-                onChange={e => setForm(f => ({ ...f, placementStatus: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="SEEKING">Seeking</option>
-                <option value="INTERVIEWING">Interviewing</option>
-                <option value="PLACED">Placed</option>
-                <option value="NOT_SEEKING">Not Seeking</option>
-              </select>
+                onChange={(val) => setForm(f => ({ ...f, placementStatus: val }))}
+                options={[
+                  { value: 'SEEKING', label: 'Seeking' },
+                  { value: 'INTERVIEWING', label: 'Interviewing' },
+                  { value: 'PLACED', label: 'Placed' },
+                  { value: 'NOT_SEEKING', label: 'Not Seeking' },
+                ]}
+                clearable={false}
+              />
             </div>
           )}
 

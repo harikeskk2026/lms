@@ -141,7 +141,7 @@ export default function SuperAdminDashboard() {
           <div className="w-1 h-5 rounded-full bg-gradient-to-b from-purple-500 to-violet-600" />
           <h3 className="font-display font-bold text-gray-800 dark:text-white text-sm uppercase tracking-wider">Platform Overview</h3>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
           {loading ? [...Array(7)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <StatCard title="Total Students"  value={stats?.overview?.totalStudents  ?? 0} icon={GraduationCap} accent="purple" />
@@ -199,7 +199,7 @@ export default function SuperAdminDashboard() {
           <div className="w-1 h-5 rounded-full bg-gradient-to-b from-purple-500 to-violet-600" />
           <h3 className="font-display font-bold text-gray-800 dark:text-white text-sm uppercase tracking-wider">Placement Drives Overview</h3>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {loading ? [...Array(3)].map((_, i) => <SkeletonStat key={i} />) : (
             <>
               <StatCard title="Active Placement Drives"  value={stats?.placement?.activeDrives       ?? 0} icon={Briefcase} accent="purple" />
@@ -227,7 +227,7 @@ export default function SuperAdminDashboard() {
                     <Zap size={13} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{item.label}</p>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 break-words">{item.label}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{item.time ? formatDistanceToNow(new Date(item.time), { addSuffix: true }) : ''}</p>
                   </div>
                 </div>

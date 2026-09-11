@@ -8,6 +8,7 @@ import { adminApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 import clsx from 'clsx'
 
 const EMPTY_FORM = { name: '', email: '', password: '', phone: '', designation: '', department: '' }
@@ -146,11 +147,16 @@ export default function AdminsPage() {
           <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by name or email..." className="input-field pl-10 text-sm py-2" />
         </div>
         <div className="flex items-center gap-3">
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }} className="input-field text-sm py-2 pr-8">
-            <option value="">All Statuses</option>
-            <option value="active">Active Only</option>
-            <option value="inactive">Inactive Only</option>
-          </select>
+          <CustomSelect
+            value={statusFilter}
+            onChange={(val) => { setStatusFilter(val); setPage(1) }}
+            options={[
+              { value: 'active', label: 'Active Only' },
+              { value: 'inactive', label: 'Inactive Only' },
+            ]}
+            placeholder="All Statuses"
+            compact
+          />
           <button onClick={fetchAdmins} className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" title="Refresh">
             <RefreshCw size={16} className={clsx(loading && 'animate-spin')} />
           </button>
@@ -234,7 +240,7 @@ export default function AdminsPage() {
               <div><label className="form-label">Full Name *</label><input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Alex Morgan" className={clsx('input-field text-sm', formErr.name && 'border-red-500')} />{formErr.name && <p className="text-xs text-red-500 mt-1">{formErr.name}</p>}</div>
               <div><label className="form-label">Email Address *</label><div className="relative"><Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="admin@careerlabs.com" className={clsx('input-field pl-9 text-sm', formErr.email && 'border-red-500')} /></div>{formErr.email && <p className="text-xs text-red-500 mt-1">{formErr.email}</p>}</div>
               <div><div className="flex items-center justify-between mb-1"><label className="form-label mb-0">Password *</label><button type="button" onClick={() => setForm({ ...form, password: genPassword() })} className="text-xs text-brand-600 hover:underline font-semibold">Generate Random</button></div><input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Min 8 chars, click Generate" className={clsx('input-field text-sm font-mono', formErr.password && 'border-red-500')} />{formErr.password && <p className="text-xs text-red-500 mt-1">{formErr.password}</p>}</div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="form-label">Phone</label><input type="tel" inputMode="numeric" maxLength={10} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g,'').slice(0,10) })} placeholder="9876543210" className={clsx('input-field text-sm', formErr.phone && 'border-red-500')} />{formErr.phone && <p className="text-xs text-red-500 mt-1">{formErr.phone}</p>}</div>
                 <div><label className="form-label">Designation</label><input type="text" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="Admin" className="input-field text-sm" /></div>
               </div>

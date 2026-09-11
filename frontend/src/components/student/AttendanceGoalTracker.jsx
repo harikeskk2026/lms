@@ -45,7 +45,7 @@ export default function AttendanceGoalTracker({ summary }) {
         <Target size={16} className="text-purple-600" />
         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">Attendance Goal</h3>
       </div>
-      <div className="flex gap-2 flex-wrap mb-3">
+      <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 mb-3">
         {OPTIONS.map(opt => (
           <button key={opt.value} onClick={() => pickGoal(opt.value)} disabled={saving}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
@@ -71,7 +71,7 @@ export default function AttendanceGoalTracker({ summary }) {
         const needed = achieved ? 0 : computedNeeded
 
         return (
-          <div className="flex items-center gap-4 text-sm flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm flex-wrap">
             <span className="text-gray-500">Current: <span className="font-semibold text-gray-700 dark:text-gray-300">{hasClasses ? `${currentPct}%` : '—'}</span></span>
             <span className="text-gray-500">Target: <span className="font-semibold text-gray-700 dark:text-gray-300">{target}%</span></span>
             {achieved ? (

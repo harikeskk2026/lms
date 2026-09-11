@@ -55,7 +55,7 @@ export default function AttendanceCalendar({ calendarData = [], activeMonth, onD
               title={`${info?.classTitle || ''}${info?.correctionPending ? ' — Present Request Pending Admin Review' : ''}`}
               onClick={() => { if (!isFuture && onDayClick) onDayClick(key) }}
               className={`
-                relative min-h-[40px] rounded-xl flex flex-col items-center justify-center
+                relative min-h-[36px] sm:min-h-[40px] rounded-xl flex flex-col items-center justify-center
                 text-xs font-medium transition-all
                 ${isToday ? 'ring-2 ring-brand-500 ring-offset-1' : ''}
                 ${info?.correctionPending ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : (status ? STATUS_STYLE[status] : isFuture ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500')}
@@ -71,7 +71,7 @@ export default function AttendanceCalendar({ calendarData = [], activeMonth, onD
         })}
       </div>
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-4 text-xs text-gray-500 flex-wrap">
+      <div className="flex items-center gap-2 sm:gap-4 mt-4 text-[10px] sm:text-xs text-gray-500 flex-wrap">
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" />Present</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" />Absent</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />Late</span>

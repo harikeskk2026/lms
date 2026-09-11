@@ -14,8 +14,9 @@ export function PerformanceTrendChart({ trend }) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={trend}>
+    <div className="min-w-0">
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={trend}>
         <defs>
           <linearGradient id="perfGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.3} />
@@ -28,7 +29,8 @@ export function PerformanceTrendChart({ trend }) {
         <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #ede9fe', fontSize: '12px' }} formatter={(v) => [`${Math.round(v)}%`, 'Avg Score']} />
         <Area type="monotone" dataKey="averageScorePct" stroke="#6d28d9" strokeWidth={2} fill="url(#perfGrad)" dot={{ r: 4, fill: '#6d28d9' }} />
       </AreaChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -41,8 +43,8 @@ export function AttendanceBreakdownChart({ data }) {
   }
 
   return (
-    <div className="flex items-center gap-4">
-      <ResponsiveContainer width="50%" height={160}>
+    <div className="flex flex-col sm:flex-row items-center gap-4 min-w-0">
+      <ResponsiveContainer width="100%" height={160} minWidth={0}>
         <PieChart>
           <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
             {data?.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -50,7 +52,7 @@ export function AttendanceBreakdownChart({ data }) {
           <Tooltip formatter={(v, n) => [v, n]} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
         </PieChart>
       </ResponsiveContainer>
-      <div className="flex-1 space-y-2">
+      <div className="flex-1 space-y-2 min-w-0">
         {data?.map(d => (
           <div key={d.name} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: d.color }} />

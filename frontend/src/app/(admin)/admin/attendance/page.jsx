@@ -18,6 +18,7 @@ import { format } from 'date-fns'
 import AttendanceMatrix from '@/components/admin/AttendanceMatrix'
 import AttendanceHeatmap from '@/components/admin/AttendanceHeatmap'
 import HistoryTab from './HistoryTab'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 // recharts is a heavy dependency - load it only for the trend charts below,
 // and only on the client (SSR doesn't need it).
@@ -339,26 +340,26 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch</label>
-            <select value={selectedBatch} onChange={e => loadClasses(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">Select batch</option>
-              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <CustomSelect
+              value={selectedBatch}
+              onChange={(val) => loadClasses(val)}
+              options={batches.map(b => ({ value: b.id, label: b.name }))}
+              placeholder="Select batch"
+              searchable={batches.length >= 10}
+            />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Class</label>
-            <select
+            <CustomSelect
               value={selectedClass}
-              onChange={e => {
-                setSelectedClass(e.target.value)
-                syncUrlParams(selectedBatch, e.target.value)
+              onChange={(val) => {
+                setSelectedClass(val)
+                syncUrlParams(selectedBatch, val)
               }}
+              options={classes.map(c => ({ value: c.id, label: `${new Date(c.date).toLocaleDateString('en-IN')} — ${c.title}` }))}
+              placeholder="Select class"
               disabled={!selectedBatch}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-            >
-              <option value="">Select class</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{new Date(c.date).toLocaleDateString('en-IN')} — {c.title}</option>)}
-            </select>
+            />
           </div>
         </div>
         <button
@@ -404,10 +405,13 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
               {selectedIds.length > 0 && (
                 <>
                   <span className="text-xs text-gray-500">Selected: {selectedIds.length}</span>
-                  <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
-                    className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500">
-                    {Object.keys(STATUS_CONFIG).map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ')}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={bulkStatus}
+                    onChange={(val) => setBulkStatus(val)}
+                    options={Object.keys(STATUS_CONFIG).map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ') }))}
+                    compact
+                    clearable={false}
+                  />
                   <button onClick={applyBulkStatus}
                     className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors">
                     Apply to Selected
@@ -428,7 +432,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
           {/* Student table */}
           <GlassCard className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[500px] text-sm">
                 <thead>
                   <tr className="bg-purple-50/50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-900/30">
                     <th className="px-4 py-3 text-left">
@@ -531,7 +535,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
                   {attachments.map((file, idx) => (
                     <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-50/70 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800 text-xs">
                       <FileText size={14} className="text-purple-600 dark:text-purple-400 shrink-0" />
-                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[180px]">{file.name}</span>
+                      <span className="font-medium text-gray-800 dark:text-gray-200 break-words">{file.name}</span>
                       {file.size && <span className="text-[10px] text-gray-400">({file.size})</span>}
                       <button
                         type="button"
@@ -952,11 +956,14 @@ function AnalyticsTab() {
             </button>
           ))}
         </div>
-        <select value={batchId} onChange={e => setBatchId(e.target.value)}
-          className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-          <option value="">All Batches</option>
-          {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
+        <CustomSelect
+          value={batchId}
+          onChange={(val) => setBatchId(val)}
+          options={batches.map(b => ({ value: b.id, label: b.name }))}
+          placeholder="All Batches"
+          searchable={batches.length >= 10}
+          compact
+        />
       </div>
 
       {loading ? (
@@ -1554,8 +1561,8 @@ function CommandCenterStrip({ refreshKey = 0 }) {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight leading-none">{c.value}</p>
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mt-1 truncate">{c.label}</p>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{c.sub}</p>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mt-1 break-words">{c.label}</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 break-words mt-0.5">{c.sub}</p>
           </div>
         </GlassCard>
       ))}
@@ -2086,7 +2093,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 py-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2 text-xs">
               <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
                 <p className="text-gray-400 uppercase font-semibold text-[10px]">Trainer</p>
                 <p className="text-gray-800 dark:text-gray-200 font-bold mt-0.5">{detailsClass.trainerName || 'Not Assigned'}</p>
@@ -2109,7 +2116,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
               <div className="p-3 rounded-xl bg-purple-50/70 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/40 flex items-center justify-between">
                 <div className="text-xs">
                   <p className="font-bold text-purple-900 dark:text-purple-200">Online Meeting Link</p>
-                  <p className="text-gray-500 dark:text-gray-400 truncate max-w-xs">{detailsClass.meetLink}</p>
+                  <p className="text-gray-500 dark:text-gray-400 break-words">{detailsClass.meetLink}</p>
                 </div>
                 <a
                   href={detailsClass.meetLink}

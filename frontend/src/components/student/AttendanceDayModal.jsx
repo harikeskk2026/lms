@@ -11,10 +11,10 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fadeIn" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl w-full max-w-md p-4 sm:p-6 max-h-[85vh] overflow-y-auto shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
 
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-800 dark:text-white">
+        <div className="flex items-center justify-between mb-4 gap-2">
+          <h3 className="font-bold text-gray-800 dark:text-white text-sm sm:text-base">
             {date ? format(new Date(date), 'MMMM d, yyyy') : ''}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

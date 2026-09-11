@@ -389,11 +389,11 @@ export default function MaterialPreviewModal({ material, onClose }) {
               {isPdf ? '📄' : isVideo ? '🎬' : material.type === 'PRESENTATION' ? '🖥️' : material.type === 'LINK' ? '🔗' : '📁'}
             </span>
             <div className="min-w-0 flex-1">
-              <h3 className="font-display font-bold text-sm sm:text-base text-gray-900 dark:text-white truncate">
+              <h3 className="font-display font-bold text-sm sm:text-base text-gray-900 dark:text-white break-words">
                 {material.title}
               </h3>
               {material.description && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{material.description}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 break-words">{material.description}</p>
               )}
             </div>
             <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 uppercase flex-shrink-0">

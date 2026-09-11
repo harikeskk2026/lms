@@ -12,6 +12,7 @@ import assignmentService from '@/services/assignmentService'
 import submissionService from '@/services/submissionService'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 import { resolveFileUrl } from '@/lib/api'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 text-gray-600',
@@ -270,7 +271,7 @@ export default function AssignmentDetailPage() {
                 title="Preview attachment"
               >
                 <Paperclip size={13} className="text-purple-500" />
-                <span className="truncate max-w-[260px]">{assignment.attachmentName || 'Attachment'}</span>
+                <span className="break-words">{assignment.attachmentName || 'Attachment'}</span>
                 <Eye size={13} className="text-purple-500 ml-0.5" />
               </button>
             </div>
@@ -280,7 +281,7 @@ export default function AssignmentDetailPage() {
         {/* Submission stats */}
         <div className="glass-card p-6">
           <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Submissions</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: 'Total Students', value: subLoading ? '—' : stats.totalStudents, color: 'text-gray-700 dark:text-gray-300' },
               { label: 'Submitted', value: subLoading ? '—' : stats.submitted, color: 'text-green-600' },
@@ -314,25 +315,29 @@ export default function AssignmentDetailPage() {
               onChange={e => handleSearch(e.target.value)}
             />
           </div>
-          <select
-            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-            value={filters.status} onChange={e => updateFilter('status', e.target.value)}
-          >
-            <option value="">All Statuses</option>
-            <option value="PENDING_APPROVAL">Pending Approval</option>
-            <option value="SUBMITTED">Submitted (On-time)</option>
-            <option value="LATE">Late</option>
-            <option value="REJECTED">Rejected</option>
-            <option value="PENDING">Not Submitted</option>
-          </select>
-          <select
-            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-            value={filters.evaluation} onChange={e => updateFilter('evaluation', e.target.value)}
-          >
-            <option value="">All Evaluations</option>
-            <option value="EVALUATED">Evaluated</option>
-            <option value="PENDING">Pending Evaluation</option>
-          </select>
+          <CustomSelect
+            value={filters.status}
+            onChange={(val) => updateFilter('status', val)}
+            options={[
+              { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
+              { value: 'SUBMITTED', label: 'Submitted (On-time)' },
+              { value: 'LATE', label: 'Late' },
+              { value: 'REJECTED', label: 'Rejected' },
+              { value: 'PENDING', label: 'Not Submitted' },
+            ]}
+            placeholder="All Statuses"
+            compact
+          />
+          <CustomSelect
+            value={filters.evaluation}
+            onChange={(val) => updateFilter('evaluation', val)}
+            options={[
+              { value: 'EVALUATED', label: 'Evaluated' },
+              { value: 'PENDING', label: 'Pending Evaluation' },
+            ]}
+            placeholder="All Evaluations"
+            compact
+          />
           <input
             type="date" value={filters.dateFrom} onChange={e => updateFilter('dateFrom', e.target.value)}
             className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
@@ -361,7 +366,7 @@ export default function AssignmentDetailPage() {
           <div className="p-10 text-center text-gray-400">No submissions match your filters</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
                   {['Student ID', 'Student', 'Status', 'Submitted', 'File', 'Score', 'Feedback', 'Evaluation', 'Actions'].map(h => (
@@ -382,7 +387,7 @@ export default function AssignmentDetailPage() {
                         {ROW_STATUS_LABELS[row.status] || row.status}
                       </span>
                       {row.status === 'REJECTED' && row.rejectionReason && (
-                        <p className="text-[10px] text-red-500 italic mt-1 max-w-[160px] truncate" title={row.rejectionReason}>
+                        <p className="text-[10px] text-red-500 italic mt-1 break-words" title={row.rejectionReason}>
                           Reason: {row.rejectionReason}
                         </p>
                       )}
@@ -402,7 +407,7 @@ export default function AssignmentDetailPage() {
                               title="Preview file"
                             >
                               <Paperclip size={12} className="text-purple-500" />
-                              <span className="truncate max-w-[160px]">{f.fileName || `File ${idx + 1}`}</span>
+                               <span className="break-words">{f.fileName || `File ${idx + 1}`}</span>
                               <Eye size={12} className="text-purple-500 flex-shrink-0 ml-0.5" />
                             </button>
                           ))}
@@ -415,7 +420,7 @@ export default function AssignmentDetailPage() {
                           title="Preview file"
                         >
                           <Paperclip size={12} className="text-purple-500" />
-                          <span className="truncate max-w-[160px]">{row.fileName || 'File'}</span>
+                           <span className="break-words">{row.fileName || 'File'}</span>
                           <Eye size={12} className="text-purple-500 flex-shrink-0 ml-0.5" />
                         </button>
                       ) : <span className="text-gray-300 text-xs">—</span>}
@@ -432,7 +437,7 @@ export default function AssignmentDetailPage() {
                     </td>
                     <td className="px-4 py-3">
                       {row.feedback ? (
-                        <p className="text-xs text-gray-700 dark:text-gray-300 italic max-w-[180px] truncate" title={row.feedback}>
+                        <p className="text-xs text-gray-700 dark:text-gray-300 italic break-words" title={row.feedback}>
                           "{row.feedback}"
                         </p>
                       ) : (

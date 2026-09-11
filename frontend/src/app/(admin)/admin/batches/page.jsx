@@ -10,6 +10,7 @@ import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
@@ -318,8 +319,8 @@ export default function BatchesPage() {
                   <div className={`bg-gradient-to-r ${grad} px-5 py-4 text-white relative`}>
                     <div className="flex items-start justify-between">
                       <div className="min-w-0 flex-1 pr-2">
-                        <h3 className="font-display font-bold text-lg truncate">{b.name}</h3>
-                        <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full inline-block truncate max-w-full">
+                        <h3 className="font-display font-bold text-lg break-words">{b.name}</h3>
+                        <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full inline-block break-words max-w-full">
                           {b.course?.title || 'No course assigned'}
                         </span>
                       </div>
@@ -375,7 +376,7 @@ export default function BatchesPage() {
                         <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-[9px]">
                           {b.trainer.name[0]}
                         </div>
-                        <span className="truncate">{b.trainer.name}</span>
+                        <span className="break-words">{b.trainer.name}</span>
                       </div>
                     )}
                   </div>
@@ -430,19 +431,16 @@ export default function BatchesPage() {
             {/* Course */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-              <select
+              <CustomSelect
                 value={form.courseId}
-                onChange={e => setForm(f => ({ ...f, courseId: e.target.value }))}
-                required
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-              >
-                <option value="">Select course</option>
-                {courses.filter(c => c.status === 'PUBLISHED').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}{c.duration ? ` — ${c.duration}` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
+                options={courses.filter(c => c.status === 'PUBLISHED').map(c => ({
+                  value: c.id,
+                  label: `${c.title}${c.duration ? ` — ${c.duration}` : ''}`
+                }))}
+                placeholder="Select course"
+                clearable={false}
+              />
               {selectedCourse && (
                 <p className="text-xs text-gray-500 mt-1">
                   Selected course duration: <span className="font-semibold text-purple-600">{selectedCourse.duration}</span>
@@ -453,18 +451,16 @@ export default function BatchesPage() {
             {/* Assign Lead Trainer */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
-              <select
+              <CustomSelect
                 value={form.trainerId}
-                onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-              >
-                <option value="">Select trainer (optional)</option>
-                {trainers.filter(t => t.active !== false).map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}{t.designation ? ` (${t.designation})` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setForm(f => ({ ...f, trainerId: val }))}
+                options={trainers.filter(t => t.active !== false).map(t => ({
+                  value: t.id,
+                  label: `${t.name}${t.designation ? ` (${t.designation})` : ''}`
+                }))}
+                placeholder="Select trainer (optional)"
+                searchable={trainers.length >= 10}
+              />
             </div>
 
             {/* Clean Start & End Time Fields */}
@@ -534,15 +530,16 @@ export default function BatchesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode</label>
-                <select
+                <CustomSelect
                   value={form.mode}
-                  onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                >
-                  <option value="ONLINE">ONLINE</option>
-                  <option value="OFFLINE">OFFLINE</option>
-                  <option value="HYBRID">HYBRID</option>
-                </select>
+                  onChange={(val) => setForm(f => ({ ...f, mode: val }))}
+                  options={[
+                    { value: 'ONLINE', label: 'ONLINE' },
+                    { value: 'OFFLINE', label: 'OFFLINE' },
+                    { value: 'HYBRID', label: 'HYBRID' },
+                  ]}
+                  clearable={false}
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Students</label>

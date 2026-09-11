@@ -242,7 +242,7 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
 
       {/* Results Dropdown Menu */}
       {showDropdown && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-800 z-50 overflow-hidden animate-fadeIn">
+        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-800 z-50 overflow-hidden animate-fadeIn">
           <div className="max-h-80 overflow-y-auto p-1.5 space-y-1">
             {!query.trim() ? (
               <div className="px-3 py-2 text-[11px] text-gray-400">

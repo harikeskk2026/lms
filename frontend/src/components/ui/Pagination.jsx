@@ -36,7 +36,7 @@ export default function Pagination({
   if (total === 0) return null
 
   return (
-    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 ${className}`}>
+    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 ${className}`}>
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium">
           Showing {startIndex + 1}–{endIndex} of {total} {label}
@@ -55,7 +55,7 @@ export default function Pagination({
         )}
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <button
           onClick={() => onPageChange(Math.max(1, validPage - 1))}
           disabled={validPage === 1}
@@ -67,7 +67,7 @@ export default function Pagination({
 
         {pageNumbers.map((p, idx, arr) => (
           <span key={p} className="flex items-center">
-            {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-400">…</span>}
+            {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-0.5 sm:px-1 text-gray-400">…</span>}
             <button
               onClick={() => onPageChange(p)}
               className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${

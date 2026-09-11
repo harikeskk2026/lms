@@ -6,6 +6,7 @@ import { Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import { questionSchema, QUESTION_TYPES, QUESTION_DIFFICULTIES } from '@/validations/questionValidation'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const SINGLE_CORRECT_TYPES = ['MCQ', 'TRUE_FALSE']
 
@@ -121,17 +122,19 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Type *</label>
-          <select {...register('questionType')}
-            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-            {QUESTION_TYPES.map(t => <option key={t} value={t}>{TYPE_DISPLAY_NAMES[t] || t}</option>)}
-          </select>
+          <CustomSelect
+            value={watch('questionType')}
+            onChange={(val) => setValue('questionType', val)}
+            options={QUESTION_TYPES.map(t => ({ value: t, label: TYPE_DISPLAY_NAMES[t] || t }))}
+          />
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty *</label>
-          <select {...register('difficulty')}
-            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-            {QUESTION_DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <CustomSelect
+            value={watch('difficulty')}
+            onChange={(val) => setValue('difficulty', val)}
+            options={QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))}
+          />
         </div>
       </div>
 
@@ -154,22 +157,23 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
               </button>
             </div>
           ) : (
-            <select {...register('topicId')}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="">No topic</option>
-              {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <CustomSelect
+              value={watch('topicId')}
+              onChange={(val) => setValue('topicId', val)}
+              options={topics.map(t => ({ value: t.id, label: t.name }))}
+              placeholder="No topic"
+              clearable
+            />
           )}
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
-          <select {...register('courseId')}
-            className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${
-              errors.courseId ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
-            }`}>
-            <option value="">Select Course</option>
-            {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
-          </select>
+          <CustomSelect
+            value={watch('courseId')}
+            onChange={(val) => setValue('courseId', val)}
+            options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+            placeholder="Select Course"
+          />
           {errors.courseId && <span className="text-xs text-red-500 mt-1 block">{errors.courseId.message}</span>}
         </div>
       </div>
@@ -223,7 +227,7 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
           className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
       </div>
 
-      <div className="flex gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row gap-3 pt-2">
         <button type="button" onClick={onCancel}
           className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">
           Cancel

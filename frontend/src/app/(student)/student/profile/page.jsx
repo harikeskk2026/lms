@@ -130,8 +130,8 @@ export default function StudentProfilePage() {
       <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">My Profile</h1>
 
       {/* Common section */}
-      <div className="glass-card p-6">
-        <div className="flex flex-wrap items-center gap-5">
+      <div className="glass-card p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
           <ProfilePhotoUploader name={profile.name} photoUrl={profile.photoUrl} onUploaded={handlePhotoUploaded} />
           <div className="flex-1 min-w-0">
             <h2 className="font-display text-lg font-bold text-gray-900 dark:text-white">{profile.name}</h2>
@@ -170,7 +170,7 @@ export default function StudentProfilePage() {
       )}
 
       {/* Section 1: Personal Information */}
-      <div className="glass-card p-6 space-y-4">
+      <div className="glass-card p-4 sm:p-6 space-y-4">
         <h3 className="font-display font-bold text-gray-800 dark:text-white">Personal Information</h3>
         <form onSubmit={handleSave} noValidate className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
@@ -276,7 +276,7 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Section 2: Academic Details */}
-      <div className="glass-card p-6">
+      <div className="glass-card p-4 sm:p-6">
         <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1">Academic Details</h3>
         <p className="text-xs text-gray-400 mb-4">
           Used as the single source of truth to automatically check your eligibility for{' '}
@@ -286,7 +286,7 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Section 3: Security */}
-      <div className="glass-card p-6">
+      <div className="glass-card p-4 sm:p-6">
         <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <ShieldCheck size={16} className="text-purple-600" /> Security
         </h3>

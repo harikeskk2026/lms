@@ -270,7 +270,7 @@ export default function StudentDetailPage() {
             {student.resumeUrl ? (
               <div className="flex items-center justify-between gap-3 bg-purple-50 dark:bg-purple-900/30 rounded-xl px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{student.resumeUrl.split('/').pop() || 'Resume'}</p>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white break-words">{student.resumeUrl.split('/').pop() || 'Resume'}</p>
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider">Resume attached</p>
                 </div>
                 <a href={student.resumeUrl} target="_blank" rel="noopener noreferrer"

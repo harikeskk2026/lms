@@ -67,7 +67,7 @@ export default function ConfirmModal({
         }
       }}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-scaleUp text-center border border-slate-100 dark:border-gray-800 relative">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-scaleUp text-center border border-slate-100 dark:border-gray-800 relative mx-4">
         {!loading && (
           <button
             onClick={onClose}

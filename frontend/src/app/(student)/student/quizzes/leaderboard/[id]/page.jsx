@@ -85,7 +85,7 @@ export default function LeaderboardPage() {
           <h1 className="font-display font-bold text-xl text-gray-800 dark:text-white flex items-center gap-2">
             <Trophy size={20} className="text-yellow-500" /> Leaderboard
           </h1>
-          <p className="text-sm text-gray-500 truncate max-w-xs">{quizTitle}</p>
+          <p className="text-sm text-gray-500 break-words">{quizTitle}</p>
         </div>
       </div>
 
@@ -138,7 +138,8 @@ export default function LeaderboardPage() {
               <div className="px-4 py-3 border-b border-purple-100 dark:border-purple-900/30">
                 <h3 className="font-display font-bold text-gray-800 dark:text-white text-sm">Full Rankings</h3>
               </div>
-              <div className="divide-y divide-gray-50 dark:divide-gray-800">
+              <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <div className="divide-y divide-gray-50 dark:divide-gray-800 min-w-[500px]">
                 {rest.map((entry, i) => (
                   <div key={i} className={`flex items-center gap-3 px-4 py-3 ${entry.isCurrentUser ? 'bg-purple-50 dark:bg-purple-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'} transition-colors`}>
                     <span className="w-8 text-center text-sm font-bold text-gray-400">#{entry.rank}</span>
@@ -146,7 +147,7 @@ export default function LeaderboardPage() {
                       {entry.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-white break-words">
                         {entry.name}
                         {entry.isCurrentUser && <span className="ml-2 text-xs text-purple-500 font-bold">(You)</span>}
                       </p>
@@ -169,6 +170,7 @@ export default function LeaderboardPage() {
                     </span>
                   </div>
                 ))}
+              </div>
               </div>
             </div>
           )}

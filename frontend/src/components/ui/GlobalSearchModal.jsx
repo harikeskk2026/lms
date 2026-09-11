@@ -190,7 +190,7 @@ export default function GlobalSearchModal({ open, onClose, role = 'STUDENT' }) {
   if (!open || !mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-6 sm:pt-14 px-3 sm:px-4 bg-black/60 backdrop-blur-md animate-fadeIn">
       {/* Backdrop click */}
       <div className="absolute inset-0" onClick={onClose} />
 

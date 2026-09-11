@@ -21,6 +21,7 @@ import MaterialPreviewModal from '@/components/ui/MaterialPreviewModal'
 import { resolveFileUrl, adminApi } from '@/lib/api'
 
 import SlidePanel from '@/components/admin/SlidePanel'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const TABS = ['Overview', 'Syllabus', 'Materials', 'Batches', 'Enrolled Students']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
@@ -268,45 +269,41 @@ export default function CourseManagePage({ params }) {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Level *</label>
-              <select
+              <CustomSelect
                 value={editForm.level}
-                onChange={e => setEditForm(f => ({ ...f, level: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="BEGINNER">BEGINNER</option>
-                <option value="INTERMEDIATE">INTERMEDIATE</option>
-                <option value="ADVANCED">ADVANCED</option>
-              </select>
+                onChange={(val) => setEditForm(f => ({ ...f, level: val }))}
+                options={[
+                  { value: 'BEGINNER', label: 'BEGINNER' },
+                  { value: 'INTERMEDIATE', label: 'INTERMEDIATE' },
+                  { value: 'ADVANCED', label: 'ADVANCED' },
+                ]}
+              />
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status *</label>
-            <select
-              value={editForm.status}
-              onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              {course?.status === 'DRAFT' && (
-                <>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                </>
-              )}
-              {course?.status === 'PUBLISHED' && (
-                <>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                  <option value="ARCHIVED">ARCHIVED</option>
-                </>
-              )}
-              {course?.status === 'ARCHIVED' && (
-                <>
-                  <option value="ARCHIVED">ARCHIVED</option>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                  <option value="DRAFT">DRAFT</option>
-                </>
-              )}
-            </select>
+              <CustomSelect
+                value={editForm.status}
+                onChange={(val) => setEditForm(f => ({ ...f, status: val }))}
+                options={
+                  course?.status === 'DRAFT'
+                    ? [
+                        { value: 'DRAFT', label: 'DRAFT' },
+                        { value: 'PUBLISHED', label: 'PUBLISHED' },
+                      ]
+                    : course?.status === 'PUBLISHED'
+                      ? [
+                          { value: 'PUBLISHED', label: 'PUBLISHED' },
+                          { value: 'ARCHIVED', label: 'ARCHIVED' },
+                        ]
+                      : [
+                          { value: 'ARCHIVED', label: 'ARCHIVED' },
+                          { value: 'PUBLISHED', label: 'PUBLISHED' },
+                          { value: 'DRAFT', label: 'DRAFT' },
+                        ]
+                }
+              />
             {course?.status === 'ARCHIVED' && (
               <p className="text-xs text-gray-500 mt-1">ARCHIVED can be published again or moved back to DRAFT.</p>
             )}
@@ -508,10 +505,12 @@ function DurationInput({ value, unit, onValueChange, onUnitChange, small, onKeyD
       <input type="number" min="1" value={value} onChange={e => onValueChange(e.target.value)} placeholder="Duration"
         onKeyDown={onKeyDown}
         className={`w-16 sm:w-20 rounded-lg border border-gray-200 bg-gray-50 px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`} />
-      <select value={unit} onChange={e => onUnitChange(e.target.value)}
-        className={`rounded-lg border border-gray-200 bg-gray-50 px-1 sm:px-2 ${size} outline-none focus:ring-2 focus:ring-purple-500`}>
-        {DURATION_UNITS.map(u => <option key={u} value={u}>{u.charAt(0) + u.slice(1).toLowerCase()}</option>)}
-      </select>
+      <CustomSelect
+        value={unit}
+        onChange={onUnitChange}
+        options={DURATION_UNITS.map(u => ({ value: u, label: u.charAt(0) + u.slice(1).toLowerCase() }))}
+        compact
+      />
     </div>
   )
 }
@@ -573,17 +572,16 @@ function StatusBadge({ status, onChange, disabled, title }) {
 
   return (
     <div className="relative inline-flex items-center flex-shrink-0" onClick={e => e.stopPropagation()}>
-      <select
+      <CustomSelect
         value={status || 'PUBLISHED'}
         disabled={disabled}
-        onChange={e => onChange(e.target.value)}
-        title={title || "Click to change course status"}
-        className={`appearance-none cursor-pointer text-[9px] font-bold px-1.5 sm:pl-2 sm:pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 max-w-[70px] sm:max-w-none ${selectStyle} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-      >
-        <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
-        <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
-        <option value="ARCHIVED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">ARCHIVED</option>
-      </select>
+        onChange={onChange}
+        options={[
+          { value: 'PUBLISHED', label: 'PUBLISHED' },
+          { value: 'DRAFT', label: 'DRAFT' },
+          { value: 'ARCHIVED', label: 'ARCHIVED' },
+        ]}
+      />
       <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
     </div>
   )
@@ -616,31 +614,28 @@ function CourseStatusBadge({ status, onChange, disabled }) {
 
   return (
     <div className="relative inline-flex items-center flex-shrink-0" onClick={e => e.stopPropagation()}>
-      <select
+      <CustomSelect
         value={status || 'PUBLISHED'}
         disabled={disabled}
-        onChange={e => onChange(e.target.value)}
-        title={isDraft ? "Click to publish course" : isArchived ? "Click to publish or unarchive this course" : "Click to archive course"}
-        className={`appearance-none cursor-pointer text-[9px] font-bold pl-2 pr-4 py-0.5 rounded-full border transition-all outline-none focus:ring-2 focus:ring-purple-400 ${colorClass} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-      >
-        {isDraft ? (
-          <>
-            <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
-            <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISH</option>
-          </>
-        ) : isArchived ? (
-          <>
-            <option value="ARCHIVED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">ARCHIVED</option>
-            <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISH</option>
-            <option value="DRAFT" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">DRAFT</option>
-          </>
-        ) : (
-          <>
-            <option value="PUBLISHED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">PUBLISHED</option>
-            <option value="ARCHIVED" className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100">ARCHIVE</option>
-          </>
-        )}
-      </select>
+        onChange={onChange}
+        options={
+          isDraft
+            ? [
+                { value: 'DRAFT', label: 'DRAFT' },
+                { value: 'PUBLISHED', label: 'PUBLISH' },
+              ]
+            : isArchived
+              ? [
+                  { value: 'ARCHIVED', label: 'ARCHIVED' },
+                  { value: 'PUBLISHED', label: 'PUBLISH' },
+                  { value: 'DRAFT', label: 'DRAFT' },
+                ]
+              : [
+                  { value: 'PUBLISHED', label: 'PUBLISHED' },
+                  { value: 'ARCHIVED', label: 'ARCHIVE' },
+                ]
+        }
+      />
       <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
     </div>
   )
@@ -648,12 +643,16 @@ function CourseStatusBadge({ status, onChange, disabled }) {
 
 function StatusSelect({ value, onChange, small }) {
   return (
-    <select value={value || 'PUBLISHED'} onChange={e => onChange(e.target.value)}
-      className={`rounded-lg border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-purple-500 ${small ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}`}>
-      <option value="DRAFT">Draft</option>
-      <option value="PUBLISHED">Published</option>
-      <option value="ARCHIVED">Archived</option>
-    </select>
+    <CustomSelect
+      value={value || 'PUBLISHED'}
+      onChange={onChange}
+      options={[
+        { value: 'DRAFT', label: 'Draft' },
+        { value: 'PUBLISHED', label: 'Published' },
+        { value: 'ARCHIVED', label: 'Archived' },
+      ]}
+      compact={small}
+    />
   )
 }
 
@@ -671,7 +670,7 @@ function SyllabusMaterialBadge({ material }) {
         <span className="text-sm flex-shrink-0">
           {material.type === 'PDF' ? '📄' : material.type === 'VIDEO' ? '🎬' : material.type === 'PRESENTATION' ? '🖥️' : material.type === 'LINK' ? '🔗' : '📁'}
         </span>
-        <span className="font-medium text-gray-700 dark:text-gray-200 truncate max-w-[180px]" title={material.title}>
+        <span className="font-medium text-gray-700 dark:text-gray-200 break-words" title={material.title}>
           {material.title}
         </span>
         <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 uppercase">
@@ -1106,22 +1105,18 @@ function SyllabusTab({ courseId }) {
           )}
           {canManageSyllabus && modules.length > 0 && (
             <div className="relative inline-flex items-center">
-              <select
+              <CustomSelect
                 disabled={statusUpdating}
                 value=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    openStatusModal(e.target.value)
-                    e.target.value = ''
-                  }
+                onChange={(val) => {
+                  if (val) openStatusModal(val)
                 }}
-                className="px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors shadow-sm outline-none cursor-pointer"
-                title="Change status for modules and topics in the syllabus"
-              >
-                <option value="" disabled>{statusUpdating ? 'Updating...' : 'Syllabus Status ▾'}</option>
-                <option value="PUBLISHED">Publish All...</option>
-                <option value="DRAFT">Draft All...</option>
-              </select>
+                options={[
+                  { value: 'PUBLISHED', label: 'Publish All...' },
+                  { value: 'DRAFT', label: 'Draft All...' },
+                ]}
+                placeholder={statusUpdating ? 'Updating...' : 'Syllabus Status'}
+              />
             </div>
           )}
           {canManageSyllabus && (
@@ -1288,7 +1283,7 @@ function SyllabusTab({ courseId }) {
                       <span className="text-gray-400 flex-shrink-0">
                         {expanded[m.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </span>
-                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">
                         {m.title}
                       </span>
                     </button>
@@ -1492,7 +1487,7 @@ function SyllabusTab({ courseId }) {
                           ) : (
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 min-w-0 truncate flex-1">
+                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 min-w-0 break-words flex-1">
                                   {t.title}
                                 </span>
                               </div>
@@ -1724,18 +1719,21 @@ function MaterialsTab({ courseId }) {
           ))}
         </div>
         {(scope === 'MODULE' || scope === 'TOPIC') && (
-          <select value={moduleId} onChange={e => { setModuleId(e.target.value); setTopicId('') }}
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none">
-            <option value="">Select module...</option>
-            {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-          </select>
+          <CustomSelect
+            value={moduleId}
+            onChange={(val) => { setModuleId(val); setTopicId('') }}
+            options={modules.map(m => ({ value: m.id, label: m.title }))}
+            placeholder="Select module..."
+          />
         )}
         {scope === 'TOPIC' && (
-          <select value={topicId} onChange={e => setTopicId(e.target.value)} disabled={!moduleId}
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none disabled:opacity-50">
-            <option value="">Select topic...</option>
-            {topics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-          </select>
+          <CustomSelect
+            value={topicId}
+            onChange={(val) => setTopicId(val)}
+            disabled={!moduleId}
+            options={topics.map(t => ({ value: t.id, label: t.title }))}
+            placeholder="Select topic..."
+          />
         )}
       </div>
 
@@ -1754,10 +1752,11 @@ function MaterialsTab({ courseId }) {
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description (optional)" rows={2}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-                    {MATERIAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={form.type}
+                    onChange={(val) => setForm(f => ({ ...f, type: val }))}
+                    options={MATERIAL_TYPES.map(t => ({ value: t, label: t }))}
+                  />
                   <StatusSelect value={form.visibility} onChange={v => setForm(f => ({ ...f, visibility: v }))} />
                 </div>
                 <input required value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="URL (or upload a file below) *"
@@ -1792,7 +1791,7 @@ function MaterialsTab({ courseId }) {
                   <div key={m.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100/70 dark:hover:bg-gray-750 transition-colors">
                     <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setPreviewMaterial(m)}>
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate hover:text-purple-600 dark:hover:text-purple-400 transition-colors" title={m.title}>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 break-words hover:text-purple-600 dark:hover:text-purple-400 transition-colors" title={m.title}>
                           {m.title}
                         </span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex-shrink-0 whitespace-nowrap">
@@ -1800,7 +1799,7 @@ function MaterialsTab({ courseId }) {
                         </span>
                         <StatusBadge status={m.visibility} />
                       </div>
-                      {m.description && <p className="text-xs text-gray-400 truncate">{m.description}</p>}
+                      {m.description && <p className="text-xs text-gray-400 break-words">{m.description}</p>}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button type="button" onClick={() => setPreviewMaterial(m)} title="Preview Material" className="w-7 h-7 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 flex items-center justify-center cursor-pointer"><Eye size={13} /></button>
@@ -1904,19 +1903,17 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Trainer (Optional)</label>
-            <select
+            <CustomSelect
               value={form.trainerId}
-              onChange={e => setForm(f => ({ ...f, trainerId: e.target.value }))}
+              onChange={(val) => setForm(f => ({ ...f, trainerId: val }))}
               disabled={loadingTrainers}
-              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60 text-gray-800 dark:text-gray-100"
-            >
-              <option value="">{loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}</option>
-              {trainers.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.name}{t.designation ? ` · ${t.designation}` : ''}
-                </option>
-              ))}
-            </select>
+              options={trainers.map(t => ({
+                value: t.id,
+                label: t.name + (t.designation ? ` · ${t.designation}` : ''),
+              }))}
+              placeholder={loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}
+              searchable
+            />
           </div>
 
           <div>
@@ -1972,10 +1969,15 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode *</label>
-            <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500">
-              <option value="ONLINE">ONLINE</option><option value="OFFLINE">OFFLINE</option><option value="HYBRID">HYBRID</option>
-            </select>
+            <CustomSelect
+              value={form.mode}
+              onChange={(val) => setForm(f => ({ ...f, mode: val }))}
+              options={[
+                { value: 'ONLINE', label: 'ONLINE' },
+                { value: 'OFFLINE', label: 'OFFLINE' },
+                { value: 'HYBRID', label: 'HYBRID' },
+              ]}
+            />
           </div>
 
           <div>
@@ -1997,8 +1999,8 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
           {batches.map(b => (
             <div key={b.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{b.name}</p>
-                <p className="text-xs text-gray-400 truncate">{b.startDate} — {b.endDate} · {b.mode} · {b.timing}</p>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 break-words">{b.name}</p>
+                <p className="text-xs text-gray-400 break-words">{b.startDate} — {b.endDate} · {b.mode} · {b.timing}</p>
               </div>
               <Link href="/admin/batches" className="text-xs font-semibold text-purple-600 hover:underline flex-shrink-0">Manage in Batches</Link>
             </div>

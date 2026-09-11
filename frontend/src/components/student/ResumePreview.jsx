@@ -17,10 +17,10 @@ export default function ResumePreview({ resumeData, studentName }) {
   const name = studentName || 'Your Name'
 
   return (
-    <div className="resume-preview bg-white text-gray-900 text-[11px] leading-tight font-sans p-6 rounded-xl shadow-sm border border-gray-200" style={{ minHeight: 600 }}>
+    <div className="resume-preview bg-white text-gray-900 text-[11px] leading-tight font-sans p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200" style={{ minHeight: 600 }}>
       {/* Header */}
       <div className="border-b-2 border-purple-600 pb-3 mb-3">
-        <h1 className="text-lg font-bold text-gray-900 uppercase tracking-wide">{name}</h1>
+        <h1 className="text-base sm:text-lg font-bold text-gray-900 uppercase tracking-wide break-words">{name}</h1>
         {headline && <p className="text-purple-700 font-medium text-xs mt-0.5">{headline}</p>}
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[10px] text-gray-600">
           {phone && <span>📱 {phone}</span>}

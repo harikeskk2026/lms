@@ -39,12 +39,12 @@ export default function ProfilePhotoUploader({ name, photoUrl, onUploaded }) {
   }
 
   return (
-    <div className="relative w-20 h-20 flex-shrink-0">
+    <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
       {photoUrl ? (
         <img src={resolveFileUrl(photoUrl)} alt={name}
-          className="w-20 h-20 rounded-2xl object-cover border border-purple-100 dark:border-purple-900/30" />
+          className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-purple-100 dark:border-purple-900/30" />
       ) : (
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-extrabold text-2xl font-display">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-extrabold text-xl sm:text-2xl font-display">
           {name?.[0]?.toUpperCase() || '?'}
         </div>
       )}
@@ -53,9 +53,9 @@ export default function ProfilePhotoUploader({ name, photoUrl, onUploaded }) {
         onClick={handlePick}
         disabled={uploading}
         title="Change profile photo"
-        className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors disabled:opacity-60"
+        className="absolute -bottom-1 -right-1 sm:-bottom-1.5 sm:-right-1.5 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors disabled:opacity-60"
       >
-        {uploading ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+        {uploading ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
       </button>
       <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleChange} />
     </div>
