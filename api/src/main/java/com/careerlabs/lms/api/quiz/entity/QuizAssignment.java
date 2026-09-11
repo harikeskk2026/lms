@@ -19,8 +19,8 @@ import java.time.LocalDateTime;
 /**
  * Targets a {@link Quiz} at a batch, course, or individual student (by User id,
  * matching {@link QuizAttempt#getStudentId()}). A quiz with zero assignment rows
- * is visible to every student — this table only narrows visibility once an admin
- * explicitly assigns it.
+ * is not visible to any student (except practice quizzes visible only to their
+ * creator). This table controls visibility once an admin explicitly assigns it.
  */
 @Entity
 @Table(name = "quiz_assignments")

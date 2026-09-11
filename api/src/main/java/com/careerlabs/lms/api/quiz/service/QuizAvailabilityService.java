@@ -13,9 +13,10 @@ public interface QuizAvailabilityService {
     QuizEffectiveStatus effectiveStatus(Quiz quiz);
 
     /**
-     * True if the quiz has no assignment rows at all (visible to everyone — today's
-     * behavior for every pre-existing quiz), or the given student's batch, course,
-     * or own user id matches at least one assignment row for this quiz.
+     * True if the given student's batch (including batches from active enrollments),
+     * course (including courses from active enrollments), or own user id matches at
+     * least one assignment row for this quiz. Practice quizzes with no assignment
+     * rows are visible only to the user who created them.
      */
     boolean isAssignedTo(Quiz quiz, Long studentUserId);
 }

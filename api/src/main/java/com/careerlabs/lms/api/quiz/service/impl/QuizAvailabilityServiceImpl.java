@@ -1,5 +1,7 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizAssignment;
 import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
@@ -12,17 +14,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class QuizAvailabilityServiceImpl implements QuizAvailabilityService {
 
     private final QuizAssignmentRepository quizAssignmentRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
 
-    public QuizAvailabilityServiceImpl(QuizAssignmentRepository quizAssignmentRepository, StudentRepository studentRepository) {
+    public QuizAvailabilityServiceImpl(QuizAssignmentRepository quizAssignmentRepository,
+                                       StudentRepository studentRepository,
+                                       EnrollmentRepository enrollmentRepository) {
         this.quizAssignmentRepository = quizAssignmentRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
     }
 
     @Override
@@ -47,18 +55,44 @@ public class QuizAvailabilityServiceImpl implements QuizAvailabilityService {
     @Transactional(readOnly = true)
     public boolean isAssignedTo(Quiz quiz, Long studentUserId) {
         List<QuizAssignment> assignments = quizAssignmentRepository.findByQuizId(quiz.getId());
+
         if (assignments.isEmpty()) {
-            if (quiz.getCreatedBy() != null && quiz.getTitle() != null && quiz.getTitle().toLowerCase().contains("practice")) {
+            if (quiz.getCreatedBy() != null && quiz.getTitle() != null
+                    && quiz.getTitle().toLowerCase().contains("practice")) {
                 return quiz.getCreatedBy().equals(studentUserId);
             }
-            return true;
+            return false;
         }
 
         Student student = studentRepository.findByUserId(studentUserId).orElse(null);
+        if (student == null) {
+            return false;
+        }
+
+        Set<Long> studentBatchIds = new HashSet<>();
+        if (student.getBatch() != null) {
+            studentBatchIds.add(student.getBatch().getId());
+        }
+        Set<Long> studentCourseIds = new HashSet<>();
+        if (student.getCourse() != null) {
+            studentCourseIds.add(student.getCourse().getId());
+        }
+
+        List<Enrollment> enrollments = enrollmentRepository
+                .findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        for (Enrollment e : enrollments) {
+            if (e.getBatch() != null) {
+                studentBatchIds.add(e.getBatch().getId());
+            }
+            if (e.getCourse() != null) {
+                studentCourseIds.add(e.getCourse().getId());
+            }
+        }
+
         for (QuizAssignment a : assignments) {
             boolean matches = switch (a.getTargetType()) {
-                case BATCH -> student != null && student.getBatch() != null && student.getBatch().getId().equals(a.getTargetId());
-                case COURSE -> student != null && student.getCourse() != null && student.getCourse().getId().equals(a.getTargetId());
+                case BATCH -> studentBatchIds.contains(a.getTargetId());
+                case COURSE -> studentCourseIds.contains(a.getTargetId());
                 case STUDENT -> a.getTargetId().equals(studentUserId);
             };
             if (matches) {
