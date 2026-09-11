@@ -56,6 +56,17 @@ const DIFFICULTY_BADGE = {
   EASY:      'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
 }
 
+function todayFileStamp() {
+  const d = new Date()
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dd}-${mm}-${d.getFullYear()}`
+}
+
+function dateStampedFilename(base) {
+  return `${base}-${todayFileStamp()}.csv`
+}
+
 function downloadCSV(data, filename) {
   if (!data.length) return toast.error('No data to export')
   const headers = Object.keys(data[0]).join(',')
@@ -139,6 +150,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false)
   const [exportPreview, setExportPreview] = useState(null)
   const [exportPreviewLoading, setExportPreviewLoading] = useState('')
+  // Record counts per export type ('students'|'attendance'|'performance') so the
+  // Download CSV button can be hidden when there's nothing to export. null = not
+  // checked yet (button stays hidden rather than flashing in then disappearing).
+  const [exportCounts, setExportCounts] = useState({ students: null, attendance: null, performance: null })
 
   const [batchHealth, setBatchHealth] = useState([])
   const [quizData, setQuizData] = useState(null)
@@ -170,6 +185,20 @@ export default function ReportsPage() {
     loadPerformance()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchFilter, courseFilter])
+
+  // Check how many rows each export type would produce, so the Export tab can hide
+  // the "Download CSV" button for a type that currently has nothing to export.
+  useEffect(() => {
+    if (tab !== 'Export') return
+    let cancelled = false
+    const types = ['students', 'attendance', 'performance']
+    types.forEach(type => {
+      reportService.export({ type, batchId: batchFilter || undefined, startDate, endDate })
+        .then(r => { if (!cancelled) setExportCounts(prev => ({ ...prev, [type]: (r.data || []).length })) })
+        .catch(() => { if (!cancelled) setExportCounts(prev => ({ ...prev, [type]: 0 })) })
+    })
+    return () => { cancelled = true }
+  }, [tab, batchFilter, startDate, endDate])
 
   const loadAttendance = async () => {
     setLoading(true)
@@ -319,7 +348,7 @@ export default function ReportsPage() {
               {loading ? 'Loading...' : 'Generate Report'}
             </button>
             {attReport.length > 0 && (
-              <button onClick={() => downloadCSV(attReport, 'attendance-report.csv')}
+              <button onClick={() => downloadCSV(attReport, dateStampedFilename('attendance-report'))}
                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200">
                 <FileDown size={14} /> Export CSV
               </button>
@@ -423,7 +452,7 @@ export default function ReportsPage() {
               {loading ? 'Loading...' : 'Generate Report'}
             </button>
             {perfReport.length > 0 && (
-              <button onClick={() => downloadCSV(perfReport, 'performance-report.csv')}
+              <button onClick={() => downloadCSV(perfReport, dateStampedFilename('performance-report'))}
                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200">
                 <FileDown size={14} /> Export CSV
               </button>
@@ -729,10 +758,10 @@ export default function ReportsPage() {
         <div className="space-y-5">
           <div className="grid sm:grid-cols-3 gap-5">
             {[
-              { label: 'Student List', desc: 'All students with profiles, batch, placement status', icon: Users, type: 'students', file: 'students.csv' },
-              { label: 'Attendance Report', desc: 'Per-student attendance breakdown', icon: BarChart2, type: 'attendance', file: 'attendance.csv' },
-              { label: 'Performance Report', desc: 'Quiz scores, attendance, assignment grades', icon: FileText, type: 'performance', file: 'performance.csv' },
-            ].map(({ label, desc, icon: Icon, type, file }) => (
+              { label: 'Student List', desc: 'All students with profiles, batch, placement status', icon: Users, type: 'students', fileBase: 'students' },
+              { label: 'Attendance Report', desc: 'Per-student attendance breakdown', icon: BarChart2, type: 'attendance', fileBase: 'attendance' },
+              { label: 'Performance Report', desc: 'Quiz scores, attendance, assignment grades', icon: FileText, type: 'performance', fileBase: 'performance' },
+            ].map(({ label, desc, icon: Icon, type, fileBase }) => (
               <div key={type} className="glass-card p-6 flex flex-col gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
                   <Icon size={22} className="text-purple-600" />
@@ -756,16 +785,21 @@ export default function ReportsPage() {
                     className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 text-sm font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/40 disabled:opacity-60 transition-colors">
                     <Eye size={15} /> {exportPreviewLoading === type ? 'Loading...' : 'View Details'}
                   </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const r = await reportService.export({ type, batchId: batchFilter || undefined, startDate, endDate })
-                        downloadCSV(r.data || [], file)
-                      } catch { toast.error('Export failed') }
-                    }}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
-                    <Download size={15} /> Download CSV
-                  </button>
+                  {exportCounts[type] > 0 && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const r = await reportService.export({ type, batchId: batchFilter || undefined, startDate, endDate })
+                          downloadCSV(r.data || [], dateStampedFilename(fileBase))
+                        } catch { toast.error('Export failed') }
+                      }}
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
+                      <Download size={15} /> Download CSV
+                    </button>
+                  )}
+                  {exportCounts[type] === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-2">No records available to export.</p>
+                  )}
                 </div>
               </div>
             ))}

@@ -6,7 +6,7 @@ import {
   Pin, Trash2, Pencil, Plus, Send, Copy, ArrowLeft,
   BarChart3, History, CalendarDays, Check, X as XIcon, Paperclip,
   ChevronLeft, ChevronRight, Eye, Megaphone, FileText, Sparkles,
-  Users, Calendar, Clock, Bookmark, Info, ChevronDown,
+  Users, Calendar, Clock, Bookmark, Info, ChevronDown, Upload,
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -16,6 +16,8 @@ import courseService from '@/services/courseService'
 import assignmentService from '@/services/assignmentService'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import CustomSelect from '@/components/ui/CustomSelect'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import { useConfirmModal } from '@/components/ui/ConfirmModal'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 
@@ -84,6 +86,9 @@ export default function AnnouncementsPage() {
   const [detailsFor, setDetailsFor] = useState(null) // { id, tab: 'analytics'|'history' }
   const [activeSection, setActiveSection] = useState('ALL')
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null)
+  const [deletingAnnouncement, setDeletingAnnouncement] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [ask, confirmModal] = useConfirmModal()
 
   const load = () => {
     setLoading(true)
@@ -133,6 +138,10 @@ export default function AnnouncementsPage() {
       toast.error('Please enter the announcement message')
       return
     }
+    if (!form.category) {
+      toast.error('Please select a category')
+      return
+    }
     if (status === 'SCHEDULED') {
       if (!form.scheduledAt) {
         toast.error('Pick a schedule date/time first')
@@ -147,9 +156,12 @@ export default function AnnouncementsPage() {
     if (status === 'PUBLISHED' && form.scheduledAt) {
       const scheduledDate = new Date(form.scheduledAt)
       if (!isNaN(scheduledDate.getTime()) && scheduledDate > new Date()) {
-        const confirmed = window.confirm(
-          `You have set a schedule time (${format(scheduledDate, 'MMM d, yyyy h:mm a')}), but "Publish" will send the announcement immediately. Do you want to publish now?`
-        )
+        const confirmed = await ask({
+          title: 'Publish Now Instead?',
+          message: `You have set a schedule time (${format(scheduledDate, 'MMM d, yyyy h:mm a')}), but "Publish" will send the announcement immediately. Do you want to publish now?`,
+          confirmLabel: 'Publish Now',
+          tone: 'warning',
+        })
         if (!confirmed) return
       }
     }
@@ -204,10 +216,27 @@ export default function AnnouncementsPage() {
     try { await adminApi.duplicateAnnouncement(id); toast.success('Duplicated as draft'); load() }
     catch (err) { toast.error(err?.message || 'Failed to duplicate') }
   }
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this announcement?')) return
-    try { await adminApi.deleteAnnouncement(id); toast.success('Deleted'); load() }
-    catch { toast.error('Failed') }
+  const handleSubmitForApproval = async (id) => {
+    try { await adminApi.submitAnnouncementForApproval(id); toast.success('Submitted for approval'); load() }
+    catch (err) { toast.error(err?.message || 'Failed to submit for approval') }
+  }
+  const handleDelete = (id) => {
+    const target = announcements.find(a => a.id === id) || { id }
+    setDeletingAnnouncement(target)
+  }
+  const handleConfirmDelete = async () => {
+    if (!deletingAnnouncement) return
+    setDeleting(true)
+    try {
+      await adminApi.deleteAnnouncement(deletingAnnouncement.id)
+      toast.success('Deleted')
+      setDeletingAnnouncement(null)
+      load()
+    } catch {
+      toast.error('Failed')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleEdit = (a) => {
@@ -236,9 +265,20 @@ export default function AnnouncementsPage() {
   }
   const activeTabData = sections.find(s => s.key === activeSection) || sections[0]
 
-  const cardProps = { batches, courses, assignments, onEdit: handleEdit, onDelete: handleDelete,
-    onPublish: handlePublish, onApprove: handleApprove, onReject: handleReject, onDuplicate: handleDuplicate,
-    onDetails: setDetailsFor, onView: setViewingAnnouncement }
+  // Every admin announcement endpoint - edit, delete, publish, approve, reject, duplicate,
+  // analytics, history - requires ADMIN or SUPERADMIN on the backend (AdminAnnouncementController
+  // is class-level @PreAuthorize'd). A TRAINER can view this page but every one of those calls
+  // would 403, so only wire the handlers in for roles that can actually use them - TRAINER gets
+  // a read-only list instead of buttons that always fail.
+  const cardProps = {
+    batches, courses, assignments,
+    onView: setViewingAnnouncement,
+    ...(canCreate ? {
+      onEdit: handleEdit, onDelete: handleDelete, onDetails: setDetailsFor,
+      onPublish: handlePublish, onApprove: handleApprove, onReject: handleReject, onDuplicate: handleDuplicate,
+      onSubmitForApproval: handleSubmitForApproval,
+    } : {}),
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -287,11 +327,16 @@ export default function AnnouncementsPage() {
               activeSection={activeSection}
               activeTabData={activeTabData}
               onView={setViewingAnnouncement}
-              onDetails={setDetailsFor}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onPublish={handlePublish}
-              onDuplicate={handleDuplicate}
+              {...(canCreate ? {
+                onEdit: handleEdit,
+                onDelete: handleDelete,
+                onDetails: setDetailsFor,
+                onPublish: handlePublish,
+                onApprove: handleApprove,
+                onReject: handleReject,
+                onDuplicate: handleDuplicate,
+                onSubmitForApproval: handleSubmitForApproval,
+              } : {})}
             />
           ) : loading ? (
             <div className="space-y-3">
@@ -313,6 +358,17 @@ export default function AnnouncementsPage() {
         <ViewAnnouncementModal a={viewingAnnouncement} batches={batches}
           courses={courses} assignments={assignments} onClose={() => setViewingAnnouncement(null)} />
       )}
+
+      <DeleteConfirmModal
+        isOpen={!!deletingAnnouncement}
+        onClose={() => { if (!deleting) setDeletingAnnouncement(null) }}
+        onConfirm={handleConfirmDelete}
+        loading={deleting}
+        title="Delete Announcement?"
+        itemName={deletingAnnouncement?.title}
+      />
+
+      {confirmModal}
     </div>
   )
 }
@@ -509,14 +565,14 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
             <Select
               label="Target Batch"
               value={form.batchId}
-              onChange={set('batchId')}
+              onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
               options={batches.map(b => [b.id, b.name])}
               allLabel="All Batches (Anyone in any batch)"
             />
             <Select
               label="Target Course"
               value={form.courseId}
-              onChange={set('courseId')}
+              onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
               options={courses.map(c => [c.id, c.title])}
               allLabel="All Courses (Anyone in any course)"
             />
@@ -557,12 +613,13 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">
-                Category
+                Category <span className="text-purple-600">*</span>
               </label>
               <CustomSelect
                   value={form.category}
                   onChange={(val) => setForm(f => ({ ...f, category: val }))}
                   options={CATEGORIES.map(c => ({ value: c, label: c.charAt(0) + c.slice(1).toLowerCase() }))}
+                  clearable={false}
                 />
             </div>
 
@@ -744,7 +801,7 @@ function AnnouncementSection({ title, color, items, emptyText, cardProps, hideTi
   )
 }
 
-function AnnouncementCard({ a, batches, courses, assignments = [], onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onDetails, onView }) {
+function AnnouncementCard({ a, batches, courses, assignments = [], onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onSubmitForApproval, onDetails, onView }) {
   const batch = batches.find(b => b.id === a.batchId)
   const course = courses.find(c => c.id === a.courseId)
   const isDraft = a.status === 'DRAFT'
@@ -800,7 +857,37 @@ function AnnouncementCard({ a, batches, courses, assignments = [], onEdit, onDel
           </div>
           {isScheduled && a.scheduledAt && <p className="text-[10px] text-sky-500 mt-0.5">Scheduled for {format(new Date(a.scheduledAt), 'dd MMM yyyy, HH:mm')}</p>}
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-800/80 sm:justify-end">
+        <div className="flex items-center gap-1.5 flex-shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-800/80 sm:justify-end flex-wrap">
+          {onDetails && (
+            <IconButton title="Analytics & History" onClick={() => onDetails({ id: a.id, tab: 'analytics' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200">
+              <BarChart3 size={13} />
+            </IconButton>
+          )}
+          {onPublish && (isDraft || isScheduled) && (
+            <IconButton title="Publish Now" onClick={() => onPublish(a.id)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+              <Send size={13} />
+            </IconButton>
+          )}
+          {onSubmitForApproval && isDraft && (
+            <IconButton title="Submit for Approval" onClick={() => onSubmitForApproval(a.id)} className="bg-sky-50 text-sky-600 hover:bg-sky-100">
+              <Upload size={13} />
+            </IconButton>
+          )}
+          {onApprove && isPending && (
+            <IconButton title="Approve" onClick={() => onApprove(a.id)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+              <Check size={13} />
+            </IconButton>
+          )}
+          {onReject && isPending && (
+            <IconButton title="Reject" onClick={() => onReject(a.id)} className="bg-amber-50 text-amber-600 hover:bg-amber-100">
+              <XIcon size={13} />
+            </IconButton>
+          )}
+          {onDuplicate && (
+            <IconButton title="Duplicate" onClick={() => onDuplicate(a.id)} className="bg-gray-100 text-gray-500 hover:bg-gray-200">
+              <Copy size={13} />
+            </IconButton>
+          )}
           {onEdit && (
             <IconButton title="Edit" onClick={() => onEdit(a)} className="bg-gray-100 text-gray-500 hover:bg-gray-200">
               <Pencil size={13} />
@@ -1014,7 +1101,10 @@ function CalendarView({
   onEdit,
   onDelete,
   onPublish,
+  onApprove,
+  onReject,
   onDuplicate,
+  onSubmitForApproval,
 }) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const year = currentDate.getFullYear()
@@ -1355,6 +1445,60 @@ function CalendarView({
                     </button>
 
                     <div className="flex items-center gap-1">
+                      {onDetails && (
+                        <IconButton
+                          title="Analytics & History"
+                          onClick={(e) => { e.stopPropagation(); onDetails({ id: a.id, tab: 'analytics' }); }}
+                          className="bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        >
+                          <BarChart3 size={12} />
+                        </IconButton>
+                      )}
+                      {onPublish && (a.status === 'DRAFT' || a.status === 'SCHEDULED') && (
+                        <IconButton
+                          title="Publish Now"
+                          onClick={(e) => { e.stopPropagation(); onPublish(a.id); }}
+                          className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                        >
+                          <Send size={12} />
+                        </IconButton>
+                      )}
+                      {onSubmitForApproval && a.status === 'DRAFT' && (
+                        <IconButton
+                          title="Submit for Approval"
+                          onClick={(e) => { e.stopPropagation(); onSubmitForApproval(a.id); }}
+                          className="bg-sky-50 text-sky-600 hover:bg-sky-100"
+                        >
+                          <Upload size={12} />
+                        </IconButton>
+                      )}
+                      {onApprove && a.status === 'PENDING_APPROVAL' && (
+                        <IconButton
+                          title="Approve"
+                          onClick={(e) => { e.stopPropagation(); onApprove(a.id); }}
+                          className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                        >
+                          <Check size={12} />
+                        </IconButton>
+                      )}
+                      {onReject && a.status === 'PENDING_APPROVAL' && (
+                        <IconButton
+                          title="Reject"
+                          onClick={(e) => { e.stopPropagation(); onReject(a.id); }}
+                          className="bg-amber-50 text-amber-600 hover:bg-amber-100"
+                        >
+                          <XIcon size={12} />
+                        </IconButton>
+                      )}
+                      {onDuplicate && (
+                        <IconButton
+                          title="Duplicate"
+                          onClick={(e) => { e.stopPropagation(); onDuplicate(a.id); }}
+                          className="bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        >
+                          <Copy size={12} />
+                        </IconButton>
+                      )}
                       {onEdit && (
                         <IconButton
                           title="Edit"
