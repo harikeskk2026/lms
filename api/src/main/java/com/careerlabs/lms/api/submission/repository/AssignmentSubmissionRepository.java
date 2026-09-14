@@ -32,9 +32,9 @@ public interface AssignmentSubmissionRepository extends JpaRepository<Assignment
 
     void deleteAllByStudentId(Long studentId);
 
-    @Query("SELECT COUNT(s) FROM AssignmentSubmission s WHERE s.reviewed = false AND s.student.batch.id IN :batchIds")
+    @Query("SELECT COUNT(s) FROM AssignmentSubmission s WHERE s.reviewed = false AND s.assignment.batch.id IN :batchIds")
     long countUnreviewedByBatchIds(@Param("batchIds") List<Long> batchIds);
 
-    @Query("SELECT s FROM AssignmentSubmission s WHERE s.reviewed = false AND s.student.batch.id IN :batchIds ORDER BY s.submittedAt DESC")
+    @Query("SELECT s FROM AssignmentSubmission s WHERE s.reviewed = false AND s.assignment.batch.id IN :batchIds ORDER BY s.submittedAt DESC")
     List<AssignmentSubmission> findUnreviewedByBatchIds(@Param("batchIds") List<Long> batchIds);
 }

@@ -10,6 +10,8 @@ import com.careerlabs.lms.api.student.dto.response.StudentResponse;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.student.service.StudentService;
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,12 +29,14 @@ public class AdminBatchController {
     private final BatchRepository batchRepository;
     private final StudentRepository studentRepository;
     private final StudentService studentService;
+    private final EnrollmentRepository enrollmentRepository;
 
     public AdminBatchController(BatchRepository batchRepository, StudentRepository studentRepository,
-                                 StudentService studentService) {
+                                 StudentService studentService, EnrollmentRepository enrollmentRepository) {
         this.batchRepository = batchRepository;
         this.studentRepository = studentRepository;
         this.studentService = studentService;
+        this.enrollmentRepository = enrollmentRepository;
     }
 
     @PostMapping("/{batchId}/enroll")
@@ -50,12 +54,11 @@ public class AdminBatchController {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
 
-        if (student.getBatch() == null || !student.getBatch().getId().equals(batch.getId())) {
-            throw new BadRequestException("Student is not enrolled in this batch");
-        }
+        Enrollment enrollment = enrollmentRepository.findByStudentIdAndBatchIdAndActiveTrue(studentId, batchId)
+                .orElseThrow(() -> new BadRequestException("Student is not enrolled in this batch"));
 
-        student.setBatch(null);
-        studentRepository.save(student);
+        enrollment.setActive(false);
+        enrollmentRepository.save(enrollment);
 
         return ResponseEntity.ok(ApiResponse.of("Student removed from batch", null));
     }

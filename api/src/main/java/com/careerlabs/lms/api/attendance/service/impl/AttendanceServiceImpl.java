@@ -41,6 +41,7 @@ import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.notification.entity.Notification;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
@@ -82,6 +83,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceCorrectionRepository attendanceCorrectionRepository;
     private final BatchRepository batchRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final MeetingLinkRepository meetingLinkRepository;
@@ -95,6 +97,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             AttendanceCorrectionRepository attendanceCorrectionRepository,
             BatchRepository batchRepository,
             StudentRepository studentRepository,
+            EnrollmentRepository enrollmentRepository,
             NotificationRepository notificationRepository,
             UserRepository userRepository,
             MeetingLinkRepository meetingLinkRepository,
@@ -106,6 +109,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         this.attendanceCorrectionRepository = attendanceCorrectionRepository;
         this.batchRepository = batchRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.meetingLinkRepository = meetingLinkRepository;
@@ -229,7 +233,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
 
         Long batchId = dailyClass.getBatch().getId();
-        List<Student> students = studentRepository.findByBatchId(batchId);
+        List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batchId);
         List<Attendance> attendances = attendanceRepository.findByDailyClassId(classId);
 
         Map<Long, Attendance> attendanceMap = attendances.stream()
@@ -390,37 +394,46 @@ public class AttendanceServiceImpl implements AttendanceService {
                 })
                 .toList();
 
-        // Classes scheduled for the student's batch that day but never marked at all for
+        // Classes scheduled for the student's batches that day but never marked at all for
         // this student — attendanceId is null so the frontend can offer "Request
         // Correction" for a genuinely missing record, not just a wrong one.
         List<Long> markedClassIds = marked.stream().map(AttendanceCalendarDayResponse::classId).toList();
         LocalDateTime dayStart = date.atStartOfDay();
         LocalDateTime dayEnd = dayStart.plusDays(1);
 
-        List<AttendanceCalendarDayResponse> unmarked = student.getBatch() == null ? List.of()
-                : dailyClassRepository.findByBatchIdAndDateBetweenOrderByDateAsc(student.getBatch().getId(), dayStart, dayEnd)
-                        .stream()
-                        .filter(c -> !markedClassIds.contains(c.getId()))
-                        .map(c -> new AttendanceCalendarDayResponse(
-                                null, c.getId(), c.getTitle(),
-                                c.getBatch() != null ? c.getBatch().getTrainerId() : null,
-                                c.getDate(), c.getStatus(), null, null,
-                                c.getMeetLink(), c.getRecordingUrl(), null))
-                        .toList();
+        List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+        List<Long> batchIds = activeBatches.stream().map(Batch::getId).toList();
+
+        List<DailyClass> candidateClasses = batchIds.isEmpty() ? List.of()
+                : dailyClassRepository.findByBatchIdInAndDateBetweenOrderByDateAsc(batchIds, dayStart, dayEnd);
+
+        List<AttendanceCalendarDayResponse> unmarked = candidateClasses.stream()
+                .filter(c -> !markedClassIds.contains(c.getId()))
+                .map(c -> new AttendanceCalendarDayResponse(
+                        null, c.getId(), c.getTitle(),
+                        c.getBatch() != null ? c.getBatch().getTrainerId() : null,
+                        c.getDate(), c.getStatus(), null, null,
+                        c.getMeetLink(), c.getRecordingUrl(), null))
+                .toList();
 
         // Scheduled Class (Zoom) sessions visible to the student that day, which never
         // got linked to a DailyClass at all (attendance never knew they happened) —
         // surfaced separately from the two categories above via meetingLinkId so the
         // frontend can offer "Report Missing Attendance" even for these.
-        Long batchId = student.getBatch() != null ? student.getBatch().getId() : null;
-        Long courseId = student.getCourse() != null ? student.getCourse().getId() : null;
-        List<AttendanceCalendarDayResponse> scheduledClassOnly = meetingLinkRepository
-                .findVisibleToStudentOnDate(batchId, courseId, dayStart, dayEnd).stream()
-                .filter(m -> m.getDailyClass() == null)
-                .map(m -> new AttendanceCalendarDayResponse(
-                        null, null, m.getTitle(), null, m.getScheduledStart(), null, null, null,
-                        m.getMeetUrl(), null, m.getId()))
-                .toList();
+        List<AttendanceCalendarDayResponse> scheduledClassOnly = new ArrayList<>();
+        Set<Long> seenMeetingIds = new HashSet<>();
+        for (Batch b : activeBatches) {
+            Long bId = b.getId();
+            Long cId = b.getCourse() != null ? b.getCourse().getId() : null;
+            List<MeetingLink> list = meetingLinkRepository.findVisibleToStudentOnDate(bId, cId, dayStart, dayEnd);
+            for (MeetingLink m : list) {
+                if (m.getDailyClass() == null && seenMeetingIds.add(m.getId())) {
+                    scheduledClassOnly.add(new AttendanceCalendarDayResponse(
+                            null, null, m.getTitle(), null, m.getScheduledStart(), null, null, null,
+                            m.getMeetUrl(), null, m.getId()));
+                }
+            }
+        }
 
         return Stream.concat(Stream.concat(marked.stream(), unmarked.stream()), scheduledClassOnly.stream()).toList();
     }
@@ -434,7 +447,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         List<AttendanceOverviewItemResponse> list = new ArrayList<>();
         for (Batch batch : batches) {
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             List<DailyClass> classes = dailyClassRepository.findByBatchIdAndStatusOrderByDateDesc(batch.getId(), ClassStatus.COMPLETED);
             List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
 
@@ -747,7 +760,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<LowAttendanceStudentResponse> results = new ArrayList<>();
 
         for (Batch batch : batches) {
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             List<DailyClass> classes = dailyClassRepository.findByBatchIdAndStatusOrderByDateDesc(batch.getId(), ClassStatus.COMPLETED);
             if (classes.isEmpty()) {
                 classes = dailyClassRepository.findByBatchIdOrderByDateDesc(batch.getId());
@@ -897,7 +910,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         .collect(Collectors.toList());
             } catch (Exception ignored) {}
         }
-        List<Student> students = studentRepository.findByBatchId(batchId);
+        List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batchId);
 
         List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batchId);
 
@@ -1275,8 +1288,13 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .orElse(null);
 
         LocalDate candidate = student.getJoiningDate();
-        if (candidate == null && student.getBatch() != null && student.getBatch().getStartDate() != null) {
-            candidate = student.getBatch().getStartDate();
+        if (candidate == null) {
+            List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+            candidate = activeBatches.stream()
+                    .map(Batch::getStartDate)
+                    .filter(java.util.Objects::nonNull)
+                    .min(Comparator.naturalOrder())
+                    .orElse(null);
         }
         if (candidate == null && student.getCreatedAt() != null) {
             candidate = student.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate();
@@ -1326,38 +1344,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Clean up any previously auto-generated dummy class records
         cleanupDummyClasses();
 
-        // 1. Resolve student's batch: prioritize the batch containing scheduled classes
-        List<MeetingLink> allMeetings = meetingLinkRepository.findAll();
-        Batch meetingBatch = null;
-        for (MeetingLink m : allMeetings) {
-            if (m.getBatch() != null) {
-                meetingBatch = m.getBatch();
-                break;
-            }
-        }
-
-        Batch batch = student.getBatch();
-        if (meetingBatch != null) {
-            batch = meetingBatch;
-        } else if (batch == null) {
-            batch = batchRepository.findAll().stream()
-                    .filter(Batch::isActive)
-                    .findFirst()
-                    .orElse(null);
-        }
-
-        if (batch != null && (student.getBatch() == null || !batch.getId().equals(student.getBatch().getId()))) {
-            student.setBatch(batch);
-            if (batch.getCourse() != null) {
-                student.setCourse(batch.getCourse());
-            }
-            studentRepository.save(student);
-        }
-        if (batch == null) {
+        List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+        if (activeBatches.isEmpty()) {
             return;
         }
 
         // 2. Ensure each real Scheduled Class (MeetingLink) has its DailyClass linked and status synced
+        List<MeetingLink> allMeetings = meetingLinkRepository.findAll();
         for (MeetingLink m : allMeetings) {
             if (m.getBatch() != null) {
                 DailyClass dc = m.getDailyClass();
@@ -1388,36 +1381,30 @@ public class AttendanceServiceImpl implements AttendanceService {
             }
         }
 
-        // 3. Find only REAL scheduled classes for this batch that have started or completed
+        // 3. For each active batch of this student, find past real classes and ensure attendance records
         LocalDateTime now = LocalDateTime.now();
-        List<DailyClass> pastRealClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(batch.getId()).stream()
-                .filter(c -> c.getDate() != null && (c.getDate().isBefore(now) || c.getStatus() == ClassStatus.COMPLETED))
-                .toList();
-
-        if (pastRealClasses.isEmpty()) {
-            return;
-        }
-
-        // 4. For each real class, if the student has no attendance record, mark ABSENT
         List<Attendance> existingAttendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
         Map<Long, Attendance> attendanceByClassId = existingAttendances.stream()
                 .filter(a -> a.getDailyClass() != null)
                 .collect(Collectors.toMap(a -> a.getDailyClass().getId(), a -> a, (a1, a2) -> a1));
 
         List<Attendance> toSave = new ArrayList<>();
-        for (DailyClass dc : pastRealClasses) {
-            Attendance existing = attendanceByClassId.get(dc.getId());
-            if (existing == null) {
-                Attendance att = new Attendance();
-                att.setStudent(student);
-                att.setDailyClass(dc);
-                att.setStatus(AttendStatus.ABSENT);
-                att.setRemarks("Auto-marked absent (no present request submitted)");
-                toSave.add(att);
-            } else if (existing.getStatus() == null) {
-                existing.setStatus(AttendStatus.ABSENT);
-                existing.setRemarks("Auto-marked absent (no present request submitted)");
-                toSave.add(existing);
+        for (Batch batch : activeBatches) {
+            List<DailyClass> pastRealClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(batch.getId()).stream()
+                    .filter(c -> c.getDate() != null && (c.getDate().isBefore(now) || c.getStatus() == ClassStatus.COMPLETED))
+                    .toList();
+
+            for (DailyClass dc : pastRealClasses) {
+                Attendance existing = attendanceByClassId.get(dc.getId());
+                if (existing == null) {
+                    Attendance newAtt = new Attendance();
+                    newAtt.setDailyClass(dc);
+                    newAtt.setStudent(student);
+                    newAtt.setStatus(AttendStatus.ABSENT);
+                    newAtt.setRemarks("Auto-marked ABSENT (past class without record)");
+                    toSave.add(newAtt);
+                    attendanceByClassId.put(dc.getId(), newAtt);
+                }
             }
         }
 
@@ -1496,7 +1483,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         int lt = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.LATE).count();
 
         int totalStudents = cls.getBatch() != null ?
-                studentRepository.findByBatchId(cls.getBatch().getId()).size() : 0;
+                (int) enrollmentRepository.countByBatchIdAndActiveTrue(cls.getBatch().getId()) : 0;
 
         return new DailyClassResponse(
                 cls.getId(),

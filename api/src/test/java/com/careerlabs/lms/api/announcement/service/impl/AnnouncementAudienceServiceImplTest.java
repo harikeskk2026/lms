@@ -66,7 +66,6 @@ class AnnouncementAudienceServiceImplTest {
 
         student = new Student();
         setId(student, 100L);
-        student.setBatch(batch);
         student.setCollege(college);
         student.setCourse(course);
     }
@@ -79,6 +78,8 @@ class AnnouncementAudienceServiceImplTest {
         a.setCollege(college);
         a.setCourse(course);
         a.setAudienceRuleType(AudienceRuleType.NONE);
+
+        when(enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(100L, 1L)).thenReturn(true);
 
         assertTrue(audienceService.isEligible(a, student));
     }
@@ -99,6 +100,8 @@ class AnnouncementAudienceServiceImplTest {
         setId(other, 99L);
         Announcement a = new Announcement();
         a.setBatch(other);
+
+        when(enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(100L, 99L)).thenReturn(false);
 
         assertFalse(audienceService.isEligible(a, student));
     }
@@ -229,6 +232,7 @@ class AnnouncementAudienceServiceImplTest {
         a.setAudienceRuleType(AudienceRuleType.NONE);
 
         when(studentRepository.findByUserId(55L)).thenReturn(Optional.of(student));
+        when(enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(100L, 1L)).thenReturn(true);
 
         assertTrue(audienceService.isUserEligible(a, 55L));
     }
@@ -241,7 +245,6 @@ class AnnouncementAudienceServiceImplTest {
 
         Student other = new Student();
         setId(other, 101L);
-        other.setBatch(batch);
 
         when(studentRepository.findAll(any(Specification.class))).thenReturn(List.of(student, other));
 

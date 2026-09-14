@@ -118,14 +118,16 @@ export default function StudentsPage() {
 
   const openEdit = (student) => {
     setEditStudent(student)
+    const initialBatch = (student.batches && student.batches.length > 0) ? student.batches[0] : null
+    const initialCourse = (student.courses && student.courses.length > 0) ? student.courses[0] : initialBatch?.course
     setForm({
       name: student.name,
       email: student.email,
       phone: student.phone || '',
       collegeName: student.college?.name || '',
       password: '',
-      batchId: student.batch?.id ? String(student.batch.id) : '',
-      courseId: student.course?.id ? String(student.course.id) : student.batch?.course?.id ? String(student.batch.course.id) : '',
+      batchId: initialBatch?.id ? String(initialBatch.id) : '',
+      courseId: initialCourse?.id ? String(initialCourse.id) : '',
       placementStatus: student.placementStatus || 'SEEKING',
     })
     setEmailError('')
@@ -248,8 +250,8 @@ export default function StudentsPage() {
         s.phone || '',
         s.enrollmentNo || '',
         s.college?.name || '',
-        s.course?.title || '',
-        s.batch?.name || '',
+        (s.courses && s.courses.length > 0) ? s.courses.map(c => c.title).join('; ') : '',
+        (s.batches && s.batches.length > 0) ? s.batches.map(b => b.name).join('; ') : '',
         s.placementStatus || '',
         s.active ? 'Active' : 'Inactive',
       ])
@@ -410,13 +412,19 @@ export default function StudentsPage() {
                         <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{s.college?.name || '—'}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-xs text-gray-500">{s.course?.title || '—'}</p>
+                        <p className="text-xs text-gray-500">
+                          {(s.courses && s.courses.length > 0) ? s.courses.map(c => c.title).join(', ') : '—'}
+                        </p>
                       </td>
                       <td className="px-4 py-3">
-                        {s.batch ? (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{s.batch.name}</p>
-                            <p className="text-[10px] text-gray-400">{s.batch.course?.title}</p>
+                        {s.batches && s.batches.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            {s.batches.map(b => (
+                              <div key={b.id}>
+                                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{b.name}</p>
+                                <p className="text-[10px] text-gray-400">{b.course?.title}</p>
+                              </div>
+                            ))}
                           </div>
                         ) : <span className="text-gray-400 text-xs">Not enrolled</span>}
                       </td>

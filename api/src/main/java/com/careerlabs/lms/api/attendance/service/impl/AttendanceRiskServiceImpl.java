@@ -13,6 +13,8 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.batch.entity.Batch;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,16 +29,19 @@ public class AttendanceRiskServiceImpl implements AttendanceRiskService {
 
     private final AttendanceRepository attendanceRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final AttendancePolicyService attendancePolicyService;
     private final UserRepository userRepository;
 
     public AttendanceRiskServiceImpl(
             AttendanceRepository attendanceRepository,
             StudentRepository studentRepository,
+            EnrollmentRepository enrollmentRepository,
             AttendancePolicyService attendancePolicyService,
             UserRepository userRepository) {
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.attendancePolicyService = attendancePolicyService;
         this.userRepository = userRepository;
     }
@@ -73,9 +78,15 @@ public class AttendanceRiskServiceImpl implements AttendanceRiskService {
                 .orElse(null);
 
         LocalDate joiningDate = student.getJoiningDate();
+        List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
         if (joiningDate == null) {
-            if (student.getBatch() != null && student.getBatch().getStartDate() != null) {
-                joiningDate = student.getBatch().getStartDate();
+            LocalDate earliestBatchStart = activeBatches.stream()
+                    .map(Batch::getStartDate)
+                    .filter(java.util.Objects::nonNull)
+                    .min(java.util.Comparator.naturalOrder())
+                    .orElse(null);
+            if (earliestBatchStart != null) {
+                joiningDate = earliestBatchStart;
             } else if (earliestAttendance != null) {
                 joiningDate = earliestAttendance;
             } else if (student.getCreatedAt() != null) {
@@ -107,7 +118,7 @@ public class AttendanceRiskServiceImpl implements AttendanceRiskService {
                 : List.of();
         int previousPercentage = priorToRecent.isEmpty() ? currentPercentage : percentageOf(priorToRecent);
 
-        Long batchId = student.getBatch() != null ? student.getBatch().getId() : null;
+        Long batchId = activeBatches.isEmpty() ? null : activeBatches.get(0).getId();
         AttendancePolicy policy = attendancePolicyService.getEffectivePolicy(batchId);
         RiskLevel riskLevel = attendances.isEmpty() ? RiskLevel.HEALTHY : classify(overallPercentage, policy);
 

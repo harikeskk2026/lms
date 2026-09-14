@@ -75,7 +75,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
     public SubmissionListResponse listByAssignment(Long assignmentId) {
         Assignment assignment = findAssignmentOrThrow(assignmentId);
 
-        List<Student> students = studentRepository.findByBatchId(assignment.getBatch().getId());
+        List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(assignment.getBatch().getId());
         Map<Long, AssignmentSubmission> byStudentId = submissionRepository.findByAssignmentId(assignmentId).stream()
                 .collect(Collectors.toMap(s -> s.getStudent().getId(), Function.identity()));
 
@@ -214,9 +214,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
 
-        boolean isEnrolledInBatch = (student.getBatch() != null && student.getBatch().getId().equals(assignment.getBatch().getId()))
-                || enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId()).stream()
-                        .anyMatch(e -> e.getBatch() != null && e.getBatch().getId().equals(assignment.getBatch().getId()));
+        boolean isEnrolledInBatch = enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), assignment.getBatch().getId());
 
         if (!isEnrolledInBatch) {
             throw new BadRequestException("You are not enrolled in this assignment's batch");

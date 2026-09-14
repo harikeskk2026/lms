@@ -35,18 +35,31 @@ import java.util.List;
 public class PlacementEligibilityGuard {
 
     private final AcademicDetailsRepository academicDetailsRepository;
+    private final com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository enrollmentRepository;
 
-    public PlacementEligibilityGuard(AcademicDetailsRepository academicDetailsRepository) {
+    public PlacementEligibilityGuard(AcademicDetailsRepository academicDetailsRepository,
+                                     com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository enrollmentRepository) {
         this.academicDetailsRepository = academicDetailsRepository;
+        this.enrollmentRepository = enrollmentRepository;
     }
 
     public List<String> ineligibilityReasons(Student student, Drive drive) {
         List<String> reasons = new ArrayList<>();
+        if (student == null || drive == null) {
+            return reasons;
+        }
+
         AcademicDetails academic = academicDetailsRepository.findByStudentId(student.getId()).orElse(null);
 
-        if (drive.getMinCgpa() != null || drive.getMinPercentage() != null) {
-            if (academic == null || academic.getUgScoreType() == null || academic.getUgScore() == null) {
-                reasons.add("Academic score (CGPA/Percentage) not on file");
+        if (academic == null) {
+            if (drive.getMinCgpa() != null || drive.getMinPercentage() != null || drive.getMaxBacklogs() != null) {
+                reasons.add("Academic profile incomplete (UG scores not on file)");
+            }
+        } else {
+            if (academic.getUgScore() == null) {
+                if (drive.getMinCgpa() != null || drive.getMinPercentage() != null) {
+                    reasons.add("UG score not recorded on academic profile");
+                }
             } else if (academic.getUgScoreType() == AcademicScoreType.CGPA) {
                 if (drive.getMinCgpa() != null && academic.getUgScore() < drive.getMinCgpa()) {
                     reasons.add("CGPA below the required minimum of " + drive.getMinCgpa());
@@ -56,25 +69,34 @@ public class PlacementEligibilityGuard {
                     reasons.add("Percentage below the required minimum of " + drive.getMinPercentage());
                 }
             }
-        }
 
-        if (drive.getMaxBacklogs() != null) {
-            Integer backlogs = academic != null ? academic.getUgBacklogs() : null;
-            if (backlogs == null) {
-                reasons.add("Backlog count not on file (maximum allowed: " + drive.getMaxBacklogs() + ")");
-            } else if (backlogs > drive.getMaxBacklogs()) {
-                reasons.add("Backlogs exceed the maximum allowed (" + drive.getMaxBacklogs() + ")");
+            if (drive.getMaxBacklogs() != null) {
+                Integer backlogs = academic.getUgBacklogs();
+                if (backlogs == null) {
+                    reasons.add("Backlog count not on file (maximum allowed: " + drive.getMaxBacklogs() + ")");
+                } else if (backlogs > drive.getMaxBacklogs()) {
+                    reasons.add("Backlogs exceed the maximum allowed (" + drive.getMaxBacklogs() + ")");
+                }
             }
         }
 
-        if (!drive.getEligibleBatches().isEmpty()
-                && (student.getBatch() == null || !drive.getEligibleBatches().contains(student.getBatch()))) {
-            reasons.add("Not part of an eligible batch for this opportunity");
+        if (!drive.getEligibleBatches().isEmpty()) {
+            List<com.careerlabs.lms.api.batch.entity.Batch> activeBatches =
+                    enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+            boolean matchesBatch = activeBatches.stream().anyMatch(b -> drive.getEligibleBatches().contains(b));
+            if (!matchesBatch) {
+                reasons.add("Not part of an eligible batch for this opportunity");
+            }
         }
 
-        if (!drive.getEligibleCourses().isEmpty()
-                && (student.getCourse() == null || !drive.getEligibleCourses().contains(student.getCourse()))) {
-            reasons.add("Not enrolled in an eligible course for this opportunity");
+        if (!drive.getEligibleCourses().isEmpty()) {
+            List<com.careerlabs.lms.api.enrollment.entity.Enrollment> activeEnrollments =
+                    enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+            boolean matchesCourse = activeEnrollments.stream()
+                    .anyMatch(e -> e.getCourse() != null && drive.getEligibleCourses().contains(e.getCourse()));
+            if (!matchesCourse && (student.getCourse() == null || !drive.getEligibleCourses().contains(student.getCourse()))) {
+                reasons.add("Not enrolled in an eligible course for this opportunity");
+            }
         }
 
         return reasons;

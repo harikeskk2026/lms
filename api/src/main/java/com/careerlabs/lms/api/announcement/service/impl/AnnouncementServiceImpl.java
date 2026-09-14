@@ -53,6 +53,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+
 @Service
 public class AnnouncementServiceImpl implements AnnouncementService {
 
@@ -66,6 +68,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
     private final AnnouncementAudienceService audienceService;
@@ -82,6 +85,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                                     CourseRepository courseRepository,
                                     UserRepository userRepository,
                                     StudentRepository studentRepository,
+                                    EnrollmentRepository enrollmentRepository,
                                     AttendanceRepository attendanceRepository,
                                     NotificationService notificationService,
                                     AnnouncementAudienceService audienceService,
@@ -97,6 +101,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.attendanceRepository = attendanceRepository;
         this.notificationService = notificationService;
         this.audienceService = audienceService;
@@ -464,7 +469,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
             if (!batch.isActive()) {
                 continue;
             }
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             long lowAttendanceCount = students.stream()
                     .filter(s -> {
                         long total = attendanceRepository.countByStudentId(s.getId());

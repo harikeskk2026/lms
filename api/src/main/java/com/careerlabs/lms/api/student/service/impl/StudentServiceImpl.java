@@ -43,6 +43,7 @@ import com.careerlabs.lms.api.student.service.StudentService;
 import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
 import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
+import java.util.regex.Pattern;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
@@ -69,7 +70,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -169,8 +170,12 @@ public class StudentServiceImpl implements StudentService {
         Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Student> result = studentRepository.findAll(buildSpecification(search, batchId, status, placementStatus), pageable);
 
+        List<Long> studentIds = result.getContent().stream().map(Student::getId).toList();
+        List<Enrollment> enrollments = studentIds.isEmpty() ? List.of() : enrollmentRepository.findByStudentIdInAndActiveTrue(studentIds);
+        Map<Long, List<Enrollment>> enrollmentsByStudent = enrollments.stream().collect(Collectors.groupingBy(e -> e.getStudent().getId()));
+
         List<StudentResponse> students = result.getContent().stream()
-                .map(StudentResponse::from)
+                .map(s -> StudentResponse.from(s, enrollmentsByStudent.getOrDefault(s.getId(), List.of())))
                 .toList();
 
         return new StudentPageResponse(students, result.getTotalElements(), pageNumber, result.getTotalPages());
@@ -187,7 +192,9 @@ public class StudentServiceImpl implements StudentService {
     @Override
     @Transactional(readOnly = true)
     public StudentResponse get(Long id) {
-        return StudentResponse.from(findOrThrow(id));
+        Student student = findOrThrow(id);
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        return StudentResponse.from(student, enrollments);
     }
 
     @Override
@@ -212,7 +219,6 @@ public class StudentServiceImpl implements StudentService {
         if (request.getCollegeName() != null && !request.getCollegeName().isBlank()) {
             student.setCollege(findOrCreateCollege(request.getCollegeName()));
         }
-        assignBatch(student, request.getBatchId());
         if (request.getCourseId() != null) {
             Course course = findCourseOrThrow(request.getCourseId());
             if (course.getStatus() != CourseStatus.PUBLISHED) {
@@ -223,8 +229,12 @@ public class StudentServiceImpl implements StudentService {
 
         student = studentRepository.save(student);
         syncCourseEnrollment(student);
+        if (request.getBatchId() != null) {
+            assignBatch(student, request.getBatchId());
+        }
 
-        return StudentResponse.from(student);
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        return StudentResponse.from(student, enrollments);
     }
 
     @Override
@@ -236,7 +246,8 @@ public class StudentServiceImpl implements StudentService {
         student = studentRepository.save(student);
         syncCourseEnrollment(student);
 
-        return StudentResponse.from(student);
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        return StudentResponse.from(student, enrollments);
     }
 
     @Override
@@ -247,7 +258,8 @@ public class StudentServiceImpl implements StudentService {
         user.setActive(!user.isActive());
         userRepository.save(user);
 
-        return StudentResponse.from(student);
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        return StudentResponse.from(student, enrollments);
     }
 
     @Override
@@ -256,7 +268,9 @@ public class StudentServiceImpl implements StudentService {
         Student student = findOrThrow(id);
         student.setPlacementStatus(placementStatus);
         student = studentRepository.save(student);
-        return StudentResponse.from(student);
+
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        return StudentResponse.from(student, enrollments);
     }
 
     @Override
@@ -264,10 +278,10 @@ public class StudentServiceImpl implements StudentService {
     public StudentResponse assignToBatch(Long studentId, Long batchId) {
         Student student = findOrThrow(studentId);
         assignBatch(student, batchId);
-        syncCourseEnrollment(student);
         student = studentRepository.save(student);
 
-        return StudentResponse.from(student);
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        return StudentResponse.from(student, enrollments);
     }
 
     /**
@@ -356,26 +370,31 @@ public class StudentServiceImpl implements StudentService {
 
     private void assignBatch(Student student, Long batchId) {
         if (batchId == null) {
-            student.setBatch(null);
-            student.setCourse(null);
-            return;
-        }
-        Batch currentBatch = student.getBatch();
-        if (currentBatch != null && currentBatch.getId().equals(batchId)) {
             return;
         }
         Batch batch = findBatchOrThrow(batchId);
-        long currentCount = studentRepository.findByBatchId(batchId).size();
+        if (student.getId() != null && enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), batchId)) {
+            return;
+        }
+        long currentCount = enrollmentRepository.countByBatchIdAndActiveTrue(batchId);
         if (currentCount >= batch.getMaxStudents()) {
             throw new ConflictException("Batch '" + batch.getName() + "' is full (" + batch.getMaxStudents() + " max)");
         }
         // Schedule conflict: new batch must not overlap with any of the student's active enrollment batches.
-        // For pure batch reassignment we exclude legacy batch being replaced (includeLegacyBatch=false)
         if (student.getId() != null) {
-            batchScheduleConflictValidator.validate(student, batch, null, false);
+            batchScheduleConflictValidator.validate(student, batch, null);
         }
-        student.setBatch(batch);
-        if (batch.getCourse() != null) {
+        if (student.getId() != null && batch.getCourse() != null) {
+            Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(student.getId(), batch.getCourse().getId())
+                    .orElseGet(() -> {
+                        Enrollment e = new Enrollment();
+                        e.setStudent(student);
+                        e.setCourse(batch.getCourse());
+                        return e;
+                    });
+            enrollment.setBatch(batch);
+            enrollment.setActive(true);
+            enrollmentRepository.save(enrollment);
             student.setCourse(batch.getCourse());
         }
     }
@@ -403,7 +422,9 @@ public class StudentServiceImpl implements StudentService {
         } else if (request.getCollegeName() != null && request.getCollegeName().isBlank()) {
             student.setCollege(null);
         }
-        assignBatch(student, request.getBatchId());
+        if (request.getBatchId() != null) {
+            assignBatch(student, request.getBatchId());
+        }
         if (request.getCourseId() != null) {
             Course course = findCourseOrThrow(request.getCourseId());
             if (course.getStatus() != CourseStatus.PUBLISHED &&
@@ -456,7 +477,14 @@ public class StudentServiceImpl implements StudentService {
                         cb.like(cb.lower(root.get("enrollmentNo")), pattern)));
             }
             if (batchId != null) {
-                predicates.add(cb.equal(root.get("batch").get("id"), batchId));
+                var subquery = query.subquery(Long.class);
+                var enrollmentRoot = subquery.from(Enrollment.class);
+                subquery.select(enrollmentRoot.get("student").get("id"))
+                        .where(cb.and(
+                                cb.equal(enrollmentRoot.get("batch").get("id"), batchId),
+                                cb.isTrue(enrollmentRoot.get("active"))
+                        ));
+                predicates.add(root.get("id").in(subquery));
             }
             if ("active".equalsIgnoreCase(status)) {
                 predicates.add(cb.isTrue(root.get("user").get("active")));
@@ -654,7 +682,7 @@ public class StudentServiceImpl implements StudentService {
 
                     // Check batch capacity taking into account seats already assigned in this import
                     Long bId = resolvedBatch.getId();
-                    int currentCount = batchCapacityTracker.computeIfAbsent(bId, id -> (int) studentRepository.countByBatchId(id));
+                    int currentCount = batchCapacityTracker.computeIfAbsent(bId, id -> (int) enrollmentRepository.countByBatchIdAndActiveTrue(id));
                     if (currentCount >= resolvedBatch.getMaxStudents()) {
                         errors.add(new StudentImportError(rowNum, name, email, "Batch '" + resolvedBatch.getName() + "' is full (" + resolvedBatch.getMaxStudents() + " max capacity)"));
                         continue;
@@ -697,17 +725,30 @@ public class StudentServiceImpl implements StudentService {
                         courseToAttach = courseRepository.findById(fCourseId).orElse(null);
                         student.setCourse(courseToAttach);
                     }
-                    if (fBatchId != null) {
-                        Batch batchToAttach = batchRepository.findById(fBatchId).orElse(null);
-                        student.setBatch(batchToAttach);
-                    }
-                    student = studentRepository.save(student);
+                    Student savedStudent = studentRepository.save(student);
 
                     if (courseToAttach != null) {
-                        syncCourseEnrollment(student);
+                        syncCourseEnrollment(savedStudent);
+                    }
+                    if (fBatchId != null) {
+                        Batch batchToAttach = batchRepository.findById(fBatchId).orElse(null);
+                        final Course finalCourse = courseToAttach;
+                        if (batchToAttach != null && finalCourse != null) {
+                            Enrollment e = enrollmentRepository.findByStudentIdAndCourseId(savedStudent.getId(), finalCourse.getId())
+                                    .orElseGet(() -> {
+                                        Enrollment en = new Enrollment();
+                                        en.setStudent(savedStudent);
+                                        en.setCourse(finalCourse);
+                                        return en;
+                                    });
+                            e.setBatch(batchToAttach);
+                            e.setActive(true);
+                            enrollmentRepository.save(e);
+                        }
                     }
 
-                    return StudentResponse.from(student);
+                    List<Enrollment> studentEnrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(savedStudent.getId());
+                    return StudentResponse.from(savedStudent, studentEnrollments);
                 });
 
                 if (created != null) {

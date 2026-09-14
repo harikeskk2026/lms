@@ -242,7 +242,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Long> batchIds = myBatchEntities.stream().map(Batch::getId).toList();
         long myStudentsCount = batchIds.isEmpty()
                 ? 0L
-                : studentRepository.findByBatchIdIn(batchIds).size();
+                : enrollmentRepository.findActiveStudentsByBatchIdIn(batchIds).size();
 
         long myBatchesCount = myBatchEntities.size();
 
@@ -272,7 +272,7 @@ public class DashboardServiceImpl implements DashboardService {
         // Real per-batch: actual student counts + progress from completed/total daily classes
         List<TrainerDashboardResponse.TrainerBatchItem> myBatches = myBatchEntities.stream()
                 .map(b -> {
-                    long studentCount = studentRepository.findByBatchId(b.getId()).size();
+                    long studentCount = enrollmentRepository.countByBatchIdAndActiveTrue(b.getId());
                     long totalClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(b.getId()).size();
                     long completedClasses = dailyClassRepository.countByBatchIdAndStatus(b.getId(), com.careerlabs.lms.api.attendance.entity.ClassStatus.COMPLETED);
                     int progressPct = totalClasses > 0 ? (int) (completedClasses * 100L / totalClasses) : 0;
@@ -298,7 +298,7 @@ public class DashboardServiceImpl implements DashboardService {
                         sub.getAssignment() != null ? sub.getAssignment().getId() : null,
                         sub.getAssignment() != null ? sub.getAssignment().getTitle() : "Assignment",
                         sub.getStudent() != null && sub.getStudent().getUser() != null ? sub.getStudent().getUser().getName() : "Student",
-                        sub.getStudent() != null && sub.getStudent().getBatch() != null ? sub.getStudent().getBatch().getName() : "Batch",
+                        sub.getAssignment() != null && sub.getAssignment().getBatch() != null ? sub.getAssignment().getBatch().getName() : "Batch",
                         sub.getSubmittedAt() != null ? sub.getSubmittedAt().toString() : ""
                 ))
                 .toList();
@@ -567,20 +567,13 @@ public class DashboardServiceImpl implements DashboardService {
 
     private List<StudentDashboardResponse.UpcomingClass> buildUpcomingClasses(Student student) {
         LocalDateTime now = LocalDateTime.now();
-        List<Long> batchIds = new java.util.ArrayList<>();
-        if (student.getBatch() != null) {
-            batchIds.add(student.getBatch().getId());
-        }
-        try {
-            List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
-            if (enrollments != null) {
-                for (Enrollment e : enrollments) {
-                    if (e.getBatch() != null && !batchIds.contains(e.getBatch().getId())) {
-                        batchIds.add(e.getBatch().getId());
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        List<Long> batchIds = enrollments.stream()
+                .map(Enrollment::getBatch)
+                .filter(java.util.Objects::nonNull)
+                .map(Batch::getId)
+                .distinct()
+                .toList();
 
         List<DailyClass> classes;
         if (batchIds.isEmpty()) {

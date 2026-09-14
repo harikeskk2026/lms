@@ -65,6 +65,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 
 @Service
 public class ReportServiceImpl implements ReportService {
@@ -94,6 +96,7 @@ public class ReportServiceImpl implements ReportService {
     private final BatchRepository batchRepository;
     private final CourseRepository courseRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final AssignmentRepository assignmentRepository;
     private final AssignmentSubmissionRepository submissionRepository;
     private final QuizAttemptRepository quizAttemptRepository;
@@ -104,6 +107,7 @@ public class ReportServiceImpl implements ReportService {
     public ReportServiceImpl(BatchRepository batchRepository,
                               CourseRepository courseRepository,
                               StudentRepository studentRepository,
+                              EnrollmentRepository enrollmentRepository,
                               AssignmentRepository assignmentRepository,
                               AssignmentSubmissionRepository submissionRepository,
                               QuizAttemptRepository quizAttemptRepository,
@@ -113,12 +117,27 @@ public class ReportServiceImpl implements ReportService {
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.assignmentRepository = assignmentRepository;
         this.submissionRepository = submissionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
         this.attendanceRepository = attendanceRepository;
         this.dailyClassRepository = dailyClassRepository;
         this.reportValidator = reportValidator;
+    }
+
+    private String getStudentBatchNames(Student student) {
+        if (student == null || student.getId() == null) {
+            return null;
+        }
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        String names = enrollments.stream()
+                .map(Enrollment::getBatch)
+                .filter(java.util.Objects::nonNull)
+                .map(Batch::getName)
+                .distinct()
+                .collect(Collectors.joining(", "));
+        return names.isEmpty() ? null : names;
     }
 
     @Override
@@ -163,7 +182,7 @@ public class ReportServiceImpl implements ReportService {
             totalLate += (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.LATE).count();
             totalExcused += (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.EXCUSED).count();
 
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             if (request.getStudentId() != null) {
                 students = students.stream().filter(s -> s.getId().equals(request.getStudentId())).toList();
             }
@@ -323,9 +342,10 @@ public class ReportServiceImpl implements ReportService {
                 .toList();
 
         List<Batch> allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
-        Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : studentRepository
-                .findByBatchIdIn(allBatches.stream().map(Batch::getId).toList()).stream()
-                .collect(Collectors.groupingBy(s -> s.getBatch().getId()));
+        Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : enrollmentRepository
+                .findByBatchIdInAndActiveTrue(allBatches.stream().map(Batch::getId).toList()).stream()
+                .filter(e -> e.getBatch() != null && e.getStudent() != null)
+                .collect(Collectors.groupingBy(e -> e.getBatch().getId(), Collectors.mapping(Enrollment::getStudent, Collectors.toList())));
         Map<Long, List<Assignment>> assignmentsByBatch = allBatches.isEmpty() ? Map.of() : assignmentRepository
                 .findByBatchIdInAndStatusIn(allBatches.stream().map(Batch::getId).toList(),
                         List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED)).stream()
@@ -379,7 +399,7 @@ public class ReportServiceImpl implements ReportService {
         return new ReportStudentResponse(
                 student.getId(),
                 student.getUser().getName(),
-                student.getBatch() != null ? student.getBatch().getName() : null,
+                getStudentBatchNames(student),
                 attendancePct,
                 quizPct,
                 submissions.size(),
@@ -400,7 +420,7 @@ public class ReportServiceImpl implements ReportService {
     @Transactional(readOnly = true)
     public List<ReportStudentResponse> getAtRiskStudents(Long batchId) {
         reportValidator.validateBatchExists(batchId);
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
 
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         Map<Long, List<AssignmentSubmission>> byStudent = submissionsByStudent(studentIds);
@@ -420,7 +440,7 @@ public class ReportServiceImpl implements ReportService {
                 atRisk.add(new ReportStudentResponse(
                         student.getId(),
                         student.getUser().getName(),
-                        student.getBatch() != null ? student.getBatch().getName() : null,
+                        getStudentBatchNames(student),
                         null,
                         quizPct,
                         submissions.size(),
@@ -452,7 +472,7 @@ public class ReportServiceImpl implements ReportService {
         }
 
         if (batchId != null) {
-            for (Student student : studentRepository.findByBatchId(batchId)) {
+            for (Student student : enrollmentRepository.findActiveStudentsByBatchId(batchId)) {
                 statusCounts.merge(student.getPlacementStatus(), 1L, Long::sum);
             }
         } else {
@@ -466,9 +486,10 @@ public class ReportServiceImpl implements ReportService {
         double conversionRate = total > 0 ? round1(placed * 100.0 / total) : 0.0;
 
         List<Batch> allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
-        Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : studentRepository
-                .findByBatchIdIn(allBatches.stream().map(Batch::getId).toList()).stream()
-                .collect(Collectors.groupingBy(s -> s.getBatch().getId()));
+        Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : enrollmentRepository
+                .findByBatchIdInAndActiveTrue(allBatches.stream().map(Batch::getId).toList()).stream()
+                .filter(e -> e.getBatch() != null && e.getStudent() != null)
+                .collect(Collectors.groupingBy(e -> e.getBatch().getId(), Collectors.mapping(Enrollment::getStudent, Collectors.toList())));
         List<PlacementReportResponse.BatchPlacement> byBatch = allBatches.stream()
                 .map(b -> toBatchPlacement(b, studentsByBatch.getOrDefault(b.getId(), List.of())))
                 .toList();
@@ -594,7 +615,7 @@ public class ReportServiceImpl implements ReportService {
         List<AssignmentAnalyticsResponse.BatchCompletion> byBatch = new ArrayList<>();
 
         for (Batch batch : batches) {
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             List<Assignment> assignments = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
                     batch.getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
             List<Long> assignmentIds = assignments.stream().map(Assignment::getId).toList();
@@ -628,7 +649,7 @@ public class ReportServiceImpl implements ReportService {
     @Transactional(readOnly = true)
     public EngagementResponse getEngagement(Long batchId) {
         reportValidator.validateBatchExists(batchId);
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         if (studentIds.isEmpty()) {
             return new EngagementResponse(0, 0, 0, 0, 0, 0);
@@ -723,7 +744,7 @@ public class ReportServiceImpl implements ReportService {
     @Transactional(readOnly = true)
     public List<DecliningStudentResponse> getDecliningStudents(Long batchId) {
         reportValidator.validateBatchExists(batchId);
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
 
         List<DecliningStudentResponse> declining = new ArrayList<>();
         for (Student student : students) {
@@ -742,7 +763,7 @@ public class ReportServiceImpl implements ReportService {
                 declining.add(new DecliningStudentResponse(
                         student.getId(),
                         student.getUser().getName(),
-                        student.getBatch() != null ? student.getBatch().getName() : null,
+                        getStudentBatchNames(student),
                         round1(current.value()),
                         round1(previous.value()),
                         round1(change),
@@ -756,7 +777,7 @@ public class ReportServiceImpl implements ReportService {
     @Transactional(readOnly = true)
     public List<PlacementReadinessResponse> getPlacementReadiness(Long batchId) {
         reportValidator.validateBatchExists(batchId);
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         Map<Long, List<AssignmentSubmission>> byStudent = submissionsByStudent(studentIds);
         Map<Long, List<QuizAttempt>> quizByStudent = quizAttemptsByStudent(studentIds);
@@ -782,7 +803,7 @@ public class ReportServiceImpl implements ReportService {
                     return new PlacementReadinessResponse(
                             student.getId(),
                             student.getUser().getName(),
-                            student.getBatch() != null ? student.getBatch().getName() : null,
+                            getStudentBatchNames(student),
                             performancePct,
                             quizPct,
                             completionPct,
@@ -798,7 +819,7 @@ public class ReportServiceImpl implements ReportService {
     @Transactional(readOnly = true)
     public List<CorrelationResponse> getCorrelations(Long batchId) {
         reportValidator.validateBatchExists(batchId);
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         Map<Long, List<AssignmentSubmission>> byStudent = submissionsByStudent(studentIds);
         Map<Long, List<QuizAttempt>> quizByStudent = quizAttemptsByStudent(studentIds);
@@ -838,10 +859,11 @@ public class ReportServiceImpl implements ReportService {
     // ---------------------------------------------------------------- helpers
 
     private List<Student> filterStudents(Long batchId, Long courseId) {
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
         if (courseId != null) {
+            List<Long> activeStudentIds = enrollmentRepository.findActiveStudentIdsByCourseId(courseId);
             students = students.stream()
-                    .filter(s -> s.getCourse() != null && s.getCourse().getId().equals(courseId))
+                    .filter(s -> activeStudentIds.contains(s.getId()))
                     .toList();
         }
         return students;
@@ -959,7 +981,7 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private BatchHealthResponse toBatchHealth(Batch batch) {
-        List<Student> students = studentRepository.findByBatchId(batch.getId());
+        List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         List<Assignment> assignments = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
                 batch.getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED));
@@ -993,14 +1015,14 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private List<Map<String, Object>> exportStudents(Long batchId) {
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
         return students.stream()
                 .map(s -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("name", s.getUser() != null ? s.getUser().getName() : "Student #" + s.getId());
                     row.put("email", s.getUser() != null ? s.getUser().getEmail() : "");
                     row.put("enrollmentNo", s.getEnrollmentNo() != null ? s.getEnrollmentNo() : "");
-                    row.put("batch", s.getBatch() != null ? s.getBatch().getName() : "");
+                    row.put("batch", getStudentBatchNames(s));
                     row.put("course", s.getCourse() != null ? s.getCourse().getTitle() : "");
                     row.put("college", s.getCollege() != null ? s.getCollege().getName() : "");
                     row.put("placementStatus", s.getPlacementStatus() != null ? s.getPlacementStatus().name() : "SEEKING");
@@ -1027,7 +1049,7 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private List<Map<String, Object>> exportAttendance(Long batchId) {
-        List<Student> students = batchId != null ? studentRepository.findByBatchId(batchId) : studentRepository.findAll();
+        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
         return students.stream()
                 .map(s -> {
                     List<Attendance> attendances = attendanceRepository.findByStudentId(s.getId());
@@ -1041,7 +1063,7 @@ public class ReportServiceImpl implements ReportService {
                     row.put("name", s.getUser() != null ? s.getUser().getName() : "Student #" + s.getId());
                     row.put("email", s.getUser() != null ? s.getUser().getEmail() : "");
                     row.put("enrollmentNo", s.getEnrollmentNo() != null ? s.getEnrollmentNo() : "");
-                    row.put("batch", s.getBatch() != null ? s.getBatch().getName() : "");
+                    row.put("batch", getStudentBatchNames(s));
                     row.put("present", present);
                     row.put("absent", absent);
                     row.put("late", late);
@@ -1066,7 +1088,7 @@ public class ReportServiceImpl implements ReportService {
         return new ReportStudentResponse(
                 student.getId(),
                 student.getUser().getName(),
-                student.getBatch() != null ? student.getBatch().getName() : null,
+                getStudentBatchNames(student),
                 attPct,
                 quizPct,
                 submissions.size(),
@@ -1213,11 +1235,13 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private Double completionPctForStudent(Student student, int submittedCount) {
-        if (student.getBatch() == null) {
+        List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+        if (activeBatches.isEmpty()) {
             return null;
         }
-        long assignmentCount = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
-                student.getBatch().getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED)).size();
+        List<Long> batchIds = activeBatches.stream().map(Batch::getId).toList();
+        long assignmentCount = assignmentRepository.findByBatchIdInAndStatusInOrderByDueDateAsc(
+                batchIds, List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED)).size();
         return assignmentCount > 0 ? Math.min(100.0, round1(submittedCount * 100.0 / assignmentCount)) : null;
     }
 

@@ -63,7 +63,9 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
     public boolean isEligible(Announcement announcement, Student student) {
         try {
             if (announcement.getBatch() != null) {
-                if (student.getBatch() == null || !student.getBatch().getId().equals(announcement.getBatch().getId())) {
+                boolean batchEnrolled = enrollmentRepository != null && student.getId() != null
+                        && enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), announcement.getBatch().getId());
+                if (!batchEnrolled) {
                     return false;
                 }
             }
@@ -75,11 +77,9 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
             if (announcement.getCourse() != null) {
                 Long targetCourseId = announcement.getCourse().getId();
                 boolean directMatch = student.getCourse() != null && targetCourseId.equals(student.getCourse().getId());
-                boolean batchMatch = student.getBatch() != null && student.getBatch().getCourse() != null
-                        && targetCourseId.equals(student.getBatch().getCourse().getId());
                 boolean enrollmentMatch = enrollmentRepository != null && student.getId() != null
                         && enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), targetCourseId);
-                if (!directMatch && !batchMatch && !enrollmentMatch) {
+                if (!directMatch && !enrollmentMatch) {
                     return false;
                 }
             }

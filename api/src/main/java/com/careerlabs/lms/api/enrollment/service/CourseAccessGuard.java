@@ -77,18 +77,7 @@ public class CourseAccessGuard {
             return false;
         }
         return studentRepository.findByUserId(principal.id())
-                .map(student -> {
-                    boolean assignedInBatch = student.getBatch() != null
-                            && student.getBatch().getCourse() != null
-                            && courseId.equals(student.getBatch().getCourse().getId());
-                    if (assignedInBatch) {
-                        return true;
-                    }
-                    if (student.getId() != null) {
-                        return enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), courseId);
-                    }
-                    return false;
-                })
+                .map(student -> student.getId() != null && enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), courseId))
                 .orElse(false);
     }
 

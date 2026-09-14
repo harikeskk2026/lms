@@ -12,6 +12,8 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.batch.entity.Batch;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,16 +27,19 @@ public class AttendanceGoalServiceImpl implements AttendanceGoalService {
     private final AttendanceGoalRepository attendanceGoalRepository;
     private final AttendanceRepository attendanceRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
 
     public AttendanceGoalServiceImpl(
             AttendanceGoalRepository attendanceGoalRepository,
             AttendanceRepository attendanceRepository,
             StudentRepository studentRepository,
+            EnrollmentRepository enrollmentRepository,
             UserRepository userRepository) {
         this.attendanceGoalRepository = attendanceGoalRepository;
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.userRepository = userRepository;
     }
 
@@ -85,8 +90,14 @@ public class AttendanceGoalServiceImpl implements AttendanceGoalService {
 
         LocalDate joiningDate = student.getJoiningDate();
         if (joiningDate == null) {
-            if (student.getBatch() != null && student.getBatch().getStartDate() != null) {
-                joiningDate = student.getBatch().getStartDate();
+            List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+            LocalDate earliestBatchStart = activeBatches.stream()
+                    .map(Batch::getStartDate)
+                    .filter(java.util.Objects::nonNull)
+                    .min(java.util.Comparator.naturalOrder())
+                    .orElse(null);
+            if (earliestBatchStart != null) {
+                joiningDate = earliestBatchStart;
             } else if (earliestAttendance != null) {
                 joiningDate = earliestAttendance;
             } else if (student.getCreatedAt() != null) {

@@ -318,32 +318,23 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         Set<Long> batchIds = new HashSet<>();
         Set<Long> courseIds = new HashSet<>();
 
-        if (student.getBatch() != null) {
-            batchIds.add(student.getBatch().getId());
-            if (student.getBatch().getCourse() != null) {
-                courseIds.add(student.getBatch().getCourse().getId());
-            }
-        }
         if (student.getCourse() != null) {
             courseIds.add(student.getCourse().getId());
         }
 
-        try {
-            List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
-            if (enrollments != null) {
-                for (Enrollment e : enrollments) {
-                    if (e.getBatch() != null) {
-                        batchIds.add(e.getBatch().getId());
-                        if (e.getBatch().getCourse() != null) {
-                            courseIds.add(e.getBatch().getCourse().getId());
-                        }
-                    }
-                    if (e.getCourse() != null) {
-                        courseIds.add(e.getCourse().getId());
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        if (enrollments != null) {
+            for (Enrollment e : enrollments) {
+                if (e.getBatch() != null) {
+                    batchIds.add(e.getBatch().getId());
+                    if (e.getBatch().getCourse() != null) {
+                        courseIds.add(e.getBatch().getCourse().getId());
                     }
                 }
+                if (e.getCourse() != null) {
+                    courseIds.add(e.getCourse().getId());
+                }
             }
-        } catch (Exception ignored) {
         }
 
         return new StudentScope(batchIds, courseIds);

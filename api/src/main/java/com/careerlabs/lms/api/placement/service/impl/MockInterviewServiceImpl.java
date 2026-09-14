@@ -11,6 +11,7 @@ import com.careerlabs.lms.api.placement.repository.MockInterviewCandidateReposit
 import com.careerlabs.lms.api.placement.repository.MockInterviewRepository;
 import com.careerlabs.lms.api.placement.repository.PreparationMaterialRepository;
 import com.careerlabs.lms.api.placement.service.MockInterviewService;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import org.springframework.stereotype.Service;
@@ -32,15 +33,18 @@ public class MockInterviewServiceImpl implements MockInterviewService {
     private final MockInterviewRepository mockInterviewRepository;
     private final MockInterviewCandidateRepository candidateRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final PreparationMaterialRepository preparationMaterialRepository;
 
     public MockInterviewServiceImpl(MockInterviewRepository mockInterviewRepository,
                                     MockInterviewCandidateRepository candidateRepository,
                                     StudentRepository studentRepository,
+                                    EnrollmentRepository enrollmentRepository,
                                     PreparationMaterialRepository preparationMaterialRepository) {
         this.mockInterviewRepository = mockInterviewRepository;
         this.candidateRepository = candidateRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.preparationMaterialRepository = preparationMaterialRepository;
     }
 
@@ -193,7 +197,10 @@ public class MockInterviewServiceImpl implements MockInterviewService {
                 if (batchIds == null || batchIds.isEmpty()) {
                     throw new BadRequestException("Select at least one batch");
                 }
-                pool.addAll(studentRepository.findByUser_ActiveTrueAndBatchIdIn(batchIds));
+                List<Student> students = enrollmentRepository.findActiveStudentsByBatchIdIn(batchIds).stream()
+                        .filter(s -> s.getUser() != null && s.getUser().isActive())
+                        .toList();
+                pool.addAll(students);
             }
             case COURSE -> {
                 if (courseIds == null || courseIds.isEmpty()) {
@@ -206,7 +213,9 @@ public class MockInterviewServiceImpl implements MockInterviewService {
                 boolean hasBatchFilter = batchIds != null && !batchIds.isEmpty();
                 boolean hasCourseFilter = courseIds != null && !courseIds.isEmpty();
                 if (hasBatchFilter) {
-                    source.addAll(studentRepository.findByUser_ActiveTrueAndBatchIdIn(batchIds));
+                    source.addAll(enrollmentRepository.findActiveStudentsByBatchIdIn(batchIds).stream()
+                            .filter(s -> s.getUser() != null && s.getUser().isActive())
+                            .toList());
                 } else if (hasCourseFilter) {
                     source.addAll(studentRepository.findByUser_ActiveTrueAndCourseIdIn(courseIds));
                 } else {

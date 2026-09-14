@@ -107,20 +107,21 @@ class AnnouncementPlaceholderResolverTest {
     }
 
     @Test
-    @DisplayName("Includes batch course if student has batch with course")
-    void variablesFor_includesBatchCourse() {
+    @DisplayName("Includes active batch names from enrollments")
+    void variablesFor_includesBatchNames() {
+        Batch b1 = new Batch();
+        b1.setName("Batch Alpha");
+        Batch b2 = new Batch();
+        b2.setName("Batch Beta");
+        when(enrollmentRepository.findActiveBatchesByStudentId(100L))
+                .thenReturn(List.of(b1, b2));
         when(enrollmentRepository.findActiveCourseTitlesByStudentId(100L))
                 .thenReturn(List.of("Python Fundamentals"));
 
-        Batch batch = new Batch();
-        Course batchCourse = new Course();
-        batchCourse.setTitle("DevOps Essentials");
-        batch.setCourse(batchCourse);
-        student.setBatch(batch);
-
         Map<String, String> vars = resolver.variablesFor(student);
 
-        assertEquals("Python Fundamentals, DevOps Essentials", vars.get("courseName"));
+        assertEquals("Batch Alpha, Batch Beta", vars.get("batchName"));
+        assertEquals("Python Fundamentals", vars.get("courseName"));
     }
 
     @Test

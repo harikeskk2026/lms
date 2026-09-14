@@ -96,8 +96,6 @@ export default function StudentDetailPage() {
     name: student.name,
     phone: student.phone,
     placementStatus: student.placementStatus,
-    batchId: student.batch?.id || null,
-    courseId: student.course?.id || null,
     ...overrides,
   })
 
@@ -249,19 +247,27 @@ export default function StudentDetailPage() {
             )}
           </div>
           <div className="glass-card p-5">
-            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-3">Current Batch</h3>
-            {student.batch ? (
-              <div className="space-y-2">
-                <p className="font-semibold text-gray-800 dark:text-white">{student.batch.name}</p>
-                <p className="text-sm text-gray-500">{student.batch.course?.title}</p>
-                <p className="text-xs text-gray-400">{student.batch.timing} · {student.batch.mode}</p>
-                {student.batch.startDate && (
-                  <p className="text-xs text-gray-400">
-                    {format(new Date(student.batch.startDate), 'dd MMM yyyy')} – {student.batch.endDate ? format(new Date(student.batch.endDate), 'dd MMM yyyy') : '—'}
-                  </p>
-                )}
+            <h3 className="font-display font-bold text-gray-800 dark:text-white mb-3">
+              Enrolled Batches {student.batches && student.batches.length > 1 ? `(${student.batches.length})` : ''}
+            </h3>
+            {student.batches && student.batches.length > 0 ? (
+              <div className="space-y-4 divide-y divide-gray-100 dark:divide-gray-800">
+                {student.batches.map(b => (
+                  <div key={b.id} className="space-y-1 pt-2 first:pt-0">
+                    <p className="font-semibold text-gray-800 dark:text-white">{b.name}</p>
+                    <p className="text-sm text-gray-500">{b.course?.title}</p>
+                    <p className="text-xs text-gray-400">{b.timing} · {b.mode}</p>
+                    {b.startDate && (
+                      <p className="text-xs text-gray-400">
+                        {format(new Date(b.startDate), 'dd MMM yyyy')} – {b.endDate ? format(new Date(b.endDate), 'dd MMM yyyy') : '—'}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : <p className="text-sm text-gray-400">Not enrolled in any batch</p>}
+            ) : (
+              <p className="text-sm text-gray-400">Not enrolled in any batch</p>
+            )}
           </div>
           <div className="glass-card p-6">
             <h3 className="font-display font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">

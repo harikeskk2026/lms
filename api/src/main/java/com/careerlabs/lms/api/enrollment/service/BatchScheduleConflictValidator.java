@@ -33,80 +33,33 @@ public class BatchScheduleConflictValidator {
      * (used when checking duplicate-course reactivation so we don't compare the batch against itself).
      */
     public void validate(Student student, Batch newBatch, Long excludeCourseId) {
-        validate(student, newBatch, excludeCourseId, true);
-    }
-
-    /**
-     * @param includeLegacyBatch when false, legacy student.batch is not compared. Use false for
-     *                           pure batch reassignment (assignToBatch) where the old batch is being replaced.
-     */
-    public void validate(Student student, Batch newBatch, Long excludeCourseId, boolean includeLegacyBatch) {
-        if (student == null || newBatch == null) {
+        if (student == null || newBatch == null || student.getId() == null) {
             return;
         }
 
-        // For new (not yet persisted) students id may be null & no enrollments to check
-        if (student.getId() != null) {
-            List<Enrollment> activeEnrollments = enrollmentRepository
-                    .findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        List<Enrollment> activeEnrollments = enrollmentRepository
+                .findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
 
-            for (Enrollment enrollment : activeEnrollments) {
-                if (excludeCourseId != null && enrollment.getCourse() != null
-                        && enrollment.getCourse().getId().equals(excludeCourseId)) {
-                    continue;
-                }
-                Batch existingBatch = enrollment.getBatch();
-                if (existingBatch == null) {
-                    continue;
-                }
-                if (!existingBatch.isActive()) {
-                    continue;
-                }
-                if (existingBatch.getId() != null && existingBatch.getId().equals(newBatch.getId())) {
-                    continue;
-                }
-                if (ScheduleOverlapUtil.isScheduleOverlap(existingBatch, newBatch)) {
-                    throw new ConflictException(formatMessage(existingBatch));
-                }
+        for (Enrollment enrollment : activeEnrollments) {
+            if (excludeCourseId != null && enrollment.getCourse() != null
+                    && enrollment.getCourse().getId().equals(excludeCourseId)) {
+                continue;
             }
-
-            // Legacy students.batch_id: if student has a batch assigned but that batch is not
-            // represented as an enrollment batch, also check it. Prevent duplicate check if already covered.
-            // Also, if the legacy batch's course enrollment is inactive/historical, don't consider it.
-            if (includeLegacyBatch) {
-                Batch legacyBatch = student.getBatch();
-                if (legacyBatch != null && legacyBatch.isActive()
-                        && legacyBatch.getId() != null && !legacyBatch.getId().equals(newBatch.getId())) {
-                    boolean alreadyChecked = activeEnrollments.stream()
-                            .anyMatch(e -> e.getBatch() != null
-                                    && e.getBatch().getId() != null
-                                    && e.getBatch().getId().equals(legacyBatch.getId()));
-                    if (!alreadyChecked) {
-                        // If legacy batch's course has an inactive enrollment, legacy is historical – don't block
-                        boolean shouldSkipLegacy = false;
-                        if (legacyBatch.getCourse() != null && legacyBatch.getCourse().getId() != null) {
-                            Long legacyCourseId = legacyBatch.getCourse().getId();
-                            var legacyEnrollmentOpt = enrollmentRepository.findByStudentIdAndCourseId(student.getId(), legacyCourseId);
-                            if (legacyEnrollmentOpt.isPresent() && !legacyEnrollmentOpt.get().isActive()) {
-                                shouldSkipLegacy = true;
-                            }
-                        }
-                        if (!shouldSkipLegacy && ScheduleOverlapUtil.isScheduleOverlap(legacyBatch, newBatch)) {
-                            throw new ConflictException(formatMessage(legacyBatch));
-                        }
-                    }
-                }
+            Batch existingBatch = enrollment.getBatch();
+            if (existingBatch == null || !existingBatch.isActive()) {
+                continue;
             }
-        } else if (includeLegacyBatch) {
-            // New student without id but with legacy batch already set (e.g., create flow before save)
-            Batch legacyBatch = student.getBatch();
-            if (legacyBatch != null && legacyBatch.isActive()
-                    && legacyBatch.getId() != null && !legacyBatch.getId().equals(newBatch.getId())) {
-                if (ScheduleOverlapUtil.isScheduleOverlap(legacyBatch, newBatch)) {
-                    throw new ConflictException(formatMessage(legacyBatch));
-                }
+            if (existingBatch.getId() != null && existingBatch.getId().equals(newBatch.getId())) {
+                continue;
+            }
+            if (ScheduleOverlapUtil.isScheduleOverlap(existingBatch, newBatch)) {
+                throw new ConflictException(formatMessage(existingBatch));
             }
         }
+    }
+
+    public void validate(Student student, Batch newBatch, Long excludeCourseId, boolean includeLegacyBatch) {
+        validate(student, newBatch, excludeCourseId);
     }
 
     private String formatMessage(Batch existingBatch) {

@@ -249,9 +249,6 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         // Backward compatibility: Only populate Student.course if the student has no primary course assigned
         if (student.getCourse() == null) {
             student.setCourse(course);
-            if (student.getBatch() == null && batch != null) {
-                student.setBatch(batch);
-            }
             studentRepository.save(student);
         }
 

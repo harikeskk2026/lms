@@ -200,12 +200,12 @@ public class CourseServiceImpl implements CourseService {
         return studentRepository.findByUserId(principal.id())
                 .map(student -> {
                     Set<Long> ids = new HashSet<>();
-                    if (student.getBatch() != null && student.getBatch().getCourse() != null) {
-                        ids.add(student.getBatch().getCourse().getId());
-                    }
                     if (student.getId() != null) {
                         enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId())
-                                .forEach(enrollment -> ids.add(enrollment.getCourse().getId()));
+                                .stream()
+                                .map(com.careerlabs.lms.api.enrollment.entity.Enrollment::getCourse)
+                                .filter(java.util.Objects::nonNull)
+                                .forEach(c -> ids.add(c.getId()));
                     }
                     return ids;
                 })

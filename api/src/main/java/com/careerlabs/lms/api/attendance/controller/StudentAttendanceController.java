@@ -39,6 +39,7 @@ public class StudentAttendanceController {
 
     private final AttendanceService attendanceService;
     private final StudentRepository studentRepository;
+    private final com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository enrollmentRepository;
     private final AttendanceRiskService attendanceRiskService;
     private final AttendanceGoalService attendanceGoalService;
     private final AttendanceCorrectionService attendanceCorrectionService;
@@ -46,11 +47,13 @@ public class StudentAttendanceController {
     public StudentAttendanceController(
             AttendanceService attendanceService,
             StudentRepository studentRepository,
+            com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository enrollmentRepository,
             AttendanceRiskService attendanceRiskService,
             AttendanceGoalService attendanceGoalService,
             AttendanceCorrectionService attendanceCorrectionService) {
         this.attendanceService = attendanceService;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.attendanceRiskService = attendanceRiskService;
         this.attendanceGoalService = attendanceGoalService;
         this.attendanceCorrectionService = attendanceCorrectionService;
@@ -61,11 +64,17 @@ public class StudentAttendanceController {
             @AuthenticationPrincipal JwtUserPrincipal principal,
             @RequestParam(required = false) ClassStatus status) {
         Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-        if (student == null || student.getBatch() == null) {
+        if (student == null) {
             return ResponseEntity.ok(ApiResponse.of(List.of()));
         }
-        Long batchId = student.getBatch().getId();
-        List<DailyClassResponse> response = attendanceService.getClasses(batchId, null, status);
+        List<com.careerlabs.lms.api.batch.entity.Batch> batches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+        if (batches.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.of(List.of()));
+        }
+        List<DailyClassResponse> response = new java.util.ArrayList<>();
+        for (com.careerlabs.lms.api.batch.entity.Batch b : batches) {
+            response.addAll(attendanceService.getClasses(b.getId(), null, status));
+        }
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

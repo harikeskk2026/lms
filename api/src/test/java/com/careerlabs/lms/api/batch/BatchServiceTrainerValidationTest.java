@@ -48,6 +48,8 @@ class BatchServiceTrainerValidationTest {
     private DailyClassRepository dailyClassRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository enrollmentRepository;
 
     @InjectMocks
     private BatchServiceImpl batchService;
@@ -239,7 +241,7 @@ class BatchServiceTrainerValidationTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(activeTrainer));
         when(batchRepository.findByTrainerIdAndActiveTrue(1L)).thenReturn(List.of());
         when(batchRepository.save(any(Batch.class))).thenReturn(existingBatch);
-        when(studentRepository.countByBatchId(50L)).thenReturn(0L);
+        when(enrollmentRepository.countByBatchIdAndActiveTrue(50L)).thenReturn(0L);
 
         BatchResponse res = batchService.toggleActive(50L);
 
@@ -262,7 +264,7 @@ class BatchServiceTrainerValidationTest {
         when(batchRepository.findByTrainerIdAndActiveTrue(1L)).thenReturn(List.of());
         when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
         when(batchRepository.save(any(Batch.class))).thenReturn(existingBatch);
-        when(studentRepository.countByBatchId(50L)).thenReturn(5L);
+        when(enrollmentRepository.countByBatchIdAndActiveTrue(50L)).thenReturn(5L);
 
         BatchResponse response = batchService.update(50L, createRequest(1L));
 

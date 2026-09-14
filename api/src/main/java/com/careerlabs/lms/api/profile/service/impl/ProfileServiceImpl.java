@@ -38,6 +38,10 @@ import java.util.Set;
  * ever act on their own account (userId comes from the JWT principal, never a
  * path/body parameter), and can never change their own role or activation state.
  */
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.batch.entity.Batch;
+import java.util.stream.Collectors;
+
 @Service
 public class ProfileServiceImpl implements ProfileService {
 
@@ -45,17 +49,20 @@ public class ProfileServiceImpl implements ProfileService {
 
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final AcademicDetailsRepository academicDetailsRepository;
     private final FileStorageService fileStorageService;
     private final PasswordEncoder passwordEncoder;
     private final TokenRevocationService tokenRevocationService;
 
     public ProfileServiceImpl(UserRepository userRepository, StudentRepository studentRepository,
+                               EnrollmentRepository enrollmentRepository,
                                AcademicDetailsRepository academicDetailsRepository,
                                FileStorageService fileStorageService, PasswordEncoder passwordEncoder,
                                TokenRevocationService tokenRevocationService) {
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.academicDetailsRepository = academicDetailsRepository;
         this.fileStorageService = fileStorageService;
         this.passwordEncoder = passwordEncoder;
@@ -144,6 +151,9 @@ public class ProfileServiceImpl implements ProfileService {
         AcademicDetails academic = academicDetailsRepository.findByStudentId(student.getId()).orElse(null);
         List<String> missing = missingAcademicFields(academic);
 
+        List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
+        String batchNames = activeBatches.stream().map(Batch::getName).collect(Collectors.joining(", "));
+
         return new ProfileResponse.StudentSection(
                 student.getEnrollmentNo(),
                 student.getAddress(),
@@ -152,7 +162,7 @@ public class ProfileServiceImpl implements ProfileService {
                 student.getGithubUrl(),
                 student.getCollege() != null ? student.getCollege().getName() : null,
                 student.getCourse() != null ? student.getCourse().getTitle() : null,
-                student.getBatch() != null ? student.getBatch().getName() : null,
+                batchNames.isEmpty() ? null : batchNames,
                 missing.isEmpty(),
                 missing);
     }

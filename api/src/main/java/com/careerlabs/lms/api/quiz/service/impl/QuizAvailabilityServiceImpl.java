@@ -70,9 +70,6 @@ public class QuizAvailabilityServiceImpl implements QuizAvailabilityService {
         }
 
         Set<Long> studentBatchIds = new HashSet<>();
-        if (student.getBatch() != null) {
-            studentBatchIds.add(student.getBatch().getId());
-        }
         Set<Long> studentCourseIds = new HashSet<>();
         if (student.getCourse() != null) {
             studentCourseIds.add(student.getCourse().getId());

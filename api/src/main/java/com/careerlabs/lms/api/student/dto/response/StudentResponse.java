@@ -9,8 +9,12 @@ import com.careerlabs.lms.api.student.entity.PlacementStatus;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.user.entity.User;
 
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public record StudentResponse(
         Long id,
@@ -25,26 +29,52 @@ public record StudentResponse(
         String githubUrl,
         String resumeUrl,
         PlacementStatus placementStatus,
-        BatchSummary batch,
+        List<BatchSummary> batches,
         CollegeSummary college,
         CourseSummary course,
+        List<CourseSummary> courses,
         Instant lastLoginAt,
         Instant createdAt,
         Instant updatedAt
 ) {
 
     public static StudentResponse from(Student student) {
+        return from(student, List.of());
+    }
+
+    public static StudentResponse from(Student student, List<Enrollment> enrollments) {
         User user = student.getUser();
-        Batch batch = student.getBatch();
         College college = student.getCollege();
-        Course course = student.getCourse();
+
+        List<BatchSummary> batchSummaries = new ArrayList<>();
+        List<CourseSummary> courseSummaries = new ArrayList<>();
+
+        if (enrollments != null) {
+            for (Enrollment e : enrollments) {
+                if (e.isActive()) {
+                    if (e.getBatch() != null) {
+                        batchSummaries.add(BatchSummary.from(e.getBatch()));
+                    }
+                    if (e.getCourse() != null) {
+                        Course c = e.getCourse();
+                        if (courseSummaries.stream().noneMatch(cs -> cs.id().equals(c.getId()))) {
+                            courseSummaries.add(new CourseSummary(c.getId(), c.getTitle()));
+                        }
+                    }
+                }
+            }
+        }
+
+        CourseSummary fallbackCourse = !courseSummaries.isEmpty()
+                ? courseSummaries.get(0)
+                : (student.getCourse() != null ? new CourseSummary(student.getCourse().getId(), student.getCourse().getTitle()) : null);
 
         return new StudentResponse(
                 student.getId(),
-                user.getName(),
-                user.getEmail(),
+                user != null ? user.getName() : null,
+                user != null ? user.getEmail() : null,
                 student.getPhone(),
-                user.isActive(),
+                user != null && user.isActive(),
                 student.getEnrollmentNo(),
                 student.getAddress(),
                 student.getQualification(),
@@ -52,10 +82,11 @@ public record StudentResponse(
                 student.getGithubUrl(),
                 student.getResumeUrl(),
                 student.getPlacementStatus(),
-                batch != null ? BatchSummary.from(batch) : null,
+                batchSummaries,
                 college != null ? new CollegeSummary(college.getId(), college.getName()) : null,
-                course != null ? new CourseSummary(course.getId(), course.getTitle()) : null,
-                user.getLastLoginAt(),
+                fallbackCourse,
+                courseSummaries,
+                user != null ? user.getLastLoginAt() : null,
                 student.getCreatedAt(),
                 student.getUpdatedAt());
     }

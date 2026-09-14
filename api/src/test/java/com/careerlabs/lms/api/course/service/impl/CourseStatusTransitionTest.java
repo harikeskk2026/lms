@@ -78,7 +78,7 @@ class CourseStatusTransitionTest {
     @BeforeEach
     void setUp() {
         courseService = new CourseServiceImpl(courseRepository, courseCodeGenerator, accessGuard, studentRepository, enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository);
-        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard);
+        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard, enrollmentRepository);
     }
 
     @Test

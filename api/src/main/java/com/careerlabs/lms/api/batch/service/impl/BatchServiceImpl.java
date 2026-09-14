@@ -16,6 +16,7 @@ import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.course.util.CourseDurationParser;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
@@ -44,6 +45,7 @@ public class BatchServiceImpl implements BatchService {
     private final DailyClassRepository dailyClassRepository;
     private final UserRepository userRepository;
     private final CourseAccessGuard accessGuard;
+    private final EnrollmentRepository enrollmentRepository;
 
     public BatchServiceImpl(BatchRepository batchRepository,
                              CourseRepository courseRepository,
@@ -51,7 +53,8 @@ public class BatchServiceImpl implements BatchService {
                              AssignmentRepository assignmentRepository,
                              DailyClassRepository dailyClassRepository,
                              UserRepository userRepository,
-                             CourseAccessGuard accessGuard) {
+                             CourseAccessGuard accessGuard,
+                             EnrollmentRepository enrollmentRepository) {
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.studentRepository = studentRepository;
@@ -59,6 +62,7 @@ public class BatchServiceImpl implements BatchService {
         this.dailyClassRepository = dailyClassRepository;
         this.userRepository = userRepository;
         this.accessGuard = accessGuard;
+        this.enrollmentRepository = enrollmentRepository;
     }
 
     @Override
@@ -75,10 +79,10 @@ public class BatchServiceImpl implements BatchService {
             batches = batchRepository.findPublishedByTrainerIdOrderByCreatedAtDesc(principal.id());
         } else if (principal != null && "STUDENT".equalsIgnoreCase(principal.role())) {
             Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-            if (student != null && student.getBatch() != null
-                    && student.getBatch().getCourse() != null
-                    && accessGuard.isReadableCourseStatus(student.getBatch().getCourse().getStatus())) {
-                batches = List.of(student.getBatch());
+            if (student != null) {
+                batches = enrollmentRepository.findActiveBatchesByStudentId(student.getId()).stream()
+                        .filter(b -> b.getCourse() != null && accessGuard.isReadableCourseStatus(b.getCourse().getStatus()))
+                        .toList();
             } else {
                 batches = List.of();
             }
@@ -88,8 +92,9 @@ public class BatchServiceImpl implements BatchService {
 
         List<Long> batchIds = batches.stream().map(Batch::getId).toList();
 
-        Map<Long, Long> countsByBatchId = batchIds.isEmpty() ? Map.of() : studentRepository.findByBatchIdIn(batchIds).stream()
-                .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.counting()));
+        Map<Long, Long> countsByBatchId = batchIds.isEmpty() ? Map.of() : enrollmentRepository.findByBatchIdInAndActiveTrue(batchIds).stream()
+                .filter(e -> e.getBatch() != null)
+                .collect(Collectors.groupingBy(e -> e.getBatch().getId(), Collectors.counting()));
 
         Set<Long> trainerIds = batches.stream()
                 .map(Batch::getTrainerId)
@@ -130,8 +135,7 @@ public class BatchServiceImpl implements BatchService {
                 }
             } else if ("STUDENT".equalsIgnoreCase(principal.role())) {
                 Student student = studentRepository.findByUserId(principal.id()).orElse(null);
-                boolean inBatch = student != null && student.getBatch() != null
-                        && student.getBatch().getId().equals(batch.getId());
+                boolean inBatch = student != null && enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), batch.getId());
                 boolean readable = batch.getCourse() != null
                         && accessGuard.isReadableCourseStatus(batch.getCourse().getStatus());
                 if (!inBatch || !readable) {
@@ -143,7 +147,7 @@ public class BatchServiceImpl implements BatchService {
         BatchResponse.TrainerSummary trainerSummary = tr != null
                 ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail())
                 : null;
-        return BatchResponse.from(batch, (int) studentRepository.countByBatchId(id), trainerSummary);
+        return BatchResponse.from(batch, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id), trainerSummary);
     }
 
     @Override
@@ -164,7 +168,7 @@ public class BatchServiceImpl implements BatchService {
         applyRequest(batch, request);
 
         Batch saved = batchRepository.save(batch);
-        return BatchResponse.from(saved, (int) studentRepository.countByBatchId(id));
+        return BatchResponse.from(saved, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id));
     }
 
     @Override
@@ -177,14 +181,14 @@ public class BatchServiceImpl implements BatchService {
         batch.setActive(!batch.isActive());
 
         Batch saved = batchRepository.save(batch);
-        return BatchResponse.from(saved, (int) studentRepository.countByBatchId(id));
+        return BatchResponse.from(saved, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id));
     }
 
     @Override
     @Transactional
     public void delete(Long id) {
         Batch batch = findOrThrow(id);
-        if (!studentRepository.findByBatchId(id).isEmpty()) {
+        if (enrollmentRepository.countByBatchIdAndActiveTrue(id) > 0) {
             throw new ConflictException("Cannot delete batch '" + batch.getName() + "': it has enrolled students. Reassign or remove them first.");
         }
         if (!assignmentRepository.findByBatchId(id).isEmpty()) {

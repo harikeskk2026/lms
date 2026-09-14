@@ -1,6 +1,5 @@
 package com.careerlabs.lms.api.student.entity;
 
-import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.college.entity.College;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.user.entity.User;
@@ -55,10 +54,6 @@ public class Student {
     @Enumerated(EnumType.STRING)
     @Column(name = "placement_status", nullable = false)
     private PlacementStatus placementStatus = PlacementStatus.SEEKING;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_id")
-    private Batch batch;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "college_id")
@@ -163,14 +158,6 @@ public class Student {
 
     public void setPlacementStatus(PlacementStatus placementStatus) {
         this.placementStatus = placementStatus;
-    }
-
-    public Batch getBatch() {
-        return batch;
-    }
-
-    public void setBatch(Batch batch) {
-        this.batch = batch;
     }
 
     public College getCollege() {

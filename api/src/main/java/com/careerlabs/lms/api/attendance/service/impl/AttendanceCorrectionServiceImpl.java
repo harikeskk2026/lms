@@ -23,6 +23,8 @@ import com.careerlabs.lms.api.meeting.entity.MeetingLink;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.service.NotificationService;
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
@@ -41,6 +43,7 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
     private final DailyClassRepository dailyClassRepository;
     private final MeetingLinkRepository meetingLinkRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
     private final AttendanceAuditLogRepository attendanceAuditLogRepository;
@@ -51,6 +54,7 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
             DailyClassRepository dailyClassRepository,
             MeetingLinkRepository meetingLinkRepository,
             StudentRepository studentRepository,
+            EnrollmentRepository enrollmentRepository,
             NotificationService notificationService,
             UserRepository userRepository,
             AttendanceAuditLogRepository attendanceAuditLogRepository) {
@@ -59,6 +63,7 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
         this.dailyClassRepository = dailyClassRepository;
         this.meetingLinkRepository = meetingLinkRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
         this.attendanceAuditLogRepository = attendanceAuditLogRepository;
@@ -81,7 +86,7 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
             DailyClass dailyClass = dailyClassRepository.findById(request.getDailyClassId())
                     .orElseThrow(() -> new ResourceNotFoundException("Class not found with id: " + request.getDailyClassId()));
 
-            if (student.getBatch() == null || !student.getBatch().getId().equals(dailyClass.getBatch().getId())) {
+            if (dailyClass.getBatch() == null || !enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), dailyClass.getBatch().getId())) {
                 throw new ForbiddenException("This class does not belong to your batch");
             }
             attendance = resolveOrCreateAttendance(student, dailyClass);
@@ -143,18 +148,33 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
             return meeting.getDailyClass();
         }
 
-        Long studentBatchId = student.getBatch() != null ? student.getBatch().getId() : null;
-        Long studentCourseId = student.getCourse() != null ? student.getCourse().getId() : null;
+        List<Enrollment> activeEnrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        List<Long> studentBatchIds = activeEnrollments.stream().map(Enrollment::getBatch).filter(java.util.Objects::nonNull).map(Batch::getId).toList();
+        List<Long> studentCourseIds = activeEnrollments.stream().map(Enrollment::getCourse).filter(java.util.Objects::nonNull).map(com.careerlabs.lms.api.course.entity.Course::getId).toList();
+
         Long meetingBatchId = meeting.getBatch() != null ? meeting.getBatch().getId() : null;
         Long meetingCourseId = meeting.getCourse() != null ? meeting.getCourse().getId() : null;
-        boolean visible = (meetingBatchId != null && meetingBatchId.equals(studentBatchId))
-                || (meetingBatchId == null && meetingCourseId != null && meetingCourseId.equals(studentCourseId))
+        boolean visible = (meetingBatchId != null && studentBatchIds.contains(meetingBatchId))
+                || (meetingBatchId == null && meetingCourseId != null && studentCourseIds.contains(meetingCourseId))
                 || (meetingBatchId == null && meetingCourseId == null);
         if (!visible) {
             throw new ForbiddenException("This scheduled class does not apply to you");
         }
 
-        Batch batch = meeting.getBatch() != null ? meeting.getBatch() : student.getBatch();
+        Batch batch = meeting.getBatch();
+        if (batch == null) {
+            if (meeting.getCourse() != null) {
+                batch = activeEnrollments.stream()
+                        .filter(e -> e.getCourse() != null && e.getCourse().getId().equals(meeting.getCourse().getId()))
+                        .map(Enrollment::getBatch)
+                        .filter(java.util.Objects::nonNull)
+                        .findFirst()
+                        .orElse(null);
+            }
+            if (batch == null) {
+                batch = activeEnrollments.stream().map(Enrollment::getBatch).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+            }
+        }
         if (batch == null) {
             throw new BadRequestException(
                     "This scheduled class isn't tied to a specific batch, and you're not assigned to one either — "

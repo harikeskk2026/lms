@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+
 @Service
 public class NotificationServiceImpl implements NotificationService {
 
@@ -25,13 +27,16 @@ public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
 
     public NotificationServiceImpl(NotificationRepository notificationRepository,
                                     StudentRepository studentRepository,
+                                    EnrollmentRepository enrollmentRepository,
                                     UserRepository userRepository) {
         this.notificationRepository = notificationRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.userRepository = userRepository;
     }
 
@@ -95,7 +100,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Async
     @Transactional
     public void notifyBatch(Long batchId, String title, String body, NotificationType type, String link) {
-        List<Notification> notifications = studentRepository.findByBatchId(batchId).stream()
+        List<Notification> notifications = enrollmentRepository.findActiveStudentsByBatchId(batchId).stream()
                 .map(student -> buildNotification(student.getUser(), title, body, type, link))
                 .toList();
         if (!notifications.isEmpty()) {

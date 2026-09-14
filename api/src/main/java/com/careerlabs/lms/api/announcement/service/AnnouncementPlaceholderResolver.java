@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Resolves {{placeholder}} tokens in announcement title/body text. Pure string substitution, no AI involved. */
 @Component
@@ -72,8 +73,11 @@ public class AnnouncementPlaceholderResolver {
     /** Builds the auto-fillable variables for a specific student, used to personalize their announcement feed. */
     public Map<String, String> variablesFor(Student student) {
         Map<String, String> vars = new HashMap<>();
-        vars.put("studentName", student.getUser() != null ? student.getUser().getName() : "");
-        vars.put("batchName", student.getBatch() != null ? student.getBatch().getName() : "");
+        List<com.careerlabs.lms.api.batch.entity.Batch> activeBatches = (enrollmentRepository != null && student.getId() != null)
+                ? enrollmentRepository.findActiveBatchesByStudentId(student.getId())
+                : List.of();
+        String batchNames = activeBatches.stream().map(com.careerlabs.lms.api.batch.entity.Batch::getName).collect(Collectors.joining(", "));
+        vars.put("batchName", batchNames);
 
         Set<String> courses = new LinkedHashSet<>();
         if (enrollmentRepository != null && student.getId() != null) {
@@ -91,14 +95,6 @@ public class AnnouncementPlaceholderResolver {
         }
         if (student.getCourse() != null && student.getCourse().getTitle() != null && !student.getCourse().getTitle().isBlank()) {
             courses.add(student.getCourse().getTitle().trim());
-        }
-        try {
-            if (student.getBatch() != null && student.getBatch().getCourse() != null
-                    && student.getBatch().getCourse().getTitle() != null
-                    && !student.getBatch().getCourse().getTitle().isBlank()) {
-                courses.add(student.getBatch().getCourse().getTitle().trim());
-            }
-        } catch (Exception ignored) {
         }
         vars.put("courseName", String.join(", ", courses));
         vars.put("date", LocalDate.now().format(DATE_FORMAT));

@@ -64,15 +64,6 @@ class CourseCatalogVisibilityTest {
         return c;
     }
 
-    Student studentWithBatch(Long studentId, Course batchCourse) {
-        Batch batch = new Batch();
-        batch.setCourse(batchCourse);
-        Student s = new Student();
-        setId(s, studentId);
-        s.setBatch(batch);
-        return s;
-    }
-
     Student plainStudent(Long studentId) {
         Student s = new Student();
         setId(s, studentId);
@@ -106,8 +97,9 @@ class CourseCatalogVisibilityTest {
         when(accessGuard.isStudent(studentPrincipal)).thenReturn(true);
         when(accessGuard.isAdmin(studentPrincipal)).thenReturn(false);
         when(accessGuard.isTrainer(studentPrincipal)).thenReturn(false);
-        when(studentRepository.findByUserId(10L)).thenReturn(Optional.of(studentWithBatch(10L, published.get(0))));
-        when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(10L)).thenReturn(List.of());
+        when(studentRepository.findByUserId(10L)).thenReturn(Optional.of(plainStudent(10L)));
+        when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(10L))
+                .thenReturn(List.of(activeEnrollment(10L, published.get(0))));
         when(courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED)).thenReturn(published);
 
         List<CourseResponse> result = courseService.list(studentPrincipal);

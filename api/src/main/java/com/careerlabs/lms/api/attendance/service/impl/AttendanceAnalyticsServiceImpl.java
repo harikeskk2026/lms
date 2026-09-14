@@ -19,6 +19,7 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.meeting.entity.MeetingLink;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
 
     private final BatchRepository batchRepository;
     private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final DailyClassRepository dailyClassRepository;
     private final AttendanceRepository attendanceRepository;
     private final AttendancePolicyService attendancePolicyService;
@@ -51,6 +53,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
     public AttendanceAnalyticsServiceImpl(
             BatchRepository batchRepository,
             StudentRepository studentRepository,
+            EnrollmentRepository enrollmentRepository,
             DailyClassRepository dailyClassRepository,
             AttendanceRepository attendanceRepository,
             AttendancePolicyService attendancePolicyService,
@@ -59,6 +62,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             UserRepository userRepository) {
         this.batchRepository = batchRepository;
         this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
         this.dailyClassRepository = dailyClassRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendancePolicyService = attendancePolicyService;
@@ -82,7 +86,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
         int totalBatchStudents = 0; // all students across active batches
 
         for (Batch batch : activeBatches) {
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             if (students.isEmpty()) continue;
 
             totalBatchStudents += students.size();
@@ -148,7 +152,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
         int totalMarkedCount = 0;
 
         for (Batch batch : activeBatches) {
-            List<Student> students = studentRepository.findByBatchId(batch.getId());
+            List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             totalStudents += students.size();
             if (students.isEmpty()) continue;
 
@@ -238,9 +242,10 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             }
         }
 
-        Map<Long, Integer> studentCountByBatchId = batchIds.isEmpty() ? Map.of() : studentRepository
-                .findByBatchIdIn(batchIds).stream()
-                .collect(Collectors.groupingBy(s -> s.getBatch().getId(), Collectors.collectingAndThen(Collectors.counting(), Long::intValue)));
+        Map<Long, Integer> studentCountByBatchId = batchIds.isEmpty() ? Map.of() : enrollmentRepository
+                .findByBatchIdInAndActiveTrue(batchIds).stream()
+                .filter(e -> e.getBatch() != null)
+                .collect(Collectors.groupingBy(e -> e.getBatch().getId(), Collectors.collectingAndThen(Collectors.counting(), Long::intValue)));
 
         Set<Long> trainerIds = new HashSet<>();
         for (DailyClass cls : classes) {

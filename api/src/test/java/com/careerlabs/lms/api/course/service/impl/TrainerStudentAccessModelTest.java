@@ -11,6 +11,7 @@ import com.careerlabs.lms.api.course.dto.response.CourseResponse;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.repository.MaterialRepository;
@@ -77,7 +78,7 @@ class TrainerStudentAccessModelTest {
     @BeforeEach
     void setUp() {
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
-        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard);
+        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard, enrollmentRepository);
         courseService = new CourseServiceImpl(
                 courseRepository, courseCodeGenerator, accessGuard,
                 studentRepository, enrollmentRepository,
@@ -122,7 +123,6 @@ class TrainerStudentAccessModelTest {
         studentEntity = new Student();
         setId(studentEntity, 501L);
         studentEntity.setUser(studentUser);
-        studentEntity.setBatch(batchA);
         studentEntity.setCourse(courseA);
     }
 
@@ -244,6 +244,10 @@ class TrainerStudentAccessModelTest {
     void studentListBatches_returnsEnrolledOnly() {
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.findActiveBatchesByStudentId(studentEntity.getId()))
+                .thenReturn(List.of(batchA));
+        when(enrollmentRepository.findByBatchIdInAndActiveTrue(anyList()))
+                .thenReturn(List.of());
 
         List<BatchResponse> result = batchService.list(studentPrincipal);
 
@@ -258,6 +262,8 @@ class TrainerStudentAccessModelTest {
         when(batchRepository.findById(batchA.getId())).thenReturn(Optional.of(batchA));
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(studentEntity.getId(), batchA.getId()))
+                .thenReturn(true);
 
         BatchResponse result = batchService.get(batchA.getId(), studentPrincipal);
 
@@ -271,6 +277,8 @@ class TrainerStudentAccessModelTest {
         when(batchRepository.findById(batchB.getId())).thenReturn(Optional.of(batchB));
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(studentEntity.getId(), batchB.getId()))
+                .thenReturn(false);
 
         assertThrows(ForbiddenException.class, () -> batchService.get(batchB.getId(), studentPrincipal));
     }
@@ -279,9 +287,11 @@ class TrainerStudentAccessModelTest {
     @DisplayName("Student with no batch: list returns empty list")
     void studentWithNoBatch_returnsEmpty() {
         Student unassignedStudent = new Student();
-        unassignedStudent.setBatch(null);
+        setId(unassignedStudent, 999L);
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(unassignedStudent));
+        when(enrollmentRepository.findActiveBatchesByStudentId(unassignedStudent.getId()))
+                .thenReturn(List.of());
 
         List<BatchResponse> result = batchService.list(studentPrincipal);
 
@@ -295,10 +305,16 @@ class TrainerStudentAccessModelTest {
     @Test
     @DisplayName("Student list courses: sees ALL PUBLISHED courses, enrolled flag marks the assigned batch course")
     void studentListCourses_seesAllPublishedWithBatchCourseEnrolled() {
+        Enrollment enrollmentA = new Enrollment();
+        enrollmentA.setCourse(courseA);
+        enrollmentA.setBatch(batchA);
+        enrollmentA.setStudent(studentEntity);
+        enrollmentA.setActive(true);
+
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(studentEntity.getId()))
-                .thenReturn(List.of());
+                .thenReturn(List.of(enrollmentA));
         when(courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED))
                 .thenReturn(List.of(courseA, courseB));
 
@@ -318,6 +334,8 @@ class TrainerStudentAccessModelTest {
         when(courseRepository.findById(courseA.getId())).thenReturn(Optional.of(courseA));
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseA.getId()))
+                .thenReturn(true);
 
         CourseResponse result = courseService.get(courseA.getId(), studentPrincipal);
 
@@ -331,6 +349,8 @@ class TrainerStudentAccessModelTest {
         when(courseRepository.findById(courseB.getId())).thenReturn(Optional.of(courseB));
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseB.getId()))
+                .thenReturn(false);
 
         assertThrows(ForbiddenException.class, () -> courseService.get(courseB.getId(), studentPrincipal));
     }
@@ -341,6 +361,8 @@ class TrainerStudentAccessModelTest {
         when(courseRepository.findById(courseA.getId())).thenReturn(Optional.of(courseA));
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseA.getId()))
+                .thenReturn(true);
 
         assertDoesNotThrow(() -> accessGuard.requireContentAccess(studentPrincipal, courseA.getId()));
     }
@@ -351,6 +373,8 @@ class TrainerStudentAccessModelTest {
         when(courseRepository.findById(courseB.getId())).thenReturn(Optional.of(courseB));
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseB.getId()))
+                .thenReturn(false);
 
         assertThrows(ForbiddenException.class, () -> accessGuard.requireContentAccess(studentPrincipal, courseB.getId()));
     }
@@ -385,12 +409,19 @@ class TrainerStudentAccessModelTest {
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
 
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseA.getId()))
+                .thenReturn(true);
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseB.getId()))
+                .thenReturn(false);
+
         assertTrue(accessGuard.isStudentForCourse(studentPrincipal, courseA.getId()));
         assertFalse(accessGuard.isStudentForCourse(studentPrincipal, courseB.getId()));
 
-        // Reassign to Batch B
-        studentEntity.setBatch(batchB);
-        studentEntity.setCourse(courseB);
+        // Reassign to Batch B (active enrollment switched to course B)
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseA.getId()))
+                .thenReturn(false);
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseB.getId()))
+                .thenReturn(true);
 
         // Access now flips
         assertFalse(accessGuard.isStudentForCourse(studentPrincipal, courseA.getId()));
@@ -471,17 +502,15 @@ class TrainerStudentAccessModelTest {
         when(courseRepository.findById(archived.getId())).thenReturn(Optional.of(archived));
         when(studentRepository.findByUserId(studentPrincipal.id())).thenReturn(Optional.of(studentEntity));
 
-        Batch archivedBatch = new Batch();
-        setId(archivedBatch, 203L);
-        archivedBatch.setName("Archived Batch");
-        archivedBatch.setCourse(archived);
-        studentEntity.setBatch(archivedBatch);
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), archived.getId()))
+                .thenReturn(true);
 
         assertDoesNotThrow(() -> accessGuard.requireContentAccess(studentPrincipal, archived.getId()));
         assertDoesNotThrow(() -> accessGuard.requireVisible(studentPrincipal, archived));
 
         // PUBLISHED course for the student => allowed
-        studentEntity.setBatch(batchA);
+        when(enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(studentEntity.getId(), courseA.getId()))
+                .thenReturn(true);
         when(courseRepository.findById(courseA.getId())).thenReturn(Optional.of(courseA));
         assertDoesNotThrow(() -> accessGuard.requireContentAccess(studentPrincipal, courseA.getId()));
         assertDoesNotThrow(() -> accessGuard.requireVisible(studentPrincipal, courseA));
@@ -524,6 +553,10 @@ class TrainerStudentAccessModelTest {
     void studentListBatches_archivedAndDraft() {
         when(studentRepository.findByUserId(studentPrincipal.id()))
                 .thenReturn(Optional.of(studentEntity));
+        when(enrollmentRepository.findActiveBatchesByStudentId(studentEntity.getId()))
+                .thenReturn(List.of(batchA));
+        when(enrollmentRepository.findByBatchIdInAndActiveTrue(anyList()))
+                .thenReturn(List.of());
 
         courseA.setStatus(CourseStatus.ARCHIVED);
         List<BatchResponse> archivedResult = batchService.list(studentPrincipal);

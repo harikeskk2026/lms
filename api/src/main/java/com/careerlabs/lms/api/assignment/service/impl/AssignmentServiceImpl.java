@@ -122,18 +122,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
 
-        Set<Long> batchIds = new LinkedHashSet<>();
-        if (student.getBatch() != null) {
-            batchIds.add(student.getBatch().getId());
-        }
-
         List<Enrollment> enrollments = enrollmentRepository
                 .findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
-        for (Enrollment e : enrollments) {
-            if (e.getBatch() != null) {
-                batchIds.add(e.getBatch().getId());
-            }
-        }
+        Set<Long> batchIds = enrollments.stream()
+                .map(Enrollment::getBatch)
+                .filter(java.util.Objects::nonNull)
+                .map(Batch::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
         if (batchIds.isEmpty()) {
             return List.of();

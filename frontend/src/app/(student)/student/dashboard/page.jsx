@@ -80,7 +80,7 @@ export default function StudentDashboardPage() {
   const [attTrend, setAttTrend] = useState([])
   const [attLoading, setAttLoading] = useState(true)
 
-  const primaryCourseId = data?.continueLearning?.[0]?.courseId
+  const activeCourseId = data?.continueLearning?.[0]?.courseId
 
   const loadAttendance = () => {
     setAttLoading(true)
@@ -107,8 +107,8 @@ export default function StudentDashboardPage() {
         studentApi.getAttSummary().then(r => setAttSummary(r.data?.data || null)).catch(() => {}),
         studentApi.getAttendanceTrend().then(r => setAttTrend(r.data?.data || [])).catch(() => {})
       ])
-      if (primaryCourseId) {
-        studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
+      if (activeCourseId) {
+        studentApi.getMaterials(activeCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
       }
       toast.success('Dashboard updated')
     } catch (err) {
@@ -119,10 +119,10 @@ export default function StudentDashboardPage() {
   }
 
   useEffect(() => {
-    if (primaryCourseId) {
-      studentApi.getMaterials(primaryCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
+    if (activeCourseId) {
+      studentApi.getMaterials(activeCourseId).then(r => setMaterials(r.data.data || [])).catch(() => {})
     }
-  }, [primaryCourseId])
+  }, [activeCourseId])
 
   if (loading) return (
     <div className="page-wrapper">

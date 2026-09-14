@@ -1,6 +1,8 @@
 package com.careerlabs.lms.api.enrollment.repository;
 
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.batch.entity.Batch;
+import com.careerlabs.lms.api.student.entity.Student;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -40,13 +42,36 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long>, J
 
     long countByCourseIdAndActiveTrue(Long courseId);
 
-    long countByBatchIdAndActiveTrue(Long batchId);
+    @Query("SELECT COUNT(DISTINCT e.student.id) FROM Enrollment e WHERE e.batch.id = :batchId AND e.active = true")
+    long countByBatchIdAndActiveTrue(@Param("batchId") Long batchId);
+
+    List<Enrollment> findByBatchIdAndActiveTrue(Long batchId);
+
+    List<Enrollment> findByBatchIdInAndActiveTrue(List<Long> batchIds);
+
+    boolean existsByStudentIdAndBatchIdAndActiveTrue(Long studentId, Long batchId);
+
+    Optional<Enrollment> findByStudentIdAndBatchIdAndActiveTrue(Long studentId, Long batchId);
+
+    List<Enrollment> findByStudentIdInAndActiveTrue(List<Long> studentIds);
+
+    @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.batch.id = :batchId AND e.active = true")
+    List<Student> findActiveStudentsByBatchId(@Param("batchId") Long batchId);
+
+    @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.batch.id IN :batchIds AND e.active = true")
+    List<Student> findActiveStudentsByBatchIdIn(@Param("batchIds") List<Long> batchIds);
+
+    @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.course.id IN :courseIds AND e.active = true")
+    List<Student> findActiveStudentsByCourseIdIn(@Param("courseIds") List<Long> courseIds);
+
+    @Query("SELECT DISTINCT e.batch FROM Enrollment e WHERE e.student.id = :studentId AND e.active = true AND e.batch IS NOT NULL")
+    List<Batch> findActiveBatchesByStudentId(@Param("studentId") Long studentId);
 
     void deleteAllByCourseId(Long courseId);
 
     void deleteAllByStudentId(Long studentId);
 
     @Override
-    @EntityGraph(attributePaths = {"student", "student.user", "student.batch", "course", "batch"})
+    @EntityGraph(attributePaths = {"student", "student.user", "course", "batch"})
     Page<Enrollment> findAll(Specification<Enrollment> spec, Pageable pageable);
 }

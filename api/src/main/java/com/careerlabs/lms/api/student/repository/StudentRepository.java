@@ -12,23 +12,15 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     boolean existsByEnrollmentNo(String enrollmentNo);
 
-    List<Student> findByBatchId(Long batchId);
-
-    long countByBatchId(Long batchId);
-
-    List<Student> findByBatchIdIn(List<Long> batchIds);
-
     List<Student> findByCourseId(Long courseId);
 
     List<Student> findByCourseIdIn(List<Long> courseIds);
 
     List<Student> findByUser_ActiveTrue();
 
-    List<Student> findByUser_ActiveTrueAndBatchIdIn(List<Long> batchIds);
-
     List<Student> findByUser_ActiveTrueAndCourseIdIn(List<Long> courseIds);
 
-    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "batch", "batch.course", "college", "course"})
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "college", "course"})
     Optional<Student> findByUserId(Long userId);
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user"})
