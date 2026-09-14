@@ -374,6 +374,17 @@ public class StudentServiceImpl implements StudentService {
         }
         Batch batch = batchRepository.findByIdWithLock(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
+
+        if (!batch.isActive()) {
+            throw new BadRequestException("Batch '" + batch.getName() + "' is inactive");
+        }
+
+        if (batch.getCourse() == null || batch.getCourse().getStatus() != CourseStatus.PUBLISHED) {
+            String courseTitle = batch.getCourse() != null ? batch.getCourse().getTitle() : "Unknown";
+            String status = batch.getCourse() != null ? String.valueOf(batch.getCourse().getStatus()) : "Unknown";
+            throw new BadRequestException("Course '" + courseTitle + "' is not open for enrollment (current status: " + status + ")");
+        }
+
         if (student.getId() != null && enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), batchId)) {
             return;
         }
@@ -557,6 +568,9 @@ public class StudentServiceImpl implements StudentService {
             }
             if (defaultBatchId != null) {
                 defaultBatch = findBatchOrThrow(defaultBatchId);
+                if (!defaultBatch.isActive()) {
+                    throw new BadRequestException("Default batch '" + defaultBatch.getName() + "' is inactive");
+                }
                 if (defaultCourse != null && !defaultBatch.getCourse().getId().equals(defaultCourse.getId())) {
                     throw new BadRequestException("Default batch '" + defaultBatch.getName() + "' does not belong to default course '" + defaultCourse.getTitle() + "'");
                 }
@@ -675,6 +689,12 @@ public class StudentServiceImpl implements StudentService {
                 }
 
                 if (resolvedBatch != null) {
+                    // Check batch is active
+                    if (!resolvedBatch.isActive()) {
+                        errors.add(new StudentImportError(rowNum, name, email, "Batch '" + resolvedBatch.getName() + "' is inactive"));
+                        continue;
+                    }
+
                     // Check batch belongs to resolved course
                     if (!resolvedBatch.getCourse().getId().equals(resolvedCourse.getId())) {
                         errors.add(new StudentImportError(rowNum, name, email, "Batch '" + resolvedBatch.getName() + "' does not belong to course '" + resolvedCourse.getTitle() + "'"));

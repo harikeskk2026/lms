@@ -10,6 +10,7 @@ import com.careerlabs.lms.api.attendance.repository.AttendanceGoalRepository;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
@@ -233,5 +234,51 @@ class StudentBatchScheduleConflictTest {
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of());
 
         assertDoesNotThrow(() -> studentService.assignToBatch(1L, 100L));
+    }
+
+    @Test
+    @DisplayName("assignToBatch inactive batch -> Reject with BadRequestException")
+    void assignToBatch_inactiveBatch_reject(){
+        Batch inactiveBatch = makeBatch(300L, "Inactive Batch", course1, LocalDate.of(2026,9,1), LocalDate.of(2026,9,30), "09:00 AM - 12:00 PM");
+        inactiveBatch.setActive(false);
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(batchRepository.findByIdWithLock(300L)).thenReturn(Optional.of(inactiveBatch));
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> studentService.assignToBatch(1L, 300L));
+        assertTrue(ex.getMessage().contains("inactive"));
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("assignToBatch batch belonging to DRAFT course -> Reject with BadRequestException")
+    void assignToBatch_draftCourseBatch_reject(){
+        Course draftCourse = makeCourse(30L, "Draft Course");
+        draftCourse.setStatus(CourseStatus.DRAFT);
+        Batch draftCourseBatch = makeBatch(301L, "Draft Course Batch", draftCourse, LocalDate.of(2026,9,1), LocalDate.of(2026,9,30), "09:00 AM - 12:00 PM");
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(batchRepository.findByIdWithLock(301L)).thenReturn(Optional.of(draftCourseBatch));
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> studentService.assignToBatch(1L, 301L));
+        assertTrue(ex.getMessage().contains("not open for enrollment"));
+        assertTrue(ex.getMessage().contains("DRAFT"));
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("assignToBatch batch belonging to ARCHIVED course -> Reject with BadRequestException")
+    void assignToBatch_archivedCourseBatch_reject(){
+        Course archivedCourse = makeCourse(40L, "Archived Course");
+        archivedCourse.setStatus(CourseStatus.ARCHIVED);
+        Batch archivedCourseBatch = makeBatch(401L, "Archived Course Batch", archivedCourse, LocalDate.of(2026,9,1), LocalDate.of(2026,9,30), "09:00 AM - 12:00 PM");
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(batchRepository.findByIdWithLock(401L)).thenReturn(Optional.of(archivedCourseBatch));
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> studentService.assignToBatch(1L, 401L));
+        assertTrue(ex.getMessage().contains("not open for enrollment"));
+        assertTrue(ex.getMessage().contains("ARCHIVED"));
+        verify(studentRepository, never()).save(any());
     }
 }

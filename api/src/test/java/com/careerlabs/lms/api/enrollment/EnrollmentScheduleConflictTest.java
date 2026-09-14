@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.enrollment;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
@@ -284,6 +285,40 @@ class EnrollmentScheduleConflictTest {
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
 
         EnrollStudentRequest req = new EnrollStudentRequest(1L, 200L);
+        assertDoesNotThrow(() -> enrollmentService.enrollStudentByAdmin(20L, req));
+    }
+
+    @Test
+    @DisplayName("Reactivation with inactive previous batch and no new batch -> Reject")
+    void reactivation_inactivePreviousBatch_noNewBatch_reject() {
+        Batch inactiveBatch = makeBatch(100L, "Batch A", course1, LocalDate.of(2026,9,1), LocalDate.of(2026,9,30), "09:00 AM - 12:00 PM", false);
+        Enrollment inactiveEnrollment = makeEnrollment(1L, student, course1, inactiveBatch, false);
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
+        when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.of(inactiveEnrollment));
+
+        EnrollStudentRequest req = new EnrollStudentRequest(1L, null);
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> enrollmentService.enrollStudentByAdmin(20L, req));
+        assertTrue(ex.getMessage().contains("previously assigned batch"));
+        assertTrue(ex.getMessage().contains("no longer active"));
+    }
+
+    @Test
+    @DisplayName("Reactivation with inactive previous batch but valid new batch -> Allow")
+    void reactivation_inactivePreviousBatch_newBatch_allow() {
+        Batch inactiveBatch = makeBatch(100L, "Batch A", course2, LocalDate.of(2026,9,1), LocalDate.of(2026,9,30), "09:00 AM - 12:00 PM", false);
+        Enrollment inactiveEnrollment = makeEnrollment(1L, student, course2, inactiveBatch, false);
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
+        when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.of(inactiveEnrollment));
+        when(batchRepository.findByIdWithLock(202L)).thenReturn(Optional.of(newBatchNoDateConflict));
+        when(enrollmentRepository.countByBatchIdAndActiveTrue(202L)).thenReturn(0L);
+        when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of());
+        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
+
+        EnrollStudentRequest req = new EnrollStudentRequest(1L, 202L);
         assertDoesNotThrow(() -> enrollmentService.enrollStudentByAdmin(20L, req));
     }
 }
