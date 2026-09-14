@@ -21,6 +21,8 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
 
     List<MeetingLink> findByBatchIdAndStatusOrderByScheduledStartAsc(Long batchId, MeetingStatus status);
 
+    List<MeetingLink> findByBatchIdInOrderByScheduledStartDesc(java.util.Collection<Long> batchIds);
+
     /**
      * A meeting reaches a student when: it's scoped to the student's own batch, or
      * it's course-wide (no batch set, but the course matches the student's course), or

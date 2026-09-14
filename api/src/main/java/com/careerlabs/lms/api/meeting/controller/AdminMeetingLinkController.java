@@ -12,6 +12,7 @@ import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,53 +45,60 @@ public class AdminMeetingLinkController {
             @Valid @RequestBody CreateMeetingLinkRequest request,
             @AuthenticationPrincipal JwtUserPrincipal principal
     ) {
-        Long currentUserId = principal != null ? principal.id() : null;
-        MeetingLinkResponse res = meetingLinkService.createMeetingLink(request, currentUserId);
+        MeetingLinkResponse res = meetingLinkService.createMeetingLink(request, principal);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(res));
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<MeetingLinkResponse>>> list(
             @RequestParam(required = false) Long batchId,
-            @RequestParam(required = false) MeetingStatus status
+            @RequestParam(required = false) MeetingStatus status,
+            @AuthenticationPrincipal JwtUserPrincipal principal
     ) {
-        List<MeetingLinkResponse> list = meetingLinkService.getAdminMeetings(batchId, status);
+        List<MeetingLinkResponse> list = meetingLinkService.getAdminMeetings(batchId, status, principal);
         return ResponseEntity.ok(ApiResponse.of(list));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<MeetingLinkResponse>> getById(@PathVariable Long id) {
-        MeetingLinkResponse res = meetingLinkService.getMeetingById(id);
+    public ResponseEntity<ApiResponse<MeetingLinkResponse>> getById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        MeetingLinkResponse res = meetingLinkService.getMeetingById(id, principal);
         return ResponseEntity.ok(ApiResponse.of(res));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<MeetingLinkResponse>> update(
             @PathVariable Long id,
-            @RequestBody UpdateMeetingLinkRequest request
+            @RequestBody UpdateMeetingLinkRequest request,
+            @AuthenticationPrincipal JwtUserPrincipal principal
     ) {
-        MeetingLinkResponse res = meetingLinkService.updateMeetingLink(id, request);
+        MeetingLinkResponse res = meetingLinkService.updateMeetingLink(id, request, principal);
         return ResponseEntity.ok(ApiResponse.of(res));
     }
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<MeetingLinkResponse>> updateStatus(
             @PathVariable Long id,
-            @RequestParam MeetingStatus status
+            @RequestParam MeetingStatus status,
+            @AuthenticationPrincipal JwtUserPrincipal principal
     ) {
-        MeetingLinkResponse res = meetingLinkService.updateMeetingStatus(id, status);
+        MeetingLinkResponse res = meetingLinkService.updateMeetingStatus(id, status, principal);
         return ResponseEntity.ok(ApiResponse.of(res));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        meetingLinkService.deleteMeetingLink(id);
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        meetingLinkService.deleteMeetingLink(id, principal);
         return ResponseEntity.ok(ApiResponse.of(null));
     }
 
-    /** Students who clicked "Join Meeting" for this scheduled class, most recent first join order. */
     @GetMapping("/{id}/attendees")
-    public ResponseEntity<ApiResponse<List<MeetingAttendeeResponse>>> attendees(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.of(meetingAttendeeService.listAttendees(id)));
+    public ResponseEntity<ApiResponse<List<MeetingAttendeeResponse>>> attendees(
+            @PathVariable Long id,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(meetingAttendeeService.listAttendees(id, principal)));
     }
 }

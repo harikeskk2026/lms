@@ -33,6 +33,9 @@ import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.attendance.service.AttendanceService;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.batch.service.BatchAuthorizationGuard;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.meeting.entity.MeetingLink;
 import com.careerlabs.lms.api.meeting.entity.MeetingStatus;
@@ -42,6 +45,7 @@ import com.careerlabs.lms.api.notification.entity.Notification;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
@@ -89,6 +93,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final MeetingLinkRepository meetingLinkRepository;
     private final MeetingAttendeeRepository meetingAttendeeRepository;
     private final AttendanceAuditLogRepository attendanceAuditLogRepository;
+    private final BatchAuthorizationGuard batchAuthGuard;
 
     public AttendanceServiceImpl(
             DailyClassRepository dailyClassRepository,
@@ -102,7 +107,8 @@ public class AttendanceServiceImpl implements AttendanceService {
             UserRepository userRepository,
             MeetingLinkRepository meetingLinkRepository,
             MeetingAttendeeRepository meetingAttendeeRepository,
-            AttendanceAuditLogRepository attendanceAuditLogRepository) {
+            AttendanceAuditLogRepository attendanceAuditLogRepository,
+            BatchAuthorizationGuard batchAuthGuard) {
         this.dailyClassRepository = dailyClassRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendanceAlertRepository = attendanceAlertRepository;
@@ -115,6 +121,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         this.meetingLinkRepository = meetingLinkRepository;
         this.meetingAttendeeRepository = meetingAttendeeRepository;
         this.attendanceAuditLogRepository = attendanceAuditLogRepository;
+        this.batchAuthGuard = batchAuthGuard;
     }
 
     private void recordAuditLog(DailyClass dailyClass, Student student, Long attendanceId,
@@ -145,7 +152,24 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<DailyClassResponse> getClasses(Long batchId, String date, ClassStatus status) {
+    public List<DailyClassResponse> getClasses(Long batchId, String date, ClassStatus status, JwtUserPrincipal principal) {
+        if (batchAuthGuard.isTrainer(principal)) {
+            if (batchId != null && !batchAuthGuard.isValidBatchFilter(principal, batchId)) {
+                throw new ForbiddenException("You are not assigned to this batch");
+            }
+            List<Long> trainerBatchIds = batchRepository.findByTrainerId(principal.id()).stream()
+                    .map(Batch::getId).toList();
+            if (trainerBatchIds.isEmpty()) {
+                return List.of();
+            }
+            if (batchId == null) {
+                List<DailyClass> classes = dailyClassRepository.findByBatchIdInAndDateBetweenOrderByDateAsc(
+                        trainerBatchIds, java.time.LocalDate.now().minusYears(1).atStartOfDay(),
+                        java.time.LocalDate.now().plusYears(1).atTime(23, 59));
+                return classes.stream().map(this::toDailyClassResponse).toList();
+            }
+        }
+
         List<DailyClass> classes;
         if (batchId != null) {
             if (status != null) {
@@ -166,9 +190,8 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     @Transactional
-    public DailyClassResponse createClass(DailyClassRequest request) {
-        Batch batch = batchRepository.findById(request.batchId())
-                .orElseThrow(() -> new ResourceNotFoundException("Batch not found with id: " + request.batchId()));
+    public DailyClassResponse createClass(DailyClassRequest request, JwtUserPrincipal principal) {
+        Batch batch = batchAuthGuard.requireBatchOwnership(principal, request.batchId());
 
         if (!batch.isActive()) {
             throw new IllegalStateException("Cannot create a class for a completed or inactive batch: " + batch.getName());
@@ -189,9 +212,12 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     @Transactional
-    public DailyClassResponse updateClass(Long classId, DailyClassRequest request) {
+    public DailyClassResponse updateClass(Long classId, DailyClassRequest request, JwtUserPrincipal principal) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                dailyClass.getBatch() != null ? dailyClass.getBatch().getId() : null);
 
         if (request.title() != null) dailyClass.setTitle(request.title());
         if (request.date() != null) dailyClass.setDate(request.date());
@@ -206,9 +232,12 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     @Transactional
-    public void deleteClass(Long classId) {
+    public void deleteClass(Long classId, JwtUserPrincipal principal) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                dailyClass.getBatch() != null ? dailyClass.getBatch().getId() : null);
 
         // 1. Delete associated MeetingLinks if any
         List<MeetingLink> meetings = meetingLinkRepository.findByDailyClassIn(List.of(dailyClass));
@@ -228,9 +257,12 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId) {
+    public List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId, JwtUserPrincipal principal) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                dailyClass.getBatch() != null ? dailyClass.getBatch().getId() : null);
 
         Long batchId = dailyClass.getBatch().getId();
         List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batchId);
@@ -323,20 +355,23 @@ public class AttendanceServiceImpl implements AttendanceService {
             dailyClassRepository.save(dailyClass);
         }
 
-        return getAttendanceSheet(classId);
+        return getAttendanceSheet(classId, null);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttendanceSheetItemResponse> getPreviousAttendanceSheet(Long classId) {
-        DailyClass dailyClass = dailyClassRepository.findById(classId)
+    public List<AttendanceSheetItemResponse> getPreviousAttendanceSheet(Long classId, JwtUserPrincipal principal) {
+        DailyClass currentClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
 
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                currentClass.getBatch() != null ? currentClass.getBatch().getId() : null);
+
         DailyClass previous = dailyClassRepository.findFirstByBatchIdAndStatusAndDateLessThanOrderByDateDesc(
-                        dailyClass.getBatch().getId(), ClassStatus.COMPLETED, dailyClass.getDate())
+                        currentClass.getBatch().getId(), ClassStatus.COMPLETED, currentClass.getDate())
                 .orElseThrow(() -> new ResourceNotFoundException("No previous completed class found for this batch"));
 
-        return getAttendanceSheet(previous.getId());
+        return getAttendanceSheet(previous.getId(), null);
     }
 
     @Override

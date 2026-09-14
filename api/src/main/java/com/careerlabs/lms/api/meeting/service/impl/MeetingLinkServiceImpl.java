@@ -9,7 +9,9 @@ import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.entity.BatchMode;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.batch.service.BatchAuthorizationGuard;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
@@ -22,6 +24,7 @@ import com.careerlabs.lms.api.meeting.entity.MeetingStatus;
 import com.careerlabs.lms.api.meeting.repository.MeetingAttendeeRepository;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.meeting.service.MeetingLinkService;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
@@ -50,6 +53,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
     private final StudentRepository studentRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final MeetingLinkSchedulerService schedulerService;
+    private final BatchAuthorizationGuard batchAuthGuard;
 
     public MeetingLinkServiceImpl(
             MeetingLinkRepository meetingLinkRepository,
@@ -62,7 +66,8 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
             AttendanceAuditLogRepository attendanceAuditLogRepository,
             StudentRepository studentRepository,
             EnrollmentRepository enrollmentRepository,
-            MeetingLinkSchedulerService schedulerService
+            MeetingLinkSchedulerService schedulerService,
+            BatchAuthorizationGuard batchAuthGuard
     ) {
         this.meetingLinkRepository = meetingLinkRepository;
         this.meetingAttendeeRepository = meetingAttendeeRepository;
@@ -75,10 +80,11 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         this.studentRepository = studentRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.schedulerService = schedulerService;
+        this.batchAuthGuard = batchAuthGuard;
     }
 
     @Override
-    public MeetingLinkResponse createMeetingLink(CreateMeetingLinkRequest request, Long currentUserId) {
+    public MeetingLinkResponse createMeetingLink(CreateMeetingLinkRequest request, JwtUserPrincipal principal) {
         if (!StringUtils.hasText(request.getMeetUrl())) {
             throw new BadRequestException("Meeting URL is required");
         }
@@ -98,11 +104,10 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         m.setScheduledEnd(request.getScheduledEnd());
         m.setPasscode(request.getPasscode());
         m.setStatus(MeetingStatus.SCHEDULED);
-        m.setCreatedBy(currentUserId);
+        m.setCreatedBy(principal != null ? principal.id() : null);
 
         if (request.getBatchId() != null) {
-            Batch batch = batchRepository.findById(request.getBatchId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with id: " + request.getBatchId()));
+            Batch batch = batchAuthGuard.requireBatchOwnership(principal, request.getBatchId());
             if (batch.getMode() == BatchMode.OFFLINE) {
                 throw new BadRequestException("Scheduled class meetings can only be created for ONLINE or HYBRID batches");
             }
@@ -141,9 +146,12 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
     }
 
     @Override
-    public MeetingLinkResponse updateMeetingLink(Long id, UpdateMeetingLinkRequest request) {
+    public MeetingLinkResponse updateMeetingLink(Long id, UpdateMeetingLinkRequest request, JwtUserPrincipal principal) {
         MeetingLink m = meetingLinkRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Meeting link not found with id: " + id));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                m.getBatch() != null ? m.getBatch().getId() : null);
 
         LocalDateTime start = request.getScheduledStart() != null ? request.getScheduledStart() : m.getScheduledStart();
         LocalDateTime end = request.getScheduledEnd() != null ? request.getScheduledEnd() : m.getScheduledEnd();
@@ -166,8 +174,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         // assigned — not skipped when null — or clearing them back to "All" would
         // silently do nothing and leave the previous batch/course in place.
         if (request.getBatchId() != null) {
-            Batch batch = batchRepository.findById(request.getBatchId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with id: " + request.getBatchId()));
+            Batch batch = batchAuthGuard.requireBatchOwnership(principal, request.getBatchId());
             if (batch.getMode() == BatchMode.OFFLINE) {
                 throw new BadRequestException("Scheduled class meetings can only be created for ONLINE or HYBRID batches");
             }
@@ -210,9 +217,11 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
     }
 
     @Override
-    public MeetingLinkResponse updateMeetingStatus(Long id, MeetingStatus status) {
+    public MeetingLinkResponse updateMeetingStatus(Long id, MeetingStatus status, JwtUserPrincipal principal) {
         MeetingLink m = meetingLinkRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Meeting link not found with id: " + id));
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                m.getBatch() != null ? m.getBatch().getId() : null);
         m.setStatus(status);
         if (m.getDailyClass() != null) {
             if (status == MeetingStatus.COMPLETED) {
@@ -227,9 +236,11 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
     }
 
     @Override
-    public void deleteMeetingLink(Long id) {
+    public void deleteMeetingLink(Long id, JwtUserPrincipal principal) {
         MeetingLink m = meetingLinkRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Meeting link not found with id: " + id));
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                m.getBatch() != null ? m.getBatch().getId() : null);
         DailyClass dc = m.getDailyClass();
         meetingAttendeeRepository.deleteByMeetingId(id);
         meetingLinkRepository.delete(m);
@@ -246,16 +257,41 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
     }
 
     @Override
-    public MeetingLinkResponse getMeetingById(Long id) {
+    public MeetingLinkResponse getMeetingById(Long id, JwtUserPrincipal principal) {
         schedulerService.autoTransitionStatuses(LocalDateTime.now());
         MeetingLink m = meetingLinkRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Meeting link not found with id: " + id));
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                m.getBatch() != null ? m.getBatch().getId() : null);
         return MeetingLinkResponse.from(m);
     }
 
     @Override
-    public List<MeetingLinkResponse> getAdminMeetings(Long batchId, MeetingStatus status) {
+    public List<MeetingLinkResponse> getAdminMeetings(Long batchId, MeetingStatus status, JwtUserPrincipal principal) {
         schedulerService.autoTransitionStatuses(LocalDateTime.now());
+
+        if (batchAuthGuard.isTrainer(principal)) {
+            if (batchId != null && !batchAuthGuard.isValidBatchFilter(principal, batchId)) {
+                throw new ForbiddenException("You are not assigned to this batch");
+            }
+            List<Long> trainerBatchIds = batchRepository.findByTrainerId(principal.id()).stream()
+                    .map(Batch::getId).toList();
+            if (trainerBatchIds.isEmpty()) {
+                return List.of();
+            }
+            if (batchId != null) {
+                List<MeetingLink> list;
+                if (status != null) {
+                    list = meetingLinkRepository.findByBatchIdAndStatusOrderByScheduledStartAsc(batchId, status);
+                } else {
+                    list = meetingLinkRepository.findByBatchIdOrderByScheduledStartDesc(batchId);
+                }
+                return list.stream().map(MeetingLinkResponse::from).toList();
+            }
+            List<MeetingLink> list = meetingLinkRepository.findByBatchIdInOrderByScheduledStartDesc(trainerBatchIds);
+            return list.stream().map(MeetingLinkResponse::from).toList();
+        }
+
         List<MeetingLink> list;
         if (batchId != null && status != null) {
             list = meetingLinkRepository.findByBatchIdAndStatusOrderByScheduledStartAsc(batchId, status);

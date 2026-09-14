@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.meeting.service.impl;
 import com.careerlabs.lms.api.attendance.entity.Attendance;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import com.careerlabs.lms.api.attendance.repository.AttendanceRepository;
+import com.careerlabs.lms.api.batch.service.BatchAuthorizationGuard;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.meeting.dto.response.MeetingAttendeeResponse;
 import com.careerlabs.lms.api.meeting.entity.MeetingAttendee;
@@ -11,6 +12,7 @@ import com.careerlabs.lms.api.meeting.entity.MeetingStatus;
 import com.careerlabs.lms.api.meeting.repository.MeetingAttendeeRepository;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.meeting.service.MeetingAttendeeService;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
@@ -33,17 +35,20 @@ public class MeetingAttendeeServiceImpl implements MeetingAttendeeService {
     private final UserRepository userRepository;
     private final AttendanceRepository attendanceRepository;
     private final StudentRepository studentRepository;
+    private final BatchAuthorizationGuard batchAuthGuard;
 
     public MeetingAttendeeServiceImpl(MeetingAttendeeRepository meetingAttendeeRepository,
                                        MeetingLinkRepository meetingLinkRepository,
                                        UserRepository userRepository,
                                        AttendanceRepository attendanceRepository,
-                                       StudentRepository studentRepository) {
+                                       StudentRepository studentRepository,
+                                       BatchAuthorizationGuard batchAuthGuard) {
         this.meetingAttendeeRepository = meetingAttendeeRepository;
         this.meetingLinkRepository = meetingLinkRepository;
         this.userRepository = userRepository;
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
+        this.batchAuthGuard = batchAuthGuard;
     }
 
     @Override
@@ -91,10 +96,12 @@ public class MeetingAttendeeServiceImpl implements MeetingAttendeeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<MeetingAttendeeResponse> listAttendees(Long meetingId) {
-        if (!meetingLinkRepository.existsById(meetingId)) {
-            throw new ResourceNotFoundException("Meeting link not found with id: " + meetingId);
-        }
+    public List<MeetingAttendeeResponse> listAttendees(Long meetingId, JwtUserPrincipal principal) {
+        MeetingLink meeting = meetingLinkRepository.findById(meetingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Meeting link not found with id: " + meetingId));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                meeting.getBatch() != null ? meeting.getBatch().getId() : null);
 
         List<MeetingAttendee> attendees = meetingAttendeeRepository.findByMeetingIdOrderByFirstJoinedAtAsc(meetingId);
         List<Long> userIds = attendees.stream().map(MeetingAttendee::getStudentUserId).toList();

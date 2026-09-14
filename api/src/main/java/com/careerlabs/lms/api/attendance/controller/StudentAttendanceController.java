@@ -73,7 +73,7 @@ public class StudentAttendanceController {
         }
         List<DailyClassResponse> response = new java.util.ArrayList<>();
         for (com.careerlabs.lms.api.batch.entity.Batch b : batches) {
-            response.addAll(attendanceService.getClasses(b.getId(), null, status));
+            response.addAll(attendanceService.getClasses(b.getId(), null, status, null));
         }
         return ResponseEntity.ok(ApiResponse.of(response));
     }

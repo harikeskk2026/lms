@@ -79,28 +79,34 @@ public class AdminAttendanceController {
     public ResponseEntity<ApiResponse<List<DailyClassResponse>>> getClasses(
             @RequestParam(required = false) Long batchId,
             @RequestParam(required = false) String date,
-            @RequestParam(required = false) ClassStatus status) {
-        List<DailyClassResponse> response = attendanceService.getClasses(batchId, date, status);
+            @RequestParam(required = false) ClassStatus status,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        List<DailyClassResponse> response = attendanceService.getClasses(batchId, date, status, principal);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
     @PostMapping("/classes")
-    public ResponseEntity<ApiResponse<DailyClassResponse>> createClass(@Valid @RequestBody DailyClassRequest request) {
-        DailyClassResponse response = attendanceService.createClass(request);
+    public ResponseEntity<ApiResponse<DailyClassResponse>> createClass(
+            @Valid @RequestBody DailyClassRequest request,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        DailyClassResponse response = attendanceService.createClass(request, principal);
         return ResponseEntity.status(201).body(ApiResponse.of("Class created", response));
     }
 
     @PatchMapping("/classes/{id}")
     public ResponseEntity<ApiResponse<DailyClassResponse>> updateClass(
             @PathVariable Long id,
-            @RequestBody DailyClassRequest request) {
-        DailyClassResponse response = attendanceService.updateClass(id, request);
+            @RequestBody DailyClassRequest request,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        DailyClassResponse response = attendanceService.updateClass(id, request, principal);
         return ResponseEntity.ok(ApiResponse.of("Class updated", response));
     }
 
     @DeleteMapping("/classes/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteClass(@PathVariable Long id) {
-        attendanceService.deleteClass(id);
+    public ResponseEntity<ApiResponse<Void>> deleteClass(
+            @PathVariable Long id,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        attendanceService.deleteClass(id, principal);
         return ResponseEntity.ok(ApiResponse.of("Class deleted successfully", null));
     }
 
@@ -168,8 +174,10 @@ public class AdminAttendanceController {
     // ─── Attendance Marking ─────────────────────────────────────────────────────
 
     @GetMapping("/attendance/{classId}")
-    public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> getAttendanceSheet(@PathVariable Long classId) {
-        List<AttendanceSheetItemResponse> response = attendanceService.getAttendanceSheet(classId);
+    public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> getAttendanceSheet(
+            @PathVariable Long classId,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        List<AttendanceSheetItemResponse> response = attendanceService.getAttendanceSheet(classId, principal);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
@@ -199,8 +207,10 @@ public class AdminAttendanceController {
     }
 
     @GetMapping("/attendance/{classId}/copy-previous")
-    public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> copyPreviousAttendance(@PathVariable Long classId) {
-        List<AttendanceSheetItemResponse> response = attendanceService.getPreviousAttendanceSheet(classId);
+    public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> copyPreviousAttendance(
+            @PathVariable Long classId,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        List<AttendanceSheetItemResponse> response = attendanceService.getPreviousAttendanceSheet(classId, principal);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

@@ -16,6 +16,7 @@ import com.careerlabs.lms.api.attendance.dto.response.AttendanceHistoryPageRespo
 import com.careerlabs.lms.api.attendance.dto.response.AttendanceRecordResponse;
 import com.careerlabs.lms.api.attendance.entity.AttendStatus;
 import com.careerlabs.lms.api.attendance.entity.ClassStatus;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -23,15 +24,15 @@ import java.util.Map;
 
 public interface AttendanceService {
 
-    List<DailyClassResponse> getClasses(Long batchId, String date, ClassStatus status);
+    List<DailyClassResponse> getClasses(Long batchId, String date, ClassStatus status, JwtUserPrincipal principal);
 
-    DailyClassResponse createClass(DailyClassRequest request);
+    DailyClassResponse createClass(DailyClassRequest request, JwtUserPrincipal principal);
 
-    DailyClassResponse updateClass(Long classId, DailyClassRequest request);
+    DailyClassResponse updateClass(Long classId, DailyClassRequest request, JwtUserPrincipal principal);
 
-    void deleteClass(Long classId);
+    void deleteClass(Long classId, JwtUserPrincipal principal);
 
-    List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId);
+    List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId, JwtUserPrincipal principal);
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records);
 
@@ -39,7 +40,7 @@ public interface AttendanceService {
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, Long markerUserId);
 
-    List<AttendanceSheetItemResponse> getPreviousAttendanceSheet(Long classId);
+    List<AttendanceSheetItemResponse> getPreviousAttendanceSheet(Long classId, JwtUserPrincipal principal);
 
     AttendanceRecordResponse editAttendanceRecord(Long attendanceId, Long reviewerUserId, AttendStatus status, String remarks);
 

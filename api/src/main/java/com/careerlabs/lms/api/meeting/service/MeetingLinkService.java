@@ -4,22 +4,23 @@ import com.careerlabs.lms.api.meeting.dto.request.CreateMeetingLinkRequest;
 import com.careerlabs.lms.api.meeting.dto.request.UpdateMeetingLinkRequest;
 import com.careerlabs.lms.api.meeting.dto.response.MeetingLinkResponse;
 import com.careerlabs.lms.api.meeting.entity.MeetingStatus;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 
 import java.util.List;
 
 public interface MeetingLinkService {
 
-    MeetingLinkResponse createMeetingLink(CreateMeetingLinkRequest request, Long currentUserId);
+    MeetingLinkResponse createMeetingLink(CreateMeetingLinkRequest request, JwtUserPrincipal principal);
 
-    MeetingLinkResponse updateMeetingLink(Long id, UpdateMeetingLinkRequest request);
+    MeetingLinkResponse updateMeetingLink(Long id, UpdateMeetingLinkRequest request, JwtUserPrincipal principal);
 
-    MeetingLinkResponse updateMeetingStatus(Long id, MeetingStatus status);
+    MeetingLinkResponse updateMeetingStatus(Long id, MeetingStatus status, JwtUserPrincipal principal);
 
-    void deleteMeetingLink(Long id);
+    void deleteMeetingLink(Long id, JwtUserPrincipal principal);
 
-    MeetingLinkResponse getMeetingById(Long id);
+    MeetingLinkResponse getMeetingById(Long id, JwtUserPrincipal principal);
 
-    List<MeetingLinkResponse> getAdminMeetings(Long batchId, MeetingStatus status);
+    List<MeetingLinkResponse> getAdminMeetings(Long batchId, MeetingStatus status, JwtUserPrincipal principal);
 
     List<MeetingLinkResponse> getStudentMeetings(Long currentUserId);
 
