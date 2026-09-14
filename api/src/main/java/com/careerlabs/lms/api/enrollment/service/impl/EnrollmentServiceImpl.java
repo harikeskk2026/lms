@@ -195,7 +195,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
         Batch batch = null;
         if (request.batchId() != null) {
-            batch = batchRepository.findById(request.batchId())
+            batch = batchRepository.findByIdWithLock(request.batchId())
                     .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.batchId()));
 
             if (!batch.getCourse().getId().equals(courseId)) {

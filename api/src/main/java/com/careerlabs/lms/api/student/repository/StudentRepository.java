@@ -32,4 +32,8 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
     long countByUser_ActiveTrue();
 
     List<Student> findTop10ByOrderByCreatedAtDesc();
+
+    @Query("UPDATE Student s SET s.course = null WHERE s.course.id = :courseId")
+    @org.springframework.data.jpa.repository.Modifying
+    void nullifyCourseForCourseId(@org.springframework.data.repository.query.Param("courseId") Long courseId);
 }

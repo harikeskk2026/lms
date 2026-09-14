@@ -116,7 +116,7 @@ class EnrollmentScheduleConflictTest {
 
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(dupBatch));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(dupBatch));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
@@ -132,7 +132,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(newBatchConflict));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(newBatchConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
@@ -147,7 +147,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(201L)).thenReturn(Optional.of(newBatchNoTimeConflict));
+        when(batchRepository.findByIdWithLock(201L)).thenReturn(Optional.of(newBatchNoTimeConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(201L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
@@ -164,7 +164,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(202L)).thenReturn(Optional.of(newBatchNoDateConflict));
+        when(batchRepository.findByIdWithLock(202L)).thenReturn(Optional.of(newBatchNoDateConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(202L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
@@ -181,7 +181,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(newBatchConflict));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(newBatchConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
@@ -197,7 +197,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(201L)).thenReturn(Optional.of(newBatchNoTimeConflict));
+        when(batchRepository.findByIdWithLock(201L)).thenReturn(Optional.of(newBatchNoTimeConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(201L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
@@ -215,7 +215,7 @@ class EnrollmentScheduleConflictTest {
         // enrollment batch inactive should be skipped, also enrollment.active true but batch inactive
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(newBatchConflict));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(newBatchConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existingInactive));
@@ -231,7 +231,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existingNoBatch = makeEnrollment(1L, student, course1, null, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(newBatchConflict));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(newBatchConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existingNoBatch));
@@ -247,7 +247,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment existingSameCourse = makeEnrollment(1L, student, course2, null, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(newBatchConflict));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(newBatchConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.of(existingSameCourse));
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         // duplicate active should be thrown before schedule check
@@ -276,7 +276,7 @@ class EnrollmentScheduleConflictTest {
         Enrollment inactiveEnrollment = makeEnrollment(1L, student, course1, existingBatch, false);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
         when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(newBatchConflict));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(newBatchConflict));
         when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         // validator calls findAllByStudentIdAndActiveTrue -> will return empty (since inactive not included)

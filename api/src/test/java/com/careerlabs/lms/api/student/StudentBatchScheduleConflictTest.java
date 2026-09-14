@@ -157,7 +157,7 @@ class StudentBatchScheduleConflictTest {
     void assignToBatch_conflict_reject(){
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(conflictingBatch));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(conflictingBatch));
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
 
@@ -170,7 +170,7 @@ class StudentBatchScheduleConflictTest {
     void assignToBatch_differentTiming_allow(){
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(batchRepository.findById(201L)).thenReturn(Optional.of(nonConflictingTimeBatch));
+        when(batchRepository.findByIdWithLock(201L)).thenReturn(Optional.of(nonConflictingTimeBatch));
         when(enrollmentRepository.countByBatchIdAndActiveTrue(201L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
@@ -185,7 +185,7 @@ class StudentBatchScheduleConflictTest {
     void assignToBatch_nonOverlappingDates_allow(){
         Enrollment existing = makeEnrollment(1L, student, course1, existingBatch, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(batchRepository.findById(202L)).thenReturn(Optional.of(nonConflictingDateBatch));
+        when(batchRepository.findByIdWithLock(202L)).thenReturn(Optional.of(nonConflictingDateBatch));
         when(enrollmentRepository.countByBatchIdAndActiveTrue(202L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
@@ -201,7 +201,7 @@ class StudentBatchScheduleConflictTest {
         inactive.setActive(false);
         Enrollment existing = makeEnrollment(1L, student, course1, inactive, true);
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(conflictingBatch));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(conflictingBatch));
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of(existing));
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
@@ -214,7 +214,7 @@ class StudentBatchScheduleConflictTest {
     @DisplayName("assignToBatch with no existing enrollments -> Allow")
     void assignToBatch_noExisting_allow(){
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(batchRepository.findById(200L)).thenReturn(Optional.of(conflictingBatch));
+        when(batchRepository.findByIdWithLock(200L)).thenReturn(Optional.of(conflictingBatch));
         when(enrollmentRepository.countByBatchIdAndActiveTrue(200L)).thenReturn(0L);
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of());
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
@@ -227,7 +227,7 @@ class StudentBatchScheduleConflictTest {
     @DisplayName("assignToBatch same batch id -> no validation, allow")
     void assignToBatch_sameBatch_allow(){
         when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(batchRepository.findById(100L)).thenReturn(Optional.of(existingBatch));
+        when(batchRepository.findByIdWithLock(100L)).thenReturn(Optional.of(existingBatch));
         when(enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(1L, 100L)).thenReturn(true);
         when(studentRepository.save(any(Student.class))).thenAnswer(i -> i.getArgument(0));
         when(enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(1L)).thenReturn(List.of());

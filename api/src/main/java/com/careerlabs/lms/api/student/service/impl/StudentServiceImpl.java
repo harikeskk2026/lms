@@ -372,7 +372,8 @@ public class StudentServiceImpl implements StudentService {
         if (batchId == null) {
             return;
         }
-        Batch batch = findBatchOrThrow(batchId);
+        Batch batch = batchRepository.findByIdWithLock(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
         if (student.getId() != null && enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), batchId)) {
             return;
         }
