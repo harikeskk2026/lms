@@ -27,7 +27,7 @@ const STATUS_COLORS = {
   ARCHIVED: 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
 }
 
-const EMPTY_FORM = { title: '', courseCode: '', description: '', durationValue: '', durationUnit: 'months', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
+const EMPTY_FORM = { title: '', courseCode: '', description: '', durationMode: 'standard', durationValue: '', durationUnit: 'months', rawDuration: '', level: 'BEGINNER', thumbnail: '', status: 'DRAFT' }
 
 export default function CourseCatalogPage() {
   const router = useRouter()
@@ -81,43 +81,69 @@ export default function CourseCatalogPage() {
   }
 
   function parseDuration(duration) {
-    if (!duration) return { durationValue: '', durationUnit: 'months' }
+    if (!duration || !duration.trim()) return { isStandard: false }
     const match = duration.trim().match(/^(\d+)\s*(d|day|days|w|week|weeks|m|month|months|y|year|years)$/i)
-    if (!match) return { durationValue: '', durationUnit: 'months' }
+    if (!match) return { isStandard: false }
     const value = match[1]
     const unit = match[2].toLowerCase()
-    if (unit === 'd' || unit === 'day' || unit === 'days') return { durationValue: value, durationUnit: 'days' }
-    if (unit === 'w' || unit === 'week' || unit === 'weeks') return { durationValue: value, durationUnit: 'weeks' }
-    if (unit === 'y' || unit === 'year' || unit === 'years') return { durationValue: value, durationUnit: 'years' }
-    return { durationValue: value, durationUnit: 'months' }
+    if (unit === 'd' || unit.startsWith('day')) return { isStandard: true, durationValue: value, durationUnit: 'days' }
+    if (unit === 'w' || unit.startsWith('week')) return { isStandard: true, durationValue: value, durationUnit: 'weeks' }
+    if (unit === 'y' || unit.startsWith('year')) return { isStandard: true, durationValue: value, durationUnit: 'years' }
+    return { isStandard: true, durationValue: value, durationUnit: 'months' }
   }
 
   function openEdit(course) {
     setEditingId(course.id)
     setEditingCourseStatus(course.status)
     const parsed = parseDuration(course.duration)
-    reset({
-      title: course.title,
-      courseCode: course.courseCode || '',
-      description: course.description,
-      durationValue: parsed.durationValue,
-      durationUnit: parsed.durationUnit,
-      level: course.level,
-      thumbnail: course.thumbnail || '',
-      status: course.status,
-    })
+    if (parsed.isStandard) {
+      reset({
+        title: course.title,
+        courseCode: course.courseCode || '',
+        description: course.description,
+        durationMode: 'standard',
+        durationValue: parsed.durationValue,
+        durationUnit: parsed.durationUnit,
+        rawDuration: course.duration || '',
+        level: course.level,
+        thumbnail: course.thumbnail || '',
+        status: course.status,
+      })
+    } else {
+      reset({
+        title: course.title,
+        courseCode: course.courseCode || '',
+        description: course.description,
+        durationMode: 'legacy',
+        durationValue: '',
+        durationUnit: 'months',
+        rawDuration: course.duration || '',
+        level: course.level,
+        thumbnail: course.thumbnail || '',
+        status: course.status,
+      })
+    }
     setPanelOpen(true)
   }
 
   async function onSubmit(data) {
     setSaving(true)
     try {
-      const payload = {
-        ...data,
-        duration: `${data.durationValue} ${data.durationUnit}`,
+      let duration
+      if (data.durationMode === 'legacy') {
+        duration = data.rawDuration
+      } else {
+        duration = `${data.durationValue.trim()} ${data.durationUnit}`
       }
-      delete payload.durationValue
-      delete payload.durationUnit
+      const payload = {
+        title: data.title,
+        courseCode: data.courseCode,
+        description: data.description,
+        duration,
+        level: data.level,
+        thumbnail: data.thumbnail,
+        status: data.status,
+      }
       if (editingId) {
         await courseService.update(editingId, payload)
         toast.success('Course updated')
@@ -356,21 +382,70 @@ export default function CourseCatalogPage() {
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
-            <div className="flex gap-2">
-              <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="e.g. 3"
-                className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <CustomSelect
-                value={watch('durationUnit')}
-                onChange={(val) => setValue('durationUnit', val, { shouldValidate: true })}
-                options={[
-                  { value: 'days', label: 'Days' },
-                  { value: 'weeks', label: 'Weeks' },
-                  { value: 'months', label: 'Months' },
-                  { value: 'years', label: 'Years' },
-                ]}
-              />
-            </div>
-            {(errors.durationValue || errors.durationUnit) && <span className="text-xs text-red-500 mt-1 block">Duration is required</span>}
+            {watch('durationMode') === 'legacy' ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40">
+                  <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 truncate">{watch('rawDuration')}</p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400">Legacy / Custom &mdash; kept as-is</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const parsed = parseDuration(watch('rawDuration'))
+                    if (parsed.isStandard) {
+                      setValue('durationMode', 'standard', { shouldValidate: true })
+                      setValue('durationValue', parsed.durationValue, { shouldValidate: true })
+                      setValue('durationUnit', parsed.durationUnit, { shouldValidate: true })
+                    } else {
+                      setValue('durationMode', 'standard', { shouldValidate: true })
+                      setValue('durationValue', '', { shouldValidate: true })
+                      setValue('durationUnit', 'months', { shouldValidate: true })
+                    }
+                  }}
+                  className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline"
+                >
+                  Change duration
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="e.g. 3"
+                    className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                  <CustomSelect
+                    value={watch('durationUnit')}
+                    onChange={(val) => setValue('durationUnit', val, { shouldValidate: true })}
+                    options={[
+                      { value: 'days', label: 'Days' },
+                      { value: 'weeks', label: 'Weeks' },
+                      { value: 'months', label: 'Months' },
+                      { value: 'years', label: 'Years' },
+                    ]}
+                  />
+                </div>
+                {editingId && watch('rawDuration') && parseDuration(watch('rawDuration')).isStandard === false && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setValue('durationMode', 'legacy', { shouldValidate: true })
+                      setValue('durationValue', '', { shouldValidate: false })
+                      setValue('durationUnit', 'months', { shouldValidate: false })
+                    }}
+                    className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:underline"
+                  >
+                    &larr; Keep original duration (&ldquo;{watch('rawDuration')}&rdquo;)
+                  </button>
+                )}
+              </div>
+            )}
+            {(errors.durationValue || errors.durationUnit || errors.rawDuration) && (
+              <span className="text-xs text-red-500 mt-1 block">
+                {errors.durationValue?.message || errors.durationUnit?.message || errors.rawDuration?.message || 'Duration is required'}
+              </span>
+            )}
           </div>
 
           <div>
