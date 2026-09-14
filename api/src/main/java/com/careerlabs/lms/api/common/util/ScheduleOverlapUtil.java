@@ -12,9 +12,9 @@ public final class ScheduleOverlapUtil {
     }
 
     private static final Pattern TIME_12H_PATTERN =
-            Pattern.compile("(?i)^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$");
+            Pattern.compile("(?i)^(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)$");
     private static final Pattern TIME_24H_PATTERN =
-            Pattern.compile("^(\\d{1,2}):(\\d{2})$");
+            Pattern.compile("^(\\d{1,2})(?::(\\d{2}))?$");
 
     public static boolean isDateOverlap(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
         if (start1 == null || end1 == null || start2 == null || end2 == null) {
@@ -57,7 +57,7 @@ public final class ScheduleOverlapUtil {
         Matcher m12 = TIME_12H_PATTERN.matcher(s);
         if (m12.matches()) {
             int hour = Integer.parseInt(m12.group(1));
-            int minute = Integer.parseInt(m12.group(2));
+            int minute = m12.group(2) != null ? Integer.parseInt(m12.group(2)) : 0;
             String ampm = m12.group(3).toUpperCase();
             if (hour == 12) {
                 hour = ampm.equals("AM") ? 0 : 12;
@@ -69,7 +69,7 @@ public final class ScheduleOverlapUtil {
         Matcher m24 = TIME_24H_PATTERN.matcher(s);
         if (m24.matches()) {
             int hour = Integer.parseInt(m24.group(1));
-            int minute = Integer.parseInt(m24.group(2));
+            int minute = m24.group(2) != null ? Integer.parseInt(m24.group(2)) : 0;
             return hour * 60 + minute;
         }
         return null;
@@ -77,7 +77,8 @@ public final class ScheduleOverlapUtil {
 
     private static TimeRange parseTiming(String timing) {
         if (timing == null || timing.isBlank()) return null;
-        String[] parts = timing.split("-");
+        String normalized = timing.replaceAll("[\\u2013\\u2014]", "-");
+        String[] parts = normalized.split("-");
         if (parts.length != 2) return null;
         Integer start = parseTimeToMinutes(parts[0]);
         Integer end = parseTimeToMinutes(parts[1]);

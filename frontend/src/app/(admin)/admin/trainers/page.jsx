@@ -747,36 +747,43 @@ export default function TrainersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                    Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <SearchableSelect
-                    options={courseOptions}
-                    value={form.courseId}
-                    onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
-                    placeholder="Select Course"
-                    searchPlaceholder="Search course..."
-                    emptyLabel="No courses found"
-                  />
+              {editingTrainer && !editingTrainer.active ? (
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-200">
+                  <p className="font-semibold mb-0.5">Trainer account is inactive</p>
+                  <p className="text-amber-700 dark:text-amber-300">Batches cannot be assigned to an inactive trainer. Please activate this trainer account before assigning batches.</p>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                      Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <SearchableSelect
+                      options={courseOptions}
+                      value={form.courseId}
+                      onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
+                      placeholder="Select Course"
+                      searchPlaceholder="Search course..."
+                      emptyLabel="No courses found"
+                    />
+                  </div>
 
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                    Assign Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <SearchableSelect
-                    options={batchOptions}
-                    value={form.batchId}
-                    onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
-                    placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
-                    searchPlaceholder="Search batch..."
-                    disabled={!form.courseId}
-                    emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
-                  />
+                  <div>
+                    <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                      Assign Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <SearchableSelect
+                      options={batchOptions}
+                      value={form.batchId}
+                      onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
+                      placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
+                      searchPlaceholder="Search batch..."
+                      disabled={!form.courseId}
+                      emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {editingTrainer?.batches && editingTrainer.batches.length > 0 && (
                 <div className="p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-xl border border-purple-100 dark:border-purple-800/40 space-y-1.5">

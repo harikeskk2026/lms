@@ -353,7 +353,10 @@ export default function BatchDetailPage() {
     load()
     if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
       adminApi.getTrainers({ limit: 100, status: 'active' })
-        .then(r => setTrainers(r.data?.data?.trainers || []))
+        .then(r => {
+          const list = r.data?.data?.trainers || []
+          setTrainers(list.filter(t => t.active === true))
+        })
         .catch(() => {})
       courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     }
@@ -540,7 +543,14 @@ export default function BatchDetailPage() {
                   <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Lead Trainer</p>
                   {batch.trainer ? (
                     <div>
-                      <p className="font-bold text-gray-900 dark:text-white text-base">{batch.trainer.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{batch.trainer.name}</p>
+                        {batch.trainer.active === false && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{batch.trainer.email}</p>
                     </div>
                   ) : (
@@ -555,7 +565,7 @@ export default function BatchDetailPage() {
                   <CustomSelect
                     value={trainers.some(t => t.id === (batch.trainer?.id || batch.trainerId)) ? (batch.trainer?.id || batch.trainerId) : ''}
                     onChange={(val) => handleAssignTrainer(val)}
-                    options={trainers.filter(t => t.active !== false).map(t => ({
+                    options={trainers.filter(t => t.active === true).map(t => ({
                       value: t.id,
                       label: `${t.name}${t.designation ? ` · ${t.designation}` : ''}`
                     }))}

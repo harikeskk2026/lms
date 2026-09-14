@@ -92,7 +92,10 @@ export default function BatchesPage() {
     load()
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     adminApi.getTrainers({ limit: 100, status: 'active' })
-      .then(r => setTrainers(r.data?.data?.trainers || []))
+      .then(r => {
+        const list = r.data?.data?.trainers || []
+        setTrainers(list.filter(t => t.active === true))
+      })
       .catch(() => {})
   }, [])
 
@@ -106,10 +109,12 @@ export default function BatchesPage() {
 
   const handleOpenEdit = (batch) => {
     setEditingBatch(batch)
+    const rawTrainerId = batch.trainer?.id ? String(batch.trainer.id) : (batch.trainerId ? String(batch.trainerId) : '')
+    const isTrainerActive = batch.trainer?.active === true || (rawTrainerId && trainers.some(t => String(t.id) === rawTrainerId && t.active === true))
     setForm({
       name: batch.name || '',
       courseId: batch.course?.id ? String(batch.course.id) : (batch.courseId ? String(batch.courseId) : ''),
-      trainerId: batch.trainer?.id ? String(batch.trainer.id) : (batch.trainerId ? String(batch.trainerId) : ''),
+      trainerId: isTrainerActive ? rawTrainerId : '',
       startDate: batch.startDate ? batch.startDate.slice(0, 10) : '',
       endDate: batch.endDate ? batch.endDate.slice(0, 10) : '',
       timing: batch.timing || '',
@@ -454,13 +459,18 @@ export default function BatchesPage() {
               <CustomSelect
                 value={form.trainerId}
                 onChange={(val) => setForm(f => ({ ...f, trainerId: val }))}
-                options={trainers.filter(t => t.active !== false).map(t => ({
+                options={trainers.filter(t => t.active === true).map(t => ({
                   value: t.id,
                   label: `${t.name}${t.designation ? ` (${t.designation})` : ''}`
                 }))}
-                placeholder="Select trainer (optional)"
+                placeholder="Select lead trainer (optional)"
                 searchable={trainers.length >= 10}
               />
+              {editingBatch?.trainer && editingBatch.trainer.active === false && !form.trainerId && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
+                  Previous trainer ({editingBatch.trainer.name}) is inactive. Please select an active trainer or leave unassigned.
+                </p>
+              )}
             </div>
 
             {/* Clean Start & End Time Fields */}

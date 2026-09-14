@@ -178,8 +178,8 @@ class BatchServiceTrainerValidationTest {
     }
 
     @Test
-    @DisplayName("Updating batch while keeping existing assigned trainer (even if now inactive) keeps assignment intact")
-    void updateBatch_keepingExistingInactiveTrainer_intactAndSucceeds() {
+    @DisplayName("Updating batch with an inactive trainer (even if previously assigned) throws BadRequestException")
+    void updateBatch_keepingExistingInactiveTrainer_throwsBadRequestException() {
         Batch existingBatch = new Batch();
         setId(existingBatch, 50L);
         existingBatch.setName("Existing Batch");
@@ -188,15 +188,63 @@ class BatchServiceTrainerValidationTest {
 
         when(batchRepository.findById(50L)).thenReturn(Optional.of(existingBatch));
         when(userRepository.findById(2L)).thenReturn(Optional.of(inactiveTrainer));
-        when(batchRepository.findByTrainerIdAndActiveTrue(2L)).thenReturn(List.of());
-        when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () ->
+                batchService.update(50L, createRequest(2L))
+        );
+
+        assertTrue(ex.getMessage().contains("Cannot assign trainer 'Inactive Trainer': trainer account is inactive."));
+        verify(batchRepository, never()).save(any(Batch.class));
+    }
+
+    @Test
+    @DisplayName("Reactivating a batch with an inactive trainer throws BadRequestException")
+    void toggleActive_inactiveTrainer_throwsBadRequestException() {
+        Batch existingBatch = new Batch();
+        setId(existingBatch, 50L);
+        existingBatch.setName("Inactive Batch");
+        existingBatch.setCourse(course);
+        existingBatch.setTrainerId(2L);
+        existingBatch.setActive(false);
+        existingBatch.setStartDate(LocalDate.of(2026, 9, 1));
+        existingBatch.setEndDate(LocalDate.of(2026, 12, 1));
+        existingBatch.setTiming("09:00 AM - 11:00 AM");
+
+        when(batchRepository.findById(50L)).thenReturn(Optional.of(existingBatch));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(inactiveTrainer));
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () ->
+                batchService.toggleActive(50L)
+        );
+
+        assertTrue(ex.getMessage().contains("Cannot assign trainer 'Inactive Trainer': trainer account is inactive."));
+        assertFalse(existingBatch.isActive());
+        verify(batchRepository, never()).save(any(Batch.class));
+    }
+
+    @Test
+    @DisplayName("Reactivating a batch with an active trainer succeeds")
+    void toggleActive_activeTrainer_succeeds() {
+        Batch existingBatch = new Batch();
+        setId(existingBatch, 50L);
+        existingBatch.setName("Inactive Batch");
+        existingBatch.setCourse(course);
+        existingBatch.setTrainerId(1L);
+        existingBatch.setActive(false);
+        existingBatch.setStartDate(LocalDate.of(2026, 9, 1));
+        existingBatch.setEndDate(LocalDate.of(2026, 12, 1));
+        existingBatch.setTiming("09:00 AM - 11:00 AM");
+
+        when(batchRepository.findById(50L)).thenReturn(Optional.of(existingBatch));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(activeTrainer));
+        when(batchRepository.findByTrainerIdAndActiveTrue(1L)).thenReturn(List.of());
         when(batchRepository.save(any(Batch.class))).thenReturn(existingBatch);
-        when(studentRepository.countByBatchId(50L)).thenReturn(5L);
+        when(studentRepository.countByBatchId(50L)).thenReturn(0L);
 
-        BatchResponse response = batchService.update(50L, createRequest(2L));
+        BatchResponse res = batchService.toggleActive(50L);
 
-        assertNotNull(response);
-        assertEquals(50L, response.id());
+        assertNotNull(res);
+        assertTrue(existingBatch.isActive());
         verify(batchRepository).save(existingBatch);
     }
 
@@ -221,5 +269,56 @@ class BatchServiceTrainerValidationTest {
         assertNotNull(response);
         assertEquals(50L, response.id());
         verify(batchRepository).save(existingBatch);
+    }
+
+    @Test
+    @DisplayName("Active trainer with overlapping batch throws ConflictException")
+    void createBatch_activeTrainer_overlappingBatch_throwsConflictException() {
+        Batch existing = new Batch();
+        setId(existing, 200L);
+        existing.setName("Existing Active Batch");
+        existing.setStartDate(LocalDate.of(2026, 9, 1));
+        existing.setEndDate(LocalDate.of(2026, 12, 1));
+        existing.setTiming("09:00 AM - 11:00 AM");
+        existing.setActive(true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(activeTrainer));
+        when(batchRepository.findByTrainerIdAndActiveTrue(1L)).thenReturn(List.of(existing));
+
+        BatchRequest req = createRequest(1L);
+        req.setStartDate(LocalDate.of(2026, 9, 15));
+        req.setEndDate(LocalDate.of(2026, 11, 15));
+        req.setTiming("10:00 AM - 12:00 PM"); // overlaps
+
+        assertThrows(com.careerlabs.lms.api.common.exception.ConflictException.class, () ->
+                batchService.create(req)
+        );
+        verify(batchRepository, never()).save(any(Batch.class));
+    }
+
+    @Test
+    @DisplayName("Active trainer with adjacent batch timings 1:00-2:00 and 2:00-3:00 succeeds")
+    void createBatch_activeTrainer_adjacentTimings_succeeds() {
+        Batch existing = new Batch();
+        setId(existing, 200L);
+        existing.setName("Existing Batch 1-2");
+        existing.setStartDate(LocalDate.of(2026, 9, 1));
+        existing.setEndDate(LocalDate.of(2026, 12, 1));
+        existing.setTiming("1:00-2:00");
+        existing.setActive(true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(activeTrainer));
+        when(batchRepository.findByTrainerIdAndActiveTrue(1L)).thenReturn(List.of(existing));
+        when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
+        when(batchRepository.save(any(Batch.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BatchRequest req = createRequest(1L);
+        req.setStartDate(LocalDate.of(2026, 9, 1));
+        req.setEndDate(LocalDate.of(2026, 12, 1));
+        req.setTiming("2:00-3:00"); // adjacent -> no overlap
+
+        BatchResponse res = batchService.create(req);
+        assertNotNull(res);
+        verify(batchRepository).save(any(Batch.class));
     }
 }

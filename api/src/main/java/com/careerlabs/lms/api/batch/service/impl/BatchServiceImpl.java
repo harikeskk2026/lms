@@ -250,15 +250,7 @@ public class BatchServiceImpl implements BatchService {
                 .filter(u -> u.getRole() == Role.TRAINER)
                 .orElseThrow(() -> new ResourceNotFoundException("Trainer not found with ID: " + trainerId));
 
-        boolean isExistingAssignment = false;
-        if (currentBatchId != null) {
-            Batch currentBatch = batchRepository.findById(currentBatchId).orElse(null);
-            if (currentBatch != null && Objects.equals(currentBatch.getTrainerId(), trainerId)) {
-                isExistingAssignment = true;
-            }
-        }
-
-        if (!trainer.isActive() && !isExistingAssignment) {
+        if (!trainer.isActive()) {
             throw new BadRequestException(String.format(
                     "Cannot assign trainer '%s': trainer account is inactive.",
                     trainer.getName()

@@ -94,4 +94,29 @@ class ScheduleOverlapUtilTest {
         assertFalse(ScheduleOverlapUtil.isDateOverlap(a.getStartDate(), a.getEndDate(), b.getStartDate(), b.getEndDate()));
         assertFalse(ScheduleOverlapUtil.isScheduleOverlap(a, b));
     }
+
+    @Test
+    @DisplayName("Adjacent times 1:00-2:00 and 2:00-3:00 -> no overlap (PASS)")
+    void adjacent1to2and2to3_noOverlap() {
+        assertFalse(ScheduleOverlapUtil.isTimeOverlap("1:00-2:00", "2:00-3:00"));
+        assertFalse(ScheduleOverlapUtil.isTimeOverlap("01:00-02:00", "02:00-03:00"));
+    }
+
+    @Test
+    @DisplayName("Overlapping times 1:00-2:00 and 1:30-2:30 -> overlap (FAIL)")
+    void overlapping1to2and130to230_overlap() {
+        assertTrue(ScheduleOverlapUtil.isTimeOverlap("1:00-2:00", "1:30-2:30"));
+    }
+
+    @Test
+    @DisplayName("Unicode en-dash adjacent times: 1:00 PM – 2:00 PM and 2:00 PM – 3:00 PM -> no overlap (PASS)")
+    void unicodeEnDashAdjacent_noOverlap() {
+        assertFalse(ScheduleOverlapUtil.isTimeOverlap("1:00 PM – 2:00 PM", "2:00 PM – 3:00 PM"));
+    }
+
+    @Test
+    @DisplayName("Unicode en-dash overlapping times: 1:00 PM – 2:00 PM and 1:30 PM – 2:30 PM -> overlap (FAIL)")
+    void unicodeEnDashOverlapping_overlap() {
+        assertTrue(ScheduleOverlapUtil.isTimeOverlap("1:00 PM – 2:00 PM", "1:30 PM – 2:30 PM"));
+    }
 }

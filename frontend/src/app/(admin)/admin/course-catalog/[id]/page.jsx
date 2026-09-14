@@ -62,8 +62,9 @@ export default function CourseManagePage({ params }) {
     adminApi.getTrainers({ limit: 200, status: 'active' })
       .then(res => {
         const list = res.data?.data?.trainers || []
-        list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-        setTrainers(list)
+        const activeList = list.filter(t => t.active === true)
+        activeList.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        setTrainers(activeList)
       })
       .catch(err => {
         console.error('Failed to load trainers:', err)
@@ -1907,7 +1908,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
               value={form.trainerId}
               onChange={(val) => setForm(f => ({ ...f, trainerId: val }))}
               disabled={loadingTrainers}
-              options={trainers.map(t => ({
+              options={trainers.filter(t => t.active === true).map(t => ({
                 value: t.id,
                 label: t.name + (t.designation ? ` · ${t.designation}` : ''),
               }))}

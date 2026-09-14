@@ -241,7 +241,7 @@ export default function PlacementPage() {
       if (p?.status === 'fulfilled') setPrepMaterials(Array.isArray(p.value.data.data) ? p.value.data.data : [])
       if (t?.status === 'fulfilled') {
         const tList = t.value?.data?.data?.trainers || t.value?.data?.data || []
-        setTrainers(Array.isArray(tList) ? tList : [])
+        setTrainers(Array.isArray(tList) ? tList.filter(t => t.active === true) : [])
       }
     })
   }, [])

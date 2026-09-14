@@ -159,7 +159,7 @@ export default function AdminMeetingLinksPage() {
       const [bRes, cRes, tRes] = await Promise.allSettled([
         batchService.list(),
         courseService.list(),
-        adminApi.getTrainers()
+        adminApi.getTrainers({ limit: 200, status: 'active' })
       ])
       if (bRes.status === 'fulfilled') {
         setBatches(extractList(bRes.value))
@@ -168,7 +168,8 @@ export default function AdminMeetingLinksPage() {
         setCourses(extractList(cRes.value))
       }
       if (tRes.status === 'fulfilled') {
-        setTrainers(extractList(tRes.value))
+        const rawTrainers = extractList(tRes.value)
+        setTrainers(rawTrainers.filter(t => t.active === true))
       }
     } catch {
       // ignore
@@ -808,7 +809,7 @@ export default function AdminMeetingLinksPage() {
                     setForm(f => ({ ...f, hostName: val }))
                   }
                 }}
-                options={trainers.map(t => ({
+                options={trainers.filter(t => t.active === true).map(t => ({
                   value: t.name || t.fullName,
                   label: `${t.name || t.fullName}${t.email ? ` (${t.email})` : ''}`
                 }))}

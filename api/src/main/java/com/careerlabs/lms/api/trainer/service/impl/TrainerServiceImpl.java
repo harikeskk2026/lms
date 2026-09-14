@@ -2,8 +2,10 @@ package com.careerlabs.lms.api.trainer.service.impl;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.trainer.dto.request.TrainerCreateRequest;
 import com.careerlabs.lms.api.trainer.dto.request.TrainerUpdateRequest;
 import com.careerlabs.lms.api.trainer.dto.response.TrainerPageResponse;
@@ -120,14 +122,28 @@ public class TrainerServiceImpl implements TrainerService {
         if (request.getBatchId() != null) {
             Batch batch = batchRepository.findById(request.getBatchId())
                     .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.getBatchId()));
+            validateTrainerAssignment(saved, batch);
             batch.setTrainerId(saved.getId());
             batchRepository.save(batch);
         } else if (request.getBatchIds() != null && !request.getBatchIds().isEmpty()) {
+            List<Batch> batchesToAssign = new ArrayList<>();
             for (Long bId : request.getBatchIds()) {
-                batchRepository.findById(bId).ifPresent(b -> {
-                    b.setTrainerId(saved.getId());
-                    batchRepository.save(b);
-                });
+                Batch b = batchRepository.findById(bId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + bId));
+                validateTrainerAssignment(saved, b);
+                for (Batch other : batchesToAssign) {
+                    if (ScheduleOverlapUtil.isScheduleOverlap(b, other)) {
+                        throw new ConflictException(String.format(
+                                "Batch '%s' overlaps with batch '%s' in the assignment list. Batch timings must not overlap.",
+                                b.getName(), other.getName()
+                        ));
+                    }
+                }
+                batchesToAssign.add(b);
+            }
+            for (Batch b : batchesToAssign) {
+                b.setTrainerId(saved.getId());
+                batchRepository.save(b);
             }
         }
 
@@ -158,12 +174,44 @@ public class TrainerServiceImpl implements TrainerService {
         if (request.getBatchId() != null) {
             Batch batch = batchRepository.findById(request.getBatchId())
                     .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.getBatchId()));
+            validateTrainerAssignment(saved, batch);
             batch.setTrainerId(saved.getId());
             batchRepository.save(batch);
         }
 
         List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(id);
         return TrainerResponse.from(saved, batches);
+    }
+
+    private void validateTrainerAssignment(User trainer, Batch targetBatch) {
+        if (!trainer.isActive()) {
+            throw new BadRequestException(String.format(
+                    "Cannot assign trainer '%s': trainer account is inactive.",
+                    trainer.getName()
+            ));
+        }
+
+        List<Batch> existingBatches = batchRepository.findByTrainerIdAndActiveTrue(trainer.getId());
+        for (Batch existing : existingBatches) {
+            if (existing.getId().equals(targetBatch.getId())) {
+                continue;
+            }
+
+            if (ScheduleOverlapUtil.isScheduleOverlap(
+                    targetBatch.getStartDate(), targetBatch.getEndDate(), targetBatch.getTiming(),
+                    existing.getStartDate(), existing.getEndDate(), existing.getTiming())) {
+                String existingTiming = (existing.getTiming() != null && !existing.getTiming().isBlank())
+                        ? existing.getTiming()
+                        : "full day";
+                throw new ConflictException(String.format(
+                        "Trainer is already assigned to batch '%s' which runs concurrently from %s to %s at %s. Batch timings must not overlap.",
+                        existing.getName(),
+                        existing.getStartDate(),
+                        existing.getEndDate(),
+                        existingTiming
+                ));
+            }
+        }
     }
 
     @Override
