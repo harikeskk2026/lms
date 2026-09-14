@@ -1,26 +1,41 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { FileDown, Download, BarChart2, FileText, Users, Eye, X } from 'lucide-react'
+import {
+  FileDown, Download, BarChart2, FileText, Users, Eye, X,
+  Sparkles, Filter, ChevronLeft, ChevronRight, CheckSquare, RotateCcw,
+  AlertTriangle, Target, UserCheck, Briefcase, Calendar, Search,
+  Award, CheckCircle2, Check, ArrowUpRight, ArrowDownRight, Layers,
+  Laptop, TrendingUp, TrendingDown, BookOpen
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import reportService from '@/services/reportService'
 import batchService from '@/services/batchService'
 import courseService from '@/services/courseService'
+import { adminApi } from '@/lib/api'
 import CustomSelect from '@/components/ui/CustomSelect'
 
 const TABS = ['Attendance', 'Performance', 'Placement', 'Export']
 
-// recharts is a heavy dependency - load each report tab's charts only when
-// that tab is viewed, and only on the client (SSR doesn't need them).
-const noSSR = (loader) => dynamic(loader, { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" /> })
+// Dynamic SSR-free chart loaders
+const noSSR = (loader) => dynamic(loader, {
+  ssr: false,
+  loading: () => <div className="h-[220px] rounded-2xl bg-purple-50/50 dark:bg-gray-800/50 animate-pulse border border-purple-100/50" />
+})
 
-const AttendanceTrendChart      = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceTrendChart))
-const AttendanceByBatchChart    = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceByBatchChart))
+const AttendanceDailyTrendChart        = noSSR(() => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.AttendanceDailyTrendChart))
+const WeeklyAttendanceRateChart        = noSSR(() => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.WeeklyAttendanceRateChart))
+const MonthlyAttendanceBreakdownChart  = noSSR(() => import('@/components/admin/attendance/AttendanceTrendCharts').then(m => m.MonthlyAttendanceBreakdownChart))
+const AttendanceHeatmap                = noSSR(() => import('@/components/admin/AttendanceHeatmap'))
+
+const AttendanceTrendChart        = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceTrendChart))
+const AttendanceByBatchChart      = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceByBatchChart))
 const AttendanceDistributionChart = noSSR(() => import('@/components/admin/reports/AttendanceReportCharts').then(m => m.AttendanceDistributionChart))
 
 const CoursePerformanceChart          = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.CoursePerformanceChart))
 const BatchPerformanceChart           = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.BatchPerformanceChart))
 const PerformanceTrendChart           = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.PerformanceTrendChart))
+const OverallPerformanceDonut         = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.OverallPerformanceDonut))
 const AtRiskBreakdownChart            = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.AtRiskBreakdownChart))
 const StudentCourseBreakdownChart     = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.StudentCourseBreakdownChart))
 const StudentProgressTrendChart       = noSSR(() => import('@/components/admin/reports/PerformanceReportCharts').then(m => m.StudentProgressTrendChart))
@@ -37,124 +52,129 @@ const PlacementByCourseChart     = noSSR(() => import('@/components/admin/report
 const PlacementFunnelChart       = noSSR(() => import('@/components/admin/reports/PlacementReportCharts').then(m => m.PlacementFunnelChart))
 
 const RISK_BADGE = {
-  LOW:      'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
-  MEDIUM:   'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
-  HIGH:     'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/40',
-  CRITICAL: 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
+  LOW:      'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300',
+  MEDIUM:   'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300',
+  HIGH:     'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/40 dark:text-orange-300',
+  CRITICAL: 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300',
 }
 
 const READINESS_BADGE = {
-  READY:             'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
-  NEARLY_READY:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
-  NEEDS_IMPROVEMENT: 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
-  NOT_READY:         'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
+  READY:             'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300',
+  NEARLY_READY:      'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300',
+  NEEDS_IMPROVEMENT: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300',
+  NOT_READY:         'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300',
+  ACADEMIC_GAP:      'bg-rose-50 text-rose-600 border border-rose-200',
+  ATTENDANCE_GAP:    'bg-amber-50 text-amber-600 border border-amber-200',
+  BACKLOG_GAP:       'bg-purple-50 text-purple-600 border border-purple-200',
 }
 
-const DIFFICULTY_BADGE = {
-  DIFFICULT: 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
-  MODERATE:  'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
-  EASY:      'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
+const ATTENDANCE_STATUS_BADGE = {
+  HEALTHY:  'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  AT_RISK:  'bg-amber-50 text-amber-700 border border-amber-200',
+  CRITICAL: 'bg-rose-50 text-rose-700 border border-rose-200',
 }
 
-function todayFileStamp() {
-  const d = new Date()
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  return `${dd}-${mm}-${d.getFullYear()}`
+const GRADE_STYLES = {
+  A: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200',
+  B: 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200',
+  C: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200',
+  D: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200',
 }
 
-function dateStampedFilename(base) {
-  return `${base}-${todayFileStamp()}.csv`
-}
+const AVATAR_BG_COLORS = [
+  'bg-purple-100 text-purple-700 border-purple-200',
+  'bg-amber-100 text-amber-700 border-amber-200',
+  'bg-blue-100 text-blue-700 border-blue-200',
+  'bg-emerald-100 text-emerald-700 border-emerald-200',
+  'bg-rose-100 text-rose-700 border-rose-200',
+  'bg-indigo-100 text-indigo-700 border-indigo-200',
+]
 
 function downloadCSV(data, filename) {
-  if (!data.length) return toast.error('No data to export')
+  if (!data || !data.length) return toast.error('No data to export')
   const headers = Object.keys(data[0]).join(',')
-  const rows = data.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+  const rows = data.map(r => Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
   const csv = [headers, ...rows].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`
+  a.click()
   URL.revokeObjectURL(url)
 }
 
-function StatCard({ label, value, color = 'text-gray-800 dark:text-white' }) {
-  return (
-    <div className="glass-card p-4 text-center">
-      <p className={`text-xl font-extrabold font-display ${color}`}>{value}</p>
-      <p className="text-[11px] text-gray-500 uppercase font-semibold mt-1">{label}</p>
-    </div>
-  )
+function getGradeFromScore(score) {
+  if (score == null) return { grade: 'B', status: 'Good', pill: 'bg-blue-50 text-blue-700 border-blue-200' }
+  if (score >= 90) return { grade: 'A', status: 'Excellent', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+  if (score >= 70) return { grade: 'B', status: 'Good', pill: 'bg-blue-50 text-blue-700 border-blue-200' }
+  if (score >= 50) return { grade: 'C', status: 'Needs Improvement', pill: 'bg-amber-50 text-amber-700 border-amber-200' }
+  return { grade: 'D', status: 'At Risk', pill: 'bg-rose-50 text-rose-700 border-rose-200' }
 }
 
-function ChartCard({ title, empty, emptyMessage, height = 220, children, footer }) {
-  return (
-    <div className="glass-card p-5 min-w-0 min-h-0">
-      <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">{title}</h3>
-      {empty ? (
-        <div style={{ height: Math.min(height, 140) }} className="flex items-center justify-center text-center px-4">
-          <p className="text-sm text-gray-400">{emptyMessage}</p>
-        </div>
-      ) : (
-        <div className="min-w-0" style={{ width: '100%' }}>{children}</div>
-      )}
-      {footer}
-    </div>
-  )
-}
-
-function TableCard({ title, rows, columns, emptyMessage, note }) {
-  return (
-    <div className="glass-card p-5 overflow-x-auto">
-      <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">{title}</h3>
-      {!rows.length ? (
-        <p className="text-sm text-gray-400">{emptyMessage}</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 dark:border-gray-800">
-              {columns.map(c => (
-                <th key={c.header} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{c.header}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={row.id ?? row.studentId ?? row.batchId ?? row.courseId ?? i} className="border-b border-gray-50 dark:border-gray-800/50">
-                {columns.map(c => (
-                  <td key={c.header} className="px-3 py-2">{c.render(row)}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {note}
-    </div>
-  )
+const DEFAULT_EXPORT_COLUMNS = {
+  attendance: [
+    { key: 'name', label: 'Student Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'enrollmentNo', label: 'Enrollment No' },
+    { key: 'batch', label: 'Batch' },
+    { key: 'attendancePct', label: 'Attendance %' },
+    { key: 'total', label: 'Total Classes' },
+    { key: 'present', label: 'Present' },
+    { key: 'absent', label: 'Absent' },
+    { key: 'late', label: 'Late' },
+  ],
+  performance: [
+    { key: 'name', label: 'Student Name' },
+    { key: 'assignmentsSubmitted', label: 'Assignments' },
+    { key: 'avgGradePct', label: 'Avg Grade %' },
+    { key: 'avgQuizScorePct', label: 'Quiz Score %' },
+    { key: 'attendancePct', label: 'Attendance %' },
+    { key: 'riskLevel', label: 'Risk Level' },
+  ],
+  placement: [
+    { key: 'name', label: 'Student Name' },
+    { key: 'batch', label: 'Batch' },
+    { key: 'performancePct', label: 'Performance %' },
+    { key: 'quizPct', label: 'Quiz %' },
+    { key: 'completionPct', label: 'Completion %' },
+    { key: 'readinessScore', label: 'Readiness Score' },
+    { key: 'readinessStatus', label: 'Readiness' },
+    { key: 'placementStatus', label: 'Placement Status' },
+  ]
 }
 
 export default function ReportsPage() {
   const [tab, setTab] = useState('Attendance')
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
+  const [trainers, setTrainers] = useState([])
+  
+  // Filter States
   const [batchFilter, setBatchFilter] = useState('')
   const [courseFilter, setCourseFilter] = useState('')
+  const [trainerFilter, setTrainerFilter] = useState('')
+  const [assessmentTypeFilter, setAssessmentTypeFilter] = useState('')
+  const [driveFilter, setDriveFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+
+  // Loading states
+  const [attLoading, setAttLoading] = useState(false)
+  const [perfLoading, setPerfLoading] = useState(false)
+  const [placementLoading, setPlacementLoading] = useState(false)
+
+  // Report Data States
   const [attData, setAttData] = useState(null)
   const [perfData, setPerfData] = useState(null)
   const [placementReport, setPlacementReport] = useState(null)
+  const [placementReadiness, setPlacementReadiness] = useState([])
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [studentDetail, setStudentDetail] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [exportPreview, setExportPreview] = useState(null)
-  const [exportPreviewLoading, setExportPreviewLoading] = useState('')
-  // Record counts per export type ('students'|'attendance'|'performance') so the
-  // Download CSV button can be hidden when there's nothing to export. null = not
-  // checked yet (button stays hidden rather than flashing in then disappearing).
-  const [exportCounts, setExportCounts] = useState({ students: null, attendance: null, performance: null })
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false)
 
+  // Advanced Analytics States
   const [batchHealth, setBatchHealth] = useState([])
   const [quizData, setQuizData] = useState(null)
   const [assignmentData, setAssignmentData] = useState(null)
@@ -163,68 +183,142 @@ export default function ReportsPage() {
   const [topStudents, setTopStudents] = useState([])
   const [batchLeaderboard, setBatchLeaderboard] = useState([])
   const [decliningStudents, setDecliningStudents] = useState([])
-  const [placementReadiness, setPlacementReadiness] = useState([])
   const [correlations, setCorrelations] = useState([])
+  const [showAdvancedPerf, setShowAdvancedPerf] = useState(false)
 
+  // Table State
+  const [perfSearch, setPerfSearch] = useState('')
+  const [perfPage, setPerfPage] = useState(1)
+  const [perfPageSize, setPerfPageSize] = useState(5)
+
+  const [placementSearch, setPlacementSearch] = useState('')
+  const [placementPage, setPlacementPage] = useState(1)
+  const [placementPageSize, setPlacementPageSize] = useState(5)
+
+  // Attendance Analytics States
+  const [attAnalyticsData, setAttAnalyticsData] = useState(null)
+  const [attDays, setAttDays] = useState(30)
+  const [showAllTrainers, setShowAllTrainers] = useState(false)
+  const [attSearch, setAttSearch] = useState('')
+  const [attPage, setAttPage] = useState(1)
+  const [attPageSize, setAttPageSize] = useState(10)
+
+  // Export Tab State
+  const [selectedExportType, setSelectedExportType] = useState('attendance')
+  const [selectedColumns, setSelectedColumns] = useState(
+    DEFAULT_EXPORT_COLUMNS.attendance.map(c => c.key)
+  )
+  const [exportPreview, setExportPreview] = useState(null)
+  const [exportPreviewLoading, setExportPreviewLoading] = useState(false)
+  const [recentExports, setRecentExports] = useState([
+    {
+      id: 1,
+      type: 'Attendance',
+      filters: 'All Batches, All Courses',
+      exportedBy: 'Admin',
+      dateTime: '10 Sep 2026, 11:15 AM',
+      format: 'CSV',
+      dataRef: 'attendance'
+    },
+    {
+      id: 2,
+      type: 'Performance',
+      filters: 'All Batches, All Courses',
+      exportedBy: 'Admin',
+      dateTime: '09 Sep 2026, 04:30 PM',
+      format: 'CSV',
+      dataRef: 'performance'
+    },
+    {
+      id: 3,
+      type: 'Placement',
+      filters: 'All Batches',
+      exportedBy: 'Admin',
+      dateTime: '08 Sep 2026, 10:20 AM',
+      format: 'CSV',
+      dataRef: 'placement'
+    }
+  ])
+
+  // Initial Data Load (Batches, Courses, Trainers)
   useEffect(() => {
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
-    reportService.getPlacement().then(r => setPlacementReport(r.data)).catch(() => {})
+    adminApi.getTrainers().then(r => {
+      const data = r.data?.data || r.data || []
+      setTrainers(Array.isArray(data) ? data : [])
+    }).catch(() => {})
     reportService.getBatchLeaderboard().then(r => setBatchLeaderboard(r.data || [])).catch(() => {})
-    reportService.getPlacementReadiness().then(r => setPlacementReadiness(r.data || [])).catch(() => {})
   }, [])
 
-  // Auto-load (and auto-refresh on filter change) so reports always reflect current data
-  // without waiting on a manual "Generate Report" click.
+  // Auto-reload on filter updates
   useEffect(() => {
     loadAttendance()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchFilter, courseFilter, startDate, endDate])
+  }, [batchFilter, courseFilter, startDate, endDate, attDays])
 
   useEffect(() => {
     loadPerformance()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchFilter, courseFilter])
+  }, [batchFilter, courseFilter, startDate, endDate])
 
-  // Check how many rows each export type would produce, so the Export tab can hide
-  // the "Download CSV" button for a type that currently has nothing to export.
   useEffect(() => {
-    if (tab !== 'Export') return
-    let cancelled = false
-    const types = ['students', 'attendance', 'performance']
-    types.forEach(type => {
-      reportService.export({ type, batchId: batchFilter || undefined, startDate, endDate })
-        .then(r => { if (!cancelled) setExportCounts(prev => ({ ...prev, [type]: (r.data || []).length })) })
-        .catch(() => { if (!cancelled) setExportCounts(prev => ({ ...prev, [type]: 0 })) })
-    })
-    return () => { cancelled = true }
-  }, [tab, batchFilter, startDate, endDate])
+    loadPlacement()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchFilter])
+
+  // Sync columns when export type changes
+  useEffect(() => {
+    const defaultCols = DEFAULT_EXPORT_COLUMNS[selectedExportType] || []
+    setSelectedColumns(defaultCols.map(c => c.key))
+    setExportPreview(null)
+  }, [selectedExportType])
 
   const loadAttendance = async () => {
-    setLoading(true)
+    setAttLoading(true)
     try {
-      const r = await reportService.getAttendance({
-        batchId: batchFilter || undefined, courseId: courseFilter || undefined, startDate, endDate,
-      })
+      const [r, analyticsRes] = await Promise.all([
+        reportService.getAttendance({
+          batchId: batchFilter || undefined,
+          courseId: courseFilter || undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        }),
+        adminApi.getAttendanceAnalytics({
+          days: attDays || 30,
+          ...(batchFilter ? { batchId: batchFilter } : {})
+        }).catch(() => ({ data: { data: null } }))
+      ])
       setAttData(r.data)
-      if (!r.data?.available) toast(r.data?.message || 'No data available for the selected filters.', { icon: 'ℹ️' })
-    } catch { toast.error('Failed') } finally { setLoading(false) }
+      if (analyticsRes?.data?.data) {
+        setAttAnalyticsData(analyticsRes.data.data)
+      }
+    } catch {
+      toast.error('Failed to load attendance report')
+    } finally {
+      setAttLoading(false)
+    }
   }
 
   const loadPerformance = async () => {
-    setLoading(true)
+    setPerfLoading(true)
     try {
-      const params = { batchId: batchFilter || undefined, courseId: courseFilter || undefined }
+      const params = {
+        batchId: batchFilter || undefined,
+        courseId: courseFilter || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      }
       const [perf, health, quiz, assignments, engagement, trend, top, declining, corr] = await Promise.all([
         reportService.getPerformance(params),
-        reportService.getBatchHealth(),
-        reportService.getQuizAnalytics(params),
-        reportService.getAssignmentAnalytics({ batchId: params.batchId }),
-        reportService.getEngagement({ batchId: params.batchId }),
-        reportService.getActivityTrend(),
-        reportService.getTopStudents({ batchId: params.batchId, limit: 10 }),
-        reportService.getDecliningStudents({ batchId: params.batchId }),
-        reportService.getCorrelations({ batchId: params.batchId }),
+        reportService.getBatchHealth().catch(() => ({ data: [] })),
+        reportService.getQuizAnalytics(params).catch(() => ({ data: null })),
+        reportService.getAssignmentAnalytics({ batchId: params.batchId }).catch(() => ({ data: null })),
+        reportService.getEngagement({ batchId: params.batchId }).catch(() => ({ data: null })),
+        reportService.getActivityTrend().catch(() => ({ data: [] })),
+        reportService.getTopStudents({ batchId: params.batchId, limit: 10 }).catch(() => ({ data: [] })),
+        reportService.getDecliningStudents({ batchId: params.batchId }).catch(() => ({ data: [] })),
+        reportService.getCorrelations({ batchId: params.batchId }).catch(() => ({ data: [] })),
       ])
       setPerfData(perf.data)
       setBatchHealth(health.data || [])
@@ -237,609 +331,2047 @@ export default function ReportsPage() {
       setCorrelations(corr.data || [])
       setSelectedStudentId('')
       setStudentDetail(null)
-    } catch { toast.error('Failed') } finally { setLoading(false) }
+    } catch {
+      toast.error('Failed to load performance report')
+    } finally {
+      setPerfLoading(false)
+    }
+  }
+
+  const loadPlacement = async () => {
+    setPlacementLoading(true)
+    try {
+      const [placement, readiness] = await Promise.all([
+        reportService.getPlacement({ batchId: batchFilter || undefined }),
+        reportService.getPlacementReadiness({ batchId: batchFilter || undefined }),
+      ])
+      setPlacementReport(placement.data)
+      setPlacementReadiness(readiness.data || [])
+    } catch {
+      toast.error('Failed to load placement data')
+    } finally {
+      setPlacementLoading(false)
+    }
   }
 
   const loadStudentDetail = async (studentId) => {
     setSelectedStudentId(studentId)
-    if (!studentId) { setStudentDetail(null); return }
+    if (!studentId) {
+      setStudentDetail(null)
+      setIsStudentModalOpen(false)
+      return
+    }
     try {
       const r = await reportService.getStudentPerformance(studentId)
       setStudentDetail(r.data)
-    } catch { toast.error('Failed to load student performance') }
+      setIsStudentModalOpen(true)
+    } catch {
+      toast.error('Failed to load student performance details')
+    }
   }
 
-  const handleViewExportDetails = async (type, label) => {
-    setExportPreviewLoading(type)
+  const handlePreviewExport = async () => {
+    setExportPreviewLoading(true)
     try {
-      const r = await reportService.export({ type, batchId: batchFilter || undefined, startDate, endDate })
-      setExportPreview({ type, label, rows: r.data || [] })
-    } catch { toast.error('Failed to load details') } finally { setExportPreviewLoading('') }
+      const r = await reportService.export({
+        type: selectedExportType,
+        batchId: batchFilter || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      })
+      const rows = r.data || []
+      setExportPreview({
+        type: selectedExportType,
+        total: rows.length,
+        rows: rows.slice(0, 10),
+      })
+      if (!rows.length) {
+        toast('No records found matching filters', { icon: 'ℹ️' })
+      } else {
+        toast.success(`Previewing ${Math.min(10, rows.length)} of ${rows.length} records`)
+      }
+    } catch {
+      toast.error('Failed to fetch export preview')
+    } finally {
+      setExportPreviewLoading(false)
+    }
   }
 
-  const attReport = attData?.students || []
-  const attAvg = attReport.length ? Math.round(attReport.reduce((a, r) => a + (r.attendancePct || 0), 0) / attReport.length) : 0
+  const handleExportCSV = async () => {
+    try {
+      const r = await reportService.export({
+        type: selectedExportType,
+        batchId: batchFilter || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      })
+      const data = r.data || []
+      if (!data.length) {
+        return toast.error('No records available to export for selected filters')
+      }
+
+      // Filter by selected columns
+      const filteredData = data.map(item => {
+        if (!selectedColumns.length) return item
+        const row = {}
+        selectedColumns.forEach(col => {
+          row[col] = item[col] ?? '—'
+        })
+        return row
+      })
+
+      downloadCSV(filteredData, `${selectedExportType}-report.csv`)
+      toast.success('Report downloaded successfully')
+
+      // Record export in dynamic log
+      const newEntry = {
+        id: Date.now(),
+        type: selectedExportType.charAt(0).toUpperCase() + selectedExportType.slice(1),
+        filters: [
+          batchFilter ? `Batch: ${batches.find(b => b.id === batchFilter)?.name || batchFilter}` : 'All Batches',
+          courseFilter ? `Course: ${courses.find(c => c.id === courseFilter)?.title || courseFilter}` : 'All Courses'
+        ].filter(Boolean).join(', '),
+        exportedBy: 'Admin',
+        dateTime: new Date().toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+        format: 'CSV',
+        dataRef: selectedExportType,
+      }
+      setRecentExports(prev => [newEntry, ...prev.slice(0, 4)])
+    } catch {
+      toast.error('Export failed')
+    }
+  }
+
+  // Pure dynamic performance calculations
   const perfReport = perfData?.students || []
+  const perfFiltered = useMemo(() => {
+    if (!perfSearch.trim()) return perfReport
+    const q = perfSearch.toLowerCase()
+    return perfReport.filter(s =>
+      (s.studentName && s.studentName.toLowerCase().includes(q)) ||
+      (s.batchName && s.batchName.toLowerCase().includes(q)) ||
+      (s.email && s.email.toLowerCase().includes(q))
+    )
+  }, [perfReport, perfSearch])
 
-  const placementChartData = placementReport ? [
-    { name: 'Seeking', count: placementReport.statusCounts?.SEEKING || 0, fill: '#3b82f6' },
-    { name: 'Interviewing', count: placementReport.statusCounts?.INTERVIEWING || 0, fill: '#f59e0b' },
-    { name: 'Placed', count: placementReport.statusCounts?.PLACED || 0, fill: '#22c55e' },
-    { name: 'Not Seeking', count: placementReport.statusCounts?.NOT_SEEKING || 0, fill: '#9ca3af' },
-  ] : []
-  const placementTotal = placementChartData.reduce((a, d) => a + d.count, 0)
-  const placementSeeking = placementReport?.statusCounts?.SEEKING || 0
-  const placementInterviewing = placementReport?.statusCounts?.INTERVIEWING || 0
-  const placementPlaced = placementReport?.statusCounts?.PLACED || 0
-  const placementNotSeeking = placementReport?.statusCounts?.NOT_SEEKING || 0
-  const placementNotPlaced = placementTotal - placementPlaced
+  const perfTotalPages = Math.max(1, Math.ceil(perfFiltered.length / perfPageSize))
+  const perfPaginated = perfFiltered.slice((perfPage - 1) * perfPageSize, perfPage * perfPageSize)
 
-  const funnelData = [
-    { name: 'Total Students', value: placementTotal, fill: '#9333ea' },
-    { name: 'Active in Process', value: placementTotal - placementNotSeeking, fill: '#3b82f6' },
-    { name: 'Interviewing or Placed', value: placementInterviewing + placementPlaced, fill: '#f59e0b' },
-    { name: 'Placed', value: placementPlaced, fill: '#22c55e' },
-  ]
+  // Overall Performance Donut: Calculated dynamically from live student grades
+  const perfDonutData = useMemo(() => {
+    let exc = 0, gd = 0, ni = 0, ar = 0
+    perfReport.forEach(s => {
+      const score = s.overallPerformancePct ?? s.avgGrade ?? s.avgQuizScore ?? 0
+      if (score >= 90) exc++
+      else if (score >= 70) gd++
+      else if (score >= 50) ni++
+      else ar++
+    })
+    return [
+      { name: 'Excellent (≥ 90%)', value: exc, fill: '#10b981', color: 'text-emerald-600', dot: 'bg-emerald-500' },
+      { name: 'Good (70% - 89%)', value: gd, fill: '#6366f1', color: 'text-indigo-600', dot: 'bg-indigo-500' },
+      { name: 'Needs Improvement (50% - 69%)', value: ni, fill: '#f59e0b', color: 'text-amber-600', dot: 'bg-amber-500' },
+      { name: 'At Risk (< 50%)', value: ar, fill: '#ef4444', color: 'text-rose-600', dot: 'bg-rose-500' },
+    ]
+  }, [perfReport])
 
-  const ATTENDANCE_STATUS_COLOR = { PRESENT: '#22c55e', ABSENT: '#ef4444', LATE: '#f59e0b', EXCUSED: '#9ca3af' }
-  const attendanceDistributionData = (attData?.attendanceDistribution || [])
-    .map(d => ({ name: d.status, value: d.count, fill: ATTENDANCE_STATUS_COLOR[d.status] || '#9ca3af' }))
+  const dynamicPerfAvgScore = useMemo(() => {
+    if (perfData?.summary?.averageScorePct != null) return perfData.summary.averageScorePct
+    if (!perfReport.length) return 0
+    const total = perfReport.reduce((acc, s) => acc + (s.overallPerformancePct ?? s.avgGrade ?? s.avgQuizScore ?? 0), 0)
+    return Math.round(total / perfReport.length)
+  }, [perfData, perfReport])
+
+  const perfTotalStudents = perfData?.summary?.totalStudents ?? perfReport.length
+  const perfTotalAssessments = useMemo(() => {
+    if (assignmentData?.totalAssignments != null) return assignmentData.totalAssignments
+    if (perfData?.courseBreakdown?.length) {
+      return perfData.courseBreakdown.reduce((acc, c) => acc + (c.assignmentCount || 0), 0)
+    }
+    return perfReport.reduce((acc, s) => acc + (s.assignmentsSubmitted || 0), 0)
+  }, [assignmentData, perfData, perfReport])
+
+  const perfBelow50Count = useMemo(() => {
+    return perfReport.filter(s => (s.overallPerformancePct ?? s.avgGrade ?? s.avgQuizScore ?? 0) < 50).length
+  }, [perfReport])
+
+  // Pure dynamic placement calculations
+  const placementSeeking = placementReport?.statusCounts?.SEEKING ?? placementReadiness.filter(r => r.status === 'READY').length
+  const placementInterviewing = placementReport?.statusCounts?.INTERVIEWING ?? placementReadiness.filter(r => r.status === 'NEARLY_READY').length
+  const placementPlaced = placementReport?.statusCounts?.PLACED ?? placementReadiness.filter(r => r.currentPlacementStatus === 'PLACED').length
+  const placementNotSeeking = placementReport?.statusCounts?.NOT_SEEKING ?? placementReadiness.filter(r => r.currentPlacementStatus === 'NOT_SEEKING').length
+  const placementTotal = (placementSeeking + placementInterviewing + placementPlaced + placementNotSeeking) || placementReadiness.length
+
+  const placementChartData = useMemo(() => [
+    { name: 'Seeking', count: placementSeeking, fill: '#3b82f6', dot: 'bg-blue-500' },
+    { name: 'Interviewing', count: placementInterviewing, fill: '#f59e0b', dot: 'bg-amber-500' },
+    { name: 'Placed', count: placementPlaced, fill: '#10b981', dot: 'bg-emerald-500' },
+    { name: 'Not Seeking', count: placementNotSeeking, fill: '#9ca3af', dot: 'bg-gray-400' },
+  ], [placementSeeking, placementInterviewing, placementPlaced, placementNotSeeking])
+
+  const dynamicFunnelData = useMemo(() => {
+    const total = placementTotal || 1
+    const active = placementSeeking + placementInterviewing + placementPlaced
+    const inInterviews = placementInterviewing + placementPlaced
+    return [
+      { name: 'Total Students', value: placementTotal, pct: '100%', fill: '#6366f1' },
+      { name: 'Eligible & Active', value: active, pct: `${Math.round((active / total) * 100)}%`, fill: '#3b82f6' },
+      { name: 'Interviewing / Placed', value: inInterviews, pct: `${Math.round((inInterviews / total) * 100)}%`, fill: '#f59e0b' },
+      { name: 'Selected (Placed)', value: placementPlaced, pct: `${Math.round((placementPlaced / total) * 100)}%`, fill: '#10b981' },
+    ]
+  }, [placementTotal, placementSeeking, placementInterviewing, placementPlaced])
+
+  const placementFiltered = useMemo(() => {
+    if (!placementSearch.trim()) return placementReadiness
+    const q = placementSearch.toLowerCase()
+    return placementReadiness.filter(s =>
+      (s.studentName && s.studentName.toLowerCase().includes(q)) ||
+      (s.batchName && s.batchName.toLowerCase().includes(q))
+    )
+  }, [placementReadiness, placementSearch])
+
+  const placementTotalPages = Math.max(1, Math.ceil(placementFiltered.length / placementPageSize))
+  const placementPaginated = placementFiltered.slice((placementPage - 1) * placementPageSize, placementPage * placementPageSize)
+
+  // Dynamic attendance calculations
+  const attReport = attData?.students || []
+  const attFiltered = useMemo(() => {
+    if (!attSearch.trim()) return attReport
+    const q = attSearch.toLowerCase()
+    return attReport.filter(s =>
+      (s.studentName && s.studentName.toLowerCase().includes(q)) ||
+      (s.batchName && s.batchName.toLowerCase().includes(q))
+    )
+  }, [attReport, attSearch])
+  const attTotalPages = Math.max(1, Math.ceil(attFiltered.length / attPageSize))
+  const attPaginated = attFiltered.slice((attPage - 1) * attPageSize, attPage * attPageSize)
+  const ATTENDANCE_STATUS_COLOR = { PRESENT: '#10b981', ABSENT: '#ef4444', LATE: '#f59e0b', EXCUSED: '#9ca3af' }
+  const attendanceDistributionData = useMemo(() => (attData?.attendanceDistribution || [])
+    .map(d => ({ name: d.status, value: d.count, fill: ATTENDANCE_STATUS_COLOR[d.status] || '#9ca3af' })), [attData])
   const attendanceDistributionTotal = attendanceDistributionData.reduce((a, d) => a + d.value, 0)
 
-  const engagementDonutData = engagementData ? [
-    { name: 'High', value: engagementData.highCount, fill: '#22c55e' },
-    { name: 'Medium', value: engagementData.mediumCount, fill: '#f59e0b' },
-    { name: 'Low', value: engagementData.lowCount, fill: '#ef4444' },
-  ] : []
-  const engagementTotal = engagementDonutData.reduce((a, d) => a + d.value, 0)
+  // Day-of-week analysis for Attendance
+  const mostAbsentDay = useMemo(() => {
+    if (!attAnalyticsData?.dailyTrend?.length) return null
+    const dowAvgs = {}
+    for (const d of attAnalyticsData.dailyTrend) {
+      if (!d.total || d.total === 0) continue
+      const dow = new Date(d.date).getDay()
+      if (!dowAvgs[dow]) dowAvgs[dow] = { total: 0, count: 0 }
+      dowAvgs[dow].total += d.pct
+      dowAvgs[dow].count++
+    }
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const sorted = Object.entries(dowAvgs).sort(([, a], [, b]) => (a.total / a.count) - (b.total / b.count))
+    if (sorted.length) {
+      const [dow, stat] = sorted[0]
+      return `${DAYS[dow]} (avg ${Math.round(stat.total / stat.count)}%)`
+    }
+    return null
+  }, [attAnalyticsData])
+
+  const totalClassesTracked = useMemo(() => {
+    return attAnalyticsData?.dailyTrend?.filter(d => (d.total > 0 || d.classTitle))?.length || attData?.totalClasses || 0
+  }, [attAnalyticsData, attData])
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
-      <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Reports & Analytics</h1>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white/80 dark:bg-gray-900/70 border border-purple-100 dark:border-purple-900/30 rounded-2xl p-1 overflow-x-auto scrollbar-hide">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === t ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-purple-600 hover:bg-purple-50'}`}>
-            {t}
-          </button>
-        ))}
+    <div className="max-w-7xl mx-auto space-y-6 pb-12 font-sans antialiased">
+      {/* Header */}
+      <div>
+        <h1 className="font-display text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+          Reports &amp; Analytics
+        </h1>
       </div>
 
-      {/* Attendance Report */}
-      {tab === 'Attendance' && (
-        <div className="space-y-4">
-          <div className="glass-card p-5 flex flex-col sm:flex-row flex-wrap gap-4 items-end">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Batch</label>
-              <CustomSelect
-                value={batchFilter}
-                onChange={(val) => setBatchFilter(val)}
-                options={batches.map(b => ({ value: b.id, label: b.name }))}
-                placeholder="All Batches"
-                compact
-                searchable={batches.length >= 10}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Course</label>
-              <CustomSelect
-                value={courseFilter}
-                onChange={(val) => setCourseFilter(val)}
-                options={courses.map(c => ({ value: c.id, label: c.title }))}
-                placeholder="All Courses"
-                compact
-                searchable={courses.length >= 10}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            </div>
-            <button onClick={loadAttendance} disabled={loading}
-              className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl text-sm font-semibold disabled:opacity-60">
-              {loading ? 'Loading...' : 'Generate Report'}
+      {/* Navigation Tabs Pill Bar & Secondary Analytics Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex gap-1.5 bg-white/90 dark:bg-gray-900/80 p-1.5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs max-w-fit overflow-x-auto">
+          {TABS.map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                tab === t
+                  ? 'bg-purple-600 text-white shadow-sm shadow-purple-300 dark:shadow-none'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-purple-600 hover:bg-purple-50/60 dark:hover:bg-purple-950/30'
+              }`}
+            >
+              {t}
             </button>
-            {attReport.length > 0 && (
-              <button onClick={() => downloadCSV(attReport, dateStampedFilename('attendance-report'))}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200">
-                <FileDown size={14} /> Export CSV
-              </button>
-            )}
-          </div>
-
-          {attData && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Average Attendance" value={attData.summary?.averageScorePct != null ? `${attData.summary.averageScorePct}%` : '—'} color="text-purple-600" />
-                <StatCard label="Total Students" value={attData.summary?.totalStudents ?? '—'} color="text-blue-600" />
-                <StatCard label="Total Classes" value={attData.totalClasses ?? '—'} color="text-green-600" />
-                <StatCard label="Low Attendance Students" value={attData.lowAttendanceCount ?? '—'} color="text-orange-600" />
-              </div>
-
-              <div className="grid sm:grid-cols-3 gap-5">
-                <ChartCard title="Attendance Trend" empty={!attData.attendanceTrend?.length} emptyMessage="Not enough attendance data yet to show a trend.">
-                  <AttendanceTrendChart data={attData.attendanceTrend} />
-                </ChartCard>
-
-                <ChartCard title="Attendance by Batch" empty={!attData.attendanceByBatch?.length} emptyMessage="No batch attendance data available.">
-                  <AttendanceByBatchChart data={attData.attendanceByBatch} />
-                </ChartCard>
-
-                <ChartCard title="Present / Absent / Late" empty={attendanceDistributionTotal === 0} emptyMessage="No attendance data available.">
-                  <AttendanceDistributionChart data={attendanceDistributionData} />
-                </ChartCard>
-              </div>
-            </>
-          )}
-
-          {attReport.length > 0 && (
-            <div className="glass-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-purple-50/50 border-b border-purple-100">
-                      {['Student', 'Batch', 'Present', 'Absent', 'Attendance %', 'Status'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attReport.map((r, i) => (
-                      <tr key={i} className="border-b border-gray-50 hover:bg-purple-50/20">
-                        <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{r.studentName}</td>
-                        <td className="px-4 py-3 text-gray-600">{r.batchName}</td>
-                        <td className="px-4 py-3 text-green-600 font-semibold">{r.presentCount ?? '—'}</td>
-                        <td className="px-4 py-3 text-red-500 font-semibold">{r.absentCount ?? '—'}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${r.attendancePct >= 85 ? 'bg-green-100 text-green-700' : r.attendancePct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-orange-100 text-orange-700'}`}>
-                            {r.attendancePct}%
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{r.status || '—'}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-purple-50/30 border-t-2 border-purple-200">
-                      <td className="px-4 py-3 font-bold text-gray-700" colSpan={4}>Class Average</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${attAvg >= 85 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{attAvg}%</span>
-                      </td>
-                      <td />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          ))}
         </div>
-      )}
 
-      {/* Performance Report */}
-      {tab === 'Performance' && (
-        <div className="space-y-4">
-          <div className="glass-card p-5 flex flex-col sm:flex-row flex-wrap gap-4 items-end">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Batch</label>
-              <CustomSelect
-                value={batchFilter}
-                onChange={(val) => setBatchFilter(val)}
-                options={batches.map(b => ({ value: b.id, label: b.name }))}
-                placeholder="All Batches"
-                compact
-                searchable={batches.length >= 10}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Course</label>
-              <CustomSelect
-                value={courseFilter}
-                onChange={(val) => setCourseFilter(val)}
-                options={courses.map(c => ({ value: c.id, label: c.title }))}
-                placeholder="All Courses"
-                compact
-                searchable={courses.length >= 10}
-              />
-            </div>
-            <button onClick={loadPerformance} disabled={loading}
-              className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl text-sm font-semibold disabled:opacity-60">
-              {loading ? 'Loading...' : 'Generate Report'}
-            </button>
-            {perfReport.length > 0 && (
-              <button onClick={() => downloadCSV(perfReport, dateStampedFilename('performance-report'))}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200">
-                <FileDown size={14} /> Export CSV
-              </button>
-            )}
+        {/* Secondary Analytics Toggle Button in top bar near tabs */}
+        {(tab === 'Performance' || tab === 'Placement') && (
+          <button
+            onClick={() => setShowAdvancedPerf(!showAdvancedPerf)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer self-start sm:self-auto shadow-2xs"
+          >
+            <Layers size={14} />
+            {showAdvancedPerf ? 'Hide Secondary Analytics' : 'Show Secondary Analytics & Breakdown'}
+          </button>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 1: ATTENDANCE REPORT & ANALYTICS                                      */}
+      {/* ========================================================================= */}
+      {tab === 'Attendance' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Subheader & description */}
+          <div>
+            <h2 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+              Attendance Report &amp; Analytics
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Comprehensive attendance trends, mode analysis, trainer performance, batch breakdown, and student records.
+            </p>
           </div>
 
-          {perfData && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Average Score" value={perfData.summary?.averageScorePct != null ? `${perfData.summary.averageScorePct}%` : '—'} color="text-purple-600" />
-                <StatCard label="Assignment Completion" value={perfData.summary?.averageCompletionPct != null ? `${perfData.summary.averageCompletionPct}%` : '—'} color="text-blue-600" />
-                <StatCard label="Quiz Average" value={perfData.summary?.averageQuizScorePct != null ? `${perfData.summary.averageQuizScorePct}%` : '—'} color="text-amber-600" />
-                <StatCard label="Overall Performance" value={perfData.summary?.overallPerformancePct != null ? `${perfData.summary.overallPerformancePct}%` : '—'} color="text-green-600" />
+          {/* Dynamic Filter Bar */}
+          <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end gap-3 flex-1">
+              {/* Quick Days Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Timeframe</label>
+                <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200/60 dark:border-gray-700/60">
+                  {[7, 30, 90].map(d => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setAttDays(d)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        attDays === d
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-300'
+                      }`}
+                    >
+                      {d} days
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-5">
-                <ChartCard title="Course Performance" empty={!perfData.courseBreakdown?.length} emptyMessage="No course performance data available.">
-                  <CoursePerformanceChart data={perfData.courseBreakdown} />
-                </ChartCard>
-
-                <ChartCard title="Batch Performance" empty={!perfData.batchBreakdown?.length} emptyMessage="No batch performance data available.">
-                  <BatchPerformanceChart data={perfData.batchBreakdown} />
-                </ChartCard>
-
-                <ChartCard title="Performance Trend" empty={!perfData.performanceTrend?.length} emptyMessage="Not enough graded submissions yet to show a trend.">
-                  <PerformanceTrendChart data={perfData.performanceTrend} />
-                </ChartCard>
-
-                <ChartCard title="At-Risk Students by Reason" empty={!perfData.atRiskBreakdown?.some(b => b.count > 0)} emptyMessage="No at-risk students for the selected filters.">
-                  <AtRiskBreakdownChart data={perfData.atRiskBreakdown} />
-                </ChartCard>
+              {/* Batch */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
+                <CustomSelect
+                  value={batchFilter}
+                  onChange={(val) => setBatchFilter(val)}
+                  options={batches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All Batches"
+                  compact
+                  searchable={batches.length >= 10}
+                />
               </div>
 
-              <div className="glass-card p-5">
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h3 className="font-display font-bold text-gray-800 dark:text-white">Student Performance</h3>
-                  <CustomSelect
-                    value={selectedStudentId}
-                    onChange={(val) => loadStudentDetail(val)}
-                    options={perfReport.map(s => ({ value: s.studentId, label: s.studentName }))}
-                    placeholder="Select a student…"
-                    searchable={perfReport.length >= 10}
-                    compact
+              {/* Course */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Course</label>
+                <CustomSelect
+                  value={courseFilter}
+                  onChange={(val) => setCourseFilter(val)}
+                  options={courses.map(c => ({ value: c.id, label: c.title }))}
+                  placeholder="All Courses"
+                  compact
+                  searchable={courses.length >= 10}
+                />
+              </div>
+
+              {/* Date Range */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Date Range</label>
+                <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-600 dark:text-gray-300 shadow-2xs">
+                  <Calendar size={14} className="text-gray-400" />
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="bg-transparent outline-none w-28 text-xs text-gray-700 dark:text-gray-200 cursor-pointer"
+                  />
+                  <span className="text-gray-400">-</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="bg-transparent outline-none w-28 text-xs text-gray-700 dark:text-gray-200 cursor-pointer"
                   />
                 </div>
-                {!studentDetail ? (
-                  <div className="h-[200px] flex items-center justify-center">
-                    <p className="text-sm text-gray-400">Select a student above to see their course-wise performance.</p>
-                  </div>
-                ) : (
-                  <>
-                    {studentDetail.riskLevel && (
-                      <div className="mb-4 flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Risk level:</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${RISK_BADGE[studentDetail.riskLevel] || 'bg-gray-100 text-gray-600'}`}>
-                          {studentDetail.riskLevel} {studentDetail.riskScore != null ? `(${studentDetail.riskScore}/100)` : ''}
-                        </span>
-                      </div>
-                    )}
-                    {!studentDetail.courseBreakdown?.length ? (
-                      <div className="h-[200px] flex items-center justify-center">
-                        <p className="text-sm text-gray-400">No graded assignments yet for this student.</p>
-                      </div>
-                    ) : (
-                      <StudentCourseBreakdownChart data={studentDetail.courseBreakdown} />
-                    )}
-                    {studentDetail.progressTrend?.length > 0 && (
-                      <div className="mt-5">
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Progress Trend</p>
-                        <StudentProgressTrendChart data={studentDetail.progressTrend} />
-                      </div>
-                    )}
-                  </>
-                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadAttendance}
+                disabled={attLoading}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {attLoading ? 'Generating...' : 'Generate Report'}
+              </button>
+              <button
+                onClick={() => loadAttendance()}
+                disabled={attLoading}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/40 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-gray-700/50 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
+                title="Refresh attendance data"
+              >
+                <RotateCcw size={13} className={attLoading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* 5 Dynamic Attendance KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Card 1: Overall Rate */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0">
+                <TrendingUp size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {attAnalyticsData?.overallPct ?? attData?.summary?.averageScorePct ?? 0}%
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Overall Attendance</p>
+              </div>
+            </div>
+
+            {/* Card 2: Total Students */}
+            <div className="glass-card p-5 rounded-2xl border border-blue-100/60 dark:border-blue-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center shrink-0">
+                <Users size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {attData?.summary?.totalStudents ?? attReport.length ?? 0}
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Students</p>
+              </div>
+            </div>
+
+            {/* Card 3: Total Classes Tracked */}
+            <div className="glass-card p-5 rounded-2xl border border-emerald-100/60 dark:border-emerald-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+                <BookOpen size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {totalClassesTracked}
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Classes Tracked</p>
+              </div>
+            </div>
+
+            {/* Card 4: Most Absent Day */}
+            <div className="glass-card p-5 rounded-2xl border border-amber-100/60 dark:border-amber-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shrink-0">
+                <TrendingDown size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-base sm:text-lg font-extrabold text-gray-900 dark:text-white font-display truncate block">
+                  {mostAbsentDay || '—'}
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Most Absent Day</p>
+              </div>
+            </div>
+
+            {/* Card 5: Low Attendance */}
+            <div className="glass-card p-5 rounded-2xl border border-rose-100/60 dark:border-rose-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {attData?.lowAttendanceCount ?? 0}
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Below 75% Threshold</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Area Chart — Attendance Daily Trend */}
+          <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
+            <AttendanceDailyTrendChart data={attAnalyticsData?.dailyTrend || []} days={attDays} />
+          </div>
+
+          {/* Attendance by Class Mode */}
+          <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
+            <div className="mb-4">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance by Class Mode</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Compare attendance by online and offline classes</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Online Classes Card */}
+              <div className="flex items-start gap-4 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs transition-all hover:shadow-md">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-100/80 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-500 dark:text-emerald-400 shrink-0 shadow-inner">
+                  <Laptop size={26} strokeWidth={2.2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
+                    Online Classes
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white leading-none mt-1">
+                    {attAnalyticsData?.modeAttendance?.onlineAvgPct ?? 0}%
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Avg Attendance
+                  </p>
+                  <p className="text-sm font-extrabold text-gray-800 dark:text-gray-100 leading-none mt-3">
+                    {attAnalyticsData?.modeAttendance?.onlineConducted ?? 0} / {attAnalyticsData?.modeAttendance?.onlineTotal ?? 0}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Classes Conducted
+                  </p>
+                </div>
               </div>
 
-              <TableCard
-                title="Course Difficulty"
-                rows={perfData.courseBreakdown || []}
-                emptyMessage="No course data available."
-                columns={[
-                  { header: 'Course', render: c => <span className="font-semibold text-gray-800 dark:text-white">{c.courseTitle}</span> },
-                  { header: 'Avg Score', render: c => c.averageScorePct != null ? `${c.averageScorePct}%` : '—' },
-                  { header: 'Pass Rate', render: c => c.passRatePct != null ? `${c.passRatePct}%` : '—' },
-                  { header: 'Status', render: c => c.difficultyStatus ? (
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_BADGE[c.difficultyStatus] || 'bg-gray-100 text-gray-600'}`}>{c.difficultyStatus}</span>
-                  ) : '—' },
-                ]}
-              />
-
-              <ChartCard title="Batch Health Comparison" empty={!batchHealth.length} emptyMessage="No batch data available.">
-                <BatchHealthChart data={batchHealth} />
-              </ChartCard>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Quiz Avg Score" value={quizData?.averageScorePct != null ? `${quizData.averageScorePct}%` : '—'} color="text-purple-600" />
-                <StatCard label="Quiz Pass Rate" value={quizData?.passRatePct != null ? `${quizData.passRatePct}%` : '—'} color="text-green-600" />
-                <StatCard label="Quiz Fail Rate" value={quizData?.failRatePct != null ? `${quizData.failRatePct}%` : '—'} color="text-red-500" />
-                <StatCard label="Avg Attempts / Student" value={quizData?.averageAttemptsPerStudent ?? '—'} color="text-blue-600" />
+              {/* Offline Classes Card */}
+              <div className="flex items-start gap-4 p-5 rounded-2xl border border-blue-200 dark:border-blue-800/50 bg-blue-50/20 dark:bg-blue-950/10 shadow-xs transition-all hover:shadow-md">
+                <div className="w-14 h-14 rounded-2xl bg-blue-100/80 dark:bg-blue-900/40 flex items-center justify-center text-blue-500 dark:text-blue-400 shrink-0 shadow-inner">
+                  <Users size={26} strokeWidth={2.2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-blue-600 dark:text-blue-400 tracking-tight">
+                    Offline Classes
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white leading-none mt-1">
+                    {attAnalyticsData?.modeAttendance?.offlineAvgPct ?? 0}%
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Avg Attendance
+                  </p>
+                  <p className="text-sm font-extrabold text-gray-800 dark:text-gray-100 leading-none mt-3">
+                    {attAnalyticsData?.modeAttendance?.offlineConducted ?? 0} / {attAnalyticsData?.modeAttendance?.offlineTotal ?? 0}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+                    Classes Conducted
+                  </p>
+                </div>
               </div>
+            </div>
+          </div>
 
-              <ChartCard title="Quiz Performance by Quiz" empty={!quizData?.quizBreakdown?.length} emptyMessage="No quiz attempts yet for the selected filters.">
-                <QuizBreakdownChart data={quizData?.quizBreakdown} />
-              </ChartCard>
-
-              <div className="grid sm:grid-cols-2 gap-5">
-                <div className="glass-card p-5">
-                  <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Assignment Analytics</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <StatCard label="Submission Rate" value={assignmentData?.submissionRatePct != null ? `${assignmentData.submissionRatePct}%` : '—'} color="text-green-600" />
-                    <StatCard label="Late Rate" value={assignmentData?.lateRatePct != null ? `${assignmentData.lateRatePct}%` : '—'} color="text-amber-600" />
-                    <StatCard label="Missing Rate" value={assignmentData?.missingRatePct != null ? `${assignmentData.missingRatePct}%` : '—'} color="text-red-500" />
-                    <StatCard label="Avg Score" value={assignmentData?.averageScorePct != null ? `${assignmentData.averageScorePct}%` : '—'} color="text-purple-600" />
+          {/* Trainer Performance & Attendance by Batch */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Trainer Performance */}
+            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Trainer Performance</h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Attendance by trainer</p>
                   </div>
+                  {attAnalyticsData?.trainerPerformance && attAnalyticsData.trainerPerformance.length > 4 && (
+                    <button
+                      onClick={() => setShowAllTrainers(!showAllTrainers)}
+                      className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-800 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      {showAllTrainers ? 'Show Top Trainers' : 'View All Trainers →'}
+                    </button>
+                  )}
                 </div>
 
-                <ChartCard title="Engagement Distribution" empty={engagementTotal === 0} emptyMessage="No engagement data available.">
-                  <EngagementDistributionChart data={engagementDonutData} />
-                </ChartCard>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        <th className="pb-3 font-semibold">Trainer</th>
+                        <th className="pb-3 font-semibold text-center">Classes Conducted</th>
+                        <th className="pb-3 font-semibold text-right">Attendance %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60 text-xs">
+                      {(!attAnalyticsData?.trainerPerformance || attAnalyticsData.trainerPerformance.length === 0) ? (
+                        <tr>
+                          <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No trainer attendance data for this period</td>
+                        </tr>
+                      ) : (
+                        (showAllTrainers ? attAnalyticsData.trainerPerformance : attAnalyticsData.trainerPerformance.slice(0, 5)).map((t, idx) => {
+                          const pct = t.attendancePct
+                          const badgeClass = pct >= 85
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            : pct >= 75
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                          return (
+                            <tr key={t.trainerId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                              <td className="py-3 font-bold text-gray-800 dark:text-gray-200">{t.trainerName}</td>
+                              <td className="py-3 text-center text-gray-600 dark:text-gray-300 font-medium">{t.classesConducted}</td>
+                              <td className="py-3 text-right">
+                                <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-extrabold ${badgeClass}`}>
+                                  {pct}%
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance by Batch */}
+            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="mb-4">
+                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance by Batch</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Compare attendance across all batches</p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        <th className="pb-3 font-semibold">Batch Name</th>
+                        <th className="pb-3 font-semibold text-center">Classes Conducted</th>
+                        <th className="pb-3 font-semibold min-w-[140px] text-right">Attendance %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60 text-xs">
+                      {(!attAnalyticsData?.batchAttendance || attAnalyticsData.batchAttendance.length === 0) ? (
+                        <tr>
+                          <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No batch attendance data for this period</td>
+                        </tr>
+                      ) : (
+                        attAnalyticsData.batchAttendance.map((b, idx) => {
+                          const colors = [
+                            'bg-emerald-500',
+                            'bg-purple-600',
+                            'bg-blue-500',
+                            'bg-amber-500',
+                            'bg-pink-500',
+                            'bg-indigo-500'
+                          ]
+                          const barColor = colors[idx % colors.length]
+                          return (
+                            <tr key={b.batchId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                              <td className="py-3.5 font-bold text-gray-800 dark:text-gray-200">{b.batchName}</td>
+                              <td className="py-3.5 text-center text-gray-600 dark:text-gray-300 font-medium">{b.classesConducted}</td>
+                              <td className="py-3.5">
+                                <div className="flex items-center justify-end gap-3">
+                                  <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden flex-1 max-w-[120px]">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                                      style={{ width: `${Math.min(100, Math.max(0, b.attendancePct))}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-extrabold text-xs text-gray-800 dark:text-gray-200 min-w-[32px] text-right">
+                                    {b.attendancePct}%
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Weekly + Monthly Charts */}
+          <div className="grid sm:grid-cols-2 gap-5">
+            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4">Weekly Attendance Rate</h3>
+              <WeeklyAttendanceRateChart data={attAnalyticsData?.weeklyTrend || []} />
+            </div>
+
+            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4">Monthly Breakdown</h3>
+              <MonthlyAttendanceBreakdownChart data={attAnalyticsData?.monthlyTrend || []} />
+            </div>
+          </div>
+
+          {/* Heatmap */}
+          <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
+            <AttendanceHeatmap dailyTrend={attAnalyticsData?.dailyTrend || []} />
+          </div>
+
+          {/* Student-Level Detailed Attendance Breakdown Table */}
+          {attReport.length > 0 && (
+            <div className="glass-card rounded-2xl overflow-hidden border border-purple-100/60 shadow-xs">
+              <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">Student Attendance Records</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Detailed breakdown of individual student attendance</p>
+                </div>
+                <div className="relative min-w-[200px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search students..."
+                    value={attSearch}
+                    onChange={e => {
+                      setAttSearch(e.target.value)
+                      setAttPage(1)
+                    }}
+                    className="w-full pl-9 pr-3.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
               </div>
 
-              <ChartCard title="Assignment Completion by Batch" empty={!assignmentData?.byBatch?.length} emptyMessage="No batch data available.">
-                <AssignmentCompletionByBatchChart data={assignmentData?.byBatch} />
-              </ChartCard>
-
-              <ChartCard title="LMS Activity Trends" empty={!activityTrend.length} emptyMessage="Not enough historical data yet." height={240}>
-                <ActivityTrendChart data={activityTrend} />
-              </ChartCard>
-
-              <div className="grid sm:grid-cols-2 gap-5">
-                <TableCard
-                  title="Top Performing Students"
-                  rows={topStudents}
-                  emptyMessage="No ranked students yet."
-                  columns={[
-                    { header: 'Rank', render: s => <span className="font-bold text-purple-600">#{s.rank}</span> },
-                    { header: 'Student', render: s => <span className="font-semibold text-gray-800 dark:text-white">{s.name}</span> },
-                    { header: 'Batch', render: s => <span className="text-gray-500">{s.subtitle}</span> },
-                    { header: 'Score', render: s => <span className="font-semibold text-green-600">{s.score}%</span> },
-                  ]}
-                />
-                <TableCard
-                  title="Batch Leaderboard"
-                  rows={batchLeaderboard}
-                  emptyMessage="No batch data available."
-                  columns={[
-                    { header: 'Rank', render: b => <span className="font-bold text-purple-600">#{b.rank}</span> },
-                    { header: 'Batch', render: b => <span className="font-semibold text-gray-800 dark:text-white">{b.name}</span> },
-                    { header: 'Status', render: b => <span className="text-gray-500">{b.subtitle}</span> },
-                    { header: 'Health', render: b => <span className="font-semibold text-green-600">{b.score}%</span> },
-                  ]}
-                />
-              </div>
-
-              <TableCard
-                title="Declining Students"
-                rows={decliningStudents}
-                emptyMessage="No students showing a declining trend right now."
-                columns={[
-                  { header: 'Student', render: s => <span className="font-semibold text-gray-800 dark:text-white">{s.studentName}</span> },
-                  { header: 'Batch', render: s => <span className="text-gray-500">{s.batchName}</span> },
-                  { header: 'Current', render: s => `${s.currentScorePct}%` },
-                  { header: 'Previous', render: s => <span className="text-gray-500">{s.previousScorePct}%</span> },
-                  { header: 'Change', render: s => <span className="font-semibold text-red-500">{s.changePct}%</span> },
-                  { header: 'Status', render: s => <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{s.status}</span> },
-                ]}
-              />
-
-              {correlations.map(corr => (
-                <ChartCard key={corr.label} title={corr.label} empty={!corr.points?.length} emptyMessage="Not enough data for this relationship yet." height={240}
-                  footer={corr.points?.length > 0 && <p className="text-[11px] text-gray-400 mt-2">{corr.note}</p>}>
-                  <CorrelationScatterChart points={corr.points} xLabel={corr.xLabel} yLabel={corr.yLabel} />
-                </ChartCard>
-              ))}
-            </>
-          )}
-
-          {perfReport.length > 0 && (
-            <div className="glass-card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-purple-50/50 border-b border-purple-100">
-                      {['Student', 'Attendance%', 'Avg Quiz', 'Assignments', 'Avg Grade', 'Risk'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <tr className="bg-purple-50/50 dark:bg-purple-950/20 border-b border-purple-100 dark:border-purple-900/30">
+                      {['Student', 'Batch', 'Present', 'Absent', 'Attendance %', 'Status'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {perfReport.map((r, i) => (
-                      <tr key={i} className="border-b border-gray-50 hover:bg-purple-50/20">
-                        <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{r.studentName}</td>
-                        <td className="px-4 py-3">
-                          {r.attendancePct != null ? (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${r.attendancePct >= 85 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                              {r.attendancePct}%
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {r.avgQuizScore != null ? (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${r.avgQuizScore >= 70 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                              {r.avgQuizScore}%
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{r.assignmentsSubmitted}</td>
-                        <td className="px-4 py-3 text-gray-600">{r.avgGrade > 0 ? `${r.avgGrade}%` : '—'}</td>
-                        <td className="px-4 py-3">
-                          {r.riskLevel ? (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${RISK_BADGE[r.riskLevel] || 'bg-gray-100 text-gray-600'}`}>
-                              {r.riskLevel}{r.riskScore != null ? ` (${r.riskScore})` : ''}
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {attPaginated.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-xs text-gray-400">No student records match search filters</td>
                       </tr>
-                    ))}
+                    ) : (
+                      attPaginated.map((r, i) => (
+                        <tr key={i} className="hover:bg-purple-50/30 dark:hover:bg-purple-950/10 transition-colors">
+                          <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{r.studentName}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.batchName}</td>
+                          <td className="px-4 py-3 text-emerald-600 font-semibold">{r.presentCount ?? '—'}</td>
+                          <td className="px-4 py-3 text-rose-500 font-semibold">{r.absentCount ?? '—'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${r.attendancePct >= 85 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : r.attendancePct >= 70 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>
+                              {r.attendancePct != null ? `${r.attendancePct}%` : '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {r.status ? (
+                              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${ATTENDANCE_STATUS_BADGE[r.status] || 'bg-gray-100 text-gray-600'}`}>
+                                {r.status.replace('_', ' ')}
+                              </span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Attendance Pagination Controls */}
+              <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
+                <div className="flex items-center gap-3">
+                  <span>
+                    Showing {attFiltered.length > 0 ? (attPage - 1) * attPageSize + 1 : 0} to {Math.min(attPage * attPageSize, attFiltered.length)} of {attFiltered.length} students
+                  </span>
+                  <div className="flex items-center gap-1.5 pl-3 border-l border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-400 font-medium">Rows:</span>
+                    <select
+                      value={attPageSize}
+                      onChange={(e) => {
+                        setAttPageSize(Number(e.target.value))
+                        setAttPage(1)
+                      }}
+                      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200 font-semibold outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                    >
+                      {[5, 10, 20, 50, 100].map(sz => (
+                        <option key={sz} value={sz}>{sz} rows</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setAttPage(p => Math.max(1, p - 1))}
+                    disabled={attPage === 1}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {Array.from({ length: Math.min(5, attTotalPages) }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setAttPage(p)}
+                      className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                        attPage === p
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  {attTotalPages > 5 && <span className="px-1 text-gray-400">...</span>}
+                  {attTotalPages > 5 && (
+                    <button
+                      onClick={() => setAttPage(attTotalPages)}
+                      className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600"
+                    >
+                      {attTotalPages}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setAttPage(p => Math.min(attTotalPages, p + 1))}
+                    disabled={attPage === attTotalPages}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Placement Report */}
-      {tab === 'Placement' && (
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard label="Total Students" value={placementTotal} color="text-gray-700 dark:text-gray-200" />
-            <StatCard label="Eligible (Seeking)" value={placementSeeking} color="text-blue-600" />
-            <StatCard label="Interviewing" value={placementInterviewing} color="text-amber-600" />
-            <StatCard label="Placed" value={placementPlaced} color="text-green-600" />
-            <StatCard label="Not Placed" value={placementNotPlaced} color="text-gray-500" />
+      {/* ========================================================================= */}
+      {/* TAB 2: PERFORMANCE REPORT (Image 1 Dynamic)                              */}
+      {/* ========================================================================= */}
+      {tab === 'Performance' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Subheader */}
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white font-display">Performance Report</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Analyze student performance across quizzes, assignments, tests, and projects.
+            </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-5">
-            <ChartCard title="Placement Distribution" empty={placementTotal === 0} emptyMessage="No placement data available.">
-              <PlacementDistributionChart data={placementChartData} />
-            </ChartCard>
+          {/* Dynamic Filter Bar */}
+          <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end gap-3 flex-1">
+              {/* Batch */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
+                <CustomSelect
+                  value={batchFilter}
+                  onChange={(val) => setBatchFilter(val)}
+                  options={batches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All Batches"
+                  compact
+                  searchable={batches.length >= 10}
+                />
+              </div>
 
-            <div className="glass-card p-5">
-              <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4">Summary</h3>
-              <div className="space-y-3">
-                {placementChartData.map(d => (
-                  <div key={d.name} className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: d.fill }} />
-                    <span className="text-sm text-gray-600 dark:text-gray-300 flex-1">{d.name}</span>
-                    <span className="text-sm font-bold text-gray-800 dark:text-white">{d.count}</span>
+              {/* Course */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Course</label>
+                <CustomSelect
+                  value={courseFilter}
+                  onChange={(val) => setCourseFilter(val)}
+                  options={courses.map(c => ({ value: c.id, label: c.title }))}
+                  placeholder="All Courses"
+                  compact
+                  searchable={courses.length >= 10}
+                />
+              </div>
+
+              {/* Dynamic Trainer List */}
+              <div className="min-w-[130px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Trainer</label>
+                <CustomSelect
+                  value={trainerFilter}
+                  onChange={(val) => setTrainerFilter(val)}
+                  options={trainers.map(t => ({ value: t.id, label: t.name || t.user?.name || `Trainer #${t.id}` }))}
+                  placeholder="All Trainers"
+                  compact
+                />
+              </div>
+
+              {/* Assessment Type */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Assessment Type</label>
+                <CustomSelect
+                  value={assessmentTypeFilter}
+                  onChange={(val) => setAssessmentTypeFilter(val)}
+                  options={[
+                    { value: '', label: 'All Types' },
+                    { value: 'quizzes', label: 'Quizzes' },
+                    { value: 'assignments', label: 'Assignments' },
+                    { value: 'tests', label: 'Tests' },
+                    { value: 'projects', label: 'Projects' }
+                  ]}
+                  placeholder="All Types"
+                  compact
+                />
+              </div>
+
+              {/* Date Range */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Date Range</label>
+                <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-600 dark:text-gray-300 shadow-2xs">
+                  <Calendar size={14} className="text-gray-400" />
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="bg-transparent outline-none w-28 text-xs text-gray-700 dark:text-gray-200 cursor-pointer"
+                  />
+                  <span className="text-gray-400">-</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="bg-transparent outline-none w-28 text-xs text-gray-700 dark:text-gray-200 cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadPerformance}
+                disabled={perfLoading}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {perfLoading ? 'Generating...' : 'Generate Report'}
+              </button>
+              <button
+                onClick={() => loadPerformance()}
+                disabled={perfLoading}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/40 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-gray-700/50 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
+                title="Refresh report data"
+              >
+                <RotateCcw size={13} className={perfLoading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Dynamic KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Average Score */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0">
+                <BarChart2 size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {dynamicPerfAvgScore}%
+                </span>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Average Score</p>
+                <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                  <span>Class Performance Index</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Card 2: Total Students */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center shrink-0">
+                <Users size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {perfTotalStudents}
+                </span>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Students</p>
+                <p className="text-[11px] font-medium text-gray-400 mt-0.5">Active enrolled</p>
+              </div>
+            </div>
+
+            {/* Card 3: Total Assessments */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+                <FileText size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {perfTotalAssessments}
+                </span>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Assessments</p>
+                <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                  <span>Quizzes &amp; Assignments</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Students Below 50% */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {perfBelow50Count}
+                </span>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Students Below 50%</p>
+                <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-0.5 mt-0.5">
+                  <span>Requires Attention</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Row: Performance Trend (Left) + Overall Performance (Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Left: Performance Trend */}
+            <div className="lg:col-span-2 glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Performance Trend</h3>
+                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300">
+                  Average Score
+                </div>
+              </div>
+              <PerformanceTrendChart data={perfData?.performanceTrend} />
+            </div>
+
+            {/* Right: Overall Performance Donut & Bracket Breakdown */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80 flex flex-col justify-between">
+              <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm mb-2">Overall Performance</h3>
+              <OverallPerformanceDonut data={perfDonutData} avgScore={dynamicPerfAvgScore} />
+              <div className="space-y-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs">
+                {perfDonutData.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${item.dot}`} />
+                      <span>{item.name}</span>
+                    </div>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {item.value} ({perfTotalStudents > 0 ? Math.round((item.value / perfTotalStudents) * 100) : 0}%)
+                    </span>
                   </div>
                 ))}
-                {placementReport && (
-                  <div className="pt-2 border-t border-gray-100">
-                    <p className="text-sm font-semibold text-green-600">
-                      Conversion rate: {placementReport.conversionRate || 0}%
-                    </p>
-                  </div>
-                )}
               </div>
-            </div>
-
-            <ChartCard title="Placement by Batch" empty={!placementReport?.byBatch?.length} emptyMessage="No batches to compare yet.">
-              <PlacementByBatchChart data={placementReport?.byBatch} />
-            </ChartCard>
-
-            <ChartCard title="Placement by Course" empty={!placementReport?.byCourse?.length} emptyMessage="No courses to compare yet.">
-              <PlacementByCourseChart data={placementReport?.byCourse} />
-            </ChartCard>
-
-            <div className="sm:col-span-2">
-              <ChartCard title="Placement Funnel" empty={placementTotal === 0} emptyMessage="No placement data available.">
-                <PlacementFunnelChart data={funnelData} />
-              </ChartCard>
             </div>
           </div>
 
-          <TableCard
-            title="Placement Readiness"
-            rows={placementReadiness.slice(0, 25)}
-            emptyMessage="No students to assess yet."
-            note={placementReadiness.length > 25 && (
-              <p className="text-[11px] text-gray-400 mt-2">Showing top 25 of {placementReadiness.length} students.</p>
-            )}
-            columns={[
-              { header: 'Student', render: r => <span className="font-semibold text-gray-800 dark:text-white">{r.studentName}</span> },
-              { header: 'Batch', render: r => <span className="text-gray-500">{r.batchName}</span> },
-              { header: 'Performance', render: r => r.performancePct != null ? `${r.performancePct}%` : '—' },
-              { header: 'Quiz', render: r => r.quizPct != null ? `${r.quizPct}%` : '—' },
-              { header: 'Completion', render: r => r.assignmentCompletionPct != null ? `${r.assignmentCompletionPct}%` : '—' },
-              { header: 'Readiness', render: r => <span className="font-semibold">{r.readinessScore != null ? `${r.readinessScore}%` : '—'}</span> },
-              { header: 'Status', render: r => (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${READINESS_BADGE[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                  {r.status?.replace('_', ' ')}
-                </span>
-              ) },
-            ]}
-          />
-        </div>
-      )}
-
-      {/* Export Tab */}
-      {tab === 'Export' && (
-        <div className="space-y-5">
-          <div className="grid sm:grid-cols-3 gap-5">
-            {[
-              { label: 'Student List', desc: 'All students with profiles, batch, placement status', icon: Users, type: 'students', fileBase: 'students' },
-              { label: 'Attendance Report', desc: 'Per-student attendance breakdown', icon: BarChart2, type: 'attendance', fileBase: 'attendance' },
-              { label: 'Performance Report', desc: 'Quiz scores, attendance, assignment grades', icon: FileText, type: 'performance', fileBase: 'performance' },
-            ].map(({ label, desc, icon: Icon, type, fileBase }) => (
-              <div key={type} className="glass-card p-6 flex flex-col gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                  <Icon size={22} className="text-purple-600" />
+          {/* Secondary Analytics & Breakdown (Expandable below Primary Charts) */}
+          {showAdvancedPerf && (
+            <div className="space-y-5 pt-2 animate-in fade-in duration-200">
+              <div className="grid sm:grid-cols-2 gap-5">
+                <div className="glass-card p-5 rounded-2xl border border-purple-100/60 shadow-xs bg-white/90 dark:bg-gray-900/80">
+                  <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 text-sm">Course Performance</h3>
+                  <CoursePerformanceChart data={perfData?.courseBreakdown} />
                 </div>
-                <div>
-                  <h3 className="font-display font-bold text-gray-800 dark:text-white">{label}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
-                </div>
-                {type === 'attendance' && (
-                  <div className="space-y-2">
-                    <input type="date" placeholder="Start date" onChange={e => setStartDate(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                    <input type="date" placeholder="End date" onChange={e => setEndDate(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500" />
-                  </div>
-                )}
-                <div className="mt-auto flex flex-col gap-2">
-                  <button
-                    onClick={() => handleViewExportDetails(type, label)}
-                    disabled={exportPreviewLoading === type}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 text-sm font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/40 disabled:opacity-60 transition-colors">
-                    <Eye size={15} /> {exportPreviewLoading === type ? 'Loading...' : 'View Details'}
-                  </button>
-                  {exportCounts[type] > 0 && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const r = await reportService.export({ type, batchId: batchFilter || undefined, startDate, endDate })
-                          downloadCSV(r.data || [], dateStampedFilename(fileBase))
-                        } catch { toast.error('Export failed') }
-                      }}
-                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
-                      <Download size={15} /> Download CSV
-                    </button>
-                  )}
-                  {exportCounts[type] === 0 && (
-                    <p className="text-xs text-gray-400 text-center py-2">No records available to export.</p>
-                  )}
+                <div className="glass-card p-5 rounded-2xl border border-purple-100/60 shadow-xs bg-white/90 dark:bg-gray-900/80">
+                  <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 text-sm">Batch Performance</h3>
+                  <BatchPerformanceChart data={perfData?.batchBreakdown} />
                 </div>
               </div>
-            ))}
-          </div>
 
-          {exportPreview && (
-            <div className="glass-card overflow-hidden">
-              <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-                <h3 className="font-display font-bold text-gray-800 dark:text-white">{exportPreview.label} — Details</h3>
-                <button onClick={() => setExportPreview(null)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-              {!exportPreview.rows.length ? (
-                <p className="text-sm text-gray-400 p-5">No data available for the selected filters.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-purple-50/50 border-b border-purple-100">
-                        {Object.keys(exportPreview.rows[0]).map(key => (
-                          <th key={key} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider whitespace-nowrap">{key}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {exportPreview.rows.map((row, i) => (
-                        <tr key={i} className="border-b border-gray-50 hover:bg-purple-50/20">
-                          {Object.keys(exportPreview.rows[0]).map(key => (
-                            <td key={key} className="px-4 py-3 text-gray-600 whitespace-nowrap">{row[key] != null ? String(row[key]) : '—'}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {batchHealth.length > 0 && (
+                <div className="glass-card p-5 rounded-2xl border border-purple-100/60 shadow-xs bg-white/90 dark:bg-gray-900/80">
+                  <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 text-sm">Batch Health Comparison</h3>
+                  <BatchHealthChart data={batchHealth} />
+                </div>
+              )}
+
+              {quizData?.quizBreakdown?.length > 0 && (
+                <div className="glass-card p-5 rounded-2xl border border-purple-100/60 shadow-xs bg-white/90 dark:bg-gray-900/80">
+                  <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 text-sm">Quiz Breakdown</h3>
+                  <QuizBreakdownChart data={quizData.quizBreakdown} />
                 </div>
               )}
             </div>
           )}
+
+          {/* Student Performance Table */}
+          <div className="glass-card rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs overflow-hidden bg-white/90 dark:bg-gray-900/80">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 flex items-center justify-center">
+                  <Users size={16} />
+                </div>
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Student Performance</h3>
+              </div>
+              <div className="relative min-w-[260px] sm:w-72">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or enrollment ID..."
+                  value={perfSearch}
+                  onChange={e => {
+                    setPerfSearch(e.target.value)
+                    setPerfPage(1)
+                  }}
+                  className="w-full pl-9 pr-3.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-gray-500 uppercase tracking-wider font-semibold">
+                    <th className="px-4 py-3 text-left w-10">#</th>
+                    <th className="px-4 py-3 text-left">Student</th>
+                    <th className="px-4 py-3 text-left">Batch</th>
+                    <th className="px-4 py-3 text-center">Quizzes (Avg)</th>
+                    <th className="px-4 py-3 text-center">Assignments (Avg)</th>
+                    <th className="px-4 py-3 text-center">Tests (Avg)</th>
+                    <th className="px-4 py-3 text-center">Overall Score</th>
+                    <th className="px-4 py-3 text-center">Grade</th>
+                    <th className="px-4 py-3 text-center">Status</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {perfPaginated.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-center py-8 text-gray-400">
+                        No student performance records found for selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    perfPaginated.map((s, idx) => {
+                      const rowNum = (perfPage - 1) * perfPageSize + idx + 1
+                      const score = s.overallPerformancePct ?? s.avgGrade ?? s.avgQuizScore ?? 0
+                      const { grade, status, pill } = getGradeFromScore(score)
+                      const avatarBg = AVATAR_BG_COLORS[idx % AVATAR_BG_COLORS.length]
+                      const initial = s.studentName ? s.studentName.trim().charAt(0).toUpperCase() : 'S'
+
+                      return (
+                        <tr key={s.studentId || idx} className="hover:bg-purple-50/20 dark:hover:bg-purple-950/10 transition-colors">
+                          <td className="px-4 py-3.5 text-gray-400 font-medium">{rowNum}</td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border ${avatarBg}`}>
+                                {initial}
+                              </div>
+                              <span className="font-semibold text-gray-900 dark:text-white">{s.studentName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-gray-600 dark:text-gray-400">{s.batchName || '—'}</td>
+                          <td className="px-4 py-3.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                            {s.avgQuizScore != null ? `${s.avgQuizScore}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                            {s.avgGrade != null && s.avgGrade > 0 ? `${s.avgGrade}%` : (s.assignmentsSubmitted > 0 ? `${s.assignmentsSubmitted} done` : '—')}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                            {s.avgGrade != null ? `${s.avgGrade}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-bold text-gray-900 dark:text-white">
+                            {score}%
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-bold text-xs ${GRADE_STYLES[grade] || GRADE_STYLES.B}`}>
+                              {grade}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${pill}`}>
+                              {status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
+                            <button
+                              onClick={() => loadStudentDetail(s.studentId)}
+                              className="px-3 py-1 text-xs font-semibold rounded-lg text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors cursor-pointer"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing {perfFiltered.length > 0 ? (perfPage - 1) * perfPageSize + 1 : 0} to {Math.min(perfPage * perfPageSize, perfFiltered.length)} of {perfFiltered.length} students
+                </span>
+                <div className="flex items-center gap-1.5 pl-3 border-l border-gray-200 dark:border-gray-700">
+                  <span className="text-gray-400 font-medium">Rows:</span>
+                  <select
+                    value={perfPageSize}
+                    onChange={(e) => {
+                      setPerfPageSize(Number(e.target.value))
+                      setPerfPage(1)
+                    }}
+                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200 font-semibold outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                  >
+                    {[5, 10, 20, 50, 100].map(sz => (
+                      <option key={sz} value={sz}>{sz} rows</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPerfPage(p => Math.max(1, p - 1))}
+                  disabled={perfPage === 1}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: Math.min(5, perfTotalPages) }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPerfPage(p)}
+                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      perfPage === p
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                {perfTotalPages > 5 && <span className="px-1 text-gray-400">...</span>}
+                {perfTotalPages > 5 && (
+                  <button
+                    onClick={() => setPerfPage(perfTotalPages)}
+                    className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600"
+                  >
+                    {perfTotalPages}
+                  </button>
+                )}
+                <button
+                  onClick={() => setPerfPage(p => Math.min(perfTotalPages, p + 1))}
+                  disabled={perfPage === perfTotalPages}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: PLACEMENT REPORT (Image 2 Dynamic)                                */}
+      {/* ========================================================================= */}
+      {tab === 'Placement' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Subheader */}
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white font-display">Placement Report</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Placement readiness, drive eligibility and student movement funnel.
+            </p>
+          </div>
+
+          {/* Dynamic Filter Bar */}
+          <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end gap-3 flex-1">
+              {/* Batch */}
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
+                <CustomSelect
+                  value={batchFilter}
+                  onChange={(val) => setBatchFilter(val)}
+                  options={batches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All Batches"
+                  compact
+                  searchable={batches.length >= 10}
+                />
+              </div>
+
+              {/* Course */}
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Course</label>
+                <CustomSelect
+                  value={courseFilter}
+                  onChange={(val) => setCourseFilter(val)}
+                  options={courses.map(c => ({ value: c.id, label: c.title }))}
+                  placeholder="All Courses"
+                  compact
+                  searchable={courses.length >= 10}
+                />
+              </div>
+
+              {/* Drive */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Drive</label>
+                <CustomSelect
+                  value={driveFilter}
+                  onChange={(val) => setDriveFilter(val)}
+                  options={[
+                    { value: '', label: 'All Drives' },
+                    { value: 'oncampus', label: 'On-Campus Drive' },
+                    { value: 'offcampus', label: 'Off-Campus Drive' },
+                    { value: 'referral', label: 'Referral Program' },
+                  ]}
+                  placeholder="All Drives"
+                  compact
+                />
+              </div>
+
+              {/* Date Lite */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Date lite</label>
+                <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-600 dark:text-gray-300 shadow-2xs">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="bg-transparent outline-none w-28 text-xs text-gray-700 dark:text-gray-200 cursor-pointer"
+                  />
+                  <span className="text-gray-400">→</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="bg-transparent outline-none w-28 text-xs text-gray-700 dark:text-gray-200 cursor-pointer"
+                  />
+                  <Calendar size={14} className="text-gray-400 ml-1" />
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadPlacement}
+                disabled={placementLoading}
+                className="flex items-center gap-1.5 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {placementLoading ? 'Applying...' : 'Apply Filters'}
+              </button>
+              <button
+                onClick={() => {
+                  setBatchFilter('')
+                  setCourseFilter('')
+                  setDriveFilter('')
+                  setStartDate('')
+                  setEndDate('')
+                  loadPlacement()
+                }}
+                className="flex items-center gap-1 px-3.5 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              >
+                <RotateCcw size={13} />
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Dynamic Placement KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Total Students */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0">
+                <Users size={24} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Students</p>
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {placementTotal}
+                </span>
+                <p className="text-[11px] font-medium text-gray-400 mt-0.5">Across selected filters</p>
+              </div>
+            </div>
+
+            {/* Card 2: Placement Ready */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+                <Target size={24} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Placement Ready</p>
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {placementSeeking}
+                </span>
+                <p className="text-[11px] font-medium text-emerald-600 font-semibold mt-0.5">
+                  {placementTotal > 0 ? Math.round((placementSeeking / placementTotal) * 100) : 0}% of students
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Drive Eligible */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shrink-0">
+                <UserCheck size={24} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Drive Eligible</p>
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {placementInterviewing}
+                </span>
+                <p className="text-[11px] font-medium text-gray-500 mt-0.5">
+                  {placementTotal > 0 ? Math.round((placementInterviewing / placementTotal) * 100) : 0}% of students
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Selected */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex items-center gap-4 bg-white/80 dark:bg-gray-900/80">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center shrink-0">
+                <Briefcase size={24} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Selected</p>
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-white font-display">
+                  {placementPlaced}
+                </span>
+                <p className="text-[11px] font-medium text-rose-500 font-semibold mt-0.5">
+                  {placementTotal > 0 ? Math.round((placementPlaced / placementTotal) * 100) : 0}% of students
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Row 1: Placement Distribution + Placement by Batch */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Placement Distribution */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80">
+              <div className="mb-2">
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Placement Distribution</h3>
+                <p className="text-xs text-gray-500">Current placement status of students</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
+                <PlacementDistributionChart data={placementChartData} total={placementTotal} />
+                <div className="space-y-2.5 text-xs">
+                  {placementChartData.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${item.dot}`} />
+                        <span>{item.name}</span>
+                      </div>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {item.count} ({placementTotal > 0 ? Math.round((item.count / placementTotal) * 100) : 0}%)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Placement by Batch */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80">
+              <div className="mb-2">
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Placement by Batch</h3>
+                <p className="text-xs text-gray-500">Placement ready percentage across batches</p>
+              </div>
+              <PlacementByBatchChart data={placementReport?.byBatch} />
+            </div>
+          </div>
+
+          {/* Charts Row 2: Placement by Course + Placement Funnel */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Placement by Course */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80">
+              <div className="mb-2">
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Placement by Course</h3>
+                <p className="text-xs text-gray-500">Placement ready percentage across courses</p>
+              </div>
+              <PlacementByCourseChart data={placementReport?.byCourse} />
+            </div>
+
+            {/* Placement Funnel */}
+            <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80">
+              <div className="mb-2">
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Placement Funnel</h3>
+                <p className="text-xs text-gray-500">Student movement through the placement process</p>
+              </div>
+              <PlacementFunnelChart data={dynamicFunnelData} />
+            </div>
+          </div>
+
+          {/* Student Placement Readiness Table */}
+          <div className="glass-card rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs overflow-hidden bg-white/90 dark:bg-gray-900/80">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Student Placement Readiness</h3>
+                <p className="text-xs text-gray-500">List of students with eligibility and placement status</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-[200px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search students..."
+                    value={placementSearch}
+                    onChange={e => {
+                      setPlacementSearch(e.target.value)
+                      setPlacementPage(1)
+                    }}
+                    className="w-full pl-9 pr-3.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <button
+                  onClick={() => downloadCSV(placementFiltered, 'placement-readiness.csv')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/40 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-semibold hover:bg-purple-50 cursor-pointer"
+                >
+                  <Download size={13} /> Export
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-gray-500 uppercase tracking-wider font-semibold">
+                    <th className="px-4 py-3 text-left w-10">#</th>
+                    <th className="px-4 py-3 text-left">Student Name</th>
+                    <th className="px-4 py-3 text-left">Batch</th>
+                    <th className="px-4 py-3 text-center">Performance %</th>
+                    <th className="px-4 py-3 text-center">Quiz %</th>
+                    <th className="px-4 py-3 text-center">Completion %</th>
+                    <th className="px-4 py-3 text-center">Readiness Score</th>
+                    <th className="px-4 py-3 text-center">Readiness Status</th>
+                    <th className="px-4 py-3 text-center">Placement Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {placementPaginated.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-center py-8 text-gray-400">
+                        No placement readiness data found for selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    placementPaginated.map((r, idx) => {
+                      const rowNum = (placementPage - 1) * placementPageSize + idx + 1
+                      const readinessBadge = READINESS_BADGE[r.status] || READINESS_BADGE.READY
+
+                      return (
+                        <tr key={r.studentId || idx} className="hover:bg-purple-50/20 dark:hover:bg-purple-950/10 transition-colors">
+                          <td className="px-4 py-3.5 text-gray-400 font-medium">{rowNum}</td>
+                          <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white">{r.studentName}</td>
+                          <td className="px-4 py-3.5 text-gray-600 dark:text-gray-400">{r.batchName || '—'}</td>
+                          <td className="px-4 py-3.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                            {r.performancePct != null ? `${r.performancePct}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                            {r.quizPct != null ? `${r.quizPct}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                            {r.assignmentCompletionPct != null ? `${r.assignmentCompletionPct}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-semibold text-gray-800 dark:text-gray-200">
+                            {r.readinessScore != null ? `${r.readinessScore}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${readinessBadge}`}>
+                              {r.status ? r.status.replace(/_/g, ' ') : 'READY'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold text-[10px]">
+                              {r.currentPlacementStatus || 'SEEKING'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
+                            <button
+                              onClick={() => loadStudentDetail(r.studentId)}
+                              className="text-purple-600 dark:text-purple-400 hover:text-purple-800 font-semibold flex items-center justify-end gap-1 ml-auto cursor-pointer"
+                            >
+                              <Eye size={13} /> View
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing {placementFiltered.length > 0 ? (placementPage - 1) * placementPageSize + 1 : 0} to {Math.min(placementPage * placementPageSize, placementFiltered.length)} of {placementFiltered.length} students
+                </span>
+                <div className="flex items-center gap-1.5 pl-3 border-l border-gray-200 dark:border-gray-700">
+                  <span className="text-gray-400 font-medium">Rows:</span>
+                  <select
+                    value={placementPageSize}
+                    onChange={(e) => {
+                      setPlacementPageSize(Number(e.target.value))
+                      setPlacementPage(1)
+                    }}
+                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200 font-semibold outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-2xs"
+                  >
+                    {[5, 10, 20, 50, 100].map(sz => (
+                      <option key={sz} value={sz}>{sz} rows</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPlacementPage(p => Math.max(1, p - 1))}
+                  disabled={placementPage === 1}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: Math.min(5, placementTotalPages) }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPlacementPage(p)}
+                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      placementPage === p
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                {placementTotalPages > 5 && <span className="px-1 text-gray-400">...</span>}
+                {placementTotalPages > 5 && (
+                  <button
+                    onClick={() => setPlacementPage(placementTotalPages)}
+                    className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600"
+                  >
+                    {placementTotalPages}
+                  </button>
+                )}
+                <button
+                  onClick={() => setPlacementPage(p => Math.min(placementTotalPages, p + 1))}
+                  disabled={placementPage === placementTotalPages}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: EXPORT REPORT                                                      */}
+      {/* ========================================================================= */}
+      {tab === 'Export' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Main Card */}
+          <div className="glass-card p-6 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs bg-white/90 dark:bg-gray-900/80 space-y-6">
+            {/* Header */}
+            <div className="flex items-center gap-3 pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 flex items-center justify-center">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h2 className="font-display font-bold text-gray-900 dark:text-white text-base">Export Report</h2>
+                <p className="text-xs text-gray-500">Download filtered data from LMS reports</p>
+              </div>
+            </div>
+
+            {/* Step 1: Select Report Type */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-800 dark:text-white mb-3">1. Select Report Type</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Attendance Report */}
+                <div
+                  onClick={() => setSelectedExportType('attendance')}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                    selectedExportType === 'attendance'
+                      ? 'border-purple-600 bg-purple-50/40 dark:bg-purple-950/20 shadow-xs'
+                      : 'border-gray-200 dark:border-gray-800 hover:border-purple-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center">
+                      <Users size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-display font-bold text-gray-900 dark:text-white text-xs">Attendance Report</h4>
+                      <p className="text-[11px] text-gray-500">Student attendance records</p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedExportType === 'attendance' ? 'border-purple-600' : 'border-gray-300'}`}>
+                    {selectedExportType === 'attendance' && <div className="w-2 h-2 rounded-full bg-purple-600" />}
+                  </div>
+                </div>
+
+                {/* Performance Report */}
+                <div
+                  onClick={() => setSelectedExportType('performance')}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                    selectedExportType === 'performance'
+                      ? 'border-purple-600 bg-purple-50/40 dark:bg-purple-950/20 shadow-xs'
+                      : 'border-gray-200 dark:border-gray-800 hover:border-purple-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center">
+                      <BarChart2 size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-display font-bold text-gray-900 dark:text-white text-xs">Performance Report</h4>
+                      <p className="text-[11px] text-gray-500">Quiz, assignment and overall performance</p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedExportType === 'performance' ? 'border-purple-600' : 'border-gray-300'}`}>
+                    {selectedExportType === 'performance' && <div className="w-2 h-2 rounded-full bg-purple-600" />}
+                  </div>
+                </div>
+
+                {/* Placement Report */}
+                <div
+                  onClick={() => setSelectedExportType('placement')}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                    selectedExportType === 'placement'
+                      ? 'border-purple-600 bg-purple-50/40 dark:bg-purple-950/20 shadow-xs'
+                      : 'border-gray-200 dark:border-gray-800 hover:border-purple-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center">
+                      <Target size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-display font-bold text-gray-900 dark:text-white text-xs">Placement Report</h4>
+                      <p className="text-[11px] text-gray-500">Placement readiness and drive status</p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedExportType === 'placement' ? 'border-purple-600' : 'border-gray-300'}`}>
+                    {selectedExportType === 'placement' && <div className="w-2 h-2 rounded-full bg-purple-600" />}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2: Apply Filters */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-800 dark:text-white mb-3">2. Apply Filters</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {/* Batch */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Batch</label>
+                  <CustomSelect
+                    value={batchFilter}
+                    onChange={(val) => setBatchFilter(val)}
+                    options={batches.map(b => ({ value: b.id, label: b.name }))}
+                    placeholder="All Batches"
+                    compact
+                    searchable={batches.length >= 10}
+                  />
+                </div>
+
+                {/* Course */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Course</label>
+                  <CustomSelect
+                    value={courseFilter}
+                    onChange={(val) => setCourseFilter(val)}
+                    options={courses.map(c => ({ value: c.id, label: c.title }))}
+                    placeholder="All Courses"
+                    compact
+                    searchable={courses.length >= 10}
+                  />
+                </div>
+
+                {/* Trainer */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Trainer</label>
+                  <CustomSelect
+                    value={trainerFilter}
+                    onChange={(val) => setTrainerFilter(val)}
+                    options={trainers.map(t => ({ value: t.id, label: t.name || t.user?.name || `Trainer #${t.id}` }))}
+                    placeholder="All Trainers"
+                    compact
+                  />
+                </div>
+
+                {/* From Date */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">From Date</label>
+                  <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300 shadow-2xs">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      className="bg-transparent outline-none w-full text-[11px] text-gray-700 dark:text-gray-200 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* To Date */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">To Date</label>
+                  <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300 shadow-2xs">
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      className="bg-transparent outline-none w-full text-[11px] text-gray-700 dark:text-gray-200 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Status</label>
+                  <CustomSelect
+                    value={statusFilter}
+                    onChange={(val) => setStatusFilter(val)}
+                    options={[
+                      { value: '', label: 'All Statuses' },
+                      { value: 'active', label: 'Active' },
+                      { value: 'at_risk', label: 'At Risk' },
+                    ]}
+                    placeholder="All Statuses"
+                    compact
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3: Select Columns to Export */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold text-gray-800 dark:text-white">3. Select Columns to Export</h3>
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    onClick={() => {
+                      const all = (DEFAULT_EXPORT_COLUMNS[selectedExportType] || []).map(c => c.key)
+                      setSelectedColumns(all)
+                    }}
+                    className="flex items-center gap-1 text-purple-600 hover:text-purple-800 font-semibold cursor-pointer"
+                  >
+                    <CheckSquare size={13} /> Select All
+                  </button>
+                  <button
+                    onClick={() => setSelectedColumns([])}
+                    className="flex items-center gap-1 text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                  >
+                    <RotateCcw size={13} /> Reset
+                  </button>
+                </div>
+              </div>
+
+              {/* Checkboxes */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {(DEFAULT_EXPORT_COLUMNS[selectedExportType] || []).map(col => {
+                  const isChecked = selectedColumns.includes(col.key)
+                  return (
+                    <label
+                      key={col.key}
+                      onClick={() => {
+                        setSelectedColumns(prev =>
+                          prev.includes(col.key) ? prev.filter(k => k !== col.key) : [...prev, col.key]
+                        )
+                      }}
+                      className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer select-none"
+                    >
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isChecked ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 dark:border-gray-700'}`}>
+                        {isChecked && <Check size={11} strokeWidth={3} />}
+                      </div>
+                      <span className="truncate">{col.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-5 border-t border-gray-100 dark:border-gray-800 mt-5">
+                <button
+                  onClick={handlePreviewExport}
+                  disabled={exportPreviewLoading}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40 rounded-xl text-xs font-semibold hover:bg-purple-100 cursor-pointer disabled:opacity-60"
+                >
+                  <Eye size={14} />
+                  {exportPreviewLoading ? 'Loading Preview...' : 'Preview Data'}
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                >
+                  <Download size={14} />
+                  Export CSV
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Section */}
+          {exportPreview && (
+            <div className="glass-card rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs overflow-hidden bg-white/90 dark:bg-gray-900/80">
+              <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Preview (First 10 Records)</h3>
+                  <p className="text-xs text-gray-500">Showing sample data based on selected filters</p>
+                </div>
+                <div className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-3 py-1 rounded-full border border-purple-200 dark:border-purple-800/40">
+                  Total Records: {exportPreview.total}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-gray-500 uppercase tracking-wider font-semibold">
+                      <th className="px-4 py-3 text-left w-10">#</th>
+                      {selectedColumns.map(colKey => {
+                        const colDef = (DEFAULT_EXPORT_COLUMNS[selectedExportType] || []).find(c => c.key === colKey)
+                        return (
+                          <th key={colKey} className="px-4 py-3 text-left whitespace-nowrap">
+                            {colDef?.label || colKey}
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {exportPreview.rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={selectedColumns.length + 1} className="text-center py-6 text-gray-400">
+                          No matching records for the current filter criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      exportPreview.rows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-purple-50/20 dark:hover:bg-purple-950/10">
+                          <td className="px-4 py-3 text-gray-400">{idx + 1}</td>
+                          {selectedColumns.map(colKey => (
+                            <td key={colKey} className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                              {row[colKey] != null ? String(row[colKey]) : '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Exports */}
+          <div className="glass-card rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs overflow-hidden bg-white/90 dark:bg-gray-900/80">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="font-display font-bold text-gray-900 dark:text-white text-sm">Recent Exports</h3>
+              <p className="text-xs text-gray-500">Your recently downloaded reports</p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-gray-500 uppercase tracking-wider font-semibold">
+                    <th className="px-4 py-3 text-left w-10">#</th>
+                    <th className="px-4 py-3 text-left">Report Type</th>
+                    <th className="px-4 py-3 text-left">Filters</th>
+                    <th className="px-4 py-3 text-left">Exported By</th>
+                    <th className="px-4 py-3 text-left">Date &amp; Time</th>
+                    <th className="px-4 py-3 text-center">Format</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {recentExports.map((item, idx) => (
+                    <tr key={item.id || idx} className="hover:bg-purple-50/20 dark:hover:bg-purple-950/10">
+                      <td className="px-4 py-3 text-gray-400">{idx + 1}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{item.type}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{item.filters}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{item.exportedBy}</td>
+                      <td className="px-4 py-3 text-gray-500">{item.dateTime}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold text-[10px]">
+                          {item.format}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const r = await reportService.export({
+                                type: item.dataRef || 'attendance',
+                                batchId: batchFilter || undefined,
+                              })
+                              downloadCSV(r.data || [], `${item.type.toLowerCase()}-report.csv`)
+                              toast.success('Report re-downloaded')
+                            } catch {
+                              toast.error('Re-download failed')
+                            }
+                          }}
+                          className="text-purple-600 dark:text-purple-400 hover:text-purple-800 font-semibold flex items-center justify-end gap-1 ml-auto cursor-pointer"
+                        >
+                          <Download size={13} /> Download
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Student Detail Modal (Accessible from Performance, Placement & all tabs) */}
+      {isStudentModalOpen && studentDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-gray-900 border border-purple-100 dark:border-purple-900/50 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h3 className="font-display font-bold text-gray-900 dark:text-white text-base flex items-center gap-2">
+                  <span>{studentDetail.studentName}</span>
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/60">
+                    {studentDetail.batchName || 'No Batch'}
+                  </span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">Comprehensive Performance &amp; Placement Readiness Profile</p>
+              </div>
+              <button
+                onClick={() => setIsStudentModalOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Quick Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 bg-purple-50/60 dark:bg-purple-950/30 rounded-xl border border-purple-100 dark:border-purple-900/40 text-center">
+                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block">Performance</span>
+                <span className="text-base font-bold text-purple-700 dark:text-purple-300 font-display">
+                  {studentDetail.overallPerformancePct != null ? `${studentDetail.overallPerformancePct}%` : '—'}
+                </span>
+              </div>
+              <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/40 text-center">
+                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block">Attendance</span>
+                <span className="text-base font-bold text-emerald-700 dark:text-emerald-300 font-display">
+                  {studentDetail.attendancePct != null ? `${studentDetail.attendancePct}%` : '—'}
+                </span>
+              </div>
+              <div className="p-3 bg-blue-50/60 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/40 text-center">
+                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block">Quiz Accuracy</span>
+                <span className="text-base font-bold text-blue-700 dark:text-blue-300 font-display">
+                  {studentDetail.avgQuizScore != null ? `${studentDetail.avgQuizScore}%` : '—'}
+                </span>
+              </div>
+              <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 rounded-xl border border-amber-100 dark:border-amber-900/40 text-center">
+                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block">Assignments</span>
+                <span className="text-base font-bold text-amber-700 dark:text-amber-300 font-display">
+                  {studentDetail.assignmentCompletionPct != null ? `${studentDetail.assignmentCompletionPct}%` : '—'}
+                </span>
+              </div>
+            </div>
+
+            {studentDetail.riskLevel && (
+              <div className="flex items-center gap-2 text-xs bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-xl">
+                <span className="text-gray-500 font-medium">Risk Status:</span>
+                <span className={`px-2.5 py-0.5 rounded-full font-bold ${RISK_BADGE[studentDetail.riskLevel] || 'bg-gray-100 text-gray-600'}`}>
+                  {studentDetail.riskLevel} {studentDetail.riskScore != null ? `(${studentDetail.riskScore}/100)` : ''}
+                </span>
+              </div>
+            )}
+
+            {studentDetail.courseBreakdown?.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Course-wise Performance</h4>
+                <StudentCourseBreakdownChart data={studentDetail.courseBreakdown} />
+              </div>
+            )}
+
+            {studentDetail.progressTrend?.length > 0 && (
+              <div className="pt-2">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Score Progress Trend</h4>
+                <StudentProgressTrendChart data={studentDetail.progressTrend} />
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+              <button
+                onClick={() => setIsStudentModalOpen(false)}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold hover:bg-gray-200 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -511,10 +511,11 @@ public class ReportServiceImpl implements ReportService {
         reportValidator.validateBatchExists(batchId);
         reportValidator.validateDateRange(startDate, endDate);
 
-        return switch (type) {
+        return switch (type.toLowerCase()) {
             case "students" -> exportStudents(batchId);
             case "performance" -> exportPerformance(batchId);
             case "attendance" -> exportAttendance(batchId);
+            case "placement" -> exportPlacement(batchId);
             default -> throw new BadRequestException("Unknown export type: " + type);
         };
     }
@@ -1069,6 +1070,23 @@ public class ReportServiceImpl implements ReportService {
                     row.put("late", late);
                     row.put("total", total);
                     row.put("attendancePct", pct);
+                    return row;
+                })
+                .toList();
+    }
+
+    private List<Map<String, Object>> exportPlacement(Long batchId) {
+        return getPlacementReadiness(batchId).stream()
+                .map(r -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("name", r.studentName() != null ? r.studentName() : "");
+                    row.put("batch", r.batchName() != null ? r.batchName() : "");
+                    row.put("performancePct", r.performancePct() != null ? r.performancePct() : 0.0);
+                    row.put("quizPct", r.quizPct() != null ? r.quizPct() : 0.0);
+                    row.put("completionPct", r.assignmentCompletionPct() != null ? r.assignmentCompletionPct() : 0.0);
+                    row.put("readinessScore", r.readinessScore() != null ? r.readinessScore() : 0.0);
+                    row.put("readinessStatus", r.status() != null ? r.status() : "");
+                    row.put("placementStatus", r.currentPlacementStatus() != null ? r.currentPlacementStatus() : "SEEKING");
                     return row;
                 })
                 .toList();
