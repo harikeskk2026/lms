@@ -51,6 +51,7 @@ public class AssignmentSubmission {
     @CollectionTable(name = "assignment_submission_attachments", joinColumns = @JoinColumn(name = "submission_id"))
     private List<SubmissionAttachment> attachments = new ArrayList<>();
 
+    @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
     @Column(name = "submitted_at", nullable = false)
@@ -71,7 +72,7 @@ public class AssignmentSubmission {
     @Column(name = "status")
     private SubmissionStatus status = SubmissionStatus.PENDING_APPROVAL;
 
-    @Column(name = "rejection_reason")
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
 
     @Column(name = "approved_at")

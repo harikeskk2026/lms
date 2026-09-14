@@ -52,8 +52,12 @@ public class AdminAccountSeeder implements CommandLineRunner {
 
         try {
             jdbcTemplate.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check");
+            jdbcTemplate.execute("ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_status_check");
+            jdbcTemplate.execute("ALTER TABLE assignment_submissions DROP CONSTRAINT IF EXISTS assignment_submissions_status_check");
+            jdbcTemplate.execute("ALTER TABLE assignment_submissions ALTER COLUMN notes TYPE text");
+            jdbcTemplate.execute("ALTER TABLE assignment_submissions ALTER COLUMN rejection_reason TYPE text");
         } catch (Exception e) {
-            log.warn("Could not drop users_role_check constraint: {}", e.getMessage());
+            log.warn("Could not execute table constraint/column adjustments: {}", e.getMessage());
         }
 
         seedAccount("Super Admin", "superadmin@careerlabs.com", "Superadmin@123", Role.SUPERADMIN);

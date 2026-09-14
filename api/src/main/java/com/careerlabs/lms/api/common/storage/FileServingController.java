@@ -35,7 +35,7 @@ public class FileServingController {
 
         // 1. Primary: serve from PostgreSQL database
         Optional<StoredFileEntity> dbFile = storedFileRepository.findByPath(path);
-        if (dbFile.isPresent()) {
+        if (dbFile.isPresent() && dbFile.get().getData() != null && dbFile.get().getData().length > 500) {
             StoredFileEntity file = dbFile.get();
             MediaType mediaType;
             try {

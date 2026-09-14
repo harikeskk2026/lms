@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.submission.service.impl;
 
 import com.careerlabs.lms.api.assignment.entity.Assignment;
+import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
 import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
@@ -28,6 +29,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
+import com.careerlabs.lms.api.user.entity.User;
+import com.careerlabs.lms.api.user.repository.UserRepository;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -49,19 +52,22 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
     private final EnrollmentRepository enrollmentRepository;
     private final FileStorageService fileStorageService;
     private final NotificationService notificationService;
+    private final com.careerlabs.lms.api.user.repository.UserRepository userRepository;
 
     public AssignmentSubmissionServiceImpl(AssignmentSubmissionRepository submissionRepository,
                                             AssignmentRepository assignmentRepository,
                                             StudentRepository studentRepository,
                                             EnrollmentRepository enrollmentRepository,
                                             FileStorageService fileStorageService,
-                                            NotificationService notificationService) {
+                                            NotificationService notificationService,
+                                            com.careerlabs.lms.api.user.repository.UserRepository userRepository) {
         this.submissionRepository = submissionRepository;
         this.assignmentRepository = assignmentRepository;
         this.studentRepository = studentRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.fileStorageService = fileStorageService;
         this.notificationService = notificationService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -100,27 +106,16 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
             throw new ResourceNotFoundException("Submission not found: " + submissionId);
         }
 
-        if (submission.getMarks() != null) {
-            // Marks are already allocated and cannot be modified
-            if (request.getMarks() != null && !request.getMarks().equals(submission.getMarks())) {
-                throw new BadRequestException("Marks have already been allocated for this submission and cannot be changed.");
+        if (request.getMarks() != null) {
+            if (request.getMarks() > submission.getAssignment().getTotalMarks()) {
+                throw new BadRequestException("Marks cannot exceed the assignment's total marks (" + submission.getAssignment().getTotalMarks() + ")");
             }
-            // Allow updating the feedback given by the user
-            if (request.getFeedback() != null) {
-                submission.setFeedback(request.getFeedback().trim().isEmpty() ? null : request.getFeedback().trim());
-            }
-        } else {
-            if (request.getMarks() != null) {
-                if (request.getMarks() > submission.getAssignment().getTotalMarks()) {
-                    throw new BadRequestException("Marks cannot exceed the assignment's total marks");
-                }
-                submission.setMarks(request.getMarks());
-            }
-            if (request.getFeedback() != null) {
-                submission.setFeedback(request.getFeedback().trim().isEmpty() ? null : request.getFeedback().trim());
-            }
-            submission.setReviewed(true);
+            submission.setMarks(request.getMarks());
         }
+        if (request.getFeedback() != null) {
+            submission.setFeedback(request.getFeedback().trim().isEmpty() ? null : request.getFeedback().trim());
+        }
+        submission.setReviewed(true);
 
         SubmissionRowResponse result = toRow(submissionRepository.save(submission));
 
@@ -132,7 +127,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
                 : "—";
         notificationService.notifyUser(
                 studentUserId,
-                "\u2705 Assignment Graded: " + assignmentTitle,
+                "Assignment Graded: " + assignmentTitle,
                 "Your score: " + scoreText + "."
                         + (submission.getFeedback() != null ? " Feedback: " + submission.getFeedback() : ""),
                 NotificationType.SUCCESS,
@@ -159,16 +154,30 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         Long studentUserId = submission.getStudent().getUser().getId();
         String assignmentTitle = submission.getAssignment().getTitle();
 
+        // Resolve trainer / reviewer name
+        String trainerName = null;
+        if (submission.getAssignment().getBatch() != null && submission.getAssignment().getBatch().getTrainerId() != null) {
+            trainerName = userRepository.findById(submission.getAssignment().getBatch().getTrainerId())
+                    .map(User::getName)
+                    .orElse(null);
+        }
+        if (trainerName == null && reviewerEmail != null) {
+            trainerName = userRepository.findByEmailIgnoreCase(reviewerEmail)
+                    .map(User::getName)
+                    .orElse(null);
+        }
+
         if ("APPROVE".equals(action)) {
             submission.setStatus(submission.isLate() ? SubmissionStatus.LATE : SubmissionStatus.SUBMITTED);
             submission.setApprovedAt(Instant.now());
-            submission.setApprovedBy(reviewerEmail != null ? reviewerEmail : "Admin");
+            submission.setApprovedBy(trainerName != null ? trainerName : (reviewerEmail != null ? reviewerEmail : "Trainer"));
             submission.setRejectionReason(null);
 
+            String approvedByText = trainerName != null ? "your trainer (" + trainerName + ")." : "your trainer.";
             notificationService.notifyUser(
                     studentUserId,
-                    "✅ Assignment Approved: " + assignmentTitle,
-                    "Your submission for \"" + assignmentTitle + "\" has been approved by the admin.",
+                    "Assignment Approved: " + assignmentTitle,
+                    "Your submission for \"" + assignmentTitle + "\" has been approved by " + approvedByText,
                     NotificationType.SUCCESS,
                     "/student/assignments"
             );
@@ -178,13 +187,14 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
             submission.setApprovedAt(null);
             submission.setApprovedBy(null);
 
+            String rejectedByText = trainerName != null ? "your trainer (" + trainerName + ")." : "your trainer.";
             String reasonMsg = (submission.getRejectionReason() != null && !submission.getRejectionReason().isEmpty())
-                    ? " Reason: " + submission.getRejectionReason()
+                    ? " Reason: " + submission.getRejectionReason() + "."
                     : "";
             notificationService.notifyUser(
                     studentUserId,
-                    "❌ Assignment Rejected: " + assignmentTitle,
-                    "Your submission for \"" + assignmentTitle + "\" was rejected." + reasonMsg + " You may resubmit your assignment.",
+                    "Assignment Rejected: " + assignmentTitle,
+                    "Your submission for \"" + assignmentTitle + "\" was rejected by " + rejectedByText + reasonMsg + " You may resubmit your assignment.",
                     NotificationType.WARNING,
                     "/student/assignments"
             );
@@ -198,6 +208,9 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
     @Transactional
     public SubmissionRowResponse submit(Long assignmentId, Long userId, List<MultipartFile> files, String notes) {
         Assignment assignment = findAssignmentOrThrow(assignmentId);
+        if (assignment.getStatus() == AssignmentStatus.CLOSED) {
+            throw new BadRequestException("This assignment is closed. Submissions are no longer accepted.");
+        }
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
 
@@ -252,7 +265,12 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
 
         submission.setFileUrl(primaryFileUrl);
         submission.setFileName(primaryFileName);
-        submission.setAttachments(attachments);
+        if (submission.getAttachments() != null) {
+            submission.getAttachments().clear();
+            submission.getAttachments().addAll(attachments);
+        } else {
+            submission.setAttachments(attachments);
+        }
         submission.setNotes(notes);
         submission.setSubmittedAt(Instant.now());
         submission.setLate(LocalDate.now().isAfter(assignment.getDueDate()));

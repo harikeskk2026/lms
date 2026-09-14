@@ -3,14 +3,14 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye, Clock, Award } from 'lucide-react'
+import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye, Clock, Award, Lock } from 'lucide-react'
 import { useAssignments } from '@/hooks/useStudentDashboard'
 import { studentApi, resolveFileUrl } from '@/lib/api'
 import toast from 'react-hot-toast'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
-const FILTERS = ['All', 'Pending', 'Pending Approval', 'Submitted', 'Graded', 'Overdue']
+const FILTERS = ['All', 'Pending', 'Pending Approval', 'Submitted', 'Graded', 'Overdue', 'Closed']
 const ALLOWED_SUBMISSION_EXTENSIONS = ['.pdf', '.docx']
 
 export function parseAssignmentDueDate(dueDate, closeTime) {
@@ -32,7 +32,10 @@ export function parseAssignmentDueDate(dueDate, closeTime) {
   }
 }
 
-function dueDateLabel(dueDate, closeTime) {
+function dueDateLabel(dueDate, closeTime, isClosed) {
+  if (isClosed) {
+    return { text: 'Assignment Closed', cls: 'text-red-600 dark:text-red-400 font-semibold' }
+  }
   const due = parseAssignmentDueDate(dueDate, closeTime)
   if (!due) return { text: 'No due date', cls: 'text-gray-500' }
   const now = new Date()
@@ -167,7 +170,19 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
       onSuccess()
       onClose()
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Submission failed')
+      const rawMsg = e?.response?.data?.message || e?.message || ''
+      let friendlyMsg = 'Submission failed. Please try again.'
+      if (rawMsg) {
+        const lower = rawMsg.toLowerCase()
+        if (lower.includes('value too long') || lower.includes('character varying')) {
+          friendlyMsg = 'Notes or file details exceed allowed length. Please shorten your notes and try again.'
+        } else if (lower.includes('dataintegrityviolation') || lower.includes('could not execute statement') || lower.includes('check constraint')) {
+          friendlyMsg = 'Unable to save submission. Please review your submission notes and try again.'
+        } else {
+          friendlyMsg = rawMsg
+        }
+      }
+      toast.error(friendlyMsg)
     } finally {
       setLoading(false)
     }
@@ -284,8 +299,11 @@ function AssignmentCard({ a, onSubmit }) {
   const [viewingFile, setViewingFile] = useState(null)
   const s = a.submission
   const isOverdue = a.isOverdue
-  const statusLabel = s ? s.status : isOverdue ? 'OVERDUE' : 'PENDING'
-  const { text: dueText, cls: dueCls } = dueDateLabel(a.dueDate, a.closeTime)
+  const isClosed = a.status === 'CLOSED'
+  const statusLabel = (!s || s.status === 'PENDING') && isClosed
+    ? 'CLOSED'
+    : (s ? s.status : isOverdue ? 'OVERDUE' : 'PENDING')
+  const { text: dueText, cls: dueCls } = dueDateLabel(a.dueDate, a.closeTime, isClosed)
 
   const statusColors = {
     GRADED:           'bg-green-100 text-green-700',
@@ -295,6 +313,7 @@ function AssignmentCard({ a, onSubmit }) {
     PENDING:          'bg-yellow-100 text-yellow-800',
     OVERDUE:          'bg-yellow-200 text-yellow-900',
     LATE:             'bg-orange-100 text-orange-700',
+    CLOSED:           'bg-red-100 text-red-700 border border-red-200',
   }
 
   return (
@@ -303,7 +322,12 @@ function AssignmentCard({ a, onSubmit }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="chip bg-brand-100 text-brand-700 text-[10px]">{a.batchName}</span>
-            {isOverdue && !s && (
+            {isClosed && (
+              <span className="chip bg-red-100 text-red-700 border border-red-200 text-[10px] flex items-center gap-1 font-bold">
+                <Lock size={10} /> CLOSED
+              </span>
+            )}
+            {isOverdue && !s && !isClosed && (
               <span className="chip bg-yellow-200 text-yellow-900 text-[10px]">OVERDUE</span>
             )}
           </div>
@@ -366,7 +390,7 @@ function AssignmentCard({ a, onSubmit }) {
         <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-300">
           <div className="flex items-center justify-between gap-2 flex-wrap mb-0.5">
             <p className="font-semibold flex items-center gap-1.5">
-              <span>⏳</span> Awaiting Admin Approval
+              <span>⏳</span> Awaiting Trainer Approval{a.trainerName ? `: ${a.trainerName}` : ''}
             </p>
             {s.submittedAt && (
               <span className="text-[11px] text-amber-700/80 dark:text-amber-400/80 flex items-center gap-1">
@@ -374,7 +398,11 @@ function AssignmentCard({ a, onSubmit }) {
               </span>
             )}
           </div>
-          <p className="text-amber-700 dark:text-amber-400 mt-0.5">Your submission has been received and is waiting to be approved by your admin / trainer.</p>
+          <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+            {a.trainerName
+              ? `Your submission has been received and is waiting to be approved by your trainer (${a.trainerName}).`
+              : 'Your submission has been received and is waiting to be approved by your trainer.'}
+          </p>
         </div>
       )}
 
@@ -484,15 +512,27 @@ function AssignmentCard({ a, onSubmit }) {
               </div>
             </div>
           )}
-          {(!s || s.status === 'PENDING') && (
+          {isClosed ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs font-semibold border border-gray-200 dark:border-gray-700">
+              <Lock size={13} className="text-gray-400" />
+              Submissions Closed
+            </span>
+          ) : (!s || s.status === 'PENDING') ? (
             <button onClick={() => onSubmit(a)} className="btn-primary text-xs py-2 px-4">
               {isOverdue ? 'Submit Late' : 'Upload Submission'}
             </button>
-          )}
+          ) : null}
           {s?.status === 'REJECTED' && (
-            <button onClick={() => onSubmit(a)} className="btn-primary text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white">
-              Resubmit Assignment
-            </button>
+            isClosed ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs font-semibold border border-gray-200">
+                <Lock size={13} className="text-gray-400" />
+                Assignment Closed
+              </span>
+            ) : (
+              <button onClick={() => onSubmit(a)} className="btn-primary text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white">
+                Resubmit Assignment
+              </button>
+            )
           )}
           {s?.status === 'GRADED' && s.feedback && (
             <button onClick={() => setExpanded(e => !e)} className="btn-outline text-xs py-2 px-3">
@@ -535,11 +575,12 @@ export default function AssignmentsPage() {
 
   const filtered = !assignments ? [] : assignments.filter(a => {
     if (filter === 'All')              return true
-    if (filter === 'Pending')          return !a.submission || a.submission.status === 'PENDING'
+    if (filter === 'Pending')          return (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED'
     if (filter === 'Pending Approval') return a.submission?.status === 'PENDING_APPROVAL'
     if (filter === 'Submitted')        return a.submission?.status === 'SUBMITTED'
     if (filter === 'Graded')           return a.submission?.status === 'GRADED'
-    if (filter === 'Overdue')          return a.isOverdue
+    if (filter === 'Overdue')          return a.isOverdue && a.status !== 'CLOSED'
+    if (filter === 'Closed')           return a.status === 'CLOSED'
     return true
   })
 
@@ -557,11 +598,12 @@ export default function AssignmentsPage() {
       <div className="flex gap-1.5 flex-wrap mb-4">
         {FILTERS.map(f => {
           const count = !assignments ? 0 : f === 'All' ? assignments.length :
-            f === 'Pending'          ? assignments.filter(a => !a.submission || a.submission.status === 'PENDING').length :
+            f === 'Pending'          ? assignments.filter(a => (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED').length :
             f === 'Pending Approval' ? assignments.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
             f === 'Submitted'        ? assignments.filter(a => a.submission?.status === 'SUBMITTED').length :
             f === 'Graded'           ? assignments.filter(a => a.submission?.status === 'GRADED').length :
-            assignments.filter(a => a.isOverdue).length
+            f === 'Overdue'          ? assignments.filter(a => a.isOverdue && a.status !== 'CLOSED').length :
+            f === 'Closed'           ? assignments.filter(a => a.status === 'CLOSED').length : 0
           return (
             <button key={f} onClick={() => setFilter(f)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${

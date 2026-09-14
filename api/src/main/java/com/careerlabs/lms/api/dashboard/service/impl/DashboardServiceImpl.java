@@ -439,9 +439,15 @@ public class DashboardServiceImpl implements DashboardService {
         StudentGameStats stats = gamificationService.getOrCreateStats(userId);
         List<StudentAssignmentResponse> assignments = assignmentService.listForStudent(userId);
         List<StudentAssignmentResponse> pendingAssignments = assignments.stream()
-                .filter(a -> a.submission() == null)
+                .filter(a -> a.submission() == null && a.status() != AssignmentStatus.CLOSED)
                 .sorted(Comparator.comparing(StudentAssignmentResponse::dueDate))
                 .toList();
+
+        long totalAssignments = assignments.size();
+        long submittedAssignments = assignments.stream().filter(a -> a.submission() != null).count();
+        double assignmentCompletionPct = totalAssignments > 0
+                ? Math.min(100.0, Math.round(submittedAssignments * 1000.0 / totalAssignments) / 10.0)
+                : 0.0;
 
         List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
         List<Enrollment> publishedEnrollments = enrollments.stream()
@@ -450,7 +456,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<StudentDashboardResponse.UpcomingClass> upcomingClasses = buildUpcomingClasses(student);
 
         return new StudentDashboardResponse(
-                buildStudentOverview(publishedEnrollments, performance, attendanceHealth, pendingAssignments, quizAnalytics, stats),
+                buildStudentOverview(publishedEnrollments, assignmentCompletionPct, attendanceHealth, pendingAssignments, quizAnalytics, stats),
                 buildContinueLearning(publishedEnrollments),
                 buildTodaysTasks(userId, pendingAssignments, upcomingClasses),
                 new StudentDashboardResponse.Performance(quizAnalytics, performance),
@@ -466,14 +472,14 @@ public class DashboardServiceImpl implements DashboardService {
 
     private StudentDashboardResponse.Overview buildStudentOverview(
             List<Enrollment> enrollments,
-            ReportStudentResponse performance,
+            Double assignmentCompletionPct,
             com.careerlabs.lms.api.attendance.dto.response.AttendanceHealthResponse attendanceHealth,
             List<StudentAssignmentResponse> pendingAssignments,
             com.careerlabs.lms.api.quiz.dto.response.QuizAnalyticsResponse quizAnalytics,
             StudentGameStats stats) {
         return new StudentDashboardResponse.Overview(
                 enrollments.size(),
-                performance.assignmentCompletionPct(),
+                assignmentCompletionPct,
                 attendanceHealth.overallPercentage(),
                 pendingAssignments.size(),
                 quizAnalytics.overallSkill(),

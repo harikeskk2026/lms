@@ -61,19 +61,42 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
         log.error("Data integrity violation on {}", request.getRequestURI(), ex);
         String rootMsg = ex.getRootCause() != null ? ex.getRootCause().getMessage() : ex.getMessage();
+        String lower = rootMsg != null ? rootMsg.toLowerCase() : (ex.getMessage() != null ? ex.getMessage().toLowerCase() : "");
         String userMessage;
-        if (rootMsg != null && rootMsg.contains("duplicate key")) {
+        if (lower.contains("assignment_submissions")) {
+            userMessage = "Cannot delete this assignment because students have already submitted work for it. You can close the assignment instead.";
+        } else if (lower.contains("foreign key") || lower.contains("violates foreign key constraint") || lower.contains("still referenced")) {
+            userMessage = "This record is referenced by other data and cannot be modified or deleted.";
+        } else if (lower.contains("duplicate key") || lower.contains("unique constraint") || lower.contains("unique")) {
             userMessage = "A record with that value already exists. Please choose a different value and try again.";
-        } else if (rootMsg != null && rootMsg.contains("NOT NULL")) {
+        } else if (lower.contains("not null") || lower.contains("null value in column")) {
             userMessage = "A required field is missing. Please fill in all required fields and try again.";
-        } else if (rootMsg != null && rootMsg.contains("unique constraint") || rootMsg != null && rootMsg.contains("Unique")) {
-            userMessage = "A record with that value already exists. Please choose a different value and try again.";
-        } else if (rootMsg != null && rootMsg.contains("foreign key")) {
-            userMessage = "This record is referenced by other data and cannot be modified as requested.";
+        } else if (lower.contains("value too long") || lower.contains("character varying")) {
+            userMessage = "One of your inputs exceeds the maximum allowed length. Please shorten your text.";
         } else {
-            userMessage = "That change conflicts with existing data. Root cause: " + rootMsg;
+            userMessage = "Unable to complete request due to data constraints.";
         }
         return buildResponse(HttpStatus.CONFLICT, userMessage, request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(org.springframework.transaction.TransactionSystemException.class)
+    public ResponseEntity<ApiErrorResponse> handleTransactionSystem(org.springframework.transaction.TransactionSystemException ex, HttpServletRequest request) {
+        log.error("Transaction exception on {}", request.getRequestURI(), ex);
+        String msg = "Unable to complete the operation. Please review your input and try again.";
+        Throwable root = ex.getRootCause();
+        if (root != null && root.getMessage() != null) {
+            String lower = root.getMessage().toLowerCase();
+            if (lower.contains("assignment_submissions")) {
+                msg = "Cannot delete this assignment because students have already submitted work for it. You can close the assignment instead.";
+            } else if (lower.contains("foreign key") || lower.contains("violates foreign key constraint") || lower.contains("still referenced")) {
+                msg = "Cannot delete or update this record because other items are still linked to it.";
+            } else if (lower.contains("value too long") || lower.contains("character varying")) {
+                msg = "One of your inputs exceeds the maximum allowed length. Please shorten your text.";
+            } else if (lower.contains("unique") || lower.contains("duplicate key")) {
+                msg = "That submission or record already exists.";
+            }
+        }
+        return buildResponse(HttpStatus.BAD_REQUEST, msg, request.getRequestURI(), null);
     }
 
     @ExceptionHandler(EmptyResultDataAccessException.class)

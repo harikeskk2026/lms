@@ -241,7 +241,7 @@ export default function StudentShell({ children }) {
           : (Array.isArray(notifsData) ? notifsData.filter(n => !n.isRead).length : 0) // old shape
         : 0
       const pendingAsgn = Array.isArray(assignments)
-        ? assignments.filter(a => !a.submission || a.submission.status === 'PENDING').length
+        ? assignments.filter(a => (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED').length
         : 0
       setBadges({ assignments: pendingAsgn, notifications: unreadNotif })
     })

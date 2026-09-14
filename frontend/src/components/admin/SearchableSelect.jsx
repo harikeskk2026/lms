@@ -18,6 +18,7 @@ export default function SearchableSelect({
   creatable = false,
   onCreate,
   creating = false,
+  error = false,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -129,7 +130,9 @@ export default function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={toggleOpen}
-        className={`w-full flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-left outline-none focus:ring-2 focus:ring-purple-500 transition-colors min-w-0 ${
+        className={`w-full flex items-center justify-between gap-2 rounded-xl border ${
+          error ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+        } bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-left outline-none focus:ring-2 transition-colors min-w-0 ${
           disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-gray-800/50' : 'cursor-pointer hover:border-purple-300'
         }`}
       >

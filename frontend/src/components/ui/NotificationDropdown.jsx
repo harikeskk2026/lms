@@ -196,7 +196,7 @@ export default function NotificationDropdown({
                         <p className={`text-xs leading-snug break-words ${
                           n.isRead ? 'text-gray-500 dark:text-gray-400 font-normal' : 'text-gray-800 dark:text-gray-100 font-semibold'
                         }`}>
-                          {n.title}
+                          {n.title?.replace(/^[\p{Emoji}\p{Extended_Pictographic}\u200d\ufe0f\s]+/u, '').trim() || n.title}
                         </p>
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-1 mt-0.5 leading-tight">
                           {n.body}

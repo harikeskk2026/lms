@@ -8,42 +8,103 @@ import tokenStorage from '@/utilities/tokenStorage'
 import { resolveFileUrl } from '@/lib/api'
 
 /**
- * Returns the file viewer type based on the filename extension.
+ * Returns the file viewer type based on filename and url extensions.
  */
-function getFileType(name) {
-  const lower = (name || '').toLowerCase()
-  if (/\.pdf$/i.test(lower)) return 'pdf'
-  if (/\.(png|jpe?g|webp|gif|svg|bmp|ico)$/i.test(lower)) return 'image'
-  if (/\.(docx?|xlsx?|pptx?)$/i.test(lower)) return 'office'
+function getFileType(name, url) {
+  const combined = `${name || ''} ${url || ''}`.toLowerCase()
+  if (/\.pdf($|\?)/i.test(combined)) return 'pdf'
+  if (/\.(png|jpe?g|webp|gif|svg|bmp|ico)($|\?)/i.test(combined)) return 'image'
+  if (/\.(docx?|xlsx?|pptx?)($|\?)/i.test(combined)) return 'office'
   return 'pdf' // default: attempt PDF/binary render
 }
 
 /**
- * Security watermark repeating diagonal grid.
- * Displays student / user identity, timestamp, and confidentiality notice across the entire view.
- * Specifically styled to remain clearly legible over white PDF documents and dark backgrounds alike,
- * establishing an undeniable forensic deterrent against phone camera capture and external recordings.
+ * Watermark overlay disabled per user preference to keep document content unobstructed and easy to read.
  */
-function SecurityWatermark({ user }) {
-  const userName = user?.name || user?.email || 'Authorized User'
-  const userEmail = user?.email || ''
-  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-  const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  const watermarkText = `${userName} ${userEmail ? `• ${userEmail} ` : ''}• CONFIDENTIAL • ${dateStr} ${timeStr} • DO NOT RECORD`
+function SecurityWatermark() {
+  return null
+}
+
+/**
+ * Native in-browser DOCX viewer powered by docx-preview.
+ * Renders DOCX files directly on client DOM without external cloud dependencies.
+ */
+function DocxViewer({ url, name }) {
+  const containerRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!url) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    ;(async () => {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch file`)
+        const blob = await res.blob()
+        if (cancelled) return
+
+        const { renderAsync } = await import('docx-preview')
+        if (containerRef.current) {
+          containerRef.current.innerHTML = ''
+          await renderAsync(blob, containerRef.current, null, {
+            className: 'docx-preview-wrapper',
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            ignoreFonts: false,
+            breakPages: true,
+            useBase64URL: true,
+          })
+        }
+      } catch (err) {
+        console.error('DocxViewer rendering error:', err)
+        if (!cancelled) setError('Failed to render document preview')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [url])
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
+        <Loader2 size={32} className="animate-spin text-purple-400" />
+        <p className="text-sm font-medium">Rendering document preview…</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center px-4 my-auto">
+        <AlertCircle size={36} className="text-red-400 mb-1" />
+        <p className="text-sm font-semibold text-gray-300">{error}</p>
+        <p className="text-xs text-gray-500 mb-3">You can download the document to view it on your device.</p>
+        <a
+          href={url}
+          download={name || 'document.docx'}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl shadow transition-colors"
+        >
+          Download Document
+        </a>
+      </div>
+    )
+  }
 
   return (
-    <div
-      className="pointer-events-none fixed inset-0 z-40 overflow-hidden select-none flex flex-wrap items-center justify-around gap-x-20 gap-y-16 p-6"
-      aria-hidden="true"
-    >
-      {Array.from({ length: 48 }).map((_, i) => (
-        <span
-          key={i}
-          className="transform -rotate-25 text-xs font-mono font-bold tracking-wider text-neutral-900/15 dark:text-neutral-100/20 uppercase whitespace-nowrap drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]"
-        >
-          {watermarkText}
-        </span>
-      ))}
+    <div className="w-full flex justify-center p-2 sm:p-6 overflow-x-auto select-none my-2">
+      <div
+        ref={containerRef}
+        className="docx-viewer-content w-full max-w-4xl bg-white text-gray-900 rounded-lg shadow-2xl p-6 sm:p-12 overflow-x-auto select-none"
+      />
     </div>
   )
 }
@@ -97,7 +158,19 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
         const pdfjsLib = await import('pdfjs-dist')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
-        const loadingTask = pdfjsLib.getDocument(url)
+        let loadingTask
+        try {
+          const res = await fetch(url)
+          if (res.ok) {
+            const arrayBuffer = await res.arrayBuffer()
+            loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) })
+          } else {
+            loadingTask = pdfjsLib.getDocument(url)
+          }
+        } catch {
+          loadingTask = pdfjsLib.getDocument(url)
+        }
+
         const pdf = await loadingTask.promise
         if (cancelled) return
 
@@ -192,10 +265,17 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center px-4">
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center px-4 my-auto">
         <AlertCircle size={36} className="text-red-400 mb-1" />
         <p className="text-sm font-semibold text-gray-300">{error}</p>
-        <p className="text-xs text-gray-500">The file could not be parsed as a valid PDF.</p>
+        <p className="text-xs text-gray-500 mb-3">The file could not be parsed as a valid PDF.</p>
+        <a
+          href={url}
+          download="document.pdf"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl shadow transition-colors"
+        >
+          Download Document
+        </a>
       </div>
     )
   }
@@ -237,7 +317,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
     ? (url.startsWith('blob:') || /^https?:\/\//i.test(url) ? url : resolveFileUrl(url))
     : ''
 
-  const fileType = getFileType(name || fileUrl)
+  const fileType = getFileType(name, fileUrl)
 
   // Mount guard for portal
   useEffect(() => {
@@ -486,14 +566,6 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
   const handleZoomOut = () => setZoomLevel(z => Math.max(0.3, +(z - 0.15).toFixed(2)))
   const handleResetZoom = () => setZoomLevel(1.0)
 
-  // Office URL configuration
-  const officeAbsoluteUrl = fileUrl
-    ? (fileUrl.startsWith('/') ? `${typeof window !== 'undefined' ? window.location.origin : ''}${fileUrl}` : fileUrl)
-    : ''
-  const officeViewerSrc = fileType === 'office' && officeAbsoluteUrl
-    ? `https://docs.google.com/gview?url=${encodeURIComponent(officeAbsoluteUrl)}&embedded=true`
-    : null
-
   if (!mounted || typeof document === 'undefined') return null
 
   const modal = (
@@ -502,9 +574,6 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
       onContextMenu={e => e.preventDefault()}
       onDragStart={e => e.preventDefault()}
     >
-      {/* ── Security Watermark Overlay ────────────────────────────────────── */}
-      <SecurityWatermark user={user} />
-
       {/* ── Top Header Toolbar ────────────────────────────────────────────── */}
       <header className="h-14 min-h-[56px] w-full px-4 sm:px-6 bg-gray-900 border-b border-gray-800 flex items-center justify-between gap-4 flex-shrink-0 z-20 shadow-md">
         
@@ -662,14 +731,11 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
           </div>
         )}
 
-        {/* Office documents preview via Google Docs Viewer */}
-        {fileType === 'office' && officeViewerSrc && (
-          <iframe
-            key={officeViewerSrc}
-            src={officeViewerSrc}
-            title={name || 'File Preview'}
-            className="w-full h-full border-0 rounded-lg shadow-2xl"
-            sandbox="allow-scripts allow-same-origin allow-forms"
+        {/* Office documents (DOCX, etc.) preview via native client-side DocxViewer */}
+        {fileType === 'office' && fileUrl && (
+          <DocxViewer
+            url={fileUrl}
+            name={name}
           />
         )}
 

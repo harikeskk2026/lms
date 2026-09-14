@@ -31,15 +31,15 @@ public class Assignment {
     @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String description;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_id")
     private Course course;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "batch_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
     private Batch batch;
 
     @Column(name = "start_date")
@@ -48,7 +48,7 @@ public class Assignment {
     @Column(name = "publish_time")
     private LocalTime publishTime;
 
-    @Column(name = "due_date", nullable = false)
+    @Column(name = "due_date")
     private LocalDate dueDate;
 
     @Column(name = "close_time")

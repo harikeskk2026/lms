@@ -1218,7 +1218,7 @@ public class ReportServiceImpl implements ReportService {
         }
         long assignmentCount = assignmentRepository.findByBatchIdAndStatusInOrderByDueDateAsc(
                 student.getBatch().getId(), List.of(AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED)).size();
-        return assignmentCount > 0 ? round1(submittedCount * 100.0 / assignmentCount) : null;
+        return assignmentCount > 0 ? Math.min(100.0, round1(submittedCount * 100.0 / assignmentCount)) : null;
     }
 
     private Double attendancePctForStudent(Long studentId) {

@@ -12,7 +12,7 @@ const TONES = {
   warning: {
     icon: AlertTriangle,
     iconWrap: 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400',
-    btn: 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20',
+    btn: 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20',
   },
   success: {
     icon: CheckCircle2,
@@ -36,10 +36,16 @@ export default function ConfirmModal({
   cancelLabel = 'Cancel',
   tone = 'danger',
   loading = false,
+  loadingText,
+  icon: CustomIcon,
+  iconWrap,
+  confirmBtnClass,
 }) {
   const [mounted, setMounted] = useState(false)
   const config = TONES[tone] || TONES.danger
-  const Icon = config.icon
+  const Icon = CustomIcon || config.icon
+  const resolvedIconWrap = iconWrap || config.iconWrap
+  const resolvedBtnClass = confirmBtnClass || config.btn
 
   useEffect(() => {
     setMounted(true)
@@ -78,7 +84,7 @@ export default function ConfirmModal({
           </button>
         )}
 
-        <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center shadow-inner ${config.iconWrap}`}>
+        <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center shadow-inner ${resolvedIconWrap}`}>
           <Icon size={24} />
         </div>
 
@@ -87,9 +93,9 @@ export default function ConfirmModal({
             {title}
           </h3>
           {message && (
-            <p className="text-xs text-slate-500 dark:text-gray-400 leading-relaxed">
+            <div className="text-xs text-slate-500 dark:text-gray-400 leading-relaxed">
               {message}
-            </p>
+            </div>
           )}
         </div>
 
@@ -106,7 +112,7 @@ export default function ConfirmModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className={`w-1/2 py-2.5 rounded-xl text-white font-semibold text-xs shadow-md disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-1.5 transition-all active:scale-95 ${config.btn}`}
+            className={`w-1/2 py-2.5 rounded-xl text-white font-semibold text-xs shadow-md disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-1.5 transition-all active:scale-95 ${resolvedBtnClass}`}
           >
             {loading ? (
               <>
@@ -114,7 +120,7 @@ export default function ConfirmModal({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <span>Please wait...</span>
+                <span>{loadingText || 'Please wait...'}</span>
               </>
             ) : (
               confirmLabel

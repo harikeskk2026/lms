@@ -34,9 +34,10 @@ public class AssignmentSchedulerService {
     public void processScheduledAssignmentTransitions() {
         LocalDateTime now = LocalDateTime.now();
 
-        // 1. Auto-publish DRAFT assignments whose scheduled start/publish date & time has arrived
-        List<Assignment> draftAssignments = assignmentRepository.findAll().stream()
-                .filter(a -> a.getStatus() == AssignmentStatus.DRAFT && a.getStartDate() != null)
+        // 1. Auto-publish DRAFT or SCHEDULED assignments whose publish date & time has arrived
+        List<Assignment> pendingAssignments = assignmentRepository.findAll().stream()
+                .filter(a -> (a.getStatus() == AssignmentStatus.DRAFT || a.getStatus() == AssignmentStatus.SCHEDULED)
+                        && a.getStartDate() != null)
                 .filter(a -> {
                     LocalDateTime publishDateTime = a.getPublishTime() != null
                             ? LocalDateTime.of(a.getStartDate(), a.getPublishTime())
@@ -45,7 +46,7 @@ public class AssignmentSchedulerService {
                 })
                 .toList();
 
-        for (Assignment a : draftAssignments) {
+        for (Assignment a : pendingAssignments) {
             try {
                 assignmentService.publish(a.getId());
                 log.info("Auto-published assignment ID {}", a.getId());

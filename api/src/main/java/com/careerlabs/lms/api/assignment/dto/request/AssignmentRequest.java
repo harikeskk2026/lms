@@ -17,25 +17,20 @@ public class AssignmentRequest {
     @Size(min = 3, max = 150, message = AssignmentValidationMessages.TITLE_SIZE)
     private String title;
 
-    @NotBlank(message = AssignmentValidationMessages.DESCRIPTION_REQUIRED)
     private String description;
 
-    @NotNull(message = AssignmentValidationMessages.COURSE_ID_REQUIRED)
     private Long courseId;
 
-    @NotNull(message = AssignmentValidationMessages.BATCH_ID_REQUIRED)
     private Long batchId;
 
     private LocalDate startDate;
 
     private LocalTime publishTime;
 
-    @NotNull(message = AssignmentValidationMessages.DUE_DATE_REQUIRED)
     private LocalDate dueDate;
 
     private LocalTime closeTime;
 
-    @NotNull(message = AssignmentValidationMessages.TOTAL_MARKS_REQUIRED)
     @Min(value = 1, message = AssignmentValidationMessages.TOTAL_MARKS_MIN)
     @Max(value = 100, message = AssignmentValidationMessages.TOTAL_MARKS_MAX)
     private Integer totalMarks;

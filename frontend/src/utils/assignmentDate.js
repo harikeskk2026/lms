@@ -50,3 +50,17 @@ export function formatAssignmentEventTime(dateStr, includeRelative = true) {
     return ''
   }
 }
+
+/**
+ * Formats a time string ("HH:mm" or "HH:mm:ss") into 12-hour AM/PM format (e.g. "02:08 PM").
+ */
+export function format12HourTime(timeStr) {
+  if (!timeStr) return ''
+  const parts = String(timeStr).split(':').map(Number)
+  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return String(timeStr)
+  const hour24 = parts[0]
+  const minute = String(parts[1]).padStart(2, '0')
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${String(hour12).padStart(2, '0')}:${minute} ${period}`
+}

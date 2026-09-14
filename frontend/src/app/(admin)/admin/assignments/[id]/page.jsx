@@ -2,20 +2,23 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Eye,
-  Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw, Check, X,
+  ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Eye, Download,
+  Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw, Check, X, Clock,
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { formatAssignmentDueDate } from '@/utils/assignmentDate'
+import { formatAssignmentDueDate, format12HourTime } from '@/utils/assignmentDate'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import submissionService from '@/services/submissionService'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import { resolveFileUrl } from '@/lib/api'
 import CustomSelect from '@/components/ui/CustomSelect'
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 text-gray-600',
+  SCHEDULED: 'bg-blue-100 text-blue-700 border border-blue-200',
   PUBLISHED: 'bg-green-100 text-green-700',
   CLOSED: 'bg-red-100 text-red-700',
 }
@@ -58,6 +61,19 @@ export default function AssignmentDetailPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [filters, setFilters] = useState(EMPTY_SUBMISSION_FILTERS)
   const [page, setPage] = useState(1)
+  const [gradeInputs, setGradeInputs] = useState({})
+  const [feedbackInputs, setFeedbackInputs] = useState({})
+  const [savingInline, setSavingInline] = useState({})
+  const [evaluatingRow, setEvaluatingRow] = useState(null)
+  const [evalMarks, setEvalMarks] = useState('')
+  const [evalFeedback, setEvalFeedback] = useState('')
+  const [evalSaving, setEvalSaving] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showCloseModal, setShowCloseModal] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [showReopenModal, setShowReopenModal] = useState(false)
+  const [reopening, setReopening] = useState(false)
   const searchTimer = useRef(null)
 
   const loadAssignment = () => {
@@ -73,13 +89,61 @@ export default function AssignmentDetailPage() {
     setSubError(false)
     submissionService.list(id)
       .then(r => {
-        setSubmissions(r.data.submissions)
+        const list = r.data?.submissions || []
+        setSubmissions(list)
+        const grades = {}
+        const feedbacks = {}
+        list.forEach(s => {
+          if (s.submissionId) {
+            grades[s.submissionId] = s.marks != null ? s.marks : ''
+            feedbacks[s.submissionId] = s.feedback || ''
+          }
+        })
+        setGradeInputs(grades)
+        setFeedbackInputs(feedbacks)
       })
       .catch(err => { toast.error(err.message || 'Failed to load submissions'); setSubError(true) })
       .finally(() => setSubLoading(false))
   }
 
+  const handleGradeInline = async (row) => {
+    const rawMarks = gradeInputs[row.submissionId]
+    if (rawMarks === '' || rawMarks === undefined || rawMarks === null) {
+      return toast.error('Please enter marks/score')
+    }
+    const marksNum = Number(rawMarks)
+    if (isNaN(marksNum) || marksNum < 0) {
+      return toast.error('Please enter valid marks')
+    }
+    const maxMarks = assignment?.totalMarks || 100
+    if (marksNum > maxMarks) {
+      return toast.error(`Marks cannot exceed total marks (${maxMarks})`)
+    }
+    setSavingInline(prev => ({ ...prev, [row.submissionId]: true }))
+    try {
+      await submissionService.grade(id, row.submissionId, {
+        marks: marksNum,
+        feedback: (feedbackInputs[row.submissionId] || '').trim(),
+        reviewed: true,
+      })
+      toast.success(`Marks & feedback saved for ${row.studentName}`)
+      loadSubmissions()
+    } catch (err) {
+      toast.error(err.message || 'Failed to save marks and feedback')
+    } finally {
+      setSavingInline(prev => ({ ...prev, [row.submissionId]: false }))
+    }
+  }
+
   useEffect(() => { loadAssignment(); loadSubmissions() }, [id])
+
+  const isEvaluated = (s) => Boolean(s && (s.reviewed || s.marks != null))
+  const isPendingEvaluation = (s) => Boolean(
+    s && s.submissionId &&
+    (s.status === 'SUBMITTED' || s.status === 'LATE') &&
+    !s.reviewed &&
+    s.marks == null
+  )
 
   // Summary cards always reflect every student in the batch, independent of the
   // filters/search applied to the table below.
@@ -88,8 +152,8 @@ export default function AssignmentDetailPage() {
     submitted: submissions.filter(s => s.status === 'SUBMITTED').length,
     notSubmitted: submissions.filter(s => s.status === 'PENDING').length,
     late: submissions.filter(s => s.status === 'LATE').length,
-    evaluated: submissions.filter(s => s.reviewed).length,
-    pendingEvaluation: submissions.filter(s => s.submissionId && !s.reviewed).length,
+    evaluated: submissions.filter(isEvaluated).length,
+    pendingEvaluation: submissions.filter(isPendingEvaluation).length,
   }), [submissions])
 
   const filteredSubmissions = useMemo(() => {
@@ -102,8 +166,8 @@ export default function AssignmentDetailPage() {
         if (!matches) return false
       }
       if (filters.status && row.status !== filters.status) return false
-      if (filters.evaluation === 'EVALUATED' && !row.reviewed) return false
-      if (filters.evaluation === 'PENDING' && (!row.submissionId || row.reviewed)) return false
+      if (filters.evaluation === 'EVALUATED' && !isEvaluated(row)) return false
+      if (filters.evaluation === 'PENDING' && !isPendingEvaluation(row)) return false
       if (filters.dateFrom && (!row.submittedAt || new Date(row.submittedAt) < new Date(filters.dateFrom))) return false
       if (filters.dateTo && (!row.submittedAt || new Date(row.submittedAt) > new Date(`${filters.dateTo}T23:59:59`))) return false
       return true
@@ -132,25 +196,46 @@ export default function AssignmentDetailPage() {
     catch (err) { toast.error(err.message || 'Failed to publish') }
   }
 
-  const handleClose = async () => {
-    if (!confirm('Close this assignment? Students will no longer be able to submit.')) return
-    try { await assignmentService.close(id); toast.success('Assignment closed'); loadAssignment() }
-    catch (err) { toast.error(err.message || 'Failed to close') }
+  const handleConfirmClose = async () => {
+    setClosing(true)
+    try {
+      await assignmentService.close(id)
+      toast.success('Assignment closed')
+      setShowCloseModal(false)
+      loadAssignment()
+    } catch (err) {
+      toast.error(err.message || 'Failed to close')
+    } finally {
+      setClosing(false)
+    }
   }
 
-  const handleReopen = async () => {
-    if (!confirm('Reopen this assignment? Students will be able to submit again.')) return
-    try { await assignmentService.reopen(id); toast.success('Assignment reopened'); loadAssignment() }
-    catch (err) { toast.error(err.message || 'Failed to reopen') }
+  const handleConfirmReopen = async () => {
+    setReopening(true)
+    try {
+      await assignmentService.reopen(id)
+      toast.success('Assignment reopened')
+      setShowReopenModal(false)
+      loadAssignment()
+    } catch (err) {
+      toast.error(err.message || 'Failed to reopen')
+    } finally {
+      setReopening(false)
+    }
   }
 
-  const handleDelete = async () => {
-    if (!confirm(`Delete "${assignment.title}"? This cannot be undone.`)) return
+  const handleConfirmDelete = async () => {
+    setDeleting(true)
     try {
       await assignmentService.remove(id)
       toast.success('Assignment deleted')
+      setShowDeleteModal(false)
       router.push('/admin/assignments')
-    } catch (err) { toast.error(err.message || 'Failed to delete') }
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete assignment')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleApprove = async (row) => {
@@ -185,6 +270,38 @@ export default function AssignmentDetailPage() {
     }
   }
 
+  const handleOpenEvaluate = (row) => {
+    setEvaluatingRow(row)
+    setEvalMarks(row.marks != null ? String(row.marks) : '')
+    setEvalFeedback(row.feedback || '')
+  }
+
+  const handleSaveEvaluation = async (e) => {
+    e?.preventDefault?.()
+    if (!evaluatingRow) return
+    const marksNum = evalMarks === '' ? null : Number(evalMarks)
+    if (evalMarks !== '' && (isNaN(marksNum) || marksNum < 0)) {
+      return toast.error('Please enter valid marks')
+    }
+    if (assignment?.totalMarks && marksNum != null && marksNum > assignment.totalMarks) {
+      return toast.error(`Marks cannot exceed total marks (${assignment.totalMarks})`)
+    }
+    setEvalSaving(true)
+    try {
+      await submissionService.grade(id, evaluatingRow.submissionId, {
+        marks: marksNum,
+        feedback: evalFeedback.trim(),
+      })
+      toast.success('Evaluation saved successfully!')
+      setEvaluatingRow(null)
+      loadSubmissions()
+    } catch (err) {
+      toast.error(err.message || 'Failed to save evaluation')
+    } finally {
+      setEvalSaving(false)
+    }
+  }
+
   if (loading) return (
     <div className="max-w-7xl mx-auto space-y-4">
       {[...Array(3)].map((_, i) => <div key={i} className="glass-card p-6 animate-pulse h-24" />)}
@@ -216,19 +333,24 @@ export default function AssignmentDetailPage() {
                 <Send size={14} /> Publish
               </button>
             )}
+            {assignment.status === 'SCHEDULED' && (
+              <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
+                <Clock size={14} /> Scheduled for {assignment.startDate}{assignment.publishTime ? ' at ' + format12HourTime(assignment.publishTime) : ''}
+              </span>
+            )}
             {assignment.status === 'PUBLISHED' && (
-              <button onClick={handleClose}
+              <button onClick={() => setShowCloseModal(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 text-amber-700 text-sm font-semibold hover:bg-amber-100 transition-colors">
                 <Lock size={14} /> Close
               </button>
             )}
             {assignment.status === 'CLOSED' && (
-              <button onClick={handleReopen}
+              <button onClick={() => setShowReopenModal(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 text-green-700 text-sm font-semibold hover:bg-green-100 transition-colors">
                 <Unlock size={14} /> Reopen
               </button>
             )}
-            <button onClick={handleDelete}
+            <button onClick={() => setShowDeleteModal(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors">
               <Trash2 size={14} /> Delete
             </button>
@@ -243,7 +365,7 @@ export default function AssignmentDetailPage() {
             {[
               { icon: BookOpen, label: 'Course', value: assignment.course.title },
               { icon: Users, label: 'Batch', value: assignment.batch.name },
-              { icon: Calendar, label: 'Due Date', value: formatAssignmentDueDate(assignment.dueDate, assignment.closeTime, assignment.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy') },
+              { icon: Calendar, label: 'End Date', value: formatAssignmentDueDate(assignment.dueDate, assignment.closeTime, assignment.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy') },
               { icon: Award, label: 'Total Marks', value: assignment.totalMarks },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-2">
@@ -263,17 +385,31 @@ export default function AssignmentDetailPage() {
           </div>
           {assignment.attachmentUrl && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Attachment</h3>
-              <button
-                type="button"
-                onClick={() => setViewingFile({ url: resolveFileUrl(assignment.attachmentUrl), name: assignment.attachmentName || 'Attachment' })}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800/40 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors shadow-2xs"
-                title="Preview attachment"
-              >
-                <Paperclip size={13} className="text-purple-500" />
-                <span className="break-words">{assignment.attachmentName || 'Attachment'}</span>
-                <Eye size={13} className="text-purple-500 ml-0.5" />
-              </button>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Attachment</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setViewingFile({ url: resolveFileUrl(assignment.attachmentUrl), name: assignment.attachmentName || 'Attachment' })}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/60 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors shadow-2xs"
+                  title="Preview attachment in viewer"
+                >
+                  <Paperclip size={14} className="text-purple-600 dark:text-purple-400" />
+                  <span className="truncate max-w-[260px]">{assignment.attachmentName || 'Attachment'}</span>
+                  <Eye size={13} className="text-purple-600 dark:text-purple-400 ml-0.5" />
+                  <span className="ml-1 text-[10px] font-bold uppercase tracking-wider bg-purple-200/60 dark:bg-purple-800/60 px-1.5 py-0.5 rounded">Preview</span>
+                </button>
+                <a
+                  href={resolveFileUrl(assignment.attachmentUrl)}
+                  download={assignment.attachmentName || 'attachment'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                  title="Download attachment file"
+                >
+                  <Download size={13} />
+                  <span>Download</span>
+                </a>
+              </div>
             </div>
           )}
         </div>
@@ -369,7 +505,7 @@ export default function AssignmentDetailPage() {
             <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['Student ID', 'Student', 'Status', 'Submitted', 'File', 'Score', 'Feedback', 'Evaluation', 'Actions'].map(h => (
+                  {['Student ID', 'Student', 'Status', 'Submitted', 'File', 'Description', 'Score', 'Feedback', 'Evaluation', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -426,36 +562,70 @@ export default function AssignmentDetailPage() {
                       ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      {row.marks != null ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800/60 shadow-2xs">
-                          <Award size={12} className="text-purple-600 dark:text-purple-400" />
-                          {row.marks} / {assignment.totalMarks}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.feedback ? (
-                        <p className="text-xs text-gray-700 dark:text-gray-300 italic break-words" title={row.feedback}>
-                          "{row.feedback}"
+                      {row.notes ? (
+                        <p className="text-xs text-gray-700 dark:text-gray-300 italic max-w-[180px] truncate" title={row.notes}>
+                          "{row.notes}"
                         </p>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {row.reviewed || row.marks != null ? (
+                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') && !isEvaluated(row) ? (
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <input
+                            type="number"
+                            min="0"
+                            max={assignment?.totalMarks || 100}
+                            value={gradeInputs[row.submissionId] ?? ''}
+                            onChange={e => setGradeInputs(prev => ({ ...prev, [row.submissionId]: e.target.value }))}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 text-xs rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 font-semibold text-gray-800 dark:text-white text-center"
+                          />
+                          <span className="text-xs text-gray-400 font-medium">/ {assignment?.totalMarks || 100}</span>
+                        </div>
+                      ) : row.marks != null ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800/60 shadow-2xs whitespace-nowrap">
+                          <Award size={12} className="text-purple-600 dark:text-purple-400" />
+                          {row.marks} / {assignment?.totalMarks || 100}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') && !isEvaluated(row) ? (
+                        <input
+                          type="text"
+                          value={feedbackInputs[row.submissionId] ?? ''}
+                          onChange={e => setFeedbackInputs(prev => ({ ...prev, [row.submissionId]: e.target.value }))}
+                          placeholder="Add feedback..."
+                          className="w-48 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-100"
+                        />
+                      ) : row.feedback ? (
+                        <p className="text-xs text-gray-700 dark:text-gray-300 italic max-w-[200px] truncate" title={row.feedback}>
+                          "{row.feedback}"
+                        </p>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {isEvaluated(row) ? (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-200 dark:border-green-800/40">
                           <CheckCircle2 size={12} /> Evaluated
+                        </span>
+                      ) : (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
+                          <Check size={12} /> Approved
                         </span>
                       ) : row.status === 'PENDING_APPROVAL' ? (
                         <span className="text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
                           Needs Review
                         </span>
-                      ) : row.status === 'SUBMITTED' || row.status === 'LATE' ? (
-                        <span className="text-xs font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
-                          Pending
+                      ) : row.status === 'REJECTED' ? (
+                        <span className="text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800/40">
+                          Rejected
                         </span>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
@@ -484,6 +654,41 @@ export default function AssignmentDetailPage() {
                             <X size={13} />
                             <span>Reject</span>
                           </button>
+                        </div>
+                      ) : (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          {!isEvaluated(row) ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleGradeInline(row)}
+                                disabled={savingInline[row.submissionId]}
+                                className="inline-flex items-center gap-1 text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold px-2.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-60"
+                                title="Save score & feedback"
+                              >
+                                <Check size={13} />
+                                <span>{savingInline[row.submissionId] ? 'Saving...' : 'Save'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEvaluate(row)}
+                                className="inline-flex items-center gap-1 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 font-semibold px-2 py-1.5 rounded-lg transition-colors"
+                                title="Open full evaluation modal"
+                              >
+                                <Award size={13} />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEvaluate(row)}
+                              className="inline-flex items-center gap-1.5 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
+                              title="Update evaluation"
+                            >
+                              <Award size={13} />
+                              <span>Update</span>
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
@@ -559,6 +764,135 @@ export default function AssignmentDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Evaluate / Grade Modal */}
+      {evaluatingRow && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-gray-100 dark:border-gray-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <Award className="text-purple-600" size={18} />
+                  <span>{isEvaluated(evaluatingRow) ? 'Update Evaluation' : 'Evaluate Submission'}</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Student: <strong className="text-gray-700 dark:text-gray-300">{evaluatingRow.studentName}</strong> ({evaluatingRow.studentEmail})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEvaluatingRow(null)}
+                className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Student Submission Info */}
+            <div className="space-y-2.5 p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/30 text-xs">
+              <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                <span>Assignment: <strong className="text-gray-800 dark:text-white">{assignment?.title}</strong></span>
+                <span>Max Marks: <strong className="text-purple-700 dark:text-purple-300">{assignment?.totalMarks}</strong></span>
+              </div>
+              {evaluatingRow.submittedAt && (
+                <p className="text-gray-500">Submitted: {format(new Date(evaluatingRow.submittedAt), 'dd MMM yyyy, HH:mm')}</p>
+              )}
+              {/* Submitted files preview */}
+              <div>
+                <p className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Submitted Files:</p>
+                {evaluatingRow.files && evaluatingRow.files.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {evaluatingRow.files.map((f, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setViewingFile({ url: resolveFileUrl(f.fileUrl), name: f.fileName || `File ${idx + 1}` })}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800 rounded-lg text-purple-700 dark:text-purple-300 font-medium hover:underline"
+                      >
+                        <Paperclip size={12} />
+                        <span className="truncate max-w-[160px]">{f.fileName || `File ${idx + 1}`}</span>
+                        <Eye size={12} />
+                      </button>
+                    ))}
+                  </div>
+                ) : evaluatingRow.fileUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => setViewingFile({ url: resolveFileUrl(evaluatingRow.fileUrl), name: evaluatingRow.fileName || 'File' })}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800 rounded-lg text-purple-700 dark:text-purple-300 font-medium hover:underline"
+                  >
+                    <Paperclip size={12} />
+                    <span className="truncate max-w-[160px]">{evaluatingRow.fileName || 'File'}</span>
+                    <Eye size={12} />
+                  </button>
+                ) : (
+                  <span className="text-gray-400">No files</span>
+                )}
+              </div>
+
+              {/* Student's Description / Notes */}
+              {evaluatingRow.notes && (
+                <div className="mt-2 pt-2 border-t border-purple-100 dark:border-purple-900/40">
+                  <p className="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">Student Description / Notes:</p>
+                  <p className="text-gray-600 dark:text-gray-400 italic whitespace-pre-wrap bg-white dark:bg-gray-800/80 p-2 rounded-lg border border-purple-100 dark:border-purple-900/30">
+                    "{evaluatingRow.notes}"
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveEvaluation} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Marks / Score (out of {assignment?.totalMarks || 100}) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={assignment?.totalMarks || 100}
+                  value={evalMarks}
+                  onChange={e => setEvalMarks(e.target.value)}
+                  placeholder={`Enter score 0 - ${assignment?.totalMarks || 100}`}
+                  required
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Trainer Feedback (Optional)
+                </label>
+                <textarea
+                  value={evalFeedback}
+                  onChange={e => setEvalFeedback(e.target.value)}
+                  placeholder="Provide feedback on the submission, strengths, improvements..."
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEvaluatingRow(null)}
+                  className="px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={evalSaving}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 flex items-center gap-1.5"
+                >
+                  <Check size={13} />
+                  <span>{evalSaving ? 'Saving...' : 'Save Evaluation'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {viewingFile && (
         <ViewAttachmentModal
           url={viewingFile.url}
@@ -566,6 +900,56 @@ export default function AssignmentDetailPage() {
           onClose={() => setViewingFile(null)}
         />
       )}
+
+      {/* Delete Confirmation Modal (matches Image 3) */}
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => !deleting && setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Assignment?"
+        itemName={assignment?.title}
+        loading={deleting}
+      />
+
+      {/* Close Confirmation Modal (matches Image 3 style) */}
+      <ConfirmModal
+        isOpen={showCloseModal}
+        onClose={() => !closing && setShowCloseModal(false)}
+        onConfirm={handleConfirmClose}
+        title="Close Assignment?"
+        tone="warning"
+        icon={Lock}
+        confirmLabel="Close Assignment"
+        loading={closing}
+        loadingText="Closing..."
+        message={
+          <>
+            Are you sure you want to close{' '}
+            <strong className="text-slate-800 dark:text-gray-200 font-semibold">"{assignment?.title}"</strong>?
+            Students will no longer be able to submit.
+          </>
+        }
+      />
+
+      {/* Reopen Confirmation Modal (matches Image 3 style) */}
+      <ConfirmModal
+        isOpen={showReopenModal}
+        onClose={() => !reopening && setShowReopenModal(false)}
+        onConfirm={handleConfirmReopen}
+        title="Reopen Assignment?"
+        tone="success"
+        icon={Unlock}
+        confirmLabel="Reopen"
+        loading={reopening}
+        loadingText="Reopening..."
+        message={
+          <>
+            Are you sure you want to reopen{' '}
+            <strong className="text-slate-800 dark:text-gray-200 font-semibold">"{assignment?.title}"</strong>?
+            Students will be able to submit again.
+          </>
+        }
+      />
     </div>
   )
 }

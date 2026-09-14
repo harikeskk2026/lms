@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar, Clock } from 'lucide-react'
 import { format } from 'date-fns'
-import { formatAssignmentDueDate } from '@/utils/assignmentDate'
+import { formatAssignmentDueDate, format12HourTime } from '@/utils/assignmentDate'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import courseService from '@/services/courseService'
@@ -11,12 +11,15 @@ import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
+import TimePicker12 from '@/components/ui/TimePicker12'
 import { resolveFileUrl } from '@/lib/api'
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
+  SCHEDULED: 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
   PUBLISHED: 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
   CLOSED: 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40',
 }
@@ -29,13 +32,20 @@ const EMPTY_FORM = {
 
 const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
 
+function isPublishDateInFuture(startDate, publishTime) {
+  if (!startDate) return false
+  const time = publishTime || '00:00'
+  const startDT = new Date(`${startDate}T${time}`)
+  return startDT > new Date()
+}
+
 function validateAssignmentDates(startDate, publishTime, dueDate, closeTime) {
   if (!startDate || !dueDate) return null
   const startDT = new Date(`${startDate}T${publishTime || '00:00'}`)
   const dueDT = new Date(`${dueDate}T${closeTime || '23:59'}`)
   if (dueDT < startDT) {
     if (startDate > dueDate) {
-      return 'Due date cannot be earlier than publish / start date'
+      return 'End date cannot be earlier than start date'
     }
     return 'Close time must be after publish time when on the same date'
   }
@@ -78,8 +88,13 @@ export default function AssignmentsPage() {
   const [saving, setSaving] = useState(false)
   const [deletingAssignment, setDeletingAssignment] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [closingAssignment, setClosingAssignment] = useState(null)
+  const [isClosing, setIsClosing] = useState(false)
+  const [reopeningAssignment, setReopeningAssignment] = useState(null)
+  const [isReopening, setIsReopening] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [previewFile, setPreviewFile] = useState(null) // { url, name }
+  const [errors, setErrors] = useState({})
   const searchTimer = useRef(null)
 
   const dateError = validateAssignmentDates(form.startDate, form.publishTime, form.dueDate, form.closeTime)
@@ -122,6 +137,7 @@ export default function AssignmentsPage() {
   const openCreate = () => {
     setEditAssignment(null)
     setForm(EMPTY_FORM)
+    setErrors({})
     setPanelOpen(true)
   }
 
@@ -140,6 +156,7 @@ export default function AssignmentsPage() {
       attachmentUrl: assignment.attachmentUrl || '',
       attachmentName: assignment.attachmentName || '',
     })
+    setErrors({})
     setPanelOpen(true)
   }
 
@@ -166,42 +183,88 @@ export default function AssignmentsPage() {
   }
 
   const buildPayload = (status) => ({
-    title: form.title,
-    description: form.description,
-    courseId: Number(form.courseId),
-    batchId: Number(form.batchId),
+    title: form.title.trim(),
+    description: form.description?.trim() || '',
+    courseId: form.courseId ? Number(form.courseId) : null,
+    batchId: form.batchId ? Number(form.batchId) : null,
     startDate: form.startDate || null,
     publishTime: form.publishTime || null,
-    dueDate: form.dueDate,
+    dueDate: form.dueDate || null,
     closeTime: form.closeTime || null,
-    totalMarks: Number(form.totalMarks),
+    totalMarks: form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined
+      ? Number(form.totalMarks)
+      : (status === 'DRAFT' ? 100 : null),
     attachmentUrl: form.attachmentUrl || null,
     attachmentName: form.attachmentName || null,
     status,
   })
 
+  const validateForm = (status) => {
+    const errs = {}
+
+    if (!form.title?.trim()) {
+      errs.title = 'Please enter assignment Title'
+    }
+
+    if (status !== 'DRAFT') {
+      if (!form.description?.trim()) {
+        errs.description = 'Please enter assignment Description'
+      }
+      if (!form.courseId) {
+        errs.courseId = 'Please select a Course'
+      }
+      if (!form.batchId) {
+        errs.batchId = 'Please select a Batch'
+      }
+      if (!form.startDate) {
+        errs.startDate = 'Please select a Start Date'
+      }
+      if (!form.dueDate) {
+        errs.dueDate = 'Please select an End Date'
+      }
+      if (form.totalMarks === '' || form.totalMarks === null || form.totalMarks === undefined) {
+        errs.totalMarks = 'Please enter Total Marks (1 to 100)'
+      } else {
+        const marksNum = Number(form.totalMarks)
+        if (isNaN(marksNum) || marksNum < 1 || marksNum > 100) {
+          errs.totalMarks = 'Total Marks must be between 1 and 100'
+        }
+      }
+      if (dateError) {
+        errs.date = dateError
+      }
+      if (marksError && !errs.totalMarks) {
+        errs.totalMarks = marksError
+      }
+    }
+
+    return errs
+  }
+
   const handleSubmit = async (status) => {
-    if (!form.title || !form.description || !form.courseId || !form.batchId || !form.dueDate || form.totalMarks === '' || form.totalMarks === null) {
-      toast.error('Please fill in all required fields')
+    const errs = validateForm(status)
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs)
+      const firstError = Object.values(errs)[0]
+      toast.error(firstError)
       return
     }
-    if (dateError) {
-      toast.error(dateError)
-      return
-    }
-    if (marksError) {
-      toast.error(marksError)
-      return
-    }
+    setErrors({})
     setSaving(true)
     try {
       const payload = buildPayload(status)
       if (editAssignment) {
         await assignmentService.update(editAssignment.id, payload)
-        toast.success('Assignment updated successfully')
+        toast.success(status === 'SCHEDULED' ? '📅 Assignment scheduled successfully' : 'Assignment updated successfully')
       } else {
         await assignmentService.create(payload)
-        toast.success(status === 'PUBLISHED' ? 'Assignment published' : 'Assignment saved as draft')
+        toast.success(
+          status === 'SCHEDULED'
+            ? '📅 Assignment scheduled – will publish automatically'
+            : status === 'PUBLISHED'
+              ? 'Assignment published'
+              : 'Assignment saved as draft'
+        )
       }
       setPanelOpen(false)
       setForm(EMPTY_FORM)
@@ -212,21 +275,67 @@ export default function AssignmentsPage() {
     } finally { setSaving(false) }
   }
 
+  const handlePublishSubmit = () => {
+    if (isPublishDateInFuture(form.startDate, form.publishTime)) {
+      toast.error('Please click Schedule option')
+      return
+    }
+    handleSubmit('PUBLISHED')
+  }
+
+  const handleScheduleSubmit = () => {
+    if (!form.startDate) {
+      toast.error('Please select a Publish / Start Date to schedule')
+      return
+    }
+    if (!isPublishDateInFuture(form.startDate, form.publishTime)) {
+      toast.error('Publish date and time must be in the future to schedule')
+      return
+    }
+    handleSubmit('SCHEDULED')
+  }
+
   const handlePublish = async (id) => {
-    try { await assignmentService.publish(id); toast.success('Assignment published'); load() }
-    catch (err) { toast.error(err.message || 'Failed to publish') }
+    try {
+      const res = await assignmentService.publish(id)
+      const returnedStatus = res?.data?.status
+      if (returnedStatus === 'SCHEDULED') {
+        toast.success('📅 Assignment scheduled – students have been notified')
+      } else {
+        toast.success('✅ Assignment published – students have been notified')
+      }
+      load()
+    } catch (err) { toast.error(err.message || 'Failed to publish') }
   }
 
-  const handleClose = async (id) => {
-    if (!confirm('Close this assignment? Students will no longer be able to submit.')) return
-    try { await assignmentService.close(id); toast.success('Assignment closed'); load() }
-    catch (err) { toast.error(err.message || 'Failed to close') }
+  const handleConfirmClose = async () => {
+    if (!closingAssignment) return
+    setIsClosing(true)
+    try {
+      await assignmentService.close(closingAssignment.id)
+      toast.success('Assignment closed')
+      setClosingAssignment(null)
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to close')
+    } finally {
+      setIsClosing(false)
+    }
   }
 
-  const handleReopen = async (id) => {
-    if (!confirm('Reopen this assignment? Students will be able to submit again.')) return
-    try { await assignmentService.reopen(id); toast.success('Assignment reopened'); load() }
-    catch (err) { toast.error(err.message || 'Failed to reopen') }
+  const handleConfirmReopen = async () => {
+    if (!reopeningAssignment) return
+    setIsReopening(true)
+    try {
+      await assignmentService.reopen(reopeningAssignment.id)
+      toast.success('Assignment reopened')
+      setReopeningAssignment(null)
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to reopen')
+    } finally {
+      setIsReopening(false)
+    }
   }
 
   const handleConfirmDelete = async () => {
@@ -238,7 +347,7 @@ export default function AssignmentsPage() {
       setDeletingAssignment(null)
       load()
     } catch (err) {
-      toast.error(err.message || 'Failed to delete')
+      toast.error(err.message || 'Failed to delete assignment')
     } finally {
       setIsDeleting(false)
     }
@@ -253,6 +362,7 @@ export default function AssignmentsPage() {
   }
 
   const handleCourseChange = (selectedCourseId) => {
+    setErrors(prev => ({ ...prev, courseId: undefined, batchId: undefined }))
     setForm(f => {
       const isBatchValid = selectedCourseId && f.batchId
         ? batches.some(b => String(b.id) === String(f.batchId) && getBatchCourseId(b) === String(selectedCourseId))
@@ -319,6 +429,7 @@ export default function AssignmentsPage() {
           onChange={(val) => { setStatusFilter(val); setPage(1) }}
           options={[
             { value: 'DRAFT', label: 'Draft' },
+            { value: 'SCHEDULED', label: 'Scheduled' },
             { value: 'PUBLISHED', label: 'Published' },
             { value: 'CLOSED', label: 'Closed' },
           ]}
@@ -331,10 +442,29 @@ export default function AssignmentsPage() {
           <input
             type="date"
             value={dueDateFrom}
-            onChange={e => { setDueDateFrom(e.target.value); setPage(1) }}
+            max={dueDateTo || undefined}
+            onChange={e => {
+              const val = e.target.value
+              if (val && dueDateTo && val > dueDateTo) {
+                toast.error('"From" date cannot be later than "To" date')
+                return
+              }
+              setDueDateFrom(val)
+              setPage(1)
+            }}
             className="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 cursor-pointer"
             title="Due date from"
           />
+          {dueDateFrom && (
+            <button
+              type="button"
+              onClick={() => { setDueDateFrom(''); setPage(1) }}
+              className="text-gray-400 hover:text-purple-600 text-xs ml-0.5"
+              title="Clear From date"
+            >
+              ×
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
           <Calendar size={14} className="text-purple-400 flex-shrink-0" />
@@ -342,10 +472,29 @@ export default function AssignmentsPage() {
           <input
             type="date"
             value={dueDateTo}
-            onChange={e => { setDueDateTo(e.target.value); setPage(1) }}
+            min={dueDateFrom || undefined}
+            onChange={e => {
+              const val = e.target.value
+              if (val && dueDateFrom && val < dueDateFrom) {
+                toast.error('"To" date cannot be earlier than "From" date')
+                return
+              }
+              setDueDateTo(val)
+              setPage(1)
+            }}
             className="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 cursor-pointer"
             title="Due date to"
           />
+          {dueDateTo && (
+            <button
+              type="button"
+              onClick={() => { setDueDateTo(''); setPage(1) }}
+              className="text-gray-400 hover:text-purple-600 text-xs ml-0.5"
+              title="Clear To date"
+            >
+              ×
+            </button>
+          )}
         </div>
         <button
           onClick={load}
@@ -368,7 +517,7 @@ export default function AssignmentsPage() {
             <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['Assignment', 'Course', 'Batch', 'Due Date', 'Marks', 'Status', 'Actions'].map(h => (
+                  {['Assignment', 'Course', 'Batch', 'End Date', 'Marks', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -408,14 +557,22 @@ export default function AssignmentsPage() {
                               <Send size={14} />
                             </button>
                           )}
+                          {a.status === 'SCHEDULED' && (
+                            <button
+                              title={`Scheduled – publishes on ${a.startDate}${a.publishTime ? ' at ' + format12HourTime(a.publishTime) : ''}`}
+                              className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 flex items-center justify-center cursor-default"
+                            >
+                              <Clock size={14} />
+                            </button>
+                          )}
                           {a.status === 'PUBLISHED' && (
-                            <button onClick={() => handleClose(a.id)}
+                            <button onClick={() => setClosingAssignment(a)}
                               className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/60 flex items-center justify-center transition-colors" title="Close">
                               <Lock size={14} />
                             </button>
                           )}
                           {a.status === 'CLOSED' && (
-                            <button onClick={() => handleReopen(a.id)}
+                            <button onClick={() => setReopeningAssignment(a)}
                               className="w-7 h-7 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/60 flex items-center justify-center transition-colors" title="Reopen">
                               <Unlock size={14} />
                             </button>
@@ -467,25 +624,42 @@ export default function AssignmentsPage() {
         onClose={() => setPanelOpen(false)}
         title={editAssignment ? 'Edit Assignment' : 'Create Assignment'}
         subtitle={editAssignment ? 'Update assignment details' : 'Assign work to a batch'}
+        width="w-full sm:w-[540px] lg:w-[600px]"
       >
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
             <input
               value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              onChange={e => {
+                setForm(f => ({ ...f, title: e.target.value }))
+                if (errors.title) setErrors(prev => ({ ...prev, title: undefined }))
+              }}
               placeholder="Java Basics Assignment"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                errors.title ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+              }`}
             />
+            {errors.title && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
             <textarea
               value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              onChange={e => {
+                setForm(f => ({ ...f, description: e.target.value }))
+                if (errors.description) setErrors(prev => ({ ...prev, description: undefined }))
+              }}
               rows={4}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 resize-none ${
+                errors.description ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+              }`}
             />
+            {errors.description && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.description}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
@@ -495,21 +669,32 @@ export default function AssignmentsPage() {
               onChange={handleCourseChange}
               placeholder="Select course"
               searchPlaceholder="Search course..."
+              error={!!errors.courseId}
             />
+            {errors.courseId && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch *</label>
             <SearchableSelect
               options={batchOptions}
               value={form.batchId}
-              onChange={(v) => setForm(f => ({ ...f, batchId: v }))}
+              onChange={(v) => {
+                setForm(f => ({ ...f, batchId: v }))
+                if (errors.batchId) setErrors(prev => ({ ...prev, batchId: undefined }))
+              }}
               placeholder="Select batch"
               searchPlaceholder="Search batch..."
+              error={!!errors.batchId}
             />
+            {errors.batchId && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.batchId}</p>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish / Start Date</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
               <input
                 type="date"
                 min={new Date().toISOString().slice(0, 10)}
@@ -520,42 +705,50 @@ export default function AssignmentsPage() {
                   setForm(f => ({
                     ...f,
                     startDate: newStart,
-                    dueDate: f.dueDate && newStart && f.dueDate < newStart ? '' : f.dueDate,
                   }))
+                  if (errors.startDate) setErrors(prev => ({ ...prev, startDate: undefined }))
                 }}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                  errors.startDate ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
               />
+              {errors.startDate && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.startDate}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish Time</label>
-              <input
-                type="time"
+              <TimePicker12
                 value={form.publishTime}
-                onChange={e => setForm(f => ({ ...f, publishTime: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                onChange={val => setForm(f => ({ ...f, publishTime: val }))}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due / Close Date *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
               <input
                 type="date"
                 min={form.startDate || new Date().toISOString().slice(0, 10)}
                 value={form.dueDate}
-                onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                  }`}
+                onChange={e => {
+                  setForm(f => ({ ...f, dueDate: e.target.value }))
+                  if (errors.dueDate) setErrors(prev => ({ ...prev, dueDate: undefined }))
+                }}
+                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                  errors.dueDate || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
               />
+              {errors.dueDate && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.dueDate}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Close Time</label>
-              <input
-                type="time"
+              <TimePicker12
                 value={form.closeTime}
-                onChange={e => setForm(f => ({ ...f, closeTime: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                onChange={val => setForm(f => ({ ...f, closeTime: val }))}
               />
             </div>
           </div>
@@ -578,14 +771,16 @@ export default function AssignmentsPage() {
                 }
               }}
               onChange={e => {
-                const val = e.target.value
-                setForm(f => ({ ...f, totalMarks: val }))
+                const clean = e.target.value.replace(/[^0-9]/g, '')
+                setForm(f => ({ ...f, totalMarks: clean }))
+                if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
               }}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${marksError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                }`}
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                errors.totalMarks || marksError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+              }`}
             />
-            {marksError && (
-              <p className="text-xs text-red-500 font-medium mt-1">{marksError}</p>
+            {(errors.totalMarks || marksError) && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.totalMarks || marksError}</p>
             )}
           </div>
           <div>
@@ -622,25 +817,31 @@ export default function AssignmentsPage() {
             {uploading && <p className="text-xs text-purple-500 mt-1">Uploading...</p>}
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-2 pt-2">
             <button type="button" onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              className="flex-1 py-2.5 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
               Cancel
             </button>
-            {editAssignment ? (
+            {editAssignment && editAssignment.status !== 'DRAFT' && editAssignment.status !== 'SCHEDULED' ? (
               <button type="button" disabled={saving} onClick={() => handleSubmit(editAssignment.status)}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
+                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
                 {saving ? 'Updating...' : 'Update Assignment'}
               </button>
             ) : (
               <>
                 <button type="button" disabled={saving} onClick={() => handleSubmit('DRAFT')}
-                  className="flex-1 py-2.5 rounded-xl border border-purple-200 text-purple-600 text-sm font-semibold hover:bg-purple-50 transition-colors disabled:opacity-60">
+                  className="flex-1 py-2.5 px-2 rounded-xl border border-purple-200 dark:border-purple-800/60 text-purple-600 dark:text-purple-400 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors disabled:opacity-60">
                   Save as Draft
                 </button>
-                <button type="button" disabled={saving} onClick={() => handleSubmit('PUBLISHED')}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
-                  {saving ? 'Saving...' : 'Publish'}
+                <button type="button" disabled={saving} onClick={handleScheduleSubmit}
+                  className="flex-1 py-2.5 px-2 rounded-xl border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:border-blue-800/60 dark:text-blue-300 text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm">
+                  <Clock size={15} />
+                  <span>Schedule</span>
+                </button>
+                <button type="button" disabled={saving} onClick={handlePublishSubmit}
+                  className="flex-1 py-2.5 px-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/20">
+                  <Send size={15} />
+                  <span>{saving ? 'Saving...' : 'Publish'}</span>
                 </button>
               </>
             )}
@@ -650,11 +851,51 @@ export default function AssignmentsPage() {
 
       <DeleteConfirmModal
         isOpen={Boolean(deletingAssignment)}
-        onClose={() => setDeletingAssignment(null)}
+        onClose={() => !isDeleting && setDeletingAssignment(null)}
         onConfirm={handleConfirmDelete}
         title="Delete Assignment?"
         itemName={deletingAssignment?.title}
         loading={isDeleting}
+      />
+
+      {/* Close Confirmation Modal (matches Image 3 style) */}
+      <ConfirmModal
+        isOpen={Boolean(closingAssignment)}
+        onClose={() => !isClosing && setClosingAssignment(null)}
+        onConfirm={handleConfirmClose}
+        title="Close Assignment?"
+        tone="warning"
+        icon={Lock}
+        confirmLabel="Close Assignment"
+        loading={isClosing}
+        loadingText="Closing..."
+        message={
+          <>
+            Are you sure you want to close{' '}
+            <strong className="text-slate-800 dark:text-gray-200 font-semibold">"{closingAssignment?.title}"</strong>?
+            Students will no longer be able to submit.
+          </>
+        }
+      />
+
+      {/* Reopen Confirmation Modal (matches Image 3 style) */}
+      <ConfirmModal
+        isOpen={Boolean(reopeningAssignment)}
+        onClose={() => !isReopening && setReopeningAssignment(null)}
+        onConfirm={handleConfirmReopen}
+        title="Reopen Assignment?"
+        tone="success"
+        icon={Unlock}
+        confirmLabel="Reopen"
+        loading={isReopening}
+        loadingText="Reopening..."
+        message={
+          <>
+            Are you sure you want to reopen{' '}
+            <strong className="text-slate-800 dark:text-gray-200 font-semibold">"{reopeningAssignment?.title}"</strong>?
+            Students will be able to submit again.
+          </>
+        }
       />
 
       {previewFile && (
