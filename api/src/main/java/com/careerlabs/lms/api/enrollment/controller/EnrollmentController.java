@@ -47,6 +47,7 @@ public class EnrollmentController {
         return ResponseEntity.ok(ApiResponse.of(enrollmentService.listMine(principal.id())));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'TRAINER')")
     @GetMapping("/{id}/enrollments")
     public ResponseEntity<ApiResponse<CourseEnrolledStudentsPageResponse>> listCourseEnrollments(
             @PathVariable Long id,
@@ -54,8 +55,9 @@ public class EnrollmentController {
             @RequestParam(required = false) Long batchId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int limit) {
-        CourseEnrolledStudentsPageResponse response = enrollmentService.getCourseEnrollments(id, search, batchId, status, page, limit);
+            @RequestParam(defaultValue = "20") int limit,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        CourseEnrolledStudentsPageResponse response = enrollmentService.getCourseEnrollments(id, search, batchId, status, page, limit, principal);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

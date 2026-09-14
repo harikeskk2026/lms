@@ -42,6 +42,9 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @Query("SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END FROM Batch b WHERE b.trainerId = :trainerId AND b.course.id = :courseId")
     boolean existsByTrainerIdAndCourseId(@Param("trainerId") Long trainerId, @Param("courseId") Long courseId);
 
+    @Query("SELECT b FROM Batch b WHERE b.trainerId = :trainerId AND b.course.id = :courseId")
+    List<Batch> findByTrainerIdAndCourseId(@Param("trainerId") Long trainerId, @Param("courseId") Long courseId);
+
     @Query("SELECT b FROM Batch b WHERE b.trainerId = :trainerId AND (b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED OR b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.ARCHIVED)")
     List<Batch> findPublishedBatchesByTrainerId(@Param("trainerId") Long trainerId);
 

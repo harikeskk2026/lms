@@ -1,11 +1,14 @@
 package com.careerlabs.lms.api.enrollment;
 
+import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
+import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentResponse;
+import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPageResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentContactResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
@@ -14,6 +17,7 @@ import com.careerlabs.lms.api.enrollment.service.BatchScheduleConflictValidator;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.enrollment.service.impl.EnrollmentContactServiceImpl;
 import com.careerlabs.lms.api.enrollment.service.impl.EnrollmentServiceImpl;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
@@ -140,6 +144,134 @@ class EnrollmentAuthorizationTest {
         when(courseRepository.findById(2L)).thenReturn(Optional.of(draftCourse));
 
         assertThrows(BadRequestException.class, () -> enrollmentService.enroll(2L, 10L, Role.ADMIN));
+    }
+
+    // ---- Course roster (getCourseEnrollments) authorization ----
+
+    private Batch makeBatch(Long id, String name, Course course, Long trainerId) {
+        Batch b = new Batch();
+        setId(b, id);
+        b.setName(name);
+        b.setCourse(course);
+        b.setTrainerId(trainerId);
+        b.setActive(true);
+        b.setMaxStudents(30);
+        return b;
+    }
+
+    private Enrollment makeEnrollment(Long id, Student student, Course course, Batch batch, boolean active) {
+        Enrollment e = new Enrollment();
+        setId(e, id);
+        e.setStudent(student);
+        e.setCourse(course);
+        e.setBatch(batch);
+        e.setActive(active);
+        e.setEnrolledAt(Instant.now());
+        return e;
+    }
+
+    @Test
+    @DisplayName("Unassigned trainer cannot view course roster -> 403")
+    void unassignedTrainer_cannotViewCourseRoster() {
+        JwtUserPrincipal trainerPrincipal = new JwtUserPrincipal(99L, "trainer@test.com", "TRAINER");
+
+        when(courseRepository.existsById(1L)).thenReturn(true);
+        when(batchRepository.existsByTrainerIdAndCourseId(99L, 1L)).thenReturn(false);
+
+        ForbiddenException ex = assertThrows(ForbiddenException.class,
+                () -> enrollmentService.getCourseEnrollments(1L, null, null, null, 1, 20, trainerPrincipal));
+        assertTrue(ex.getMessage().contains("not assigned"));
+    }
+
+    @Test
+    @DisplayName("Trainer accessing another trainer's batch -> 403")
+    void trainer_accessingOtherTrainerBatch_forbidden() {
+        JwtUserPrincipal trainerA = new JwtUserPrincipal(10L, "trainerA@test.com", "TRAINER");
+        Batch batchB = makeBatch(200L, "Batch B", publishedCourse, 20L);
+
+        when(courseRepository.existsById(1L)).thenReturn(true);
+        when(batchRepository.existsByTrainerIdAndCourseId(10L, 1L)).thenReturn(true);
+        when(batchRepository.findByTrainerIdAndCourseId(10L, 1L)).thenReturn(List.of());
+
+        ForbiddenException ex = assertThrows(ForbiddenException.class,
+                () -> enrollmentService.getCourseEnrollments(1L, null, 200L, null, 1, 20, trainerA));
+        assertTrue(ex.getMessage().contains("not assigned"));
+    }
+
+    @Test
+    @DisplayName("Trainer with no batchId provided -> scoped to trainer's batches only")
+    void trainer_noBatchProvided_scopesToTrainerBatches() {
+        JwtUserPrincipal trainerA = new JwtUserPrincipal(10L, "trainerA@test.com", "TRAINER");
+        Batch batchA = makeBatch(100L, "Batch A", publishedCourse, 10L);
+        Enrollment enrollment = makeEnrollment(1L, student, publishedCourse, batchA, true);
+
+        when(courseRepository.existsById(1L)).thenReturn(true);
+        when(batchRepository.existsByTrainerIdAndCourseId(10L, 1L)).thenReturn(true);
+        when(batchRepository.findByTrainerIdAndCourseId(10L, 1L)).thenReturn(List.of(batchA));
+        when(enrollmentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(enrollment)));
+
+        CourseEnrolledStudentsPageResponse response =
+                enrollmentService.getCourseEnrollments(1L, null, null, null, 1, 20, trainerA);
+
+        assertNotNull(response);
+        assertEquals(1, response.enrollments().size());
+    }
+
+    @Test
+    @DisplayName("Admin retains full access with or without batch filter")
+    void admin_retainsFullAccess_withOrWithoutBatch() {
+        JwtUserPrincipal adminPrincipal = new JwtUserPrincipal(1L, "admin@test.com", "ADMIN");
+        Batch batchA = makeBatch(100L, "Batch A", publishedCourse, 10L);
+        Batch batchB = makeBatch(200L, "Batch B", publishedCourse, 20L);
+        Enrollment e1 = makeEnrollment(1L, student, publishedCourse, batchA, true);
+
+        when(courseRepository.existsById(1L)).thenReturn(true);
+        when(enrollmentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(e1)));
+
+        CourseEnrolledStudentsPageResponse response =
+                enrollmentService.getCourseEnrollments(1L, null, null, null, 1, 20, adminPrincipal);
+        assertNotNull(response);
+
+        when(enrollmentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(e1)));
+        CourseEnrolledStudentsPageResponse responseWithBatch =
+                enrollmentService.getCourseEnrollments(1L, null, 100L, null, 1, 20, adminPrincipal);
+        assertNotNull(responseWithBatch);
+    }
+
+    @Test
+    @DisplayName("SuperAdmin retains full access across all batches")
+    void superAdmin_retainsFullAccess() {
+        JwtUserPrincipal superAdminPrincipal = new JwtUserPrincipal(1L, "superadmin@test.com", "SUPERADMIN");
+        Batch batchA = makeBatch(100L, "Batch A", publishedCourse, 10L);
+        Enrollment e1 = makeEnrollment(1L, student, publishedCourse, batchA, true);
+
+        when(courseRepository.existsById(1L)).thenReturn(true);
+        when(enrollmentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(e1)));
+
+        CourseEnrolledStudentsPageResponse response =
+                enrollmentService.getCourseEnrollments(1L, null, null, null, 1, 20, superAdminPrincipal);
+        assertNotNull(response);
+        assertEquals(1, response.enrollments().size());
+    }
+
+    @Test
+    @DisplayName("Student cannot view course roster -> 403")
+    void student_cannotViewCourseRoster() {
+        JwtUserPrincipal studentPrincipal = new JwtUserPrincipal(50L, "student@test.com", "STUDENT");
+
+        when(courseRepository.existsById(1L)).thenReturn(true);
+
+        ForbiddenException ex = assertThrows(ForbiddenException.class,
+                () -> enrollmentService.getCourseEnrollments(1L, null, null, null, 1, 20, studentPrincipal));
+        assertTrue(ex.getMessage().contains("not authorized"));
     }
 
     // ---- Enrollment contact info (no hardcoded values) ----

@@ -19,6 +19,7 @@ import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.BatchScheduleConflictValidator;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.enrollment.service.EnrollmentService;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
@@ -124,21 +125,47 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Override
     @Transactional(readOnly = true)
     public CourseEnrolledStudentsPageResponse getCourseEnrollments(Long courseId, String search, Long batchId,
-                                                                    String status, int page, int limit) {
+                                                                    String status, int page, int limit,
+                                                                    JwtUserPrincipal principal) {
+        if (principal == null) {
+            throw new ForbiddenException("Authentication required");
+        }
+
         if (!courseRepository.existsById(courseId)) {
             throw new ResourceNotFoundException("Course not found: " + courseId);
+        }
+
+        boolean isAdmin = accessGuard.isAdmin(principal);
+        boolean isTrainer = accessGuard.isTrainer(principal);
+
+        if (!isAdmin && !isTrainer) {
+            throw new ForbiddenException("You are not authorized to view course enrollments");
+        }
+
+        List<Long> trainerBatchIds = null;
+        if (isTrainer) {
+            if (!accessGuard.isTrainerForCourse(principal, courseId)) {
+                throw new ForbiddenException("You are not assigned to any batch for this course");
+            }
+            trainerBatchIds = batchRepository.findByTrainerIdAndCourseId(principal.id(), courseId)
+                    .stream().map(Batch::getId).toList();
+            if (trainerBatchIds.isEmpty()) {
+                throw new ForbiddenException("You are not assigned to any batch for this course");
+            }
+            if (batchId != null && !trainerBatchIds.contains(batchId)) {
+                throw new ForbiddenException("You are not assigned to this batch");
+            }
         }
 
         int pageNumber = Math.max(page, 1);
         int pageSize = limit > 0 ? limit : 20;
 
+        List<Long> finalTrainerBatchIds = trainerBatchIds;
         Specification<Enrollment> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Filter by Course
             predicates.add(cb.equal(root.get("course").get("id"), courseId));
 
-            // Status filter (default: active enrollments only)
             if ("all".equalsIgnoreCase(status)) {
                 // Don't filter by active status
             } else if ("inactive".equalsIgnoreCase(status)) {
@@ -147,18 +174,12 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 predicates.add(cb.isTrue(root.get("active")));
             }
 
-            // Batch filter
             if (batchId != null) {
-                Predicate directBatch = cb.equal(root.get("batch").get("id"), batchId);
-                Predicate studentBatch = cb.and(
-                        cb.isNull(root.get("batch")),
-                        cb.equal(root.get("student").get("batch").get("id"), batchId),
-                        cb.equal(root.get("student").get("batch").get("course").get("id"), courseId)
-                );
-                predicates.add(cb.or(directBatch, studentBatch));
+                predicates.add(cb.equal(root.get("batch").get("id"), batchId));
+            } else if (!isAdmin && finalTrainerBatchIds != null) {
+                predicates.add(root.get("batch").get("id").in(finalTrainerBatchIds));
             }
 
-            // Search filter across student name, email, and enrollmentNo
             if (search != null && !search.isBlank()) {
                 String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
                 Predicate nameMatch = cb.like(cb.lower(root.get("student").get("user").get("name")), pattern);
