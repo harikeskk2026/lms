@@ -25,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class CourseServiceImpl implements CourseService {
@@ -186,11 +188,29 @@ public class CourseServiceImpl implements CourseService {
     private void applyRequest(Course course, CourseRequest request, boolean isCreate) {
         course.setTitle(request.getTitle());
         course.setDescription(request.getDescription());
-        course.setDuration(request.getDuration());
+        course.setDuration(normalizeDuration(request.getDuration()));
         course.setLevel(request.getLevel());
         course.setThumbnail(request.getThumbnail());
         course.setStatus(request.getStatus());
         course.setCourseCode(request.getCourseCode() != null && !request.getCourseCode().isBlank() ? request.getCourseCode().trim() : null);
+    }
+
+    private static final Pattern DURATION_NORMALIZER = Pattern.compile(
+            "^\\s*(\\d+)\\s+(day|days|week|weeks|month|months|year|years)\\s*$",
+            Pattern.CASE_INSENSITIVE);
+
+    private String normalizeDuration(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        Matcher m = DURATION_NORMALIZER.matcher(raw.trim());
+        if (!m.matches()) return raw;
+        String value = m.group(1);
+        String unit = m.group(2).toLowerCase();
+        if (unit.endsWith("y") && !unit.endsWith("ys")) {
+            unit = unit + "s";
+        } else if (!unit.endsWith("s")) {
+            unit = unit + "s";
+        }
+        return value + " " + unit;
     }
 
     private Set<Long> enrolledCourseIds(JwtUserPrincipal principal) {

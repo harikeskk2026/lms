@@ -51,7 +51,8 @@ export default function CourseManagePage({ params }) {
     title: '',
     courseCode: '',
     description: '',
-    duration: '',
+    durationValue: '',
+    durationUnit: 'months',
     level: 'BEGINNER',
     status: 'PUBLISHED',
     thumbnail: '',
@@ -78,16 +79,28 @@ export default function CourseManagePage({ params }) {
     }
   }, [user, router])
 
+  function parseDurationStr(duration) {
+    if (!duration || !duration.trim()) return null
+    const match = duration.trim().match(/^(\d+)\s+(days?|weeks?|months?|years?)$/i)
+    if (!match) return null
+    const value = match[1]
+    const raw = match[2].toLowerCase()
+    const unit = raw.endsWith('s') ? raw : raw + 's'
+    return { durationValue: value, durationUnit: unit }
+  }
+
   const loadCourse = useCallback(() => {
     courseService.get(courseId)
       .then(r => {
         setCourse(r.data)
         if (r.data) {
+          const parsed = parseDurationStr(r.data.duration)
           setEditForm({
             title: r.data.title || '',
             courseCode: r.data.courseCode || '',
             description: r.data.description || '',
-            duration: r.data.duration || '',
+            durationValue: parsed?.durationValue || '',
+            durationUnit: parsed?.durationUnit || 'months',
             level: r.data.level || 'BEGINNER',
             status: r.data.status || 'PUBLISHED',
             thumbnail: r.data.thumbnail || '',
@@ -102,11 +115,13 @@ export default function CourseManagePage({ params }) {
 
   const handleOpenEdit = () => {
     if (!course) return
+    const parsed = parseDurationStr(course.duration)
     setEditForm({
       title: course.title || '',
       courseCode: course.courseCode || '',
       description: course.description || '',
-      duration: course.duration || '',
+      durationValue: parsed?.durationValue || '',
+      durationUnit: parsed?.durationUnit || 'months',
       level: course.level || 'BEGINNER',
       status: course.status || 'PUBLISHED',
       thumbnail: course.thumbnail || '',
@@ -117,7 +132,7 @@ export default function CourseManagePage({ params }) {
   const handleSaveCourse = async (e) => {
     e.preventDefault()
     if (savingCourse) return
-    if (!editForm.title?.trim() || !editForm.description?.trim() || !editForm.duration?.trim()) {
+    if (!editForm.title?.trim() || !editForm.description?.trim() || !editForm.durationValue?.trim()) {
       toast.error('Please fill required fields (Title, Description, Duration)', { id: 'save-course' })
       return
     }
@@ -127,7 +142,7 @@ export default function CourseManagePage({ params }) {
         title: editForm.title.trim(),
         courseCode: editForm.courseCode?.trim() || null,
         description: editForm.description.trim(),
-        duration: editForm.duration.trim(),
+        duration: `${editForm.durationValue.trim()} ${editForm.durationUnit}`,
         level: editForm.level,
         status: editForm.status,
         thumbnail: editForm.thumbnail?.trim() || null,
@@ -258,14 +273,27 @@ export default function CourseManagePage({ params }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
-              <input
-                type="text"
-                required
-                value={editForm.duration}
-                onChange={e => setEditForm(f => ({ ...f, duration: e.target.value }))}
-                placeholder="e.g. 3 months"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={editForm.durationValue}
+                  onChange={e => setEditForm(f => ({ ...f, durationValue: e.target.value }))}
+                  placeholder="e.g. 3"
+                  className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <CustomSelect
+                  value={editForm.durationUnit}
+                  onChange={(val) => setEditForm(f => ({ ...f, durationUnit: val }))}
+                  options={[
+                    { value: 'days', label: 'Days' },
+                    { value: 'weeks', label: 'Weeks' },
+                    { value: 'months', label: 'Months' },
+                    { value: 'years', label: 'Years' },
+                  ]}
+                />
+              </div>
             </div>
 
             <div>

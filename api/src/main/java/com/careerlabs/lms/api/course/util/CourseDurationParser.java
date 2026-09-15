@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 public final class CourseDurationParser {
 
     private static final Pattern DURATION_PATTERN = Pattern.compile(
-            "^\\s*(\\d+)\\s*(d|day|days|w|week|weeks|m|month|months|y|year|years)\\s*$",
+            "^\\s*(\\d+)\\s+(days|weeks|months|years)\\s*$",
             Pattern.CASE_INSENSITIVE);
 
     private CourseDurationParser() {
@@ -31,10 +31,10 @@ public final class CourseDurationParser {
         int amount = Integer.parseInt(m.group(1));
         String unit = m.group(2).toLowerCase();
         return switch (unit) {
-            case "d", "day", "days" -> startDate.plusDays(amount);
-            case "w", "week", "weeks" -> startDate.plusWeeks(amount);
-            case "m", "month", "months" -> startDate.plusMonths(amount);
-            case "y", "year", "years" -> startDate.plusYears(amount);
+            case "days" -> startDate.plusDays(amount);
+            case "weeks" -> startDate.plusWeeks(amount);
+            case "months" -> startDate.plusMonths(amount);
+            case "years" -> startDate.plusYears(amount);
             default -> null;
         };
     }

@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.course.entity.Level;
 import com.careerlabs.lms.api.course.validation.CourseValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class CourseRequest {
@@ -20,6 +21,11 @@ public class CourseRequest {
     private String description;
 
     @NotBlank(message = CourseValidationMessages.DURATION_REQUIRED)
+    @Pattern(
+        regexp = "^[1-9]\\d*\\s+(days?|weeks?|months?|years?)$",
+        flags = Pattern.Flag.CASE_INSENSITIVE,
+        message = CourseValidationMessages.DURATION_INVALID
+    )
     private String duration;
 
     @NotNull(message = CourseValidationMessages.LEVEL_REQUIRED)

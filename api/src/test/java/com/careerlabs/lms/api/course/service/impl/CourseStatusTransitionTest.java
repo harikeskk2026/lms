@@ -261,4 +261,64 @@ class CourseStatusTransitionTest {
         var resp = batchService.create(req);
         assertNotNull(resp);
     }
+
+    @Test
+    @DisplayName("Updating title without changing duration preserves duration")
+    void update_title_only_preserves_duration() {
+        Course c = courseWithStatus(CourseStatus.DRAFT);
+        c.setDuration("6 weeks");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+
+        CourseRequest req = new CourseRequest();
+        req.setTitle("Updated Title");
+        req.setDescription("Desc updated");
+        req.setDuration("6 weeks");
+        req.setLevel(Level.BEGINNER);
+        req.setStatus(CourseStatus.DRAFT);
+
+        var resp = courseService.update(1L, req);
+        assertEquals("6 weeks", c.getDuration());
+        assertEquals("Updated Title", resp.title());
+    }
+
+    @Test
+    @DisplayName("Updating description without changing duration preserves duration")
+    void update_description_only_preserves_duration() {
+        Course c = courseWithStatus(CourseStatus.PUBLISHED);
+        c.setDuration("3 months");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+
+        CourseRequest req = new CourseRequest();
+        req.setTitle("Test Course");
+        req.setDescription("Updated description text");
+        req.setDuration("3 months");
+        req.setLevel(Level.BEGINNER);
+        req.setStatus(CourseStatus.PUBLISHED);
+
+        var resp = courseService.update(1L, req);
+        assertEquals("3 months", c.getDuration());
+        assertEquals("Updated description text", resp.description());
+    }
+
+    @Test
+    @DisplayName("Updating status without changing duration preserves duration")
+    void update_status_only_preserves_duration() {
+        Course c = courseWithStatus(CourseStatus.DRAFT);
+        c.setDuration("10 days");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
+
+        CourseRequest req = new CourseRequest();
+        req.setTitle("Test Course");
+        req.setDescription("Desc");
+        req.setDuration("10 days");
+        req.setLevel(Level.BEGINNER);
+        req.setStatus(CourseStatus.PUBLISHED);
+
+        var resp = courseService.update(1L, req);
+        assertEquals("10 days", c.getDuration());
+        assertEquals(CourseStatus.PUBLISHED, resp.status());
+    }
 }
