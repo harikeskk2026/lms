@@ -11,6 +11,9 @@ public class SubmitAnswerRequest {
 
     private List<Long> selectedOptionIds;
 
+    /** Free-text/code/SQL answer for a FREE_TEXT-mode question; null for OPTIONS-mode questions. */
+    private String answerText;
+
     private Integer timeTaken;
 
     public Long getQuestionId() {
@@ -27,6 +30,14 @@ public class SubmitAnswerRequest {
 
     public void setSelectedOptionIds(List<Long> selectedOptionIds) {
         this.selectedOptionIds = selectedOptionIds;
+    }
+
+    public String getAnswerText() {
+        return answerText;
+    }
+
+    public void setAnswerText(String answerText) {
+        this.answerText = answerText;
     }
 
     public Integer getTimeTaken() {

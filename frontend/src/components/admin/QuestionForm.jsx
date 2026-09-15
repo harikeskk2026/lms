@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
-import { questionSchema, QUESTION_TYPES, QUESTION_DIFFICULTIES } from '@/validations/questionValidation'
+import { questionSchema, QUESTION_TYPES, QUESTION_DIFFICULTIES, FORCE_FREE_TEXT_TYPES } from '@/validations/questionValidation'
 import CustomSelect from '@/components/ui/CustomSelect'
 
 const SINGLE_CORRECT_TYPES = ['MCQ', 'TRUE_FALSE']
@@ -15,9 +15,13 @@ const EMPTY_FORM = {
   courseId: '',
   questionText: '',
   questionType: 'MCQ',
+  answerMode: 'OPTIONS',
   difficulty: 'MEDIUM',
   explanation: '',
   codeSnippet: '',
+  correctAnswerText: '',
+  referenceAnswer: '',
+  answerLanguage: '',
   points: 1,
   options: [
     { optionText: '', correct: true },
@@ -34,12 +38,16 @@ const TYPE_DISPLAY_NAMES = {
   SCENARIO: 'SCENARIO',
   SQL: 'SQL',
   INTERVIEW: 'INTERVIEW',
+  SHORT_ANSWER: 'SHORT_ANSWER (Text Input)',
 }
 
 // Shared create/edit question form. Used both by the Question Bank tab and by
 // "Quick Add Question" inside the Quiz Builder, so a new question (or a new
 // topic) can be created without losing whatever the caller was already doing.
-export default function QuestionForm({ topics = [], courses = [], onTopicsChange, defaultValues, editingId, onSaved, onCancel }) {
+export default function QuestionForm({
+  topics = [], courses = [], onTopicsChange, defaultValues, editingId, onSaved, onCancel,
+  showTopic = true, showCodeSnippet = true, typeOptions = QUESTION_TYPES,
+}) {
   const [saving, setSaving] = useState(false)
   const [newTopicOpen, setNewTopicOpen] = useState(false)
   const [newTopicName, setNewTopicName] = useState('')
@@ -59,10 +67,38 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
     reset(defaultValues || EMPTY_FORM)
   }, [defaultValues, reset])
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'options' })
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'options' })
   const questionType = watch('questionType')
+  const answerMode = watch('answerMode')
   const options = watch('options')
   const isSingleCorrect = SINGLE_CORRECT_TYPES.includes(questionType)
+  const isFreeText = answerMode === 'FREE_TEXT'
+
+  // Question type dictates the answer mode — keep them in sync so switching
+  // type never leaves a stale/impossible combination. SHORT_ANSWER is the
+  // only FREE_TEXT type; every other type (including SQL) is always OPTIONS.
+  useEffect(() => {
+    setValue('answerMode', FORCE_FREE_TEXT_TYPES.includes(questionType) ? 'FREE_TEXT' : 'OPTIONS')
+  }, [questionType, setValue])
+
+  // The options array always carries validation rules (every option needs
+  // non-empty text), even while the Options section is hidden for a free-text
+  // question. Leftover blank options from a previous OPTIONS-mode edit (or the
+  // 2 blanks every new question starts with) would silently fail that hidden
+  // validation and block submit with no visible error. Clearing them out when
+  // entering FREE_TEXT — and restoring 2 blanks when returning to OPTIONS with
+  // none left — keeps the (always-active) options validation in sync with what
+  // the admin can actually see and edit.
+  useEffect(() => {
+    if (isFreeText) {
+      if (options?.length) {
+        replace([])
+      }
+    } else if (!options?.length) {
+      replace([{ optionText: '', correct: true }, { optionText: '', correct: false }])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFreeText])
 
   function selectSingleCorrect(index) {
     options.forEach((_, i) => setValue(`options.${i}.correct`, i === index))
@@ -91,8 +127,12 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
     try {
       const payload = {
         ...data,
-        topicId: data.topicId === '' ? null : Number(data.topicId),
+        topicId: data.topicId === '' || data.topicId === undefined || data.topicId === null ? null : Number(data.topicId),
         courseId: data.courseId === '' ? null : Number(data.courseId),
+        options: data.answerMode === 'FREE_TEXT' ? [] : data.options,
+        correctAnswerText: data.answerMode === 'FREE_TEXT' ? data.correctAnswerText : null,
+        referenceAnswer: null,
+        answerLanguage: null,
       }
       let saved
       if (editingId) {
@@ -125,7 +165,7 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
           <CustomSelect
             value={watch('questionType')}
             onChange={(val) => setValue('questionType', val)}
-            options={QUESTION_TYPES.map(t => ({ value: t, label: TYPE_DISPLAY_NAMES[t] || t }))}
+            options={typeOptions.map(t => ({ value: t, label: TYPE_DISPLAY_NAMES[t] || t }))}
           />
         </div>
         <div>
@@ -138,34 +178,36 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-sm font-semibold text-gray-700">Topic</label>
-            <button type="button" onClick={() => setNewTopicOpen(o => !o)}
-              className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-0.5">
-              <Plus size={12} /> New
-            </button>
-          </div>
-          {newTopicOpen ? (
-            <div className="flex items-center gap-1.5">
-              <input value={newTopicName} onChange={e => setNewTopicName(e.target.value)} placeholder="Topic name"
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              <button type="button" onClick={handleCreateTopic} disabled={creatingTopic || !newTopicName.trim()}
-                className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold disabled:opacity-50">
-                Add
+      <div className={showTopic ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
+        {showTopic && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-semibold text-gray-700">Topic</label>
+              <button type="button" onClick={() => setNewTopicOpen(o => !o)}
+                className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-0.5">
+                <Plus size={12} /> New
               </button>
             </div>
-          ) : (
-            <CustomSelect
-              value={watch('topicId')}
-              onChange={(val) => setValue('topicId', val)}
-              options={topics.map(t => ({ value: t.id, label: t.name }))}
-              placeholder="No topic"
-              clearable
-            />
-          )}
-        </div>
+            {newTopicOpen ? (
+              <div className="flex items-center gap-1.5">
+                <input value={newTopicName} onChange={e => setNewTopicName(e.target.value)} placeholder="Topic name"
+                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                <button type="button" onClick={handleCreateTopic} disabled={creatingTopic || !newTopicName.trim()}
+                  className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold disabled:opacity-50">
+                  Add
+                </button>
+              </div>
+            ) : (
+              <CustomSelect
+                value={watch('topicId')}
+                onChange={(val) => setValue('topicId', val)}
+                options={topics.map(t => ({ value: t.id, label: t.name }))}
+                placeholder="No topic"
+                clearable
+              />
+            )}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
           <CustomSelect
@@ -185,41 +227,52 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
         {errors.points && <span className="text-xs text-red-500 mt-1 block">{errors.points.message}</span>}
       </div>
 
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Code Snippet</label>
-        <textarea {...register('codeSnippet')} rows={2} placeholder="Optional"
-          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-      </div>
+      {showCodeSnippet && (
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Code Snippet</label>
+          <textarea {...register('codeSnippet')} rows={2} placeholder="Optional"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+        </div>
+      )}
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="block text-sm font-semibold text-gray-700">Options *</label>
-          <button type="button" onClick={() => append({ optionText: '', correct: false })}
-            className="text-xs font-semibold text-purple-600 hover:text-purple-700">+ Add Option</button>
+      {isFreeText ? (
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Correct Answer *</label>
+          <input {...register('correctAnswerText')} placeholder="Expected answer (matched case/whitespace-insensitively)"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+          {errors.correctAnswerText && <span className="text-xs text-red-500 mt-1 block">{errors.correctAnswerText.message}</span>}
         </div>
-        <p className="text-xs text-gray-400 mb-2">
-          {isSingleCorrect ? 'Select the one correct option.' : 'Check every correct option.'}
-        </p>
-        <div className="space-y-2">
-          {fields.map((field, index) => (
-            <div key={field.id} className="flex items-center gap-2">
-              <input
-                type={isSingleCorrect ? 'radio' : 'checkbox'}
-                checked={!!options?.[index]?.correct}
-                onChange={() => isSingleCorrect ? selectSingleCorrect(index) : setValue(`options.${index}.correct`, !options?.[index]?.correct)}
-                className="w-4 h-4 accent-purple-600 shrink-0"
-              />
-              <input {...register(`options.${index}.optionText`)} placeholder={`Option ${index + 1}`}
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-              {fields.length > 1 && (
-                <button type="button" onClick={() => remove(index)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
-              )}
-            </div>
-          ))}
+      ) : (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-semibold text-gray-700">Options *</label>
+            <button type="button" onClick={() => append({ optionText: '', correct: false })}
+              className="text-xs font-semibold text-purple-600 hover:text-purple-700">+ Add Option</button>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">
+            {isSingleCorrect ? 'Select the one correct option.' : 'Check every correct option.'}
+          </p>
+          <div className="space-y-2">
+            {fields.map((field, index) => (
+              <div key={field.id} className="flex items-center gap-2">
+                <input
+                  type={isSingleCorrect ? 'radio' : 'checkbox'}
+                  checked={!!options?.[index]?.correct}
+                  onChange={() => isSingleCorrect ? selectSingleCorrect(index) : setValue(`options.${index}.correct`, !options?.[index]?.correct)}
+                  className="w-4 h-4 accent-purple-600 shrink-0"
+                />
+                <input {...register(`options.${index}.optionText`)} placeholder={`Option ${index + 1}`}
+                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                {fields.length > 1 && (
+                  <button type="button" onClick={() => remove(index)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+          {errors.options?.message && <span className="text-xs text-red-500 mt-1 block">{errors.options.message}</span>}
+          {errors.options?.root?.message && <span className="text-xs text-red-500 mt-1 block">{errors.options.root.message}</span>}
         </div>
-        {errors.options?.message && <span className="text-xs text-red-500 mt-1 block">{errors.options.message}</span>}
-        {errors.options?.root?.message && <span className="text-xs text-red-500 mt-1 block">{errors.options.root.message}</span>}
-      </div>
+      )}
 
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">Explanation</label>

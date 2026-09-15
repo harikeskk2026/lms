@@ -56,6 +56,15 @@ public class QuizAttempt {
     @Column(name = "skipped_count", nullable = false)
     private int skippedCount = 0;
 
+    /**
+     * Count of ungraded (correct=null, 0 points) question attempts — a
+     * defensive path kept for any historical FREE_TEXT SQL rows created while
+     * Coding/SQL free-text authoring briefly existed; tracked separately so
+     * they don't inflate {@link #wrongCount} or distort {@link #accuracy}.
+     */
+    @Column(name = "ungraded_count", nullable = false)
+    private int ungradedCount = 0;
+
     @Column(name = "time_taken")
     private Integer timeTaken;
 
@@ -173,6 +182,14 @@ public class QuizAttempt {
 
     public void setSkippedCount(int skippedCount) {
         this.skippedCount = skippedCount;
+    }
+
+    public int getUngradedCount() {
+        return ungradedCount;
+    }
+
+    public void setUngradedCount(int ungradedCount) {
+        this.ungradedCount = ungradedCount;
     }
 
     public Integer getTimeTaken() {

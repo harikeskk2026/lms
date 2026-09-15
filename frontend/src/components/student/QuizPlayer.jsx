@@ -27,6 +27,11 @@ const TYPE_LABELS = {
   CODING:         'Coding',
   INTERVIEW_PREP: 'Interview Prep',
 }
+const DIFFICULTY_PILL_STYLES = {
+  EASY:   'bg-green-100 text-green-700',
+  MEDIUM: 'bg-amber-100 text-amber-700',
+  HARD:   'bg-red-100 text-red-700',
+}
 const MULTI_SELECT_TYPES = ['MULTIPLE_CORRECT']
 
 // ─── Celebration Particles ─────────────────────────────────────────────────
@@ -74,12 +79,12 @@ function ScoreRing({ pct, size = 160 }) {
     return () => clearInterval(iv)
   }, [pct, circ])
 
-  const color = pct >= 80 ? '#10b981' : pct >= 60 ? '#6d28d9' : '#f59e0b'
+  const color = pct >= 80 ? '#10b981' : pct >= 60 ? '#7c3aed' : '#f59e0b'
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#ffffff20" strokeWidth={12} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#ede9fe" strokeWidth={12} />
         <circle
           cx={size/2} cy={size/2} r={r} fill="none"
           stroke={color} strokeWidth={12}
@@ -90,7 +95,7 @@ function ScoreRing({ pct, size = 160 }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-4xl font-extrabold text-white font-display leading-none">{display}%</span>
+        <span className="text-4xl font-extrabold text-gray-800 font-display leading-none">{display}%</span>
       </div>
     </div>
   )
@@ -106,17 +111,17 @@ function TimerBadge({ timeLeft }) {
 
   return (
     <div className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-2xl border ${
-      tone === 'red' ? 'border-red-400/50 bg-red-500/10 animate-timerPulse'
-        : tone === 'amber' ? 'border-amber-400/50 bg-amber-500/10'
-        : 'border-purple-400/30 bg-purple-500/10'
+      tone === 'red' ? 'border-red-300 bg-red-50 animate-timerPulse'
+        : tone === 'amber' ? 'border-amber-300 bg-amber-50'
+        : 'border-purple-200 bg-purple-50'
     }`}>
       <div className="flex items-center gap-1.5">
-        <Clock size={14} className={tone === 'red' ? 'text-red-300' : tone === 'amber' ? 'text-amber-300' : 'text-purple-300'} />
-        <span className={`font-mono font-bold text-sm ${tone === 'red' ? 'text-red-300' : tone === 'amber' ? 'text-amber-300' : 'text-white'}`}>
+        <Clock size={14} className={tone === 'red' ? 'text-red-500' : tone === 'amber' ? 'text-amber-500' : 'text-purple-500'} />
+        <span className={`font-mono font-bold text-sm ${tone === 'red' ? 'text-red-600' : tone === 'amber' ? 'text-amber-600' : 'text-gray-800'}`}>
           {mm}:{ss}
         </span>
       </div>
-      <span className="text-[9px] text-white/40 uppercase tracking-wide">min left</span>
+      <span className="text-[9px] text-gray-400 uppercase tracking-wide">min left</span>
     </div>
   )
 }
@@ -124,7 +129,7 @@ function TimerBadge({ timeLeft }) {
 // ─── Decorative Hero Banner (pure CSS — no image asset needed) ───────────────
 function HeroBanner() {
   return (
-    <div className="h-28 rounded-2xl overflow-hidden relative bg-gradient-to-b from-indigo-950 via-purple-800 to-orange-300">
+    <div className="h-28 rounded-2xl overflow-hidden relative bg-gradient-to-b from-violet-200 via-purple-300 to-orange-200">
       <div
         className="absolute rounded-full"
         style={{
@@ -134,51 +139,51 @@ function HeroBanner() {
         }}
       />
       <div
-        className="absolute bottom-0 left-0 right-0 h-16 bg-purple-950/90"
+        className="absolute bottom-0 left-0 right-0 h-16 bg-purple-900/80"
         style={{ clipPath: 'polygon(0 100%, 0 55%, 14% 80%, 28% 35%, 44% 70%, 58% 25%, 74% 65%, 88% 40%, 100% 72%, 100% 100%)' }}
       />
       <div
-        className="absolute bottom-0 left-0 right-0 h-9 bg-purple-900/70"
+        className="absolute bottom-0 left-0 right-0 h-9 bg-purple-800/60"
         style={{ clipPath: 'polygon(0 100%, 0 65%, 20% 92%, 38% 50%, 58% 85%, 78% 42%, 100% 78%, 100% 100%)' }}
       />
     </div>
   )
 }
 
-// ─── Left Info Panel (persists across intro + playing) ───────────────────────
-function InfoPanel({ quiz, phase, starting, onStart, answered, totalQ }) {
+// ─── Left Info Panel (intro only) ──────────────────────────────────────────
+function InfoPanel({ quiz, starting, onStart }) {
   const maxXp = (quiz.totalQuestions || 0) * 10 + 50
   return (
-    <div className="hidden md:flex md:flex-col w-[320px] shrink-0 border-r border-white/10 overflow-y-auto p-5 space-y-5">
+    <div className="hidden md:flex md:flex-col w-[320px] shrink-0 border-r border-purple-100 bg-white/60 overflow-y-auto p-5 space-y-5">
       <HeroBanner />
 
       <div>
-        <p className="text-purple-300 text-xs font-bold uppercase tracking-wider">{TYPE_LABELS[quiz.type] || quiz.type}</p>
-        <h2 className="text-white text-lg font-display font-bold mt-0.5">{quiz.title}</h2>
-        {quiz.description && <p className="text-white/50 text-sm mt-1.5">{quiz.description}</p>}
+        <p className="text-purple-600 text-xs font-bold uppercase tracking-wider">{TYPE_LABELS[quiz.type] || quiz.type}</p>
+        <h2 className="text-gray-800 text-lg font-display font-bold mt-0.5">{quiz.title}</h2>
+        {quiz.description && <p className="text-gray-500 text-sm mt-1.5">{quiz.description}</p>}
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
         {[
-          { icon: FileText, value: quiz.totalQuestions, label: 'Questions', bg: 'bg-purple-500/20', color: 'text-purple-300' },
-          { icon: Clock, value: `${quiz.duration}m`, label: 'Duration', bg: 'bg-blue-500/20', color: 'text-blue-300' },
-          { icon: Target, value: `${quiz.passingScore}%`, label: 'To Pass', bg: 'bg-green-500/20', color: 'text-green-300' },
-          { icon: Zap, value: `+${maxXp}`, label: 'Max XP', bg: 'bg-amber-500/20', color: 'text-amber-300' },
+          { icon: FileText, value: quiz.totalQuestions, label: 'Questions', bg: 'bg-purple-100', color: 'text-purple-600' },
+          { icon: Clock, value: `${quiz.duration}m`, label: 'Duration', bg: 'bg-blue-100', color: 'text-blue-600' },
+          { icon: Target, value: `${quiz.passingScore}%`, label: 'To Pass', bg: 'bg-green-100', color: 'text-green-600' },
+          { icon: Zap, value: `+${maxXp}`, label: 'Max XP', bg: 'bg-amber-100', color: 'text-amber-600' },
         ].map(s => (
-          <div key={s.label} className="flex items-center gap-2.5 bg-white/5 border border-white/10 rounded-xl p-2.5">
+          <div key={s.label} className="flex items-center gap-2.5 bg-white border border-purple-100 rounded-xl p-2.5 shadow-sm">
             <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center shrink-0`}>
               <s.icon size={15} className={s.color} />
             </div>
             <div className="min-w-0">
-              <p className="text-white font-bold text-sm leading-tight break-words">{s.value}</p>
-              <p className="text-white/40 text-[10px] leading-tight">{s.label}</p>
+              <p className="text-gray-800 font-bold text-sm leading-tight break-words">{s.value}</p>
+              <p className="text-gray-400 text-[10px] leading-tight">{s.label}</p>
             </div>
           </div>
         ))}
       </div>
 
       <div>
-        <p className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">Rules</p>
+        <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2">Rules</p>
         <div className="space-y-1.5">
           {[
             'Navigate between questions freely',
@@ -189,7 +194,7 @@ function InfoPanel({ quiz, phase, starting, onStart, answered, totalQ }) {
           ].map((rule, i) => (
             <div key={i} className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-              <p className="text-xs text-white/70">{rule}</p>
+              <p className="text-xs text-gray-500">{rule}</p>
             </div>
           ))}
         </div>
@@ -197,23 +202,40 @@ function InfoPanel({ quiz, phase, starting, onStart, answered, totalQ }) {
 
       <div className="flex-1" />
 
-      {phase === 'intro' ? (
-        <button
-          onClick={onStart}
-          disabled={starting}
-          className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-yellow-400 to-amber-400 text-gray-900 font-bold hover:opacity-90 active:scale-[0.98] transition-all shadow-xl shadow-yellow-500/30 disabled:opacity-60 flex items-center justify-center gap-2"
-        >
-          {starting ? 'Starting…' : <>Start {quiz.type === 'MCQ' && quiz.maxAttempts === 1 ? 'Challenge' : 'Quiz'} <ChevronRight size={18} /></>}
-        </button>
-      ) : (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 text-center">
-          <p className="text-white font-bold text-sm">{answered} / {totalQ} answered</p>
-          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mt-2">
-            <div className="h-full rounded-full bg-gradient-to-r from-yellow-400 to-amber-400 transition-all duration-300"
-              style={{ width: `${totalQ ? (answered / totalQ) * 100 : 0}%` }} />
-          </div>
+      <button
+        onClick={onStart}
+        disabled={starting}
+        className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold hover:from-purple-700 hover:to-violet-700 active:scale-[0.98] transition-all shadow-xl shadow-purple-500/20 disabled:opacity-60 flex items-center justify-center gap-2"
+      >
+        {starting ? 'Starting…' : <>Start {quiz.type === 'MCQ' && quiz.maxAttempts === 1 ? 'Challenge' : 'Quiz'} <ChevronRight size={18} /></>}
+      </button>
+    </div>
+  )
+}
+
+// ─── Right Quiz Stats Sidebar (playing only) ───────────────────────────────
+function QuizStatsSidebar({ answered, totalQ, xp }) {
+  const pct = totalQ ? Math.round((answered / totalQ) * 100) : 0
+  return (
+    <div className="hidden lg:flex lg:flex-col w-[260px] shrink-0 border-l border-purple-100 bg-white/60 overflow-y-auto p-5 space-y-3">
+      <p className="text-xs font-bold text-purple-600 uppercase tracking-wider">Quiz Stats</p>
+
+      <div className="bg-white border border-purple-100 rounded-2xl p-4 text-center shadow-sm">
+        <Trophy size={18} className="text-amber-500 mx-auto mb-1.5" />
+        <p className="text-lg font-extrabold text-gray-800 font-display">{xp ?? '—'}</p>
+        <p className="text-[10px] text-gray-400 uppercase font-semibold mt-0.5">XP Earned</p>
+      </div>
+
+      <div className="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-gray-600">Progress</span>
+          <span className="text-xs font-bold text-purple-600">{pct}%</span>
         </div>
-      )}
+        <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="text-[10px] text-gray-400 mt-1.5">{answered} of {totalQ} answered</p>
+      </div>
     </div>
   )
 }
@@ -324,6 +346,21 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
     })
   }
 
+  // FREE_TEXT questions (Short Answer/Coding/SQL) — debounced so a code editor's
+  // per-keystroke onChange doesn't fire a network request on every character.
+  const textSaveTimers = useRef({})
+
+  const saveTextAnswer = (questionId, text) => {
+    const timeTaken = Math.round((Date.now() - questionStartedAt.current) / 1000)
+    quizService.saveAnswer(attempt.attemptId, { questionId, answerText: text, timeTaken }).catch(() => {})
+  }
+
+  const selectTextAnswer = (question, text) => {
+    setAnswers(prev => ({ ...prev, [question.id]: text }))
+    clearTimeout(textSaveTimers.current[question.id])
+    textSaveTimers.current[question.id] = setTimeout(() => saveTextAnswer(question.id, text), 600)
+  }
+
   const goToQuestion = (idx) => {
     setAnimDir(idx > current ? 'right' : 'left')
     setCurrent(idx)
@@ -340,9 +377,9 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
 
   // ── PHASE: SUBMITTING ─────────────────────────────────────────────────────────
   if (phase === 'submitting') return (
-    <div className="fixed inset-0 bg-gradient-to-br from-purple-950 to-violet-950 z-50 flex flex-col items-center justify-center gap-4">
-      <Loader2 size={40} className="text-purple-400 animate-spin" />
-      <p className="text-white/70 font-medium">Evaluating your answers…</p>
+    <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 flex flex-col items-center justify-center gap-4">
+      <Loader2 size={40} className="text-purple-500 animate-spin" />
+      <p className="text-gray-500 font-medium">Evaluating your answers…</p>
     </div>
   )
 
@@ -354,19 +391,19 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
     const secs = (result.timeTaken || 0) % 60
 
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-purple-950 to-violet-950 z-50 overflow-y-auto">
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 overflow-y-auto">
         <Confetti />
         <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 animate-fadeInUp">
           <div className="flex flex-col items-center mb-6">
             <ScoreRing pct={scorePct} size={160} />
-            <p className="text-white/60 text-sm mt-3">{result.score} / {result.totalScore} points · {Math.round(result.accuracy)}% accuracy</p>
+            <p className="text-gray-500 text-sm mt-3">{result.score} / {result.totalScore} points · {Math.round(result.accuracy)}% accuracy</p>
             <div className="mt-3">
               {passed ? (
-                <span className="px-6 py-2 rounded-full bg-green-500/20 border border-green-400/40 text-green-300 font-bold text-sm">
+                <span className="px-6 py-2 rounded-full bg-green-100 border border-green-300 text-green-700 font-bold text-sm">
                   PASSED ✓
                 </span>
               ) : (
-                <span className="px-6 py-2 rounded-full bg-yellow-500/20 border border-yellow-400/40 text-yellow-300 font-bold text-sm">
+                <span className="px-6 py-2 rounded-full bg-amber-100 border border-amber-300 text-amber-700 font-bold text-sm">
                   NEEDS IMPROVEMENT
                 </span>
               )}
@@ -375,25 +412,25 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
             {[
-              { label: 'Correct', value: `✓ ${result.correctCount}`, color: 'text-green-400' },
-              { label: 'Wrong', value: `✗ ${result.wrongCount}`, color: 'text-yellow-400' },
-              { label: 'Skipped', value: result.skippedCount, color: 'text-white/60' },
-              { label: 'Time', value: `${mins}m ${secs}s`, color: 'text-blue-400' },
+              { label: 'Correct', value: `✓ ${result.correctCount}`, color: 'text-green-600' },
+              { label: 'Wrong', value: `✗ ${result.wrongCount}`, color: 'text-amber-600' },
+              { label: 'Skipped', value: result.skippedCount, color: 'text-gray-500' },
+              { label: 'Time', value: `${mins}m ${secs}s`, color: 'text-blue-600' },
             ].map(s => (
-              <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+              <div key={s.label} className="bg-white border border-purple-100 rounded-xl p-3 text-center shadow-sm">
                 <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-xs text-white/40 font-semibold">{s.label}</p>
+                <p className="text-xs text-gray-400 font-semibold">{s.label}</p>
               </div>
             ))}
           </div>
 
           {/* Interview Simulation metrics — only for INTERVIEW_PREP quizzes */}
           {interviewResult && (
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
-              <p className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-3">Interview Readiness</p>
+            <div className="bg-white border border-purple-100 rounded-2xl p-4 mb-6 shadow-sm">
+              <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-3">Interview Readiness</p>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-2xl font-extrabold text-white font-display">{Math.round(interviewResult.interviewReadiness)}%</span>
-                <span className="text-xs font-bold px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                <span className="text-2xl font-extrabold text-gray-800 font-display">{Math.round(interviewResult.interviewReadiness)}%</span>
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
                   {interviewResult.readinessLevel.replace('_', ' ')}
                 </span>
               </div>
@@ -406,11 +443,11 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                 ].map(m => (
                   <div key={m.label}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-white/60">{m.label}</span>
-                      <span className="text-xs text-white/80 font-semibold">{Math.round(m.value)}%</span>
+                      <span className="text-xs text-gray-500">{m.label}</span>
+                      <span className="text-xs text-gray-700 font-semibold">{Math.round(m.value)}%</span>
                     </div>
-                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-purple-400" style={{ width: `${m.value}%` }} />
+                    <div className="h-1.5 bg-purple-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-purple-500" style={{ width: `${m.value}%` }} />
                     </div>
                   </div>
                 ))}
@@ -419,54 +456,72 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
           )}
 
           {/* Answer Review */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
-            <p className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-3">Answer Review</p>
+          <div className="bg-white border border-purple-100 rounded-2xl p-4 mb-6 shadow-sm">
+            <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-3">Answer Review</p>
             <div className="space-y-2">
-              {result.review?.map((b, i) => (
-                <div key={b.questionId} className={`rounded-xl border overflow-hidden ${b.correct ? 'border-green-500/20' : 'border-yellow-500/20'}`}>
-                  <button
-                    onClick={() => setReviewOpen(prev => ({ ...prev, [i]: !prev[i] }))}
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 ${b.correct ? 'bg-green-900/20' : 'bg-yellow-900/20'}`}
-                  >
-                    {b.correct
-                      ? <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
-                      : <AlertCircle size={16} className="text-yellow-400 flex-shrink-0" />
-                    }
-                    <span className="text-sm text-white/80 flex-1 text-left line-clamp-1">
-                      Q{i + 1}. {b.questionText}
-                    </span>
-                    <span className={`text-xs font-bold ${b.correct ? 'text-green-400' : 'text-yellow-400'}`}>
-                      {b.correct ? 'Correct' : 'Wrong'}
-                    </span>
-                    <ChevronRight size={14} className={`text-white/40 transition-transform ${reviewOpen[i] ? 'rotate-90' : ''}`} />
-                  </button>
-                  {reviewOpen[i] && (
-                    <div className="px-4 py-3 space-y-2 border-t border-white/5">
-                      {b.correctAnswers?.length > 0 && (
-                        <div className="bg-green-900/20 border border-green-500/20 rounded-lg px-3 py-2">
-                          <p className="text-xs text-green-400 font-semibold mb-0.5">Correct Answer</p>
-                          <p className="text-sm text-white/80">{b.correctAnswers.join(', ')}</p>
-                        </div>
-                      )}
-                      {!b.correct && b.yourAnswers?.length > 0 && (
-                        <div className="bg-yellow-900/20 border border-yellow-500/20 rounded-lg px-3 py-2">
-                          <p className="text-xs text-yellow-400 font-semibold mb-0.5">Your Answer</p>
-                          <p className="text-sm text-white/80">{b.yourAnswers.join(', ')}</p>
-                        </div>
-                      )}
-                      {b.explanation && (
-                        <p className="text-xs text-white/50 italic">{b.explanation}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {result.review?.map((b, i) => {
+                const ungraded = b.correct === null || b.correct === undefined
+                // Defensive: only ever true for a historical FREE_TEXT SQL row
+                // created while Coding/SQL free-text authoring briefly existed.
+                const isCodeAnswer = b.questionType === 'SQL'
+                return (
+                  <div key={b.questionId} className={`rounded-xl border overflow-hidden ${
+                    ungraded ? 'border-gray-200' : b.correct ? 'border-green-200' : 'border-amber-200'
+                  }`}>
+                    <button
+                      onClick={() => setReviewOpen(prev => ({ ...prev, [i]: !prev[i] }))}
+                      className={`w-full text-left px-4 py-3 flex items-center gap-3 ${
+                        ungraded ? 'bg-gray-50' : b.correct ? 'bg-green-50' : 'bg-amber-50'
+                      }`}
+                    >
+                      {ungraded
+                        ? <FileText size={16} className="text-gray-400 flex-shrink-0" />
+                        : b.correct
+                          ? <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                          : <AlertCircle size={16} className="text-amber-500 flex-shrink-0" />
+                      }
+                      <span className="text-sm text-gray-700 flex-1 text-left line-clamp-1">
+                        Q{i + 1}. {b.questionText}
+                      </span>
+                      <span className={`text-xs font-bold ${ungraded ? 'text-gray-400' : b.correct ? 'text-green-600' : 'text-amber-600'}`}>
+                        {ungraded ? 'Not graded' : b.correct ? 'Correct' : 'Wrong'}
+                      </span>
+                      <ChevronRight size={14} className={`text-gray-400 transition-transform ${reviewOpen[i] ? 'rotate-90' : ''}`} />
+                    </button>
+                    {reviewOpen[i] && (
+                      <div className="px-4 py-3 space-y-2 border-t border-gray-100">
+                        {b.correctAnswers?.length > 0 && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                            <p className="text-xs text-green-600 font-semibold mb-0.5">Correct Answer</p>
+                            <p className="text-sm text-gray-700">{b.correctAnswers.join(', ')}</p>
+                          </div>
+                        )}
+                        {(ungraded || !b.correct) && b.yourAnswers?.length > 0 && (
+                          <div className={`rounded-lg px-3 py-2 border ${ungraded ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'}`}>
+                            <p className={`text-xs font-semibold mb-0.5 ${ungraded ? 'text-gray-500' : 'text-amber-600'}`}>
+                              {ungraded ? 'Your Submission (not auto-graded)' : 'Your Answer'}
+                            </p>
+                            {isCodeAnswer ? (
+                              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{b.yourAnswers.join('\n')}</pre>
+                            ) : (
+                              <p className="text-sm text-gray-700">{b.yourAnswers.join(', ')}</p>
+                            )}
+                          </div>
+                        )}
+                        {b.explanation && (
+                          <p className="text-xs text-gray-400 italic">{b.explanation}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-full py-3 rounded-xl border border-white/20 text-white/70 font-semibold text-sm hover:bg-white/5 transition-colors"
+            className="w-full py-3 rounded-xl border border-purple-200 text-gray-600 font-semibold text-sm hover:bg-purple-50 transition-colors"
           >
             ← Back to Quizzes
           </button>
@@ -475,22 +530,24 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
     )
   }
 
-  // ── PHASE: INTRO / PLAYING (persistent two-panel layout) ──────────────────────
+  // ── PHASE: INTRO / PLAYING ──────────────────────────────────────────────────
   const q = questions[current]
-  const sel = q ? (answers[q.id] || []) : []
+  const isFreeText = q?.answerMode === 'FREE_TEXT'
+  const sel = q ? (answers[q.id] ?? (isFreeText ? '' : [])) : []
   const isMulti = q && MULTI_SELECT_TYPES.includes(q.questionType)
+  const progressPct = totalQ ? Math.round(((current + 1) / totalQ) * 100) : 0
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-purple-950 to-violet-950 z-50 flex flex-col">
+    <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 flex flex-col">
       {/* TOP BAR */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-white/10 shrink-0">
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-purple-100 bg-white/70 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors shrink-0">
+          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 hover:bg-purple-100 transition-colors shrink-0">
             <ChevronLeft size={18} />
           </button>
           <div className="min-w-0">
-            <p className="text-white font-bold text-sm break-words">{quiz.title}</p>
-            {phase === 'playing' && <p className="text-white/40 text-xs">Question {current + 1} of {totalQ}</p>}
+            <p className="text-gray-800 font-bold text-sm break-words">{quiz.title}</p>
+            {phase === 'playing' && <p className="text-gray-400 text-xs">Question {current + 1} of {totalQ} · {progressPct}% Complete</p>}
           </div>
         </div>
 
@@ -498,14 +555,14 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
           {gameStats && (
             <>
               <div className="hidden sm:flex items-center gap-1.5">
-                <Flame size={16} className="text-orange-400" />
-                <span className="text-white font-bold text-sm">{gameStats.currentStreak}</span>
-                <span className="text-white/40 text-xs">Day Streak</span>
+                <Flame size={16} className="text-orange-500" />
+                <span className="text-gray-800 font-bold text-sm">{gameStats.currentStreak}</span>
+                <span className="text-gray-400 text-xs">Day Streak</span>
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
-                <Trophy size={16} className="text-yellow-400" />
-                <span className="text-white font-bold text-sm">{gameStats.totalXp}</span>
-                <span className="text-white/40 text-xs">XP Earned</span>
+                <Trophy size={16} className="text-amber-500" />
+                <span className="text-gray-800 font-bold text-sm">{gameStats.totalXp}</span>
+                <span className="text-gray-400 text-xs">XP Earned</span>
               </div>
             </>
           )}
@@ -515,109 +572,127 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
 
       {/* PROGRESS BAR */}
       {phase === 'playing' && (
-        <div className="h-1 bg-white/10 shrink-0">
+        <div className="h-1.5 bg-purple-100 shrink-0">
           <div
-            className="h-full bg-gradient-to-r from-yellow-400 to-amber-400 transition-all duration-300"
-            style={{ width: `${((current + 1) / totalQ) * 100}%` }}
+            className="h-full bg-gradient-to-r from-purple-500 to-violet-500 transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
           />
         </div>
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        <InfoPanel quiz={quiz} phase={phase} starting={starting} onStart={startQuiz} answered={answered} totalQ={totalQ} />
+        {phase === 'intro' && <InfoPanel quiz={quiz} starting={starting} onStart={startQuiz} />}
 
-        {/* RIGHT PANEL */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {phase === 'intro' ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 text-center md:hidden">
-              {/* Mobile fallback where the info panel is hidden */}
-              <p className="text-white/60 text-sm max-w-xs">{quiz.description}</p>
-              <button
-                onClick={startQuiz}
-                disabled={starting}
-                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-yellow-400 to-amber-400 text-gray-900 font-bold disabled:opacity-60"
-              >
-                {starting ? 'Starting…' : 'Start Quiz →'}
-              </button>
-            </div>
-          ) : (
-            <>
+        {/* RIGHT SIDE */}
+        {phase === 'intro' ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 text-center md:hidden">
+            {/* Mobile fallback where the info panel is hidden */}
+            <p className="text-gray-500 text-sm max-w-xs">{quiz.description}</p>
+            <button
+              onClick={startQuiz}
+              disabled={starting}
+              className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold disabled:opacity-60"
+            >
+              {starting ? 'Starting…' : 'Start Quiz →'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto">
                 <div key={`${current}-${animDir}`} className="animate-quizSlideInRight px-3 py-3 sm:px-6 sm:py-5 max-w-2xl mx-auto">
-                  <div className="flex items-center justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-2 text-white/50 text-xs font-semibold">
-                      <List size={14} />
-                      <span>Question {current + 1} of {totalQ}</span>
-                    </div>
-                    <button onClick={() => toggleMarkForReview(q.id)}
-                      className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
-                        markedForReview.has(q.id)
-                          ? 'bg-amber-400/20 border-amber-400/40 text-amber-300'
-                          : 'bg-white/5 border-white/10 text-white/40 hover:text-white/70'
-                      }`}
-                      title="Mark for review">
-                      {markedForReview.has(q.id) ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap mb-4">
-                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-500/30 text-purple-200 uppercase tracking-wider">
-                      {q?.questionType?.replace('_', ' ')}
-                    </span>
-                    {q?.topicName && (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/10 text-white/60 uppercase tracking-wider">
-                        {q.topicName}
-                      </span>
-                    )}
-                    {isMulti && (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-500/30 text-indigo-200">
-                        Select all that apply
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="text-white font-bold text-lg leading-relaxed mb-5">{q?.questionText}</h3>
-
-                  {q?.codeSnippet && (
-                    <pre className="bg-gray-900/80 text-green-400 rounded-xl p-4 text-sm mb-5 font-mono overflow-x-auto border border-green-900/30 leading-relaxed">
-                      {q.codeSnippet}
-                    </pre>
-                  )}
-
-                  <div className="space-y-3 pb-4">
-                    {q?.options?.map((opt, i) => {
-                      const isSelected = sel.includes(opt.id)
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => selectAnswer(q, opt.id)}
-                          className={`
-                            w-full text-left rounded-2xl p-3 sm:p-4 transition-all duration-200 border-2
-                            flex items-center gap-3 sm:gap-4 group
-                            ${isSelected
-                              ? 'border-purple-400 bg-purple-500/20 shadow-lg shadow-purple-500/10'
-                              : 'border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10'
-                            }
-                          `}
-                        >
-                           <span className={`
-                            w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all
-                            ${isSelected ? 'bg-purple-500 text-white' : 'bg-white/10 text-white/60 group-hover:bg-white/20'}
-                          `}>
-                            {String.fromCharCode(65 + i)}
+                  <div className="bg-white border border-purple-100 rounded-3xl shadow-sm p-4 sm:p-6">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div className="flex items-center gap-2 text-gray-400 text-xs font-semibold">
+                        <List size={14} />
+                        <span>Question {current + 1} of {totalQ}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {q?.difficulty && (
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${DIFFICULTY_PILL_STYLES[q.difficulty] || 'bg-gray-100 text-gray-600'}`}>
+                            {q.difficulty}
                           </span>
-                          <span className={`font-medium text-sm leading-snug ${isSelected ? 'text-white' : 'text-white/75'}`}>
-                            {opt.optionText}
-                          </span>
+                        )}
+                        <button onClick={() => toggleMarkForReview(q.id)}
+                          className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+                            markedForReview.has(q.id)
+                              ? 'bg-amber-100 border-amber-300 text-amber-600'
+                              : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-gray-600'
+                          }`}
+                          title="Mark for review">
+                          {markedForReview.has(q.id) ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
                         </button>
-                      )
-                    })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap mb-4">
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 uppercase tracking-wider">
+                        {q?.questionType?.replace('_', ' ')}
+                      </span>
+                      {q?.topicName && (
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 uppercase tracking-wider">
+                          {q.topicName}
+                        </span>
+                      )}
+                      {isMulti && (
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                          Select all that apply
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-gray-800 font-bold text-lg leading-relaxed mb-5">{q?.questionText}</h3>
+
+                    {q?.codeSnippet && (
+                      <pre className="bg-gray-900 text-green-400 rounded-xl p-4 text-sm mb-5 font-mono overflow-x-auto border border-gray-800 leading-relaxed">
+                        {q.codeSnippet}
+                      </pre>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-1">
+                      {isFreeText && q?.questionType === 'SHORT_ANSWER' && (
+                        <input
+                          type="text"
+                          value={typeof sel === 'string' ? sel : ''}
+                          onChange={(e) => selectTextAnswer(q, e.target.value)}
+                          placeholder="Type your answer..."
+                          className="sm:col-span-2 w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 text-gray-800 placeholder-gray-400 outline-none focus:border-purple-400 focus:bg-white transition-colors"
+                        />
+                      )}
+                      {!isFreeText && q?.options?.map((opt, i) => {
+                        const isSelected = sel.includes(opt.id)
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => selectAnswer(q, opt.id)}
+                            className={`
+                              w-full text-left rounded-2xl p-3 sm:p-4 transition-all duration-200 border-2
+                              flex items-center gap-3 sm:gap-4 group
+                              ${isSelected
+                                ? 'border-purple-500 bg-purple-50 shadow-sm'
+                                : 'border-gray-200 bg-white hover:border-purple-200 hover:bg-purple-50/40'
+                              }
+                            `}
+                          >
+                             <span className={`
+                              w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all
+                              ${isSelected ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-400 group-hover:bg-purple-100'}
+                            `}>
+                              {String.fromCharCode(65 + i)}
+                            </span>
+                            <span className={`font-medium text-sm leading-snug ${isSelected ? 'text-gray-900' : 'text-gray-600'}`}>
+                              {opt.optionText}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* BOTTOM NAV */}
-              <div className="border-t border-white/10 px-3 py-3 sm:px-6 sm:py-3.5 bg-purple-950/60 shrink-0">
+              <div className="border-t border-purple-100 px-3 py-3 sm:px-6 sm:py-3.5 bg-white/70 backdrop-blur-sm shrink-0">
                 <div className="flex justify-center flex-wrap gap-1.5 mb-3">
                   {questions.map((question, i) => {
                     const done = (answers[question.id] || []).length > 0
@@ -628,14 +703,14 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                         onClick={() => goToQuestion(i)}
                         className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full text-[10px] sm:text-xs font-bold transition-all border ${
                           i === current
-                            ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-purple-950 bg-purple-700 border-purple-500 text-white'
+                            ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-white bg-purple-600 border-purple-500 text-white'
                             : done
-                            ? 'bg-green-500/20 text-green-300 border-green-500/40'
-                            : 'bg-white/5 text-white/40 border-white/10'
+                            ? 'bg-green-100 text-green-700 border-green-300'
+                            : 'bg-gray-50 text-gray-400 border-gray-200'
                         }`}
                       >
                         {i + 1}
-                        {marked && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border border-purple-950" />}
+                        {marked && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border border-white" />}
                       </button>
                     )
                   })}
@@ -644,7 +719,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                   <button
                     onClick={() => goToQuestion(Math.max(0, current - 1))}
                     disabled={current === 0}
-                    className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl border border-white/15 text-white/60 text-xs sm:text-sm font-semibold hover:border-white/30 hover:text-white/80 transition-all disabled:opacity-30"
+                    className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl border border-gray-200 text-gray-500 text-xs sm:text-sm font-semibold hover:border-purple-300 hover:text-gray-700 transition-all disabled:opacity-30"
                   >
                     <ChevronLeft size={16} /> Prev
                   </button>
@@ -652,7 +727,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                   {current < totalQ - 1 ? (
                     <button
                       onClick={() => goToQuestion(current + 1)}
-                      className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-purple-700/60 border border-purple-500/30 text-white text-xs sm:text-sm font-semibold hover:bg-purple-700/80 transition-all"
+                      className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-purple-100 border border-purple-200 text-purple-700 text-xs sm:text-sm font-semibold hover:bg-purple-200 transition-all"
                     >
                       Next <ChevronRight size={16} />
                     </button>
@@ -660,16 +735,18 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
                     <button
                       onClick={handleSubmit}
                       disabled={submitting}
-                      className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-400 text-gray-900 font-bold text-xs sm:text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-yellow-400/20"
+                      className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold text-xs sm:text-sm hover:from-purple-700 hover:to-violet-700 active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-purple-400/20"
                     >
                       Submit ({answered}/{totalQ} answered)
                     </button>
                   )}
                 </div>
               </div>
-            </>
-          )}
-        </div>
+            </div>
+
+            <QuizStatsSidebar answered={answered} totalQ={totalQ} xp={gameStats?.totalXp} />
+          </>
+        )}
       </div>
     </div>
   )

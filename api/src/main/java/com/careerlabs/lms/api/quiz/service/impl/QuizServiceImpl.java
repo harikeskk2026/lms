@@ -33,6 +33,7 @@ import com.careerlabs.lms.api.quiz.repository.QuizAssignmentRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizQuestionRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizSourcePdfRepository;
 import com.careerlabs.lms.api.quiz.service.QuizAvailabilityService;
 import com.careerlabs.lms.api.quiz.service.QuizService;
 import com.careerlabs.lms.api.user.entity.User;
@@ -59,12 +60,14 @@ public class QuizServiceImpl implements QuizService {
     private final UserRepository userRepository;
     private final QuizAvailabilityService quizAvailabilityService;
     private final CourseAccessGuard accessGuard;
+    private final QuizSourcePdfRepository quizSourcePdfRepository;
 
     public QuizServiceImpl(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
                             QuestionRepository questionRepository, QuizAttemptRepository quizAttemptRepository,
                             QuizAssignmentRepository quizAssignmentRepository, CourseRepository courseRepository,
                             BatchRepository batchRepository, UserRepository userRepository,
-                            QuizAvailabilityService quizAvailabilityService, CourseAccessGuard accessGuard) {
+                            QuizAvailabilityService quizAvailabilityService, CourseAccessGuard accessGuard,
+                            QuizSourcePdfRepository quizSourcePdfRepository) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.questionRepository = questionRepository;
@@ -75,6 +78,7 @@ public class QuizServiceImpl implements QuizService {
         this.userRepository = userRepository;
         this.quizAvailabilityService = quizAvailabilityService;
         this.accessGuard = accessGuard;
+        this.quizSourcePdfRepository = quizSourcePdfRepository;
     }
 
     @Override
@@ -419,7 +423,9 @@ public class QuizServiceImpl implements QuizService {
         String batchName = quiz.getBatchId() == null ? null
                 : batchRepository.findById(quiz.getBatchId()).map(Batch::getName).orElse(null);
         List<QuizAssignmentResponse> assignments = getAssignments(quiz.getId());
-        return QuizResponse.from(quiz, questions, courseName, batchName, quizAvailabilityService.effectiveStatus(quiz), assignments);
+        boolean hasSourcePdf = quizSourcePdfRepository.existsByQuizId(quiz.getId());
+        return QuizResponse.from(quiz, questions, courseName, batchName, quizAvailabilityService.effectiveStatus(quiz),
+                assignments, hasSourcePdf);
     }
 
     private StudentQuizResponse toStudentResponse(Quiz quiz, Long studentId) {

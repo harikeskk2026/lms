@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.quiz.validation;
 
 import com.careerlabs.lms.api.quiz.dto.request.QuestionOptionRequest;
+import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.QuestionType;
 import com.careerlabs.lms.api.quiz.validation.annotation.ValidQuestionOptions;
 import jakarta.validation.ConstraintValidator;
@@ -17,10 +18,17 @@ public class QuestionOptionsValidator implements ConstraintValidator<ValidQuesti
             return true;
         }
 
+        if (value.getAnswerMode() == AnswerMode.FREE_TEXT) {
+            // Short Answer / Coding / SQL free-text questions don't use options at
+            // all — their correctness lives in correctAnswerText/referenceAnswer.
+            return true;
+        }
+
         List<QuestionOptionRequest> options = value.getOptions();
         if (options == null || options.isEmpty()) {
-            // @NotEmpty on options already reports the "required" case.
-            return true;
+            // OPTIONS-mode questions always need at least one option; there's no
+            // longer a field-level @NotEmpty for this (FREE_TEXT questions send none).
+            return fail(context, QuestionValidationMessages.OPTIONS_REQUIRED);
         }
 
         long correctCount = options.stream().filter(QuestionOptionRequest::isCorrect).count();

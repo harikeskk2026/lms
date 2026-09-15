@@ -1,8 +1,11 @@
 package com.careerlabs.lms.api.quiz.dto.response;
 
+import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
+import com.careerlabs.lms.api.quiz.entity.Question;
 import com.careerlabs.lms.api.quiz.entity.QuestionAttempt;
 import com.careerlabs.lms.api.quiz.entity.QuestionOption;
+import com.careerlabs.lms.api.quiz.entity.QuestionType;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
 
 import java.time.Instant;
@@ -74,14 +77,27 @@ public record QuizResultResponse(
     }
 
     private static QuestionReviewItem toReviewItem(QuestionAttempt qa, boolean submitted, boolean showExplanation) {
-        List<String> yourAnswers = qa.getSelectedOptions().stream().map(QuestionOption::getOptionText).toList();
+        Question question = qa.getQuestion();
+        List<String> yourAnswers;
+        List<String> correctAnswers;
 
-        List<String> correctAnswers = submitted
-                ? qa.getQuestion().getOptions().stream()
-                        .filter(QuestionOption::isCorrect)
-                        .map(QuestionOption::getOptionText)
-                        .toList()
-                : null;
+        if (question.getAnswerMode() == AnswerMode.FREE_TEXT) {
+            yourAnswers = qa.getAnswerText() == null || qa.getAnswerText().isBlank()
+                    ? List.of() : List.of(qa.getAnswerText());
+            // Coding/SQL are never graded and their reference answer is never revealed to
+            // students; Short Answer's grading key is shown once results are released.
+            boolean revealAnswerKey = submitted && question.getQuestionType() == QuestionType.SHORT_ANSWER;
+            correctAnswers = revealAnswerKey && question.getCorrectAnswerText() != null
+                    ? List.of(question.getCorrectAnswerText()) : null;
+        } else {
+            yourAnswers = qa.getSelectedOptions().stream().map(QuestionOption::getOptionText).toList();
+            correctAnswers = submitted
+                    ? question.getOptions().stream()
+                            .filter(QuestionOption::isCorrect)
+                            .map(QuestionOption::getOptionText)
+                            .toList()
+                    : null;
+        }
 
         return new QuestionReviewItem(
                 qa.getQuestion().getId(),

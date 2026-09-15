@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3, Users, Send, X } from 'lucide-react'
+import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3, Users, Send, X, ClipboardList, CheckCircle, AlertCircle, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
@@ -9,6 +9,7 @@ import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionBankPanel from '@/components/admin/QuestionBankPanel'
 import QuestionForm from '@/components/admin/QuestionForm'
 import BulkQuestionForm from '@/components/admin/BulkQuestionForm'
+import CreatePdfQuizPanel from '@/components/admin/CreatePdfQuizPanel'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
@@ -36,6 +37,13 @@ const EMPTY_FORM = {
   randomQuestions: false, randomOptions: false, showExplanation: true,
   negativeMarking: false, resultVisibility: 'IMMEDIATE',
   scheduledStart: '', scheduledEnd: '',
+}
+
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return '—'
+  const mm = Math.floor(seconds / 60)
+  const ss = seconds % 60
+  return `${mm}m ${ss}s`
 }
 
 const STATUS_BADGE_STYLES = {
@@ -88,6 +96,14 @@ export default function QuizzesPage() {
   const [quizAssignments, setQuizAssignments] = useState([])
   const [deletingQuiz, setDeletingQuiz] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [pdfPanelOpen, setPdfPanelOpen] = useState(false)
+  const [attemptsQuiz, setAttemptsQuiz] = useState(null)
+  const [quizAttempts, setQuizAttempts] = useState([])
+  const [loadingAttempts, setLoadingAttempts] = useState(false)
+  const [reviewingAttempt, setReviewingAttempt] = useState(null)
+  const [attemptReview, setAttemptReview] = useState(null)
+  const [loadingReview, setLoadingReview] = useState(false)
+  const [reviewOpenIndex, setReviewOpenIndex] = useState({})
 
   const loadBankQuestions = () => {
     quizService.listQuestions({ active: true }).then(r => setBankQuestions(r.data || [])).catch(() => {})
@@ -170,6 +186,34 @@ export default function QuizzesPage() {
       toast.error(err.message || 'Failed to load analytics')
     } finally {
       setLoadingAnalytics(false)
+    }
+  }
+
+  const handleViewAttempts = async (quiz) => {
+    setAttemptsQuiz(quiz)
+    setLoadingAttempts(true)
+    try {
+      const res = await quizService.getQuizAttempts(quiz.id)
+      setQuizAttempts(res.data || [])
+    } catch (err) {
+      toast.error(err.message || 'Failed to load results')
+    } finally {
+      setLoadingAttempts(false)
+    }
+  }
+
+  const handleViewAttemptReview = async (attempt) => {
+    if (!attemptsQuiz) return
+    setReviewingAttempt(attempt)
+    setReviewOpenIndex({})
+    setLoadingReview(true)
+    try {
+      const res = await quizService.getAdminAttemptReview(attemptsQuiz.id, attempt.attemptId)
+      setAttemptReview(res.data)
+    } catch (err) {
+      toast.error(err.message || 'Failed to load review')
+    } finally {
+      setLoadingReview(false)
     }
   }
 
@@ -430,6 +474,10 @@ export default function QuizzesPage() {
     return true
   })
 
+  // PDF-created quizzes only — independent of the main tab's filters above, so
+  // switching tabs never carries filter state across (each list is self-contained).
+  const pdfQuizzes = quizzes.filter(q => q.hasSourcePdf)
+
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -443,6 +491,12 @@ export default function QuizzesPage() {
             <Plus size={16} /> Create Quiz
           </button>
         )}
+        {activeTab === 'pdf-quiz' && (
+          <button onClick={() => setPdfPanelOpen(true)}
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
+            <Plus size={16} /> Create Quiz from PDF
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -450,6 +504,7 @@ export default function QuizzesPage() {
         {[
           { id: 'quizzes', label: 'Quizzes' },
           { id: 'question-bank', label: 'Question Bank' },
+          { id: 'pdf-quiz', label: 'Quiz' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -466,6 +521,78 @@ export default function QuizzesPage() {
       </div>
 
       {activeTab === 'question-bank' && <QuestionBankPanel onChange={loadBankQuestions} />}
+
+      {activeTab === 'pdf-quiz' && (
+        pdfQuizzes.length === 0 ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-2xl p-8 text-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              Build a quiz from an uploaded PDF — the backend extracts the questions, you review and edit them,
+              then save as a draft or publish. The original PDF is kept private and is never shown to students.
+            </p>
+            <button onClick={() => setPdfPanelOpen(true)}
+              className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
+              <Plus size={16} /> Create Quiz from PDF
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pdfQuizzes.map(q => {
+              const published = q.status === 'PUBLISHED'
+              return (
+                <div key={q.id} className="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white shrink-0">
+                    <FileText size={20} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-display font-bold text-gray-800 dark:text-white break-words">{q.title}</h3>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_BADGE_STYLES[q.effectiveStatus] || STATUS_BADGE_STYLES.DRAFT}`}>
+                        {q.effectiveStatus || (published ? 'LIVE' : 'DRAFT')}
+                      </span>
+                    </div>
+                    {q.description && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1">{q.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 flex-wrap mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      <span className="inline-flex items-center gap-1">
+                        <ClipboardList size={12} className="text-purple-500" /> {q.totalQuestions} questions
+                      </span>
+                      {q.duration != null && (
+                        <span className="inline-flex items-center gap-1">
+                          🕒 {q.duration}m
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TYPE_STYLES[q.type] || TYPE_STYLES.MCQ}`}>
+                        {TYPE_LABELS[q.type] || q.type}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_STYLES[q.difficulty]}`}>{q.difficulty}</span>
+                      <span className="inline-flex items-center gap-1">
+                        📅 {q.createdAt ? new Date(q.createdAt).toLocaleDateString() : '—'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 sm:self-center">
+                    {published ? (
+                      <button onClick={() => handleViewAttempts(q)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 text-xs font-semibold transition-colors" title="View Results">
+                        <ClipboardList size={13} /> Results
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300 dark:text-gray-600 px-1">Publish to see results</span>
+                    )}
+                    <button onClick={() => handleViewQuiz(q)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-xs font-semibold transition-colors" title="View">
+                      <Eye size={13} /> View
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      )}
 
       {activeTab === 'quizzes' && (
       <>
@@ -702,7 +829,7 @@ export default function QuizzesPage() {
       )}
 
       {/* Create Quiz Panel */}
-      <SlidePanel open={panelOpen} isDirty={isQuizFormDirty} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[680px]">
+      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[680px]" variant="modal">
         {/* Steps */}
         <div className="flex mb-5 gap-1.5">
           {STEP_LABELS.map((l, i) => (
@@ -1281,7 +1408,7 @@ export default function QuizzesPage() {
       </SlidePanel>
 
       {/* Quiz Details View SlidePanel */}
-      <SlidePanel open={!!viewingQuiz} onClose={() => setViewingQuiz(null)} title="Quiz Details" width="w-[600px]">
+      <SlidePanel open={!!viewingQuiz} onClose={() => setViewingQuiz(null)} title="Quiz Details" width="w-[600px]" variant="modal">
         {viewingQuiz && (
           <div className="space-y-5">
             <div className="glass-card p-5 space-y-3">
@@ -1360,7 +1487,7 @@ export default function QuizzesPage() {
       </SlidePanel>
 
       {/* Quiz Analytics SlidePanel */}
-      <SlidePanel open={!!analyticsQuiz} onClose={() => { setAnalyticsQuiz(null); setQuizAnalytics(null) }} title="Quiz Analytics" width="w-[420px]">
+      <SlidePanel open={!!analyticsQuiz} onClose={() => { setAnalyticsQuiz(null); setQuizAnalytics(null) }} title="Quiz Analytics" width="w-[420px]" variant="modal">
         {analyticsQuiz && (
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-gray-800 dark:text-white">{analyticsQuiz.title}</h3>
@@ -1387,8 +1514,119 @@ export default function QuizzesPage() {
         )}
       </SlidePanel>
 
+      {/* Quiz Results SlidePanel — list of submitted attempts for a Published PDF quiz */}
+      <SlidePanel open={!!attemptsQuiz} onClose={() => { setAttemptsQuiz(null); setQuizAttempts([]) }} title="Results" width="w-[560px]" variant="modal">
+        {attemptsQuiz && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 dark:text-white">{attemptsQuiz.title}</h3>
+            {loadingAttempts ? (
+              <div className="space-y-3">{[0, 1, 2].map(i => <div key={i} className="h-16 glass-card animate-pulse" />)}</div>
+            ) : quizAttempts.length === 0 ? (
+              <div className="p-6 text-center text-xs text-gray-400 border border-dashed rounded-xl">No submissions yet.</div>
+            ) : (
+              <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                {quizAttempts.map(a => (
+                  <div key={a.attemptId} className="glass-card p-3.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{a.studentName}</p>
+                      <div className="flex items-center gap-2 flex-wrap mt-1">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                          Attempt #{a.attemptNumber}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {a.passed ? 'PASS' : 'FAIL'}
+                        </span>
+                        <span className="text-[10px] text-gray-400">{formatDuration(a.timeTaken)}</span>
+                        <span className="text-[10px] text-gray-400">
+                          {a.completedAt ? new Date(a.completedAt).toLocaleString() : '—'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-extrabold text-purple-600">{a.score}/{a.totalScore}</span>
+                      <button onClick={() => handleViewAttemptReview(a)}
+                        className="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 text-xs font-semibold transition-colors">
+                        View Review
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </SlidePanel>
+
+      {/* Attempt Review SlidePanel — per-question answer review for one student's attempt */}
+      <SlidePanel open={!!reviewingAttempt} onClose={() => { setReviewingAttempt(null); setAttemptReview(null) }}
+        title={reviewingAttempt ? `Review — ${reviewingAttempt.studentName}` : 'Review'}
+        subtitle={reviewingAttempt ? `Attempt #${reviewingAttempt.attemptNumber}` : undefined} width="w-[560px]" variant="modal">
+        {loadingReview ? (
+          <div className="space-y-3">{[0, 1, 2].map(i => <div key={i} className="h-16 glass-card animate-pulse" />)}</div>
+        ) : attemptReview ? (
+          <div className="space-y-4">
+            <div className="glass-card p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xl font-extrabold text-purple-600 font-display">{attemptReview.score}/{attemptReview.totalScore}</p>
+                <p className="text-[10px] text-gray-400 uppercase font-semibold mt-1">Total Score</p>
+              </div>
+              <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${attemptReview.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {attemptReview.passed ? 'PASSED' : 'FAILED'}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {attemptReview.review?.map((b, i) => {
+                const ungraded = b.correct === null || b.correct === undefined
+                return (
+                  <div key={b.questionId} className={`rounded-xl border overflow-hidden ${
+                    ungraded ? 'border-gray-200 dark:border-gray-700' : b.correct ? 'border-green-200 dark:border-green-800/50' : 'border-red-200 dark:border-red-800/50'
+                  }`}>
+                    <button onClick={() => setReviewOpenIndex(prev => ({ ...prev, [i]: !prev[i] }))}
+                      className={`w-full text-left px-3.5 py-3 flex items-center gap-3 ${
+                        ungraded ? 'bg-gray-50 dark:bg-gray-800/50' : b.correct ? 'bg-green-50 dark:bg-green-900/10' : 'bg-red-50 dark:bg-red-900/10'
+                      }`}>
+                      {ungraded
+                        ? <FileText size={15} className="text-gray-400 shrink-0" />
+                        : b.correct
+                          ? <CheckCircle size={15} className="text-green-500 shrink-0" />
+                          : <AlertCircle size={15} className="text-red-500 shrink-0" />
+                      }
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-200 flex-1 line-clamp-1">
+                        Q{i + 1}. {b.questionText}
+                      </span>
+                      <span className="text-[10px] font-bold text-gray-500 shrink-0">{b.pointsEarned}/{b.points ?? 1}</span>
+                      <ChevronRight size={14} className={`text-gray-400 transition-transform shrink-0 ${reviewOpenIndex[i] ? 'rotate-90' : ''}`} />
+                    </button>
+                    {reviewOpenIndex[i] && (
+                      <div className="px-3.5 py-3 space-y-2 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+                        <div className="rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                          <p className="text-[10px] text-gray-400 font-semibold mb-0.5">Student's Answer</p>
+                          <p className="text-xs text-gray-700 dark:text-gray-200">
+                            {b.yourAnswers?.length > 0 ? b.yourAnswers.join(', ') : '(no answer)'}
+                          </p>
+                        </div>
+                        {b.correctAnswers?.length > 0 && (
+                          <div className="rounded-lg px-3 py-2 border border-green-200 dark:border-green-800/50 bg-green-50 dark:bg-green-900/10">
+                            <p className="text-[10px] text-green-600 font-semibold mb-0.5">Correct Answer</p>
+                            <p className="text-xs text-gray-700 dark:text-gray-200">{b.correctAnswers.join(', ')}</p>
+                          </div>
+                        )}
+                        {b.explanation && <p className="text-[11px] text-gray-400 italic">{b.explanation}</p>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">No data</p>
+        )}
+      </SlidePanel>
+
       {/* Assign Quiz SlidePanel */}
-      <SlidePanel open={!!assigningQuiz} onClose={() => { setAssigningQuiz(null); setQuizAssignments([]) }} title="Assign Quiz" width="w-[460px]">
+      <SlidePanel open={!!assigningQuiz} onClose={() => { setAssigningQuiz(null); setQuizAssignments([]) }} title="Assign Quiz" width="w-[460px]" variant="modal">
         {assigningQuiz && (
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-gray-800 dark:text-white">{assigningQuiz.title}</h3>
@@ -1453,6 +1691,18 @@ export default function QuizzesPage() {
         itemName={deletingQuiz?.title}
         loading={isDeleting}
       />
+
+      {/* Create Quiz from PDF SlidePanel — fully separate from the Quizzes-tab wizard above */}
+      <SlidePanel open={pdfPanelOpen} onClose={() => setPdfPanelOpen(false)} title="Create Quiz from PDF" width="w-[680px]" variant="modal">
+        <CreatePdfQuizPanel
+          topics={topics}
+          courses={courses}
+          batches={batches}
+          onTopicsChange={setTopics}
+          onCreated={load}
+          onClose={() => setPdfPanelOpen(false)}
+        />
+      </SlidePanel>
     </div>
   )
 }

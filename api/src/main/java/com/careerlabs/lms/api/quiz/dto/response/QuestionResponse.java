@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.quiz.dto.response;
 
+import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.Question;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuestionType;
@@ -15,9 +16,13 @@ public record QuestionResponse(
         String courseName,
         String questionText,
         QuestionType questionType,
+        AnswerMode answerMode,
         QuizDifficulty difficulty,
         String explanation,
         String codeSnippet,
+        String correctAnswerText,
+        String referenceAnswer,
+        String answerLanguage,
         Integer points,
         boolean active,
         List<QuestionOptionResponse> options,
@@ -43,9 +48,13 @@ public record QuestionResponse(
                 question.getCourse() != null ? question.getCourse().getTitle() : null,
                 question.getQuestionText(),
                 question.getQuestionType(),
+                question.getAnswerMode(),
                 question.getDifficulty(),
                 question.getExplanation(),
                 question.getCodeSnippet(),
+                question.getCorrectAnswerText(),
+                question.getReferenceAnswer(),
+                question.getAnswerLanguage(),
                 marksOverride != null ? marksOverride : question.getPoints(),
                 question.isActive(),
                 question.getOptions().stream().map(QuestionOptionResponse::from).toList(),

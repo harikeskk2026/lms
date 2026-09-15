@@ -10,10 +10,12 @@ import com.careerlabs.lms.api.quiz.dto.response.QuizResultResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StartAttemptResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StudentQuestionOptionResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StudentQuestionResponse;
+import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
 import com.careerlabs.lms.api.quiz.entity.Question;
 import com.careerlabs.lms.api.quiz.entity.QuestionAttempt;
 import com.careerlabs.lms.api.quiz.entity.QuestionOption;
+import com.careerlabs.lms.api.quiz.entity.QuestionType;
 import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
 import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
@@ -189,12 +191,16 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
                 .findByAttemptIdAndQuestionId(attemptId, request.getQuestionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Question is not part of this attempt"));
 
-        List<Long> selectedIds = request.getSelectedOptionIds() == null ? List.of() : request.getSelectedOptionIds();
-        List<QuestionOption> selectedOptions = questionAttempt.getQuestion().getOptions().stream()
-                .filter(option -> selectedIds.contains(option.getId()))
-                .toList();
-
-        questionAttempt.setSelectedOptions(new ArrayList<>(selectedOptions));
+        if (questionAttempt.getQuestion().getAnswerMode() == AnswerMode.FREE_TEXT) {
+            questionAttempt.setAnswerText(request.getAnswerText());
+            questionAttempt.setSelectedOptions(new ArrayList<>());
+        } else {
+            List<Long> selectedIds = request.getSelectedOptionIds() == null ? List.of() : request.getSelectedOptionIds();
+            List<QuestionOption> selectedOptions = questionAttempt.getQuestion().getOptions().stream()
+                    .filter(option -> selectedIds.contains(option.getId()))
+                    .toList();
+            questionAttempt.setSelectedOptions(new ArrayList<>(selectedOptions));
+        }
         questionAttempt.setTimeTaken(request.getTimeTaken());
         questionAttemptRepository.save(questionAttempt);
     }
@@ -213,26 +219,37 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
 
         int correctCount = 0;
         int skippedCount = 0;
+        int ungradedCount = 0;
         int score = 0;
         for (QuestionAttempt qa : questionAttempts) {
             score += qa.getPointsEarned();
-            if (Boolean.TRUE.equals(qa.getCorrect())) {
+            Question question = qa.getQuestion();
+            boolean freeText = question.getAnswerMode() == AnswerMode.FREE_TEXT;
+            // Defensive: SQL is no longer authored as FREE_TEXT going forward
+            // (Coding/SQL free-text authoring was dropped), but any question
+            // saved as FREE_TEXT SQL before that change stays ungraded.
+            boolean neverGraded = freeText && question.getQuestionType() == QuestionType.SQL;
+            if (neverGraded) {
+                ungradedCount++;
+            } else if (Boolean.TRUE.equals(qa.getCorrect())) {
                 correctCount++;
-            } else if (qa.getSelectedOptions().isEmpty()) {
+            } else if (isBlankAnswer(qa, freeText)) {
                 skippedCount++;
             }
         }
-        int wrongCount = questionAttempts.size() - correctCount - skippedCount;
+        int wrongCount = questionAttempts.size() - correctCount - skippedCount - ungradedCount;
+        int gradedCount = correctCount + wrongCount;
 
         Instant completedAt = Instant.now();
         int totalScore = attempt.getTotalScore() == null ? 0 : attempt.getTotalScore();
         boolean passed = totalScore > 0 && (score * 100.0 / totalScore) >= attempt.getQuiz().getPassingScore();
 
         attempt.setScore(score);
-        attempt.setAccuracy(questionAttempts.isEmpty() ? 0.0 : (correctCount * 100.0) / questionAttempts.size());
+        attempt.setAccuracy(gradedCount == 0 ? 0.0 : (correctCount * 100.0) / gradedCount);
         attempt.setCorrectCount(correctCount);
         attempt.setWrongCount(wrongCount);
         attempt.setSkippedCount(skippedCount);
+        attempt.setUngradedCount(ungradedCount);
         attempt.setCompletedAt(completedAt);
         attempt.setTimeTaken((int) Duration.between(attempt.getStartedAt(), completedAt).getSeconds());
         attempt.setStatus(AttemptStatus.SUBMITTED);
@@ -278,6 +295,11 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         return quizAttemptRepository.findByStudentIdOrderByStartedAtDesc(studentId).stream()
                 .map(QuizAttemptResponse::from)
                 .toList();
+    }
+
+    /** FREE_TEXT questions are blank when their text is empty; OPTIONS questions when no option was picked. */
+    private boolean isBlankAnswer(QuestionAttempt qa, boolean freeText) {
+        return freeText ? (qa.getAnswerText() == null || qa.getAnswerText().isBlank()) : qa.getSelectedOptions().isEmpty();
     }
 
     private QuizAttempt findAttemptOwnedBy(Long attemptId, Long studentId) {

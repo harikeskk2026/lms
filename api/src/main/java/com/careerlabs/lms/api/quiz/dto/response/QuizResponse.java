@@ -38,12 +38,20 @@ public record QuizResponse(
         int totalQuestions,
         List<QuestionResponse> questions,
         List<QuizAssignmentResponse> assignments,
+        boolean hasSourcePdf,
         Instant createdAt,
         Instant updatedAt
 ) {
 
     public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions, String courseName, String batchName,
                                      QuizEffectiveStatus effectiveStatus, List<QuizAssignmentResponse> assignments) {
+        return from(quiz, questions, courseName, batchName, effectiveStatus, assignments, false);
+    }
+
+    /** {@code hasSourcePdf} is admin-view only — whether this quiz was authored via the PDF-import flow. */
+    public static QuizResponse from(Quiz quiz, List<QuestionResponse> questions, String courseName, String batchName,
+                                     QuizEffectiveStatus effectiveStatus, List<QuizAssignmentResponse> assignments,
+                                     boolean hasSourcePdf) {
         return new QuizResponse(
                 quiz.getId(),
                 quiz.getTitle(),
@@ -71,6 +79,7 @@ public record QuizResponse(
                 questions.size(),
                 questions,
                 assignments,
+                hasSourcePdf,
                 quiz.getCreatedAt(),
                 quiz.getUpdatedAt());
     }

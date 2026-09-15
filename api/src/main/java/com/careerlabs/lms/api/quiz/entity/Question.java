@@ -55,6 +55,36 @@ public class Question {
     @Column(name = "code_snippet", columnDefinition = "TEXT")
     private String codeSnippet;
 
+    /**
+     * How this question is answered/graded. {@code OPTIONS} (default) is the
+     * original MCQ-style mode and covers every question created before this
+     * column existed (backfilled by migration V8). {@code FREE_TEXT} is used
+     * only by SHORT_ANSWER (auto-graded against {@link #correctAnswerText}).
+     * Coding/SQL free-text authoring was dropped — there's no sandboxed
+     * execution to grade them — so SQL stays options-based only, as before.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "answer_mode", nullable = false)
+    private AnswerMode answerMode = AnswerMode.OPTIONS;
+
+    /** SHORT_ANSWER grading key only; normalized-text-compared against the student's answer. */
+    @Column(name = "correct_answer_text", columnDefinition = "TEXT")
+    private String correctAnswerText;
+
+    /**
+     * Unused since Coding/SQL free-text authoring was dropped; kept only so
+     * historical rows created while that feature briefly existed still load.
+     */
+    @Column(name = "reference_answer", columnDefinition = "TEXT")
+    private String referenceAnswer;
+
+    /**
+     * Unused since Coding/SQL free-text authoring was dropped; kept only so
+     * historical rows created while that feature briefly existed still load.
+     */
+    @Column(name = "answer_language")
+    private String answerLanguage;
+
     @Column(nullable = false)
     private Integer points = 1;
 
@@ -144,6 +174,38 @@ public class Question {
 
     public void setCodeSnippet(String codeSnippet) {
         this.codeSnippet = codeSnippet;
+    }
+
+    public AnswerMode getAnswerMode() {
+        return answerMode;
+    }
+
+    public void setAnswerMode(AnswerMode answerMode) {
+        this.answerMode = answerMode;
+    }
+
+    public String getCorrectAnswerText() {
+        return correctAnswerText;
+    }
+
+    public void setCorrectAnswerText(String correctAnswerText) {
+        this.correctAnswerText = correctAnswerText;
+    }
+
+    public String getReferenceAnswer() {
+        return referenceAnswer;
+    }
+
+    public void setReferenceAnswer(String referenceAnswer) {
+        this.referenceAnswer = referenceAnswer;
+    }
+
+    public String getAnswerLanguage() {
+        return answerLanguage;
+    }
+
+    public void setAnswerLanguage(String answerLanguage) {
+        this.answerLanguage = answerLanguage;
     }
 
     public Integer getPoints() {

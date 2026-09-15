@@ -8,5 +8,6 @@ public enum QuestionType {
     DEBUGGING,
     SCENARIO,
     SQL,
-    INTERVIEW
+    INTERVIEW,
+    SHORT_ANSWER
 }

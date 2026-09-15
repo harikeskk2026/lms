@@ -168,6 +168,12 @@
       <artifactId>commons-io</artifactId>
       <version>2.16.1</version>
     </dependency>
+    <!-- PDF text extraction (quiz PDF-import feature) -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.3</version>
+    </dependency>
   </dependencies>
   <build>
     <finalName>lms-api</finalName>

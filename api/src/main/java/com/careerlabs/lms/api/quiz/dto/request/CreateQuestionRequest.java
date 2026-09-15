@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.quiz.dto.request;
 
+import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuestionType;
 import com.careerlabs.lms.api.quiz.validation.QuestionOptionsAware;
@@ -8,7 +9,6 @@ import com.careerlabs.lms.api.quiz.validation.annotation.ValidQuestionOptions;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
@@ -33,13 +33,27 @@ public class CreateQuestionRequest implements QuestionOptionsAware {
 
     private String codeSnippet;
 
+    /** Defaults to OPTIONS so any client not yet aware of this field behaves exactly as before. */
+    private AnswerMode answerMode = AnswerMode.OPTIONS;
+
+    private String correctAnswerText;
+
+    private String referenceAnswer;
+
+    private String answerLanguage;
+
     @NotNull(message = QuestionValidationMessages.POINTS_REQUIRED)
     @Min(value = 1, message = QuestionValidationMessages.POINTS_MIN)
     private Integer points;
 
-    @NotEmpty(message = QuestionValidationMessages.OPTIONS_REQUIRED)
+    /**
+     * Required (validated by {@link com.careerlabs.lms.api.quiz.validation.QuestionOptionsValidator})
+     * only when {@link #answerMode} is {@code OPTIONS} — FREE_TEXT questions (Short
+     * Answer/Coding/SQL) send an empty list here and use {@link #correctAnswerText}/
+     * {@link #referenceAnswer} instead.
+     */
     @Valid
-    private List<QuestionOptionRequest> options;
+    private List<QuestionOptionRequest> options = new java.util.ArrayList<>();
 
     public Long getTopicId() {
         return topicId;
@@ -96,6 +110,39 @@ public class CreateQuestionRequest implements QuestionOptionsAware {
 
     public void setCodeSnippet(String codeSnippet) {
         this.codeSnippet = codeSnippet;
+    }
+
+    @Override
+    public AnswerMode getAnswerMode() {
+        return answerMode == null ? AnswerMode.OPTIONS : answerMode;
+    }
+
+    public void setAnswerMode(AnswerMode answerMode) {
+        this.answerMode = answerMode;
+    }
+
+    public String getCorrectAnswerText() {
+        return correctAnswerText;
+    }
+
+    public void setCorrectAnswerText(String correctAnswerText) {
+        this.correctAnswerText = correctAnswerText;
+    }
+
+    public String getReferenceAnswer() {
+        return referenceAnswer;
+    }
+
+    public void setReferenceAnswer(String referenceAnswer) {
+        this.referenceAnswer = referenceAnswer;
+    }
+
+    public String getAnswerLanguage() {
+        return answerLanguage;
+    }
+
+    public void setAnswerLanguage(String answerLanguage) {
+        this.answerLanguage = answerLanguage;
     }
 
     public Integer getPoints() {

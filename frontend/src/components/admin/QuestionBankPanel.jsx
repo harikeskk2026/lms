@@ -98,9 +98,13 @@ export default function QuestionBankPanel({ onChange }) {
       courseId: question.courseId ?? '',
       questionText: question.questionText,
       questionType: question.questionType,
+      answerMode: question.answerMode || 'OPTIONS',
       difficulty: question.difficulty,
       explanation: question.explanation || '',
       codeSnippet: question.codeSnippet || '',
+      correctAnswerText: question.correctAnswerText || '',
+      referenceAnswer: question.referenceAnswer || '',
+      answerLanguage: question.answerLanguage || '',
       points: question.points,
       options: question.options.map(o => ({ optionText: o.optionText, correct: o.correct })),
     })
@@ -464,14 +468,31 @@ export default function QuestionBankPanel({ onChange }) {
             {previewing.codeSnippet && (
               <pre className="text-xs bg-gray-900 text-gray-100 rounded-xl p-3 overflow-x-auto font-mono">{previewing.codeSnippet}</pre>
             )}
-            <div className="space-y-1.5">
-              {previewing.options.map(o => (
-                <div key={o.id} className={`text-sm rounded-xl px-3 py-2 border flex items-center justify-between ${o.correct ? 'border-green-300 bg-green-50 text-green-700 font-semibold' : 'border-gray-200 text-gray-600'}`}>
-                  <span>{o.optionText}</span>
-                  {o.correct && <span className="text-xs text-green-600">✓ Correct</span>}
-                </div>
-              ))}
-            </div>
+            {previewing.answerMode === 'FREE_TEXT' ? (
+              <div className="space-y-2">
+                {previewing.correctAnswerText && (
+                  <div className="text-sm rounded-xl px-3 py-2 border border-green-300 bg-green-50 text-green-700">
+                    <span className="text-xs font-semibold block mb-0.5">Correct Answer</span>
+                    {previewing.correctAnswerText}
+                  </div>
+                )}
+                {previewing.referenceAnswer && (
+                  <div className="text-xs rounded-xl px-3 py-2 border border-gray-200 bg-gray-50 text-gray-600">
+                    <span className="font-semibold block mb-0.5">Reference Answer (not auto-graded)</span>
+                    <pre className="whitespace-pre-wrap font-mono">{previewing.referenceAnswer}</pre>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {previewing.options.map(o => (
+                  <div key={o.id} className={`text-sm rounded-xl px-3 py-2 border flex items-center justify-between ${o.correct ? 'border-green-300 bg-green-50 text-green-700 font-semibold' : 'border-gray-200 text-gray-600'}`}>
+                    <span>{o.optionText}</span>
+                    {o.correct && <span className="text-xs text-green-600">✓ Correct</span>}
+                  </div>
+                ))}
+              </div>
+            )}
             {previewing.explanation && (
               <div className="text-xs text-gray-500 bg-gray-50 rounded-xl p-3">{previewing.explanation}</div>
             )}

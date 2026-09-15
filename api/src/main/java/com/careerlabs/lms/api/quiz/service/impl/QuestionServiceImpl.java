@@ -8,6 +8,7 @@ import com.careerlabs.lms.api.quiz.dto.request.QuestionOptionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuestionAnalyticsResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuestionResponse;
+import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
 import com.careerlabs.lms.api.quiz.entity.Question;
 import com.careerlabs.lms.api.quiz.entity.QuestionAttempt;
@@ -66,7 +67,8 @@ public class QuestionServiceImpl implements QuestionService {
         question.setCreatedBy(createdBy);
         applyRequest(question, request.getTopicId(), request.getCourseId(), request.getQuestionText(), request.getQuestionType(),
                 request.getDifficulty(), request.getExplanation(), request.getCodeSnippet(), request.getPoints(),
-                request.getOptions());
+                request.getOptions(), request.getAnswerMode(), request.getCorrectAnswerText(),
+                request.getReferenceAnswer(), request.getAnswerLanguage());
 
         return QuestionResponse.from(questionRepository.save(question));
     }
@@ -77,7 +79,8 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = findOrThrow(id);
         applyRequest(question, request.getTopicId(), request.getCourseId(), request.getQuestionText(), request.getQuestionType(),
                 request.getDifficulty(), request.getExplanation(), request.getCodeSnippet(), request.getPoints(),
-                request.getOptions());
+                request.getOptions(), request.getAnswerMode(), request.getCorrectAnswerText(),
+                request.getReferenceAnswer(), request.getAnswerLanguage());
         question.setActive(request.isActive());
 
         return QuestionResponse.from(questionRepository.save(question));
@@ -111,6 +114,10 @@ public class QuestionServiceImpl implements QuestionService {
         copy.setDifficulty(source.getDifficulty());
         copy.setExplanation(source.getExplanation());
         copy.setCodeSnippet(source.getCodeSnippet());
+        copy.setAnswerMode(source.getAnswerMode());
+        copy.setCorrectAnswerText(source.getCorrectAnswerText());
+        copy.setReferenceAnswer(source.getReferenceAnswer());
+        copy.setAnswerLanguage(source.getAnswerLanguage());
         copy.setPoints(source.getPoints());
         copy.setActive(true);
         copy.setCreatedBy(source.getCreatedBy());
@@ -160,7 +167,8 @@ public class QuestionServiceImpl implements QuestionService {
 
     private void applyRequest(Question question, Long topicId, Long courseId, String questionText, QuestionType questionType,
                                QuizDifficulty difficulty, String explanation, String codeSnippet, Integer points,
-                               List<QuestionOptionRequest> optionRequests) {
+                               List<QuestionOptionRequest> optionRequests, AnswerMode answerMode, String correctAnswerText,
+                               String referenceAnswer, String answerLanguage) {
         question.setTopic(resolveTopic(topicId));
         question.setCourse(resolveCourse(courseId));
         question.setQuestionText(questionText);
@@ -169,16 +177,22 @@ public class QuestionServiceImpl implements QuestionService {
         question.setExplanation(explanation);
         question.setCodeSnippet(codeSnippet);
         question.setPoints(points);
+        question.setAnswerMode(answerMode == null ? AnswerMode.OPTIONS : answerMode);
+        question.setCorrectAnswerText(correctAnswerText);
+        question.setReferenceAnswer(referenceAnswer);
+        question.setAnswerLanguage(answerLanguage);
 
         question.getOptions().clear();
-        int index = 0;
-        for (QuestionOptionRequest optionRequest : optionRequests) {
-            QuestionOption option = new QuestionOption();
-            option.setQuestion(question);
-            option.setOptionText(optionRequest.getOptionText());
-            option.setCorrect(optionRequest.isCorrect());
-            option.setOrderIndex(index++);
-            question.getOptions().add(option);
+        if (optionRequests != null) {
+            int index = 0;
+            for (QuestionOptionRequest optionRequest : optionRequests) {
+                QuestionOption option = new QuestionOption();
+                option.setQuestion(question);
+                option.setOptionText(optionRequest.getOptionText());
+                option.setCorrect(optionRequest.isCorrect());
+                option.setOrderIndex(index++);
+                question.getOptions().add(option);
+            }
         }
     }
 

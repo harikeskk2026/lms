@@ -21,6 +21,11 @@ const quizService = {
     apiCall({ method: 'DELETE', url: `/admin/quizzes/${quizId}/assignments/${assignmentId}` }),
   releaseResults: (quizId) => apiCall({ method: 'POST', url: `/admin/quizzes/${quizId}/release-results` }),
 
+  // Admin - quiz attempts & review
+  getQuizAttempts: (quizId) => apiCall({ method: 'GET', url: `/admin/quizzes/${quizId}/attempts` }),
+  getAdminAttemptReview: (quizId, attemptId) =>
+    apiCall({ method: 'GET', url: `/admin/quizzes/${quizId}/attempts/${attemptId}` }),
+
   // Admin - question bank
   listQuestions: (filters = {}) => apiCall({ method: 'GET', url: '/admin/questions', params: filters }),
   getQuestion: (id) => apiCall({ method: 'GET', url: `/admin/questions/${id}` }),
@@ -36,6 +41,28 @@ const quizService = {
   // Admin - analytics
   getAdminQuizAnalytics: (id) => apiCall({ method: 'GET', url: `/admin/quizzes/${id}/analytics` }),
   getAdminQuestionAnalytics: (id) => apiCall({ method: 'GET', url: `/admin/questions/${id}/analytics` }),
+
+  // Admin - create quiz from PDF
+  extractQuestionsFromPdf: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiCall({
+      method: 'POST',
+      url: '/admin/quizzes/pdf-import/preview',
+      data: formData,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  uploadSourcePdf: (quizId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiCall({
+      method: 'POST',
+      url: `/admin/quizzes/${quizId}/source-pdf`,
+      data: formData,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 
   // Student - quizzes + attempts
   listStudentQuizzes: () => apiCall({ method: 'GET', url: '/student/quizzes' }),

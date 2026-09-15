@@ -7,8 +7,11 @@ import com.careerlabs.lms.api.quiz.dto.request.CreateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.request.ReorderQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAnalyticsResponse;
+import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAttemptResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizAssignmentResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuizResultResponse;
+import com.careerlabs.lms.api.quiz.service.QuizAttemptAdminService;
 import com.careerlabs.lms.api.quiz.service.QuizService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
@@ -35,9 +38,11 @@ import java.util.List;
 public class QuizController {
 
     private final QuizService quizService;
+    private final QuizAttemptAdminService quizAttemptAdminService;
 
-    public QuizController(QuizService quizService) {
+    public QuizController(QuizService quizService, QuizAttemptAdminService quizAttemptAdminService) {
         this.quizService = quizService;
+        this.quizAttemptAdminService = quizAttemptAdminService;
     }
 
     @GetMapping
@@ -119,5 +124,16 @@ public class QuizController {
     public ResponseEntity<ApiResponse<QuizResponse>> releaseResults(@PathVariable Long id) {
         QuizResponse response = quizService.releaseResults(id);
         return ResponseEntity.ok(ApiResponse.of("Results released", response));
+    }
+
+    @GetMapping("/{id}/attempts")
+    public ResponseEntity<ApiResponse<List<AdminQuizAttemptResponse>>> listAttempts(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.of(quizAttemptAdminService.listAttempts(id)));
+    }
+
+    @GetMapping("/{id}/attempts/{attemptId}")
+    public ResponseEntity<ApiResponse<QuizResultResponse>> getAttemptReview(@PathVariable Long id,
+                                                                              @PathVariable Long attemptId) {
+        return ResponseEntity.ok(ApiResponse.of(quizAttemptAdminService.getAttemptReview(id, attemptId)));
     }
 }

@@ -73,6 +73,13 @@ public class QuestionAttempt {
     @Enumerated(EnumType.STRING)
     private QuizDifficulty difficulty;
 
+    /**
+     * Student's free-text/code/SQL submission for a FREE_TEXT-mode question;
+     * null for OPTIONS-mode questions, which use {@link #selectedOptions} instead.
+     */
+    @Column(name = "answer_text", columnDefinition = "TEXT")
+    private String answerText;
+
     public Long getId() {
         return id;
     }
@@ -155,5 +162,13 @@ public class QuestionAttempt {
 
     public void setDifficulty(QuizDifficulty difficulty) {
         this.difficulty = difficulty;
+    }
+
+    public String getAnswerText() {
+        return answerText;
+    }
+
+    public void setAnswerText(String answerText) {
+        this.answerText = answerText;
     }
 }
