@@ -47,7 +47,6 @@ export const adminApi = {
 
   // Batches
   getBatches: (params) => api.get('/batches', { params }),
-  getCourses: () => api.get('/courses'),
   createBatch: (data) => api.post('/batches', data),
   getBatchDetail: (id) => api.get(`/batches/${id}`),
   updateBatch: (id, data) => api.put(`/batches/${id}`, data),

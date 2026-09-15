@@ -19,7 +19,7 @@ const courseService = {
 
   getEnrollments: (courseId, params) => apiCall({ method: 'GET', url: `/courses/${courseId}/enrollments`, params }),
 
-  enrollStudent: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enrollments`, data }),
+  enrollStudent: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enroll`, data }),
 
   bulkEnrollStudents: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enrollments/bulk`, data }),
 

@@ -151,7 +151,7 @@ export default function CourseManagePage({ params }) {
       setEditingCourse(false)
       loadCourse()
     } catch (err) {
-      toast.error(err?.response?.data?.message || err.message || 'Failed to save course', { id: 'save-course' })
+      toast.error(err.message || 'Failed to save course', { id: 'save-course' })
     } finally {
       setSavingCourse(false)
     }
@@ -978,12 +978,7 @@ function SyllabusTab({ courseId }) {
   }
 
   async function deleteModule(id) {
-    if (!confirm('Delete module and all its topics?')) return
-    try {
-      await courseContentService.deleteModule(id)
-      toast.success('Module deleted')
-      load()
-    } catch { toast.error('Failed to delete module') }
+    setDeleteModal({ open: true, type: 'module', id, name: '' })
   }
 
   async function moveModule(idx, direction) {
@@ -1084,12 +1079,7 @@ function SyllabusTab({ courseId }) {
   }
 
   async function deleteTopic(id) {
-    if (!confirm('Delete topic?')) return
-    try {
-      await courseContentService.deleteTopic(id)
-      toast.success('Topic deleted')
-      load()
-    } catch { toast.error('Failed to delete topic') }
+    setDeleteModal({ open: true, type: 'topic', id, name: '' })
   }
 
   async function moveTopic(moduleId, currentTopics, idx, direction) {
@@ -1631,6 +1621,7 @@ function MaterialsTab({ courseId }) {
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [previewMaterial, setPreviewMaterial] = useState(null)
+  const [materialDeleteModal, setMaterialDeleteModal] = useState({ open: false, id: null })
 
   useEffect(() => {
     courseContentService.getModules(courseId).then(r => setModules(r.data || [])).catch(() => { })
@@ -1719,8 +1710,16 @@ function MaterialsTab({ courseId }) {
       toast.error('Only administrators can delete materials')
       return
     }
-    if (!confirm('Delete this material?')) return
-    try { await courseContentService.deleteMaterial(id); load() } catch (err) { toast.error(err.message || 'Failed to delete') }
+    setMaterialDeleteModal({ open: true, id })
+  }
+
+  async function handleConfirmMaterialDelete() {
+    if (!materialDeleteModal.id) return
+    try {
+      await courseContentService.deleteMaterial(materialDeleteModal.id)
+      setMaterialDeleteModal({ open: false, id: null })
+      load()
+    } catch { toast.error('Failed to delete material') }
   }
 
   async function moveMaterial(index, direction) {
@@ -1855,6 +1854,14 @@ function MaterialsTab({ courseId }) {
           onClose={() => setPreviewMaterial(null)}
         />
       )}
+
+      <DeleteConfirmModal
+        isOpen={materialDeleteModal.open}
+        onClose={() => setMaterialDeleteModal({ open: false, id: null })}
+        onConfirm={handleConfirmMaterialDelete}
+        title="Delete Material?"
+        message="Are you sure you want to delete this material? This action cannot be undone."
+      />
     </div>
   )
 }

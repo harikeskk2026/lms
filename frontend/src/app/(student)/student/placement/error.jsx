@@ -15,9 +15,7 @@ export default function PlacementError({ error, reset }) {
           Something went wrong on this page.
         </p>
         <p className="text-xs text-gray-400">
-          {error && typeof error.message === 'string'
-            ? error.message
-            : 'An unexpected error occurred. Please try again.'}
+          An unexpected error occurred while loading this page. Please try again.
         </p>
         <button
           onClick={reset}

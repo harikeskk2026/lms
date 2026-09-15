@@ -65,6 +65,6 @@ public record BatchResponse(
     public record CourseSummary(Long id, String title) {
     }
 
-    public record TrainerSummary(Long id, String name, String email) {
+    public record TrainerSummary(Long id, String name, String email, boolean active) {
     }
 }

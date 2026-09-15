@@ -43,7 +43,7 @@ function DocxViewer({ url, name }) {
     ;(async () => {
       try {
         const res = await fetch(url)
-        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch file`)
+        if (!res.ok) throw new Error('Failed to fetch file')
         const blob = await res.blob()
         if (cancelled) return
 

@@ -84,7 +84,7 @@ public class AdminPlacementController {
     public ResponseEntity<ApiResponse<Void>> updateStatus(@PathVariable Long studentId, @RequestBody Map<String, String> body) {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
-        String statusStr = body.get("status");
+        String statusStr = body.getOrDefault("status", body.get("placementStatus"));
         if (statusStr != null) {
             student.setPlacementStatus(PlacementStatus.valueOf(statusStr.toUpperCase()));
             studentRepository.save(student);

@@ -108,7 +108,7 @@ public class BatchServiceImpl implements BatchService {
                 .map(b -> {
                     User tr = b.getTrainerId() != null ? trainersById.get(b.getTrainerId()) : null;
                     BatchResponse.TrainerSummary trainerSummary = tr != null
-                            ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail())
+                            ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail(), tr.isActive())
                             : null;
                     return BatchResponse.from(b, countsByBatchId.getOrDefault(b.getId(), 0L).intValue(), trainerSummary);
                 })
@@ -145,7 +145,7 @@ public class BatchServiceImpl implements BatchService {
         }
         User tr = batch.getTrainerId() != null ? userRepository.findById(batch.getTrainerId()).orElse(null) : null;
         BatchResponse.TrainerSummary trainerSummary = tr != null
-                ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail())
+                ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail(), tr.isActive())
                 : null;
         return BatchResponse.from(batch, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id), trainerSummary);
     }

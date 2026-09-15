@@ -43,6 +43,18 @@ export default function LoginPage() {
     formState: { errors, isSubmitting }
   } = useForm({ resolver: zodResolver(loginSchema), mode: 'onSubmit', reValidateMode: 'onSubmit', shouldFocusError: false })
 
+  // Clean any sensitive query params if native submit happened previously
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      const params = new URLSearchParams(window.location.search)
+      const emailParam = params.get('email')
+      const passwordParam = params.get('password')
+      if (emailParam) setValue('email', emailParam, { shouldValidate: true, shouldDirty: true })
+      if (passwordParam) setValue('password', passwordParam, { shouldValidate: true, shouldDirty: true })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [setValue])
+
   async function onSubmit(data) {
     try {
       await login(data.email, data.password)
@@ -52,9 +64,14 @@ export default function LoginPage() {
     }
   }
 
+  function onInvalid(formErrors) {
+    const firstError = Object.values(formErrors)[0]?.message || 'Please check your email and password'
+    toast.error(firstError)
+  }
+
   function fillDemo(email, password) {
-    setValue('email', email)
-    setValue('password', password)
+    setValue('email', email, { shouldValidate: true, shouldDirty: true, shouldTouch: true })
+    setValue('password', password, { shouldValidate: true, shouldDirty: true, shouldTouch: true })
   }
 
   return (
@@ -136,7 +153,16 @@ export default function LoginPage() {
               <p className="text-slate-500 text-sm mt-1">Sign in to your CareerLabs account</p>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+            <form
+              action="javascript:void(0);"
+              method="post"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSubmit(onSubmit, onInvalid)(e);
+              }}
+              className="flex flex-col gap-5"
+              noValidate
+            >
               {/* Email */}
               <div className="form-group">
                 <label className="form-label" htmlFor="email">Email address</label>

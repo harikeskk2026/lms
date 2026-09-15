@@ -50,8 +50,6 @@ export default class ErrorBoundary extends Component {
     }
 
     const label = typeof this.props.label === 'string' ? this.props.label : 'this section'
-    const detail =
-      error && typeof error.message === 'string' && error.message ? error.message : null
 
     return (
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center space-y-3">
@@ -59,7 +57,9 @@ export default class ErrorBoundary extends Component {
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
           Something went wrong while loading {label}.
         </p>
-        {detail && <p className="text-xs text-gray-400 max-w-md mx-auto">{detail}</p>}
+        <p className="text-xs text-gray-400 max-w-md mx-auto">
+          An unexpected error occurred. Please try again.
+        </p>
         <p className="text-xs text-gray-400">
           Your other data is still available. Use the tabs above or retry below.
         </p>

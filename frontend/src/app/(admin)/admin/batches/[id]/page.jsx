@@ -5,6 +5,7 @@ import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search, Pa
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
+import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi, resolveFileUrl } from '@/lib/api'
 import studentService from '@/services/studentService'
@@ -29,6 +30,7 @@ export default function BatchDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const { user } = useAuth()
+  const [ask, confirmModal] = useConfirmModal()
   const [batch, setBatch] = useState(null)
   const [classes, setClasses] = useState([])
   const [roster, setRoster] = useState([])
@@ -63,6 +65,7 @@ export default function BatchDetailPage() {
   const [editForm, setEditForm] = useState({ name: '', courseId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
   const [hasSearched, setHasSearched] = useState(false)
   const [studentRosterQuery, setStudentRosterQuery] = useState('')
+  const [rejectModal, setRejectModal] = useState({ open: false, student: null, reason: '' })
 
   const filteredRoster = roster.filter(s => {
     if (!studentRosterQuery.trim()) return true
@@ -96,7 +99,7 @@ export default function BatchDetailPage() {
       setPanelGradeInputs(grades)
       setPanelFeedbackInputs(feedbacks)
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to load submissions')
+      toast.error(err.message || 'Failed to load submissions')
       setSubmissionsList([])
     } finally {
       setSubmissionsLoading(false)
@@ -142,7 +145,7 @@ export default function BatchDetailPage() {
       setPanelFeedbackInputs(feedbacks)
       load()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to allocate marks')
+      toast.error(err.message || 'Failed to allocate marks')
     } finally {
       setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: false }))
     }
@@ -166,7 +169,7 @@ export default function BatchDetailPage() {
       setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: false }))
       load()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to update feedback')
+      toast.error(err.message || 'Failed to update feedback')
     } finally {
       setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: false }))
     }
@@ -203,13 +206,17 @@ export default function BatchDetailPage() {
 
   const handlePanelReject = async (s) => {
     if (!selectedAssignment || !s.submissionId) return
-    const reason = window.prompt(`Enter rejection reason for ${s.studentName} (optional):`)
-    if (reason === null) return
+    setRejectModal({ open: true, student: s, reason: '' })
+  }
+
+  const submitReject = async () => {
+    const s = rejectModal.student
+    if (!s) return
     setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: true }))
     try {
       await submissionService.approveOrReject(selectedAssignment.id, s.submissionId, {
         action: 'REJECT',
-        reason: reason.trim() || undefined,
+        reason: rejectModal.reason.trim() || undefined,
       })
       toast.success(`Submission rejected for ${s.studentName}`)
       const res = await submissionService.list(selectedAssignment.id)
@@ -227,6 +234,7 @@ export default function BatchDetailPage() {
       })
       setPanelGradeInputs(grades)
       setPanelFeedbackInputs(feedbacks)
+      setRejectModal({ open: false, student: null, reason: '' })
       load()
     } catch (err) {
       toast.error(err.message || 'Failed to reject submission')
@@ -244,7 +252,7 @@ export default function BatchDetailPage() {
     try {
       await adminApi.updateBatch(id, {
         name: batch.name,
-        courseId: batch.course?.id,
+        courseId: batch.course?.id ?? batch.courseId,
         trainerId: newTrainerId ? Number(newTrainerId) : null,
         startDate: batch.startDate,
         endDate: batch.endDate,
@@ -428,7 +436,14 @@ export default function BatchDetailPage() {
 
 
   const handleRemoveStudent = async (studentUserId) => {
-    if (!confirm('Remove this student from the batch?')) return
+    const ok = await ask({
+      title: 'Remove Student from Batch?',
+      message: 'Are you sure you want to remove this student from the batch? Their course enrollment and materials access will remain unaffected.',
+      confirmLabel: 'Remove Student',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await adminApi.removeFromBatch(id, studentUserId)
       toast.success('Student removed')
@@ -1298,6 +1313,44 @@ export default function BatchDetailPage() {
           onClose={() => setViewingFile(null)}
         />
       )}
+
+      {/* Reject Submission Modal */}
+      {rejectModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="glass-card bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h3 className="font-display text-lg font-bold text-gray-900 dark:text-white">Reject Submission</h3>
+            <p className="text-sm text-gray-500">
+              Provide an optional rejection reason for {rejectModal.student?.studentName || 'this student'}:
+            </p>
+            <textarea
+              rows={3}
+              value={rejectModal.reason}
+              onChange={(e) => setRejectModal(m => ({ ...m, reason: e.target.value }))}
+              placeholder="Reason for rejection (optional)..."
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none text-gray-800 dark:text-gray-200"
+            />
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectModal({ open: false, student: null, reason: '' })}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={panelActionLoading[rejectModal.student?.submissionId]}
+                onClick={submitReject}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-md shadow-red-500/20 disabled:opacity-60"
+              >
+                {panelActionLoading[rejectModal.student?.submissionId] ? 'Rejecting...' : 'Reject Submission'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal}
     </div>
   )
 }

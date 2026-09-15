@@ -8,6 +8,7 @@ import batchService from '@/services/batchService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 
 const STATUS_STYLES = {
@@ -27,6 +28,7 @@ const EMPTY_FORM = {
 }
 
 export default function RecordedSessionsPage() {
+  const [ask, confirmModal] = useConfirmModal()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState([])
@@ -212,7 +214,14 @@ export default function RecordedSessionsPage() {
   }
 
   const handleRevokeAllForStudent = async (studentId) => {
-    if (!confirm('Revoke every active playback session for this student, across all recorded sessions?')) return
+    const ok = await ask({
+      title: 'Revoke All Playback Sessions?',
+      message: 'Revoke every active playback session for this student, across all recorded sessions?',
+      confirmLabel: 'Revoke All',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await recordedSessionService.revokeAllSessionsForStudent(studentId)
       toast.success('All active sessions revoked for this student')
@@ -221,7 +230,14 @@ export default function RecordedSessionsPage() {
   }
 
   const handleBlockStudent = async (studentId) => {
-    if (!confirm('Block this student from this recording? Their course enrollment is unaffected.')) return
+    const ok = await ask({
+      title: 'Block Student from Recording?',
+      message: 'Block this student from this recording? Their course enrollment is unaffected.',
+      confirmLabel: 'Block Student',
+      cancelLabel: 'Cancel',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await recordedSessionService.blockStudent(securityTarget.id, studentId)
       toast.success('Student blocked from this recording')
@@ -554,6 +570,8 @@ export default function RecordedSessionsPage() {
         itemName={deletingSession?.title}
         loading={isDeleting}
       />
+
+      {confirmModal}
     </div>
   )
 }

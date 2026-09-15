@@ -526,7 +526,7 @@ export default function PlacementPage() {
         const [q, a] = line.split('|').map(s => s.trim())
         return { questionText: q || '', answerText: a || '' }
       }).filter(q => q.questionText)
-      await adminApi.setPrepQuestions(id, { questions })
+      await adminApi.setPrepQuestions(id, questions)
       toast.success('Questions saved')
       handleOpenPrep(id)
     } catch (err) {

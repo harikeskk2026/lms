@@ -171,8 +171,7 @@ export default function BatchesPage() {
       setPanelOpen(false)
       load()
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || (editingBatch ? 'Failed to update batch' : 'Failed to create batch')
-      toast.error(msg)
+      toast.error(err.message || (editingBatch ? 'Failed to update batch' : 'Failed to create batch'))
     } finally {
       setSaving(false)
     }
