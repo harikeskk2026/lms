@@ -142,7 +142,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         }
 
         MeetingLink saved = meetingLinkRepository.save(m);
-        return MeetingLinkResponse.from(saved);
+        return toResponse(saved, principal);
     }
 
     @Override
@@ -213,7 +213,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         }
 
         MeetingLink saved = meetingLinkRepository.save(m);
-        return MeetingLinkResponse.from(saved);
+        return toResponse(saved, principal);
     }
 
     @Override
@@ -232,7 +232,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
             dailyClassRepository.save(m.getDailyClass());
         }
         MeetingLink saved = meetingLinkRepository.save(m);
-        return MeetingLinkResponse.from(saved);
+        return toResponse(saved, principal);
     }
 
     @Override
@@ -263,7 +263,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
                 .orElseThrow(() -> new ResourceNotFoundException("Meeting link not found with id: " + id));
         batchAuthGuard.requireEntityBatchOwnership(principal,
                 m.getBatch() != null ? m.getBatch().getId() : null);
-        return MeetingLinkResponse.from(m);
+        return toResponse(m, principal);
     }
 
     @Override
@@ -286,10 +286,10 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
                 } else {
                     list = meetingLinkRepository.findByBatchIdOrderByScheduledStartDesc(batchId);
                 }
-                return list.stream().map(MeetingLinkResponse::from).toList();
+                return list.stream().map(m -> toResponse(m, principal)).toList();
             }
             List<MeetingLink> list = meetingLinkRepository.findByBatchIdInOrderByScheduledStartDesc(trainerBatchIds);
-            return list.stream().map(MeetingLinkResponse::from).toList();
+            return list.stream().map(m -> toResponse(m, principal)).toList();
         }
 
         List<MeetingLink> list;
@@ -302,7 +302,14 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         } else {
             list = meetingLinkRepository.findAllByOrderByScheduledStartDesc();
         }
-        return list.stream().map(MeetingLinkResponse::from).toList();
+        return list.stream().map(m -> toResponse(m, principal)).toList();
+    }
+
+    private MeetingLinkResponse toResponse(MeetingLink m, JwtUserPrincipal principal) {
+        boolean canView = batchAuthGuard.canViewPasscode(principal,
+                m.getBatch() != null ? m.getBatch().getId() : null,
+                m.getCreatedBy());
+        return MeetingLinkResponse.from(m, canView);
     }
 
     @Override

@@ -2,6 +2,8 @@ package com.careerlabs.lms.api.common.storage;
 
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,8 @@ import java.util.UUID;
  */
 @Service
 public class FileStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(FileStorageService.class);
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
             "pdf", "docx", "doc", "xls", "xlsx", "csv", "txt", "ppt", "pptx",
@@ -73,8 +77,9 @@ public class FileStorageService {
                 Files.createDirectories(targetDir);
                 Path target = targetDir.resolve(storedName).normalize();
                 Files.write(target, data);
-            } catch (Exception ignored) {
-                // Non-fatal if disk write fails because DB has the complete file
+            } catch (Exception e) {
+                // Non-fatal if disk write fails because DB has the complete file, but log warning
+                log.warn("Secondary disk caching failed for file {} in subDir {}: {}", storedName, subDir, e.getMessage());
             }
 
             return new StoredFile(url, originalName);

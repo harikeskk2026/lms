@@ -55,7 +55,10 @@ import java.util.stream.Collectors;
 @Service
 public class AssignmentServiceImpl implements AssignmentService {
 
-    private static final Set<String> ALLOWED_ASSIGNMENT_EXTENSIONS = Set.of("pdf", "docx", "doc");
+    private static final Set<String> ALLOWED_ASSIGNMENT_EXTENSIONS = Set.of(
+            "pdf", "docx", "doc", "xls", "xlsx", "csv", "txt", "ppt", "pptx",
+            "png", "jpg", "jpeg", "webp", "gif", "svg", "zip"
+    );
 
     private final AssignmentRepository assignmentRepository;
     private final CourseRepository courseRepository;

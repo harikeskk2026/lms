@@ -28,6 +28,10 @@ public record MeetingLinkResponse(
         Instant updatedAt
 ) {
     public static MeetingLinkResponse from(MeetingLink m) {
+        return from(m, true);
+    }
+
+    public static MeetingLinkResponse from(MeetingLink m, boolean includePasscode) {
         return new MeetingLinkResponse(
                 m.getId(),
                 m.getTitle(),
@@ -43,7 +47,7 @@ public record MeetingLinkResponse(
                 m.getScheduledStart(),
                 m.getScheduledEnd(),
                 m.getStatus(),
-                m.getPasscode(),
+                includePasscode ? m.getPasscode() : null,
                 m.getCreatedBy(),
                 m.getCreatedAt(),
                 m.getUpdatedAt()

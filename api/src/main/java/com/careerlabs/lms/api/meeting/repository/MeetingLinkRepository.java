@@ -17,6 +17,8 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
 
     List<MeetingLink> findByBatchIdOrderByScheduledStartDesc(Long batchId);
 
+    List<MeetingLink> findByCourseIdOrderByScheduledStartDesc(Long courseId);
+
     List<MeetingLink> findByStatusOrderByScheduledStartAsc(MeetingStatus status);
 
     List<MeetingLink> findByBatchIdAndStatusOrderByScheduledStartAsc(Long batchId, MeetingStatus status);
@@ -107,6 +109,18 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
     List<MeetingLink> findByScheduledStartBetweenOrderByScheduledStartAsc(
             LocalDateTime from, LocalDateTime to);
 
+    /** Meetings that *overlap* a given day window — catches multi-day / ongoing classes
+     *  whose scheduledStart is before targetDay and scheduledEnd is on or after targetDay. */
+    List<MeetingLink> findByScheduledStartLessThanEqualAndScheduledEndGreaterThanEqualOrderByScheduledStartAsc(
+            LocalDateTime endOfDay, LocalDateTime startOfDay);
+
+    /** Active meetings on a date window — catches both single-day meetings and multi-day / ongoing meetings. */
+    @Query("SELECT m FROM MeetingLink m WHERE " +
+            "(m.scheduledStart >= :startOfDay AND m.scheduledStart <= :endOfDay) OR " +
+            "(m.scheduledStart <= :endOfDay AND m.scheduledEnd IS NOT NULL AND m.scheduledEnd >= :startOfDay) " +
+            "ORDER BY m.scheduledStart ASC")
+    List<MeetingLink> findActiveMeetingsForDate(@Param("startOfDay") LocalDateTime startOfDay, @Param("endOfDay") LocalDateTime endOfDay);
+
     /** Scheduled classes that belong to a batch but don't yet have a DailyClass linked. */
     List<MeetingLink> findByDailyClassIsNullAndBatchIsNotNull();
 
@@ -120,7 +134,8 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
             "((m.batch.id = :batchId) OR " +
             "(m.batch IS NULL AND m.course.id = :courseId) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +
-            "AND m.scheduledStart >= :dayStart AND m.scheduledStart < :dayEnd " +
+            "AND ((m.scheduledStart >= :dayStart AND m.scheduledStart < :dayEnd) OR " +
+            "     (m.scheduledStart < :dayEnd AND m.scheduledEnd IS NOT NULL AND m.scheduledEnd >= :dayStart)) " +
             "ORDER BY m.scheduledStart ASC")
     List<MeetingLink> findVisibleToStudentOnDate(@Param("batchId") Long batchId, @Param("courseId") Long courseId,
                                                   @Param("dayStart") LocalDateTime dayStart, @Param("dayEnd") LocalDateTime dayEnd);

@@ -1,6 +1,8 @@
 package com.careerlabs.lms.api.common.storage;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,8 @@ import java.util.Optional;
  */
 @RestController
 public class FileServingController {
+
+    private static final Logger log = LoggerFactory.getLogger(FileServingController.class);
 
     private final StoredFileRepository storedFileRepository;
     private final Path root;
@@ -70,7 +74,8 @@ public class FileServingController {
                                 (long) data.length,
                                 data
                         ));
-                    } catch (Exception ignored) {
+                    } catch (Exception e) {
+                        log.warn("Failed to auto-cache disk file to DB for path {}: {}", path, e.getMessage());
                     }
 
                     return ResponseEntity.ok()
@@ -80,7 +85,8 @@ public class FileServingController {
                             .body(data);
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Failed reading file from disk fallback for path {}: {}", path, e.getMessage());
         }
 
         // 3. Resilient self-healing fallback: If not found, match by file extension to avoid breaking previews
@@ -104,7 +110,8 @@ public class FileServingController {
                                 sample.getData()
                         );
                         storedFileRepository.save(selfHealed);
-                    } catch (Exception ignored) {
+                    } catch (Exception e) {
+                        log.warn("Failed to save self-healed file entry for path {}: {}", path, e.getMessage());
                     }
 
                     MediaType mediaType;
@@ -121,7 +128,8 @@ public class FileServingController {
                             .body(sample.getData());
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Failed self-healing fallback for path {}: {}", path, e.getMessage());
         }
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).build();

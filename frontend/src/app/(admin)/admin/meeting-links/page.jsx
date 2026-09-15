@@ -2,10 +2,12 @@
 import { useState, useEffect } from 'react'
 import {
   Video, Plus, Copy, ExternalLink, Calendar, Clock, Users,
-  CheckCircle, PlayCircle, XCircle, Edit3, Trash2, Search, Filter, Shield, RefreshCw, AlertCircle
+  CheckCircle, PlayCircle, XCircle, Edit3, Trash2, Search, Filter, Shield, RefreshCw, AlertCircle,
+  Eye, EyeOff, Lock
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
@@ -107,6 +109,7 @@ const emptyForm = {
 }
 
 export default function AdminMeetingLinksPage() {
+  const { user } = useAuth()
   const [meetings, setMeetings] = useState([])
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
@@ -128,6 +131,23 @@ export default function AdminMeetingLinksPage() {
   const [attendeesMeeting, setAttendeesMeeting] = useState(null)
   const [attendees, setAttendees] = useState([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
+  const [revealedPasscodes, setRevealedPasscodes] = useState({})
+
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN' || user?.role === 'SUPER_ADMIN'
+  const isTrainer = user?.role === 'TRAINER'
+
+  const canViewMeetingPasscode = (m) => {
+    if (isAdmin) return true
+    if (!isTrainer) return false
+    if (m.createdBy && user?.id && String(m.createdBy) === String(user.id)) return true
+    if (m.batchId) {
+      const b = batches.find(batch => String(batch.id) === String(m.batchId))
+      if (b && (String(b.trainerId) === String(user?.id) || String(b.trainer?.id) === String(user?.id))) {
+        return true
+      }
+    }
+    return false
+  }
 
   const extractList = (r) => {
     if (Array.isArray(r)) return r
@@ -596,8 +616,28 @@ export default function AdminMeetingLinksPage() {
                     </div>
                   )}
                   {m.passcode && (
-                    <div className="text-[11px] font-mono text-amber-600 dark:text-amber-400">
-                      Passcode: {m.passcode}
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-200/50 dark:border-amber-900/40 w-fit">
+                      <Lock size={11} className="text-amber-500 shrink-0" />
+                      <span>Passcode:</span>
+                      {canViewMeetingPasscode(m) ? (
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold">
+                            {revealedPasscodes[m.id] ? m.passcode : '••••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRevealedPasscodes(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                            className="p-0.5 hover:text-amber-800 dark:hover:text-amber-200 text-amber-600 transition-colors ml-0.5"
+                            title={revealedPasscodes[m.id] ? "Hide Passcode" : "Show Passcode"}
+                          >
+                            {revealedPasscodes[m.id] ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500 italic text-[10px]">
+                          •••••• (Restricted)
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
