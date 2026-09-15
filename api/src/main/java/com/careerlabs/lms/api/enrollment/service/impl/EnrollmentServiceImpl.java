@@ -84,15 +84,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             if (existing.isActive()) {
                 throw new ConflictException("Already enrolled in this course");
             }
-            // Reject reactivation if the previous batch is inactive
-            if (existing.getBatch() != null && !existing.getBatch().isActive()) {
-                throw new BadRequestException("Cannot reactivate enrollment: the previously assigned batch '"
-                        + existing.getBatch().getName() + "' is no longer active. Please contact your administrator to be assigned to a new batch.");
-            }
-            // Validate schedule conflict if reactivated enrollment has a batch
-            if (existing.getBatch() != null && existing.getBatch().isActive()) {
-                batchScheduleConflictValidator.validate(student, existing.getBatch(), courseId);
-            }
+            // Reactivate enrollment with batch=null; batch must be assigned explicitly later
+            existing.setBatch(null);
             existing.setActive(true);
             existing.setEnrolledAt(Instant.now());
             return EnrollmentResponse.from(enrollmentRepository.save(existing));
@@ -247,23 +240,13 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             if (enrollment.isActive()) {
                 throw new ConflictException("Student '" + student.getUser().getName() + "' is already actively enrolled in this course");
             }
-            // Reject reactivation if no new batch provided and previous batch is inactive
-            if (batch == null && enrollment.getBatch() != null && !enrollment.getBatch().isActive()) {
-                throw new BadRequestException("Cannot reactivate enrollment: the previously assigned batch '"
-                        + enrollment.getBatch().getName() + "' is no longer active. Please provide a new active batch or contact your administrator.");
-            }
-            // Validate schedule conflict before reactivating (exclude this course's inactive enrollment)
+            // Validate schedule conflict if a new batch is provided
             if (batch != null) {
                 batchScheduleConflictValidator.validate(student, batch, courseId);
-            } else if (enrollment.getBatch() != null && enrollment.getBatch().isActive()) {
-                // Reactivating enrollment keeps its original batch - validate that batch if no new batch provided
-                batchScheduleConflictValidator.validate(student, enrollment.getBatch(), courseId);
             }
-            // Reactivate existing enrollment
+            // Reactivate enrollment; batch is set only if a new one is provided, otherwise null
             enrollment.setActive(true);
-            if (batch != null) {
-                enrollment.setBatch(batch);
-            }
+            enrollment.setBatch(batch);
             enrollment.setEnrolledAt(Instant.now());
         } else {
             // Validate schedule conflict for new enrollment
@@ -318,7 +301,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Enrollment record #" + enrollmentId + " not found for course #" + courseId));
 
         // Soft unenrollment: preserve history and audit trails by setting active = false
+        // Clear batch to prevent zombie batch resurrection on future reactivation
         enrollment.setActive(false);
+        enrollment.setBatch(null);
         enrollmentRepository.save(enrollment);
     }
 }

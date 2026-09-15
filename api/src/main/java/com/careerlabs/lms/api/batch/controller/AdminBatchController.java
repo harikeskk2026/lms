@@ -57,7 +57,8 @@ public class AdminBatchController {
         Enrollment enrollment = enrollmentRepository.findByStudentIdAndBatchIdAndActiveTrue(studentId, batchId)
                 .orElseThrow(() -> new BadRequestException("Student is not enrolled in this batch"));
 
-        enrollment.setActive(false);
+        enrollment.setBatch(null);
+        enrollment.setActive(true);
         enrollmentRepository.save(enrollment);
 
         return ResponseEntity.ok(ApiResponse.of("Student removed from batch", null));
