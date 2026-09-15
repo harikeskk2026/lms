@@ -213,8 +213,8 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
           >
             <Upload size={24} className="mx-auto text-purple-600 dark:text-purple-400 mb-2" />
             <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Click to browse or drag & drop files</p>
-            <p className="text-xs text-gray-400 mt-1">Upload single or multiple files (PDF, DOCX only)</p>
-            <input type="file" multiple accept=".pdf,.docx" className="hidden" onChange={handleFileChange} />
+            <p className="text-xs text-gray-400 mt-1">Upload single or multiple files (PDF, DOCX, Images, ZIP)</p>
+            <input type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip" className="hidden" onChange={handleFileChange} />
           </label>
 
           {/* Selected files list */}

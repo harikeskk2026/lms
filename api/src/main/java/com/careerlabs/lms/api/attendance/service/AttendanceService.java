@@ -36,11 +36,13 @@ public interface AttendanceService {
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records);
 
-    List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit);
+    List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, JwtUserPrincipal principal);
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, Long markerUserId);
 
     List<AttendanceSheetItemResponse> getPreviousAttendanceSheet(Long classId, JwtUserPrincipal principal);
+
+    AttendanceRecordResponse editAttendanceRecord(Long attendanceId, JwtUserPrincipal principal, AttendStatus status, String remarks);
 
     AttendanceRecordResponse editAttendanceRecord(Long attendanceId, Long reviewerUserId, AttendStatus status, String remarks);
 

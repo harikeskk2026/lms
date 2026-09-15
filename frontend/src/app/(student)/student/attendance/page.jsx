@@ -91,7 +91,12 @@ export default function AttendancePage() {
   const total   = (summary.present || 0) + (summary.absent || 0) + (summary.late || 0) + (summary.excused || 0)
   const overallPct = summary.overallPercentage !== undefined ? summary.overallPercentage : pct
   const overallTotal = summary.overallTotal !== undefined ? summary.overallTotal : total
-  const needed  = summary.neededFor75 !== undefined ? summary.neededFor75 : Math.max(0, Math.ceil(0.75 * (overallTotal || total) - (summary.present || 0)))
+  const presentCount = (summary.present || 0) + (summary.late || 0)
+  const needed  = summary.neededFor75 !== undefined
+    ? summary.neededFor75
+    : (overallPct < 75 && (overallTotal || total) > 0
+        ? Math.max(0, Math.ceil((0.75 * (overallTotal || total) - presentCount) / (1 - 0.75)))
+        : 0)
   const isLow   = overallPct < 75 && overallTotal > 0
 
   return (

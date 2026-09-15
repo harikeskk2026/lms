@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
@@ -19,6 +20,7 @@ import AttendanceMatrix from '@/components/admin/AttendanceMatrix'
 import AttendanceHeatmap from '@/components/admin/AttendanceHeatmap'
 import HistoryTab from './HistoryTab'
 import CustomSelect from '@/components/ui/CustomSelect'
+import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 // recharts is a heavy dependency - load it only for the trend charts below,
 // and only on the client (SSR doesn't need it).
@@ -82,7 +84,46 @@ function PctBar({ pct }) {
 
 // ─── TAB 1: Mark Attendance ────────────────────────────────────────────────────
 
-function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }) {
+function getClassDateStr(dateVal) {
+  if (!dateVal) return ''
+  try {
+    if (Array.isArray(dateVal)) {
+      const [yr, mo, dy] = dateVal
+      return `${yr}-${String(mo).padStart(2, '0')}-${String(dy).padStart(2, '0')}`
+    }
+    const d = new Date(dateVal)
+    if (isNaN(d.getTime())) return ''
+    const yr = d.getFullYear()
+    const mo = String(d.getMonth() + 1).padStart(2, '0')
+    const dy = String(d.getDate()).padStart(2, '0')
+    return `${yr}-${mo}-${dy}`
+  } catch {
+    return ''
+  }
+}
+
+function formatClassOptionLabel(c) {
+  if (!c) return 'Select class'
+  let datePart = ''
+  if (c.date) {
+    try {
+      if (Array.isArray(c.date)) {
+        const [yr, mo, dy] = c.date
+        const d = new Date(yr, mo - 1, dy)
+        datePart = d.toLocaleDateString('en-IN')
+      } else {
+        const d = new Date(c.date)
+        if (!isNaN(d.getTime())) {
+          datePart = d.toLocaleDateString('en-IN')
+        }
+      }
+    } catch {}
+  }
+  const titlePart = c.title || `Class #${c.id}`
+  return datePart ? `${datePart} — ${titlePart}` : titlePart
+}
+
+function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, refreshKey = 0 }) {
   const [batches, setBatches]             = useState([])
   const [classes, setClasses]             = useState([])
   const [selectedBatch, setSelectedBatch] = useState(initialBatchId ? String(initialBatchId) : '')
@@ -98,6 +139,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
   const [attachments, setAttachments]     = useState([])
   const [uploading, setUploading]         = useState(false)
   const [copying, setCopying]             = useState(false)
+  const [viewingAttachment, setViewingAttachment] = useState(null)
   const [history, setHistory]             = useState([])
   const [studentSearch, setStudentSearch] = useState('')
   const [selectedIds, setSelectedIds]     = useState([])
@@ -109,21 +151,18 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
     setUploading(true)
     try {
       const res = await assignmentService.upload(file)
+      const fileUrl = res.data?.url || res.data?.fileUrl || (typeof res.data === 'string' ? res.data : '')
+      const fileName = res.data?.fileName || res.data?.originalName || file.name
       const newAttachment = {
-        name: res.data?.fileName || file.name,
-        url: res.data?.url || '',
+        name: fileName,
+        url: fileUrl,
         size: (file.size / 1024).toFixed(1) + ' KB'
       }
       setAttachments(prev => [...prev, newAttachment])
       toast.success(`Attached ${file.name}`)
-    } catch {
-      const newAttachment = {
-        name: file.name,
-        url: URL.createObjectURL(file),
-        size: (file.size / 1024).toFixed(1) + ' KB'
-      }
-      setAttachments(prev => [...prev, newAttachment])
-      toast.success(`Attached ${file.name}`)
+    } catch (err) {
+      console.error('Attachment upload failed:', err)
+      toast.error(err?.response?.data?.message || err?.message || `Failed to upload ${file.name}`)
     } finally {
       setUploading(false)
       e.target.value = ''
@@ -146,37 +185,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
     } catch {}
   }
 
-  useEffect(() => {
-    adminApi.getBatches({ isActive: 'true' }).then(r => {
-      const batchList = r.data.data || []
-      setBatches(batchList)
-      if (initialBatchId) {
-        loadClasses(initialBatchId, initialClassId)
-      }
-    }).catch(() => {})
-  }, [initialBatchId, initialClassId])
-
-  const loadClasses = async (batchId, autoClassId = null) => {
-    setSelectedBatch(batchId)
-    setSelectedClass(autoClassId ? String(autoClassId) : '')
-    setSheet(null)
-    setSaveResult(null)
-    syncUrlParams(batchId, autoClassId)
-    if (!batchId) return
-    try {
-      const r = await adminApi.getClasses({ batchId })
-      const clsList = r.data.data || []
-      setClasses(clsList)
-      if (autoClassId) {
-        setSelectedClass(String(autoClassId))
-        fetchAttendanceSheet(autoClassId, batchId, clsList)
-      }
-    } catch {
-      toast.error('Failed to load classes for batch')
-    }
-  }
-
-  const fetchAttendanceSheet = async (classId, batchId, classList = classes) => {
+  const fetchAttendanceSheet = async (classId, batchId, classList = classes, batchList = batches) => {
     if (!classId) return toast.error('Select a class')
     setLoading(true)
     setSaveResult(null)
@@ -186,11 +195,14 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
         adminApi.getAttendanceSheet(classId),
         targetBatchId ? adminApi.getBatchAttDetail(targetBatchId) : Promise.reject(),
       ])
-      const rawSheet = sheetRes.status === 'fulfilled' ? sheetRes.value.data.data : null
-      const detailData = detailRes.status === 'fulfilled' ? detailRes.value.data.data : null
+      const rawSheet = sheetRes.status === 'fulfilled' ? sheetRes.value.data?.data : null
+      const detailData = detailRes.status === 'fulfilled' ? detailRes.value.data?.data : null
 
-      const selectedClassObj = (classList || classes).find(c => String(c.id) === String(classId))
-      const selectedBatchObj = batches.find(b => String(b.id) === String(targetBatchId))
+      const currentClasses = (classList && classList.length > 0) ? classList : classes
+      const currentBatches = (batchList && batchList.length > 0) ? batchList : batches
+
+      const selectedClassObj = currentClasses.find(c => String(c.id) === String(classId))
+      const selectedBatchObj = currentBatches.find(b => String(b.id) === String(targetBatchId))
 
       const studentList = Array.isArray(rawSheet) ? rawSheet : (rawSheet?.students || [])
 
@@ -199,8 +211,8 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
           id: selectedClassObj.id,
           title: selectedClassObj.title,
           date: selectedClassObj.date,
-          batch: selectedBatchObj || { name: 'Batch' }
-        } : (rawSheet?.class || { title: 'Class', date: new Date().toISOString(), batch: { name: 'Batch' } }),
+          batch: selectedBatchObj || (rawSheet?.class?.batch) || { name: 'Batch' }
+        } : (rawSheet?.class || { title: 'Class', date: new Date().toISOString(), batch: selectedBatchObj || { name: 'Batch' } }),
         students: studentList
       }
 
@@ -218,6 +230,14 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
       setSelectedIds([])
       setStudentSearch('')
       setHistory([])
+      const rawNotes = selectedClassObj?.notes || rawSheet?.class?.notes || ''
+      const parsedAttachments = []
+      const cleanNotes = rawNotes.replace(/\[Attachment:\s*([^\]]+)\]\(([^)]+)\)/g, (match, name, url) => {
+        parsedAttachments.push({ name: name.trim(), url: url.trim() })
+        return ''
+      }).trim()
+      setClassNotes(cleanNotes)
+      setAttachments(parsedAttachments)
     } catch (err) {
       console.error(err)
       toast.error('Failed to load attendance sheet')
@@ -226,7 +246,87 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
     }
   }
 
-  const loadSheet = () => fetchAttendanceSheet(selectedClass, selectedBatch)
+  const loadClasses = async (batchId, autoClassId = null) => {
+    const bId = batchId ? String(batchId) : ''
+    const cId = autoClassId ? String(autoClassId) : ''
+    setSelectedBatch(bId)
+    setSelectedClass(cId)
+    setSheet(null)
+    setSaveResult(null)
+    setClassNotes('')
+    setAttachments([])
+    syncUrlParams(bId, cId)
+    if (!bId) {
+      setClasses([])
+      return
+    }
+    try {
+      setLoading(true)
+      const r = await adminApi.getClasses({ batchId: bId })
+      const clsList = r.data?.data || []
+      setClasses(clsList)
+
+      if (cId) {
+        setSelectedClass(cId)
+        await fetchAttendanceSheet(cId, bId, clsList, batches)
+      } else if (clsList.length > 0) {
+        setSelectedClass(String(clsList[0].id))
+        syncUrlParams(bId, clsList[0].id)
+        await fetchAttendanceSheet(clsList[0].id, bId, clsList, batches)
+      }
+    } catch {
+      toast.error('Failed to load classes for batch')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let isMounted = true
+
+    const init = async () => {
+      try {
+        const bRes = await adminApi.getBatches({ isActive: 'true' })
+        const batchList = bRes.data?.data || []
+        if (!isMounted) return
+        setBatches(batchList)
+
+        const targetBatchId = (initialBatchId !== undefined && initialBatchId !== null && initialBatchId !== '') ? String(initialBatchId) : selectedBatch
+        const targetClassId = (initialClassId !== undefined && initialClassId !== null && initialClassId !== '') ? String(initialClassId) : selectedClass
+
+        if (targetBatchId) {
+          setSelectedBatch(targetBatchId)
+          const cRes = await adminApi.getClasses({ batchId: targetBatchId })
+          const clsList = cRes.data?.data || []
+          if (!isMounted) return
+          setClasses(clsList)
+
+          if (targetClassId) {
+            setSelectedClass(targetClassId)
+            syncUrlParams(targetBatchId, targetClassId)
+            await fetchAttendanceSheet(targetClassId, targetBatchId, clsList, batchList)
+          } else if (clsList.length > 0) {
+            setSelectedClass(String(clsList[0].id))
+            syncUrlParams(targetBatchId, clsList[0].id)
+            await fetchAttendanceSheet(clsList[0].id, targetBatchId, clsList, batchList)
+          } else {
+            setSelectedClass('')
+            syncUrlParams(targetBatchId, null)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to initialize Mark Attendance tab:', err)
+      }
+    }
+
+    init()
+
+    return () => {
+      isMounted = false
+    }
+  }, [initialBatchId, initialClassId, refreshKey])
+
+  const loadSheet = () => fetchAttendanceSheet(selectedClass, selectedBatch, classes, batches)
 
   const saveAttendance = async (submit = true) => {
     setSaving(true)
@@ -236,17 +336,48 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
         status,
         remarks: remarks[studentId]?.trim() || undefined,
       }))
-      await (submit ? adminApi.submitAttendance(selectedClass, records) : adminApi.saveAttendanceDraft(selectedClass, records))
+
+      // Prepare notes with attachments if any
+      let finalNotes = classNotes.trim()
+      if (attachments.length > 0) {
+        const attachmentText = attachments.map(a => `[Attachment: ${a.name}](${a.url})`).join('\n')
+        finalNotes = finalNotes ? `${finalNotes}\n\n${attachmentText}` : attachmentText
+      }
+
+      const attendancePromise = submit
+        ? adminApi.submitAttendance(selectedClass, records)
+        : adminApi.saveAttendanceDraft(selectedClass, records)
+
+      const updateClassPromise = (selectedClass && finalNotes)
+        ? adminApi.updateClass(selectedClass, { notes: finalNotes })
+        : Promise.resolve()
+
+      await Promise.all([attendancePromise, updateClassPromise])
+
+      if (finalNotes && selectedClass) {
+        setClasses(prev => prev.map(c => String(c.id) === String(selectedClass) ? { ...c, notes: finalNotes } : c))
+      }
+
       if (submit) {
         const counts = Object.fromEntries(Object.keys(STATUS_CONFIG).map(s => [s, 0]))
         for (const s of Object.values(statuses)) counts[s] = (counts[s] || 0) + 1
         setSaveResult(counts)
         toast.success('Attendance saved successfully')
+        // Automatically close sheet and return to Today's Classes tab
+        setTimeout(() => {
+          setSheet(null)
+          onAttendanceSaved?.(true)
+        }, 700)
       } else {
         toast.success('Draft saved — class stays pending')
+        onAttendanceSaved?.(false)
       }
-      onAttendanceSaved?.()
-    } catch { toast.error('Failed to save attendance') } finally { setSaving(false) }
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || 'Failed to save attendance'
+      toast.error(msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const pushHistory = () => setHistory(prev => [...prev, statuses])
@@ -343,7 +474,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
             <CustomSelect
               value={selectedBatch}
               onChange={(val) => loadClasses(val)}
-              options={batches.map(b => ({ value: b.id, label: b.name }))}
+              options={batches.map(b => ({ value: String(b.id), label: b.name }))}
               placeholder="Select batch"
               searchable={batches.length >= 10}
             />
@@ -353,19 +484,30 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
             <CustomSelect
               value={selectedClass}
               onChange={(val) => {
-                setSelectedClass(val)
-                syncUrlParams(selectedBatch, val)
+                const nextVal = val ? String(val) : ''
+                setSelectedClass(nextVal)
+                syncUrlParams(selectedBatch, nextVal)
               }}
-              options={classes.map(c => ({ value: c.id, label: `${new Date(c.date).toLocaleDateString('en-IN')} — ${c.title}` }))}
-              placeholder="Select class"
+              options={classes.map(c => ({
+                value: String(c.id),
+                label: formatClassOptionLabel(c)
+              }))}
+              placeholder={classes.length === 0 && selectedBatch ? "No classes scheduled for today" : "Select class"}
+              emptyLabel="No related classes found for this date"
               disabled={!selectedBatch}
+              searchable={classes.length >= 10}
             />
+            {classes.length === 0 && selectedBatch && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                No active/scheduled classes found for today for this batch.
+              </p>
+            )}
           </div>
         </div>
         <button
           onClick={() => {
             syncUrlParams(selectedBatch, selectedClass)
-            fetchAttendanceSheet(selectedClass)
+            fetchAttendanceSheet(selectedClass, selectedBatch, classes, batches)
           }}
           disabled={!selectedClass || loading}
           className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all"
@@ -381,17 +523,40 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
 
           {/* Class info + counts */}
           <GlassCard className="p-5 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <p className="font-display font-bold text-gray-800 dark:text-white">{sheet.class?.title}</p>
-              <p className="text-xs text-gray-500">{sheet.class?.batch?.name} · {sheet.class?.date ? format(new Date(sheet.class.date), 'd MMMM yyyy') : ''}</p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setSheet(null)
+                  onAttendanceSaved?.(true)
+                }}
+                className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/40 transition-colors shadow-sm shrink-0"
+                title="Back to Today's Classes"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <div>
+                <p className="font-display font-bold text-gray-800 dark:text-white">{sheet.class?.title}</p>
+                <p className="text-xs text-gray-500">{sheet.class?.batch?.name} · {sheet.class?.date ? format(new Date(sheet.class.date), 'd MMMM yyyy') : ''}</p>
+              </div>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               {Object.entries(counts).map(([s, c]) => (
                 <div key={s} className="text-center px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <p className="text-sm font-extrabold text-gray-800 dark:text-white">{c}</p>
                   <p className="text-[9px] text-gray-400 uppercase font-semibold">{s}</p>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setSheet(null)
+                  onAttendanceSaved?.(true)
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ml-1"
+              >
+                <X size={13} /> Close
+              </button>
             </div>
           </GlassCard>
 
@@ -524,7 +689,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
                     className="hidden"
                     onChange={handleFileUpload}
                     disabled={uploading}
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.zip"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip"
                   />
                 </label>
               </div>
@@ -532,21 +697,38 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
               {/* Attachments list */}
               {attachments.length > 0 ? (
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {attachments.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-50/70 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800 text-xs">
-                      <FileText size={14} className="text-purple-600 dark:text-purple-400 shrink-0" />
-                      <span className="font-medium text-gray-800 dark:text-gray-200 break-words">{file.name}</span>
-                      {file.size && <span className="text-[10px] text-gray-400">({file.size})</span>}
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(idx)}
-                        className="text-gray-400 hover:text-red-500 transition-colors ml-1"
-                        title="Remove file"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
+                  {attachments.map((file, idx) => {
+                    const fileUrl = typeof file === 'string' ? file : (file.url || file.fileUrl || '')
+                    const fileName = (typeof file === 'object' && file.name) ? file.name : (fileUrl ? fileUrl.split('/').pop() : `Attachment #${idx + 1}`)
+                    return (
+                      <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-50/70 dark:bg-purple-900/30 border border-purple-100 dark:border-purple-800 text-xs shadow-sm">
+                        <FileText size={14} className="text-purple-600 dark:text-purple-400 shrink-0" />
+                        <span className="font-medium text-gray-800 dark:text-gray-200 max-w-[200px] truncate" title={fileName}>
+                          {fileName}
+                        </span>
+                        {file.size && <span className="text-[10px] text-gray-400">({file.size})</span>}
+                        {fileUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setViewingAttachment({ url: fileUrl, name: fileName })}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200 bg-white/70 dark:bg-gray-800/70 px-2 py-0.5 rounded-lg border border-purple-200/60 dark:border-purple-700/60 transition-colors shadow-xs ml-1 cursor-pointer"
+                            title="View attachment inside LMS"
+                          >
+                            <Eye size={12} />
+                            View
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(idx)}
+                          className="text-gray-400 hover:text-red-500 transition-colors ml-0.5 p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/40"
+                          title="Remove file"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-xs text-gray-400 italic mt-1">No attachments added yet.</p>
@@ -583,6 +765,15 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId }
 
         </div>
       )}
+
+      {/* In-app attachment preview modal */}
+      {viewingAttachment && (
+        <ViewAttachmentModal
+          url={viewingAttachment.url}
+          name={viewingAttachment.name}
+          onClose={() => setViewingAttachment(null)}
+        />
+      )}
     </div>
   )
 }
@@ -599,7 +790,7 @@ const STUDENT_AVATAR_PALETTE = [
   'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300',
 ]
 
-function BatchOverviewTab() {
+function BatchOverviewTab({ refreshKey = 0 }) {
   const router = useRouter()
   const [overview, setOverview]         = useState(null)
   const [loading, setLoading]           = useState(true)
@@ -609,12 +800,20 @@ function BatchOverviewTab() {
   const [monthFilter, setMonthFilter]   = useState('')
   const [studentSearch, setStudentSearch] = useState('')
 
-  useEffect(() => {
+  const loadOverview = useCallback(() => {
+    setLoading(true)
     adminApi.getAttendanceOverview()
       .then(r => setOverview(r.data.data || []))
       .catch(() => toast.error('Failed to load overview'))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    loadOverview()
+    if (selectedBatch) {
+      reloadDetail()
+    }
+  }, [loadOverview, refreshKey])
 
   const openBatch = async (batch) => {
     setSelectedBatch(batch)
@@ -890,7 +1089,7 @@ function BatchOverviewTab() {
 
 // ─── TAB 3: Analytics ─────────────────────────────────────────────────────────
 
-function AnalyticsTab() {
+function AnalyticsTab({ refreshKey = 0 }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays]       = useState(30)
@@ -908,9 +1107,9 @@ function AnalyticsTab() {
 
   useEffect(() => {
     adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
-  }, [])
+  }, [refreshKey])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   // Day-of-week analysis
   const dayOfWeekStats = {}
@@ -1195,7 +1394,7 @@ function AnalyticsTab() {
 
 // ─── TAB 5: Alerts ─────────────────────────────────────────────────────────────
 
-function AlertsTab({ onAlertsChanged }) {
+function AlertsTab({ onAlertsChanged, refreshKey = 0 }) {
   const router = useRouter()
   const [alerts, setAlerts]             = useState([])
   const [loading, setLoading]           = useState(true)
@@ -1205,15 +1404,15 @@ function AlertsTab({ onAlertsChanged }) {
   const [searchQuery, setSearchQuery]   = useState('')
   const [riskFilter, setRiskFilter]     = useState('ALL') // 'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM'
 
-  const load = async (resolved = false) => {
+  const load = useCallback(async (resolved = false) => {
     setLoading(true)
     try {
       const r = await adminApi.getAttendanceAlerts({ resolved: resolved ? 'true' : 'false' })
       setAlerts(r.data.data || [])
     } catch { toast.error('Failed to load alerts') } finally { setLoading(false) }
-  }
+  }, [])
 
-  useEffect(() => { load(showResolved) }, [showResolved])
+  useEffect(() => { load(showResolved) }, [load, showResolved, refreshKey])
 
   const generate = async () => {
     const numThreshold = Number(threshold)
@@ -1572,7 +1771,8 @@ function CommandCenterStrip({ refreshKey = 0 }) {
 
 // ─── TAB 5: Today ───────────────────────────────────────────────────────────────
 
-function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
+function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted, refreshKey = 0 }) {
+  const [mounted, setMounted] = useState(false)
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
@@ -1581,6 +1781,10 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const dateInputRef = useRef(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const loadClasses = useCallback((dateStr) => {
     setLoading(true)
@@ -1620,7 +1824,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
 
   useEffect(() => {
     loadClasses(selectedDate)
-  }, [selectedDate, loadClasses])
+  }, [selectedDate, loadClasses, refreshKey])
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
 
@@ -1677,7 +1881,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
     let startTimeStr = '—'
     let endTimeStr = '—'
     let isOngoing = false
-    let isUpcoming = true
+    let isUpcoming = false
     let isCompleted = c.status === 'COMPLETED'
 
     const startISO = toISOStr(c.date)
@@ -1697,49 +1901,81 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
         endTimeStr = format(endTime, 'hh:mm a')
       }
 
-      if (isToday) {
-        const now = getLocalISONow()
-        const todayClassDate = startISO.slice(0, 10)
-        const startTimeOnly = (startISO.slice(11, 19) || '00:00:00').padEnd(8, ':00')
-        let endTimeOnly = endISO ? (endISO.slice(11, 19) || '23:59:59').padEnd(8, ':00') : null
-        if (!endTimeOnly) {
-          const [sh = '10', sm = '00', ss = '00'] = startTimeOnly.split(':')
-          const endH = String((parseInt(sh, 10) + 1) % 24).padStart(2, '0')
-          endTimeOnly = `${endH}:${sm}:${ss}`
-        }
+      const now = getLocalISONow()
+      const todayDate = now.slice(0, 10)
+      const currentTime = now.slice(11, 19)
 
-        const todayStartISO = `${todayClassDate}T${startTimeOnly}`
-        const todayEndISO   = `${todayClassDate}T${endTimeOnly}`
+      const targetDate = selectedDate || todayDate
+      const startDate = startISO.slice(0, 10)
+      const endDate = endISO ? endISO.slice(0, 10) : startDate
 
-        if (now < todayStartISO) {
-          isUpcoming = true
-          isOngoing = false
-          isCompleted = false
-        } else if (now >= todayStartISO && now <= todayEndISO) {
-          isOngoing = true
-          isUpcoming = false
-          isCompleted = false
-        } else {
-          // now > todayEndISO
-          isUpcoming = false
-          isOngoing = false
-          isCompleted = true
-        }
+      const startTimeOnly = (startISO.slice(11, 19) || '00:00:00').padEnd(8, ':00')
+      let endTimeOnly = endISO ? (endISO.slice(11, 19) || '23:59:59').padEnd(8, ':00') : null
+      if (!endTimeOnly) {
+        const [sh = '10', sm = '00', ss = '00'] = startTimeOnly.split(':')
+        const endH = String((parseInt(sh, 10) + 1) % 24).padStart(2, '0')
+        endTimeOnly = `${endH}:${sm}:${ss}`
+      }
+
+      if (c.status === 'COMPLETED') {
+        isCompleted = true
+        isOngoing = false
+        isUpcoming = false
+      } else if (targetDate < todayDate) {
+        // Any class viewed on a past date has already ended
+        isCompleted = true
+        isOngoing = false
+        isUpcoming = false
+      } else if (targetDate > todayDate) {
+        // Any class viewed on a future date is upcoming
+        isUpcoming = true
+        isOngoing = false
+        isCompleted = false
       } else {
-        const todayISO = getLocalISONow().slice(0, 10)
-        const classISO = startISO.slice(0, 10)
-        if (classISO < todayISO) {
-          isUpcoming = false
-          isCompleted = true
-        } else if (classISO > todayISO) {
+        // Target date IS today
+        if (todayDate < startDate) {
           isUpcoming = true
+          isOngoing = false
           isCompleted = false
+        } else if (todayDate > endDate) {
+          isUpcoming = false
+          isOngoing = false
+          isCompleted = true
+        } else {
+          // Today is within [startDate, endDate]
+          if (currentTime < startTimeOnly) {
+            isUpcoming = true
+            isOngoing = false
+            isCompleted = false
+          } else if (currentTime >= startTimeOnly && currentTime <= endTimeOnly) {
+            isOngoing = true
+            isUpcoming = false
+            isCompleted = false
+          } else {
+            // currentTime > endTimeOnly
+            isUpcoming = false
+            isOngoing = false
+            isCompleted = true
+          }
         }
       }
     } else if (c.timing && c.timing.includes('-')) {
       const parts = c.timing.split('-')
       if (parts[0]?.trim()) startTimeStr = parts[0].trim()
       if (parts[1]?.trim()) endTimeStr = parts[1].trim()
+
+      const now = getLocalISONow()
+      const todayDate = now.slice(0, 10)
+      const targetDate = selectedDate || todayDate
+      if (c.status === 'COMPLETED' || targetDate < todayDate) {
+        isCompleted = true
+        isOngoing = false
+        isUpcoming = false
+      } else if (targetDate > todayDate) {
+        isUpcoming = true
+        isOngoing = false
+        isCompleted = false
+      }
     }
 
     const hasAttendanceData = (c.present > 0 || c.absent > 0)
@@ -2073,9 +2309,15 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
       )}
 
       {/* Class Details Modal */}
-      {detailsClass && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 border border-purple-100 dark:border-purple-900/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      {detailsClass && mounted && createPortal(
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={() => setDetailsClass(null)}
+        >
+          <div 
+            className="relative bg-white dark:bg-gray-900 border border-purple-100 dark:border-purple-900/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-auto max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
@@ -2151,13 +2393,20 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Confirmation Modal */}
-      {deletingClass && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800 text-center space-y-4">
+      {deletingClass && mounted && createPortal(
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={() => !isDeleting && setDeletingClass(null)}
+        >
+          <div 
+            className="relative bg-white dark:bg-gray-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-800 text-center space-y-4 my-auto max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
               <Trash2 size={24} />
             </div>
@@ -2184,7 +2433,8 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -2192,7 +2442,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted }) {
 
 // ─── TAB 6: Corrections ─────────────────────────────────────────────────────────
 
-function CorrectionsTab({ onCorrectionsChanged }) {
+function CorrectionsTab({ onCorrectionsChanged, refreshKey = 0 }) {
   const [corrections, setCorrections] = useState([])
   const [loading, setLoading]         = useState(true)
   const [statusFilter, setStatusFilter] = useState('PENDING')
@@ -2201,6 +2451,7 @@ function CorrectionsTab({ onCorrectionsChanged }) {
   const [rejectComment, setRejectComment] = useState('')
   const [verifyResults, setVerifyResults] = useState({})
   const [verifying, setVerifying]     = useState(null)
+  const [viewingAttachment, setViewingAttachment] = useState(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -2210,7 +2461,7 @@ function CorrectionsTab({ onCorrectionsChanged }) {
       .finally(() => setLoading(false))
   }, [statusFilter])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   const review = async (id, decision, comment) => {
     setReviewing(id)
@@ -2265,7 +2516,13 @@ function CorrectionsTab({ onCorrectionsChanged }) {
                 <p className="text-xs text-gray-500 mt-1">Reason: {c.reason}</p>
                 {c.comment && <p className="text-xs text-gray-400 mt-0.5">Comment: {c.comment}</p>}
                 {c.documentUrl && (
-                  <a href={c.documentUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-600 hover:underline mt-0.5 inline-block">View document</a>
+                  <button
+                    type="button"
+                    onClick={() => setViewingAttachment({ url: c.documentUrl, name: `${c.studentName || 'Student'} Correction Document` })}
+                    className="text-xs text-purple-600 dark:text-purple-400 hover:underline mt-0.5 inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye size={11} /> View document
+                  </button>
                 )}
 
                 {c.status === 'PENDING' && (
@@ -2341,6 +2598,15 @@ function CorrectionsTab({ onCorrectionsChanged }) {
           ))}
         </div>
       )}
+
+      {/* In-app correction document preview modal */}
+      {viewingAttachment && (
+        <ViewAttachmentModal
+          url={viewingAttachment.url}
+          name={viewingAttachment.name}
+          onClose={() => setViewingAttachment(null)}
+        />
+      )}
     </div>
   )
 }
@@ -2360,6 +2626,7 @@ const TABS = [
 export default function AttendancePage() {
   const [activeTab, setActiveTab] = useState('today')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [initialBatchId, setInitialBatchId] = useState(null)
   const [initialClassId, setInitialClassId] = useState(null)
 
@@ -2399,7 +2666,12 @@ export default function AttendancePage() {
   }, [])
 
   const handleRefresh = useCallback(() => {
+    setIsRefreshing(true)
     setRefreshKey(k => k + 1)
+    setTimeout(() => {
+      setIsRefreshing(false)
+      toast.success('Attendance data refreshed')
+    }, 400)
   }, [])
 
   const handleTabChange = (key) => {
@@ -2476,6 +2748,13 @@ export default function AttendancePage() {
     }
   }
 
+  const handleAttendanceSaved = (autoClose = false) => {
+    handleRefresh()
+    if (autoClose) {
+      handleTabChange('today')
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -2485,9 +2764,14 @@ export default function AttendancePage() {
             <p className="text-sm text-gray-500 mt-0.5">Track, analyze and manage student attendance across all batches</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleRefresh} title="Refresh real-time stats"
-              className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
-              <RefreshCw size={14} /> Refresh
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh real-time stats"
+              className="flex items-center gap-2 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all active:scale-95 disabled:opacity-60"
+            >
+              <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-purple-600' : ''} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             <button onClick={exportCSV}
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors shadow-sm">
@@ -2517,6 +2801,7 @@ export default function AttendancePage() {
         {/* Tab content */}
         {activeTab === 'today'       && (
           <TodayTab
+            refreshKey={refreshKey}
             onMarkAttendance={handleMarkAttendanceFromToday}
             onViewAttendance={handleViewAttendanceFromToday}
             onClassDeleted={handleRefresh}
@@ -2524,16 +2809,17 @@ export default function AttendancePage() {
         )}
         {activeTab === 'mark'        && (
           <MarkAttendanceTab
-            onAttendanceSaved={handleRefresh}
+            refreshKey={refreshKey}
+            onAttendanceSaved={handleAttendanceSaved}
             initialBatchId={initialBatchId}
             initialClassId={initialClassId}
           />
         )}
-        {activeTab === 'overview'    && <BatchOverviewTab />}
-        {activeTab === 'analytics'   && <AnalyticsTab />}
-        {activeTab === 'alerts'      && <AlertsTab onAlertsChanged={handleRefresh} />}
-        {activeTab === 'history'     && <HistoryTab />}
-        {activeTab === 'corrections' && <CorrectionsTab onCorrectionsChanged={handleRefresh} />}
+        {activeTab === 'overview'    && <BatchOverviewTab refreshKey={refreshKey} />}
+        {activeTab === 'analytics'   && <AnalyticsTab refreshKey={refreshKey} />}
+        {activeTab === 'alerts'      && <AlertsTab refreshKey={refreshKey} onAlertsChanged={handleRefresh} />}
+        {activeTab === 'history'     && <HistoryTab refreshKey={refreshKey} />}
+        {activeTab === 'corrections' && <CorrectionsTab refreshKey={refreshKey} onCorrectionsChanged={handleRefresh} />}
     </div>
   )
 }

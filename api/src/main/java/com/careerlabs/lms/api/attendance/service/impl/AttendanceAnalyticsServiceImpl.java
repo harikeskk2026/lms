@@ -22,6 +22,8 @@ import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsService {
+
+    private static final Logger log = LoggerFactory.getLogger(AttendanceAnalyticsServiceImpl.class);
 
     private final BatchRepository batchRepository;
     private final StudentRepository studentRepository;
@@ -207,14 +211,45 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<TodayClassResponse> getTodayClasses(LocalDate date) {
         LocalDate targetDate = date != null ? date : LocalDate.now();
         LocalDateTime startOfDay = targetDate.atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
 
-        List<DailyClass> classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay);
-        List<MeetingLink> scheduledMeetings = meetingLinkRepository.findByScheduledStartBetweenOrderByScheduledStartAsc(startOfDay, endOfDay);
+        List<DailyClass> classes = new ArrayList<>(dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfDay));
+        List<MeetingLink> scheduledMeetings = new ArrayList<>(meetingLinkRepository.findActiveMeetingsForDate(startOfDay, endOfDay));
+
+        // Also ensure any meetings for batches have their DailyClasses created & linked
+        for (MeetingLink m : scheduledMeetings) {
+            if (m.getDailyClass() == null && m.getBatch() != null) {
+                try {
+                    DailyClass dc = new DailyClass();
+                    dc.setBatch(m.getBatch());
+                    dc.setDate(m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now());
+                    dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
+                    dc.setMeetLink(m.getMeetUrl());
+                    dc.setStatus(ClassStatus.SCHEDULED);
+                    dc = dailyClassRepository.save(dc);
+                    m.setDailyClass(dc);
+                    meetingLinkRepository.save(m);
+                } catch (Exception e) {
+                    log.warn("Failed to auto-create daily class for meetingLinkId {}: {}", m.getId(), e.getMessage(), e);
+                }
+            }
+        }
+
+        // Also find DailyClasses linked to those meetings (so attendance can be marked)
+        List<DailyClass> meetingLinkedClasses = scheduledMeetings.stream()
+                .filter(m -> m.getDailyClass() != null)
+                .map(MeetingLink::getDailyClass)
+                .filter(cls -> !classes.contains(cls))
+                .distinct()
+                .toList();
+        if (!meetingLinkedClasses.isEmpty()) {
+            classes.addAll(meetingLinkedClasses);
+        }
+
         List<MeetingLink> classLinkedMeetings = classes.isEmpty() ? List.of() : meetingLinkRepository.findByDailyClassIn(classes);
 
         // Merge all meetings for fast lookup
@@ -365,7 +400,24 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
 
         // Include any scheduled MeetingLinks that don't have a DailyClass already rendered
         for (MeetingLink m : allMeetings) {
-            if (m.getDailyClass() != null && renderedDailyClassIds.contains(m.getDailyClass().getId())) {
+            DailyClass dc = m.getDailyClass();
+            if (dc == null && m.getBatch() != null) {
+                try {
+                    dc = new DailyClass();
+                    dc.setBatch(m.getBatch());
+                    dc.setDate(m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now());
+                    dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
+                    dc.setMeetLink(m.getMeetUrl());
+                    dc.setStatus(ClassStatus.SCHEDULED);
+                    dc = dailyClassRepository.save(dc);
+                    m.setDailyClass(dc);
+                    meetingLinkRepository.save(m);
+                } catch (Exception e) {
+                    log.warn("Failed to auto-create daily class for meetingLinkId {}: {}", m.getId(), e.getMessage(), e);
+                }
+            }
+
+            if (dc != null && renderedDailyClassIds.contains(dc.getId())) {
                 continue;
             }
             String key = (m.getBatch() != null ? m.getBatch().getId() : "null")
@@ -409,7 +461,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 }
 
                 result.add(new TodayClassResponse(
-                        m.getDailyClass() != null ? m.getDailyClass().getId() : null,
+                        dc != null ? dc.getId() : (m.getDailyClass() != null ? m.getDailyClass().getId() : null),
                         m.getBatch() != null ? m.getBatch().getId() : null,
                         m.getBatch() != null ? m.getBatch().getName() : (courseTitle != null ? courseTitle : "All Batches"),
                         classStartTime,

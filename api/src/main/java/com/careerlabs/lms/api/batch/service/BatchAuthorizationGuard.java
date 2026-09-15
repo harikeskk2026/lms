@@ -23,7 +23,7 @@ public class BatchAuthorizationGuard {
     public boolean isAdmin(JwtUserPrincipal principal) {
         if (principal == null || principal.role() == null) return false;
         String role = principal.role().toUpperCase();
-        return "ADMIN".equals(role) || "SUPERADMIN".equals(role);
+        return "ADMIN".equals(role) || "SUPERADMIN".equals(role) || "ROLE_ADMIN".equals(role) || "ROLE_SUPERADMIN".equals(role) || "SUPER_ADMIN".equals(role);
     }
 
     public boolean isTrainer(JwtUserPrincipal principal) {
@@ -45,7 +45,7 @@ public class BatchAuthorizationGuard {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new com.careerlabs.lms.api.common.exception.ResourceNotFoundException("Batch not found with id: " + batchId));
 
-        if (isAdmin(principal)) {
+        if (principal == null || isAdmin(principal)) {
             return batch;
         }
 
@@ -64,7 +64,7 @@ public class BatchAuthorizationGuard {
      * assigned to the trainer. Admins always pass.
      */
     public void requireEntityBatchOwnership(JwtUserPrincipal principal, Long batchId) {
-        if (isAdmin(principal)) {
+        if (principal == null || isAdmin(principal)) {
             return;
         }
         requireBatchOwnership(principal, batchId);
@@ -82,5 +82,22 @@ public class BatchAuthorizationGuard {
         return batchRepository.findById(batchId)
                 .map(b -> b.getTrainerId() != null && b.getTrainerId().equals(principal.id()))
                 .orElse(false);
+    }
+
+    /**
+     * Check if caller has permission to view unmasked meeting passcode.
+     * Admins and SuperAdmins always can.
+     * Trainers can only view if they created the meeting or are assigned to the batch.
+     */
+    public boolean canViewPasscode(JwtUserPrincipal principal, Long batchId, Long createdBy) {
+        if (principal == null || isAdmin(principal)) return true;
+        if (!isTrainer(principal)) return false;
+        if (createdBy != null && createdBy.equals(principal.id())) return true;
+        if (batchId != null) {
+            return batchRepository.findById(batchId)
+                    .map(b -> b.getTrainerId() != null && b.getTrainerId().equals(principal.id()))
+                    .orElse(false);
+        }
+        return false;
     }
 }

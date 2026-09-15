@@ -187,9 +187,8 @@ public class AdminAttendanceController {
             @RequestParam(defaultValue = "true") boolean submit,
             @RequestBody MarkAttendanceRequest request,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
-        Long markerId = principal != null ? principal.id() : null;
         List<AttendanceSheetItemResponse> response = attendanceService.markAttendance(
-                classId, request.records() != null ? request.records() : List.of(), submit, markerId);
+                classId, request.records() != null ? request.records() : List.of(), submit, principal);
         return ResponseEntity.ok(ApiResponse.of(submit ? "Attendance saved" : "Draft saved", response));
     }
 
@@ -200,9 +199,8 @@ public class AdminAttendanceController {
             @RequestBody Map<String, String> body,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
         AttendStatus status = AttendStatus.valueOf(body.getOrDefault("status", "PRESENT"));
-        Long markerId = principal != null ? principal.id() : null;
         List<AttendanceSheetItemResponse> response = attendanceService.markAttendance(
-                classId, List.of(new AttendanceRecordRequest(studentId, status)), true, markerId);
+                classId, List.of(new AttendanceRecordRequest(studentId, status)), true, principal);
         return ResponseEntity.ok(ApiResponse.of("Attendance updated", response));
     }
 
@@ -220,7 +218,7 @@ public class AdminAttendanceController {
             @AuthenticationPrincipal JwtUserPrincipal principal,
             @Valid @RequestBody AttendanceEditRequest request) {
         AttendanceRecordResponse response = attendanceService.editAttendanceRecord(
-                id, principal.id(), request.getStatus(), request.getRemarks());
+                id, principal, request.getStatus(), request.getRemarks());
         return ResponseEntity.ok(ApiResponse.of("Attendance record updated", response));
     }
 

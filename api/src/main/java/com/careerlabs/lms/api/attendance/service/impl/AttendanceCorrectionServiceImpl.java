@@ -29,6 +29,8 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,8 @@ import java.util.List;
 
 @Service
 public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionService {
+
+    private static final Logger log = LoggerFactory.getLogger(AttendanceCorrectionServiceImpl.class);
 
     private final AttendanceCorrectionRepository attendanceCorrectionRepository;
     private final AttendanceRepository attendanceRepository;
@@ -124,11 +128,16 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
     private Attendance resolveOrCreateAttendance(Student student, DailyClass dailyClass) {
         return attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), dailyClass.getId())
                 .orElseGet(() -> {
-                    Attendance attendance = new Attendance();
-                    attendance.setStudent(student);
-                    attendance.setDailyClass(dailyClass);
-                    attendance.setStatus(AttendStatus.ABSENT);
-                    return attendanceRepository.save(attendance);
+                    attendanceRepository.upsertAttendance(
+                            student.getId(),
+                            dailyClass.getId(),
+                            AttendStatus.ABSENT.name(),
+                            java.time.Instant.now(),
+                            null,
+                            null
+                    );
+                    return attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), dailyClass.getId())
+                            .orElseThrow(() -> new IllegalStateException("Failed to resolve attendance record"));
                 });
     }
 
@@ -274,7 +283,9 @@ public class AttendanceCorrectionServiceImpl implements AttendanceCorrectionServ
                     });
                 }
                 attendanceAuditLogRepository.save(auditLog);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                log.warn("Failed to record audit log for approved correction id {}: {}", correctionId, e.getMessage(), e);
+            }
 
             notificationService.notifyUser(studentUserId, "Correction Approved",
                     "Your attendance correction request for \"" + className + "\" was approved.",

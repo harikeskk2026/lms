@@ -323,7 +323,7 @@ function StudentDetailModal({ studentId, onClose }) {
   )
 }
 
-export default function HistoryTab() {
+export default function HistoryTab({ refreshKey = 0 }) {
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -338,7 +338,7 @@ export default function HistoryTab() {
   useEffect(() => {
     adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
-  }, [])
+  }, [refreshKey])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -362,7 +362,7 @@ export default function HistoryTab() {
       .finally(() => setLoading(false))
   }, [page, pageSize, filters])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   const updateFilter = (key, value) => {
     if (key === 'to' && value && filters.from && value < filters.from) {

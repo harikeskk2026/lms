@@ -51,6 +51,8 @@ import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -80,6 +82,8 @@ import java.util.stream.Stream;
 
 @Service
 public class AttendanceServiceImpl implements AttendanceService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AttendanceServiceImpl.class);
 
     private final DailyClassRepository dailyClassRepository;
     private final AttendanceRepository attendanceRepository;
@@ -147,12 +151,81 @@ public class AttendanceServiceImpl implements AttendanceService {
                 });
             }
             attendanceAuditLogRepository.save(log);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOGGER.warn("Failed to record attendance audit log for classId={}, studentId={}, attendanceId={}: {}",
+                    dailyClass != null ? dailyClass.getId() : null,
+                    student != null ? student.getId() : null,
+                    attendanceId,
+                    e.getMessage(), e);
+        }
+    }
+
+    private void syncMissingDailyClasses(Long batchId) {
+        try {
+            List<MeetingLink> meetings;
+            if (batchId != null) {
+                Batch targetBatch = batchRepository.findById(batchId).orElse(null);
+                if (targetBatch != null) {
+                    List<MeetingLink> batchMeetings = meetingLinkRepository.findByBatchIdOrderByScheduledStartDesc(batchId);
+                    List<MeetingLink> courseMeetings = targetBatch.getCourse() != null
+                            ? meetingLinkRepository.findByCourseIdOrderByScheduledStartDesc(targetBatch.getCourse().getId())
+                            : List.of();
+                    meetings = new ArrayList<>(batchMeetings);
+                    for (MeetingLink cm : courseMeetings) {
+                        if (!meetings.contains(cm)) {
+                            meetings.add(cm);
+                        }
+                    }
+                } else {
+                    meetings = meetingLinkRepository.findByBatchIdOrderByScheduledStartDesc(batchId);
+                }
+            } else {
+                meetings = meetingLinkRepository.findAll();
+            }
+
+            for (MeetingLink m : meetings) {
+                if (m.getBatch() != null) {
+                    if (m.getDailyClass() == null) {
+                        DailyClass dc = new DailyClass();
+                        dc.setBatch(m.getBatch());
+                        dc.setDate(m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now());
+                        dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
+                        dc.setMeetLink(m.getMeetUrl());
+                        dc.setStatus(ClassStatus.SCHEDULED);
+                        dc = dailyClassRepository.save(dc);
+                        m.setDailyClass(dc);
+                        meetingLinkRepository.save(m);
+                    }
+                } else if (m.getCourse() != null && batchId != null) {
+                    Batch b = batchRepository.findById(batchId).orElse(null);
+                    if (b != null && b.getCourse() != null && b.getCourse().getId().equals(m.getCourse().getId())) {
+                        LocalDateTime start = m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now();
+                        List<DailyClass> existing = dailyClassRepository.findByBatchIdOrderByDateDesc(batchId);
+                        boolean alreadyExists = existing.stream().anyMatch(dc ->
+                                (dc.getTitle() != null && dc.getTitle().equalsIgnoreCase(m.getTitle())) &&
+                                (dc.getDate() != null && dc.getDate().toLocalDate().equals(start.toLocalDate())));
+                        if (!alreadyExists) {
+                            DailyClass dc = new DailyClass();
+                            dc.setBatch(b);
+                            dc.setDate(start);
+                            dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
+                            dc.setMeetLink(m.getMeetUrl());
+                            dc.setStatus(ClassStatus.SCHEDULED);
+                            dailyClassRepository.save(dc);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to sync missing daily classes for batchId={}: {}", batchId, e.getMessage(), e);
+        }
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<DailyClassResponse> getClasses(Long batchId, String date, ClassStatus status, JwtUserPrincipal principal) {
+        syncMissingDailyClasses(batchId);
+
         if (batchAuthGuard.isTrainer(principal)) {
             if (batchId != null && !batchAuthGuard.isValidBatchFilter(principal, batchId)) {
                 throw new ForbiddenException("You are not assigned to this batch");
@@ -288,13 +361,65 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @Transactional
     public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records) {
-        return markAttendance(classId, records, true, null);
+        return markAttendance(classId, records, true, (JwtUserPrincipal) null);
     }
 
     @Override
     @Transactional
-    public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit) {
-        return markAttendance(classId, records, submit, null);
+    public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, JwtUserPrincipal principal) {
+        DailyClass dailyClass = dailyClassRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                dailyClass.getBatch() != null ? dailyClass.getBatch().getId() : null);
+
+        // Guard: do not allow marking attendance for future-dated classes
+        if (dailyClass.getDate() != null && dailyClass.getDate().isAfter(LocalDateTime.now())) {
+            throw new IllegalStateException("Cannot mark attendance for a future-dated class: " + dailyClass.getTitle());
+        }
+
+        // Guard: do not allow marking attendance for classes belonging to inactive/completed batches
+        Batch classBatch = dailyClass.getBatch();
+        if (classBatch != null && !classBatch.isActive()) {
+            throw new IllegalStateException(
+                    "Cannot mark attendance for class '" + dailyClass.getTitle() +
+                    "' because batch '" + classBatch.getName() + "' is no longer active.");
+        }
+
+        Long markerUserId = principal != null ? principal.id() : null;
+
+        for (AttendanceRecordRequest rec : records) {
+            Student student = studentRepository.findById(rec.studentId())
+                    .orElseGet(() -> studentRepository.findByUserId(rec.studentId()).orElse(null));
+
+            if (student == null) continue;
+
+            Optional<Attendance> existing = attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), classId);
+            AttendStatus previousStatus = existing.map(Attendance::getStatus).orElse(null);
+            boolean isNew = existing.isEmpty();
+
+            attendanceRepository.upsertAttendance(
+                    student.getId(),
+                    classId,
+                    rec.status().name(),
+                    Instant.now(),
+                    markerUserId,
+                    rec.remarks()
+            );
+
+            Attendance saved = attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), classId).orElse(null);
+            if (saved != null) {
+                String actionType = isNew ? "INITIAL_MARK" : (previousStatus != rec.status() ? "STATUS_CHANGE" : "MARK_UPDATE");
+                recordAuditLog(dailyClass, student, saved.getId(), previousStatus, rec.status(), markerUserId, rec.remarks(), actionType);
+            }
+        }
+
+        if (submit) {
+            dailyClass.setStatus(ClassStatus.COMPLETED);
+            dailyClassRepository.save(dailyClass);
+        }
+
+        return getAttendanceSheet(classId, principal);
     }
 
     @Override
@@ -302,6 +427,11 @@ public class AttendanceServiceImpl implements AttendanceService {
     public List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, Long markerUserId) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
+
+        // Guard: do not allow marking attendance for future-dated classes
+        if (dailyClass.getDate() != null && dailyClass.getDate().isAfter(LocalDateTime.now())) {
+            throw new IllegalStateException("Cannot mark attendance for a future-dated class: " + dailyClass.getTitle());
+        }
 
         // Guard: do not allow marking attendance for classes belonging to inactive/completed batches
         Batch classBatch = dailyClass.getBatch();
@@ -318,36 +448,23 @@ public class AttendanceServiceImpl implements AttendanceService {
             if (student == null) continue;
 
             Optional<Attendance> existing = attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), classId);
-            Attendance attendance;
-            AttendStatus previousStatus = null;
-            boolean isNew = !existing.isPresent();
+            AttendStatus previousStatus = existing.map(Attendance::getStatus).orElse(null);
+            boolean isNew = existing.isEmpty();
 
-            if (existing.isPresent()) {
-                attendance = existing.get();
-                previousStatus = attendance.getStatus();
-                attendance.setStatus(rec.status());
-                attendance.setMarkedAt(Instant.now());
-                if (markerUserId != null) {
-                    attendance.setMarkedBy(markerUserId);
-                }
-            } else {
-                attendance = new Attendance();
-                attendance.setDailyClass(dailyClass);
-                attendance.setStudent(student);
-                attendance.setStatus(rec.status());
-                attendance.setMarkedAt(Instant.now());
-                if (markerUserId != null) {
-                    attendance.setMarkedBy(markerUserId);
-                }
-            }
-            if (rec.remarks() != null) {
-                attendance.setRemarks(rec.remarks());
-            }
-            Attendance saved = attendanceRepository.save(attendance);
+            attendanceRepository.upsertAttendance(
+                    student.getId(),
+                    classId,
+                    rec.status().name(),
+                    Instant.now(),
+                    markerUserId,
+                    rec.remarks()
+            );
 
-            // Record audit log entry
-            String actionType = isNew ? "INITIAL_MARK" : (previousStatus != rec.status() ? "STATUS_CHANGE" : "MARK_UPDATE");
-            recordAuditLog(dailyClass, student, saved.getId(), previousStatus, rec.status(), markerUserId, rec.remarks(), actionType);
+            Attendance saved = attendanceRepository.findByStudentIdAndDailyClassId(student.getId(), classId).orElse(null);
+            if (saved != null) {
+                String actionType = isNew ? "INITIAL_MARK" : (previousStatus != rec.status() ? "STATUS_CHANGE" : "MARK_UPDATE");
+                recordAuditLog(dailyClass, student, saved.getId(), previousStatus, rec.status(), markerUserId, rec.remarks(), actionType);
+            }
         }
 
         if (submit) {
@@ -371,7 +488,34 @@ public class AttendanceServiceImpl implements AttendanceService {
                         currentClass.getBatch().getId(), ClassStatus.COMPLETED, currentClass.getDate())
                 .orElseThrow(() -> new ResourceNotFoundException("No previous completed class found for this batch"));
 
-        return getAttendanceSheet(previous.getId(), null);
+        return getAttendanceSheet(previous.getId(), principal);
+    }
+
+    @Override
+    @Transactional
+    public AttendanceRecordResponse editAttendanceRecord(Long attendanceId, JwtUserPrincipal principal, AttendStatus status, String remarks) {
+        Attendance attendance = attendanceRepository.findById(attendanceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attendance record not found with id: " + attendanceId));
+
+        batchAuthGuard.requireEntityBatchOwnership(principal,
+                attendance.getDailyClass() != null && attendance.getDailyClass().getBatch() != null
+                        ? attendance.getDailyClass().getBatch().getId() : null);
+
+        Long reviewerUserId = principal != null ? principal.id() : null;
+
+        AttendStatus previousStatus = attendance.getStatus();
+        attendance.setStatus(status);
+        attendance.setRemarks(remarks);
+        if (reviewerUserId != null) {
+            attendance.setMarkedBy(reviewerUserId);
+        }
+        attendance.setMarkedAt(Instant.now());
+
+        Attendance saved = attendanceRepository.save(attendance);
+
+        recordAuditLog(saved.getDailyClass(), saved.getStudent(), saved.getId(), previousStatus, status, reviewerUserId, remarks, "ADMIN_EDIT");
+
+        return AttendanceRecordResponse.from(saved);
     }
 
     @Override
@@ -943,7 +1087,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                                      c.getDate().getYear() == ym.getYear() &&
                                      c.getDate().getMonthValue() == ym.getMonthValue())
                         .collect(Collectors.toList());
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.warn("Failed to parse month filter '{}' in getBatchAttendanceDetail for batchId {}: {}", month, batchId, e.getMessage());
+            }
         }
         List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batchId);
 
@@ -1009,7 +1155,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (!isRes) {
             try {
                 generateAttendanceAlerts(75.0);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.warn("Failed to auto-generate attendance alerts in getAttendanceAlerts: {}", e.getMessage(), e);
+            }
         }
         List<AttendanceAlert> alerts = batchId != null ?
                 attendanceAlertRepository.findByBatchIdAndIsResolvedOrderByCurrentPctAsc(batchId, isRes) :
@@ -1048,7 +1196,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                     notification.setType(NotificationType.WARNING);
                     notification.setLink("/student/attendance");
                     notificationRepository.save(notification);
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to save low attendance notification for studentId={}: {}", student.getId(), e.getMessage(), e);
+                }
 
                 generated++;
             } else {
@@ -1357,73 +1507,57 @@ public class AttendanceServiceImpl implements AttendanceService {
         ensurePastClassesMarked(student);
     }
 
-    private void cleanupDummyClasses() {
-        List<DailyClass> dummyClasses = dailyClassRepository.findAll().stream()
-                .filter(c -> c.getTitle() != null && (c.getTitle().endsWith("- Class Session") || c.getTitle().equals("Regular Class Session")))
-                .toList();
-        for (DailyClass dc : dummyClasses) {
-            try {
-                attendanceCorrectionRepository.deleteByDailyClassId(dc.getId());
-                attendanceRepository.deleteByDailyClassId(dc.getId());
-                dailyClassRepository.delete(dc);
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
     private void ensurePastClassesMarked(Student student) {
         if (student == null) {
             return;
         }
-
-        // Clean up any previously auto-generated dummy class records
-        cleanupDummyClasses();
 
         List<Batch> activeBatches = enrollmentRepository.findActiveBatchesByStudentId(student.getId());
         if (activeBatches.isEmpty()) {
             return;
         }
 
-        // 2. Ensure each real Scheduled Class (MeetingLink) has its DailyClass linked and status synced
-        List<MeetingLink> allMeetings = meetingLinkRepository.findAll();
-        for (MeetingLink m : allMeetings) {
-            if (m.getBatch() != null) {
-                DailyClass dc = m.getDailyClass();
-                if (dc == null) {
-                    dc = new DailyClass();
-                    dc.setBatch(m.getBatch());
-                    dc.setDate(m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now());
-                    dc.setTitle(m.getTitle());
-                    dc.setMeetLink(m.getMeetUrl());
-                    dc.setStatus(m.getStatus() == MeetingStatus.COMPLETED ? ClassStatus.COMPLETED : ClassStatus.SCHEDULED);
-                    dc = dailyClassRepository.save(dc);
-                    m.setDailyClass(dc);
-                    meetingLinkRepository.save(m);
-                } else {
-                    boolean changed = false;
-                    if (m.getStatus() == MeetingStatus.COMPLETED && dc.getStatus() != ClassStatus.COMPLETED) {
-                        dc.setStatus(ClassStatus.COMPLETED);
-                        changed = true;
-                    }
-                    if (m.getScheduledStart() != null && !m.getScheduledStart().equals(dc.getDate())) {
-                        dc.setDate(m.getScheduledStart());
-                        changed = true;
-                    }
-                    if (changed) {
-                        dailyClassRepository.save(dc);
+        // 1. Ensure Scheduled Classes (MeetingLink) strictly for the student's active batches have DailyClass linked
+        for (Batch batch : activeBatches) {
+            List<MeetingLink> batchMeetings = meetingLinkRepository.findByBatchIdOrderByScheduledStartDesc(batch.getId());
+            for (MeetingLink m : batchMeetings) {
+                if (m.getBatch() != null) {
+                    DailyClass dc = m.getDailyClass();
+                    if (dc == null) {
+                        dc = new DailyClass();
+                        dc.setBatch(m.getBatch());
+                        dc.setDate(m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now());
+                        dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
+                        dc.setMeetLink(m.getMeetUrl());
+                        dc.setStatus(m.getStatus() == MeetingStatus.COMPLETED ? ClassStatus.COMPLETED : ClassStatus.SCHEDULED);
+                        dc = dailyClassRepository.save(dc);
+                        m.setDailyClass(dc);
+                        meetingLinkRepository.save(m);
+                    } else {
+                        boolean changed = false;
+                        if (m.getStatus() == MeetingStatus.COMPLETED && dc.getStatus() != ClassStatus.COMPLETED) {
+                            dc.setStatus(ClassStatus.COMPLETED);
+                            changed = true;
+                        }
+                        if (m.getScheduledStart() != null && !m.getScheduledStart().equals(dc.getDate())) {
+                            dc.setDate(m.getScheduledStart());
+                            changed = true;
+                        }
+                        if (changed) {
+                            dailyClassRepository.save(dc);
+                        }
                     }
                 }
             }
         }
 
-        // 3. For each active batch of this student, find past real classes and ensure attendance records
+        // 2. For each active batch of this student, find past real classes and ensure attendance records
         LocalDateTime now = LocalDateTime.now();
         List<Attendance> existingAttendances = attendanceRepository.findByStudentIdOrderByDailyClassDateDesc(student.getId());
         Map<Long, Attendance> attendanceByClassId = existingAttendances.stream()
                 .filter(a -> a.getDailyClass() != null)
                 .collect(Collectors.toMap(a -> a.getDailyClass().getId(), a -> a, (a1, a2) -> a1));
 
-        List<Attendance> toSave = new ArrayList<>();
         for (Batch batch : activeBatches) {
             List<DailyClass> pastRealClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(batch.getId()).stream()
                     .filter(c -> c.getDate() != null && (c.getDate().isBefore(now) || c.getStatus() == ClassStatus.COMPLETED))
@@ -1432,19 +1566,16 @@ public class AttendanceServiceImpl implements AttendanceService {
             for (DailyClass dc : pastRealClasses) {
                 Attendance existing = attendanceByClassId.get(dc.getId());
                 if (existing == null) {
-                    Attendance newAtt = new Attendance();
-                    newAtt.setDailyClass(dc);
-                    newAtt.setStudent(student);
-                    newAtt.setStatus(AttendStatus.ABSENT);
-                    newAtt.setRemarks("Auto-marked ABSENT (past class without record)");
-                    toSave.add(newAtt);
-                    attendanceByClassId.put(dc.getId(), newAtt);
+                    attendanceRepository.upsertAttendance(
+                            student.getId(),
+                            dc.getId(),
+                            AttendStatus.ABSENT.name(),
+                            Instant.now(),
+                            null,
+                            "Auto-marked ABSENT (past class without record)"
+                    );
                 }
             }
-        }
-
-        if (!toSave.isEmpty()) {
-            attendanceRepository.saveAll(toSave);
         }
     }
 

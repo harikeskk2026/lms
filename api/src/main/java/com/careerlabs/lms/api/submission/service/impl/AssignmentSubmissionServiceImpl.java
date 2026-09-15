@@ -95,7 +95,10 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         return new SubmissionListResponse(rows, new SubmissionSummaryResponse(total, submitted, pending, late));
     }
 
-    private static final Set<String> ALLOWED_SUBMISSION_EXTENSIONS = Set.of("pdf", "docx", "doc");
+    private static final Set<String> ALLOWED_SUBMISSION_EXTENSIONS = Set.of(
+            "pdf", "docx", "doc", "xls", "xlsx", "csv", "txt", "ppt", "pptx",
+            "png", "jpg", "jpeg", "webp", "gif", "svg", "zip"
+    );
 
     @Override
     @Transactional

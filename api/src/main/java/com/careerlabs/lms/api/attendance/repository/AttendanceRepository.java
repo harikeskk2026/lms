@@ -42,4 +42,19 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long>, J
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM Attendance a WHERE a.dailyClass.id = :classId")
     void deleteByDailyClassId(@Param("classId") Long classId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "INSERT INTO attendances (student_id, class_id, status, marked_at, marked_by, remarks) " +
+            "VALUES (:studentId, :classId, :status, :markedAt, :markedBy, :remarks) " +
+            "ON CONFLICT (student_id, class_id) DO UPDATE " +
+            "SET status = EXCLUDED.status, " +
+            "    marked_at = EXCLUDED.marked_at, " +
+            "    marked_by = EXCLUDED.marked_by, " +
+            "    remarks = EXCLUDED.remarks", nativeQuery = true)
+    void upsertAttendance(@Param("studentId") Long studentId,
+                          @Param("classId") Long classId,
+                          @Param("status") String status,
+                          @Param("markedAt") java.time.Instant markedAt,
+                          @Param("markedBy") Long markedBy,
+                          @Param("remarks") String remarks);
 }
