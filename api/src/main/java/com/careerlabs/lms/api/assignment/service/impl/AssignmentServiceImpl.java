@@ -1,17 +1,20 @@
 package com.careerlabs.lms.api.assignment.service.impl;
 
 import com.careerlabs.lms.api.assignment.dto.request.AssignmentRequest;
+import com.careerlabs.lms.api.assignment.dto.response.AssignmentAttachmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.AssignmentPageResponse;
 import com.careerlabs.lms.api.assignment.dto.response.AssignmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.StudentAssignmentResponse;
 import com.careerlabs.lms.api.assignment.dto.response.UploadResponse;
 import com.careerlabs.lms.api.assignment.entity.Assignment;
+import com.careerlabs.lms.api.assignment.entity.AssignmentAttachment;
 import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
 import com.careerlabs.lms.api.assignment.repository.AssignmentRepository;
 import com.careerlabs.lms.api.assignment.service.AssignmentService;
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
+import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.storage.FileStorageService;
 import com.careerlabs.lms.api.common.storage.StoredFile;
@@ -24,6 +27,7 @@ import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.submission.dto.response.SubmissionAttachmentResponse;
 import com.careerlabs.lms.api.submission.entity.AssignmentSubmission;
 import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import jakarta.persistence.criteria.Predicate;
@@ -88,16 +92,56 @@ public class AssignmentServiceImpl implements AssignmentService {
         this.userRepository = userRepository;
     }
 
+    private void requireAssignmentBatchOwnership(Assignment assignment, JwtUserPrincipal principal) {
+        if (principal == null || principal.role() == null) return;
+        String role = principal.role().toUpperCase();
+        if ("TRAINER".equals(role) || "ROLE_TRAINER".equals(role)) {
+            if (assignment.getBatch() == null || assignment.getBatch().getTrainerId() == null
+                    || !assignment.getBatch().getTrainerId().equals(principal.id())) {
+                throw new ForbiddenException("You are not authorized to access or modify assignments for this batch");
+            }
+        }
+    }
+
+    private void requireBatchOwnership(Long batchId, JwtUserPrincipal principal) {
+        if (principal == null || principal.role() == null || batchId == null) return;
+        String role = principal.role().toUpperCase();
+        if ("TRAINER".equals(role) || "ROLE_TRAINER".equals(role)) {
+            Batch batch = batchRepository.findById(batchId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
+            if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
+                throw new ForbiddenException("You can only create assignments for your assigned batches");
+            }
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public AssignmentPageResponse list(String search, Long courseId, Long batchId, AssignmentStatus status,
-            LocalDate dueDateFrom, LocalDate dueDateTo, int page, int limit) {
+            LocalDate dueDateFrom, LocalDate dueDateTo, int page, int limit, JwtUserPrincipal principal) {
         int pageNumber = Math.max(page, 1);
         int pageSize = limit > 0 ? limit : 20;
 
+        List<Long> allowedBatchIds = null;
+        if (principal != null && ("TRAINER".equalsIgnoreCase(principal.role()) || "ROLE_TRAINER".equalsIgnoreCase(principal.role()))) {
+            List<Long> trainerBatchIds = batchRepository.findByTrainerId(principal.id()).stream()
+                    .map(Batch::getId)
+                    .toList();
+            if (trainerBatchIds.isEmpty()) {
+                return new AssignmentPageResponse(List.of(), 0, pageNumber, 0);
+            }
+            if (batchId != null) {
+                if (!trainerBatchIds.contains(batchId)) {
+                    return new AssignmentPageResponse(List.of(), 0, pageNumber, 0);
+                }
+            } else {
+                allowedBatchIds = trainerBatchIds;
+            }
+        }
+
         Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Assignment> result = assignmentRepository.findAll(
-                buildSpecification(search, courseId, batchId, status, dueDateFrom, dueDateTo), pageable);
+                buildSpecification(search, courseId, batchId, allowedBatchIds, status, dueDateFrom, dueDateTo), pageable);
 
         List<Long> ids = result.getContent().stream().map(Assignment::getId).toList();
         Map<Long, Long> countsByAssignmentId = ids.isEmpty() ? Map.of()
@@ -113,8 +157,9 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public AssignmentResponse get(Long id) {
+    public AssignmentResponse get(Long id, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
+        requireAssignmentBatchOwnership(assignment, principal);
         int submissionCount = submissionRepository.findByAssignmentId(id).size();
         return AssignmentResponse.from(assignment, submissionCount);
     }
@@ -202,17 +247,25 @@ public class AssignmentServiceImpl implements AssignmentService {
                     s.getSubmittedAt(), s.isReviewed() ? s.getUpdatedAt() : null, files, s.getRejectionReason());
         }).orElse(null);
 
+        List<AssignmentAttachmentResponse> attachments = assignment.getAttachments() != null && !assignment.getAttachments().isEmpty()
+                ? assignment.getAttachments().stream()
+                        .map(a -> new AssignmentAttachmentResponse(a.getFileUrl(), a.getFileName())).toList()
+                : (assignment.getAttachmentUrl() != null && !assignment.getAttachmentUrl().isBlank()
+                        ? List.of(new AssignmentAttachmentResponse(assignment.getAttachmentUrl(), assignment.getAttachmentName()))
+                        : List.of());
+
         return new StudentAssignmentResponse(
                 assignment.getId(), assignment.getTitle(), assignment.getDescription(),
                 assignment.getBatch().getName(), trainerName, assignment.getStartDate(), assignment.getPublishTime(),
                 assignment.getDueDate(), assignment.getCloseTime(), assignment.getTotalMarks(),
-                assignment.getAttachmentUrl(), assignment.getAttachmentName(), isOverdue,
+                assignment.getAttachmentUrl(), assignment.getAttachmentName(), attachments, isOverdue,
                 assignment.getStatus(), submissionInfo);
     }
 
     @Override
     @Transactional
-    public AssignmentResponse create(AssignmentRequest request) {
+    public AssignmentResponse create(AssignmentRequest request, JwtUserPrincipal principal) {
+        requireBatchOwnership(request.getBatchId(), principal);
         Assignment assignment = new Assignment();
         applyRequest(assignment, request);
         if (request.getStatus() != null) {
@@ -253,8 +306,12 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     @Transactional
-    public AssignmentResponse update(Long id, AssignmentRequest request) {
+    public AssignmentResponse update(Long id, AssignmentRequest request, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
+        requireAssignmentBatchOwnership(assignment, principal);
+        if (request.getBatchId() != null && !request.getBatchId().equals(assignment.getBatch().getId())) {
+            requireBatchOwnership(request.getBatchId(), principal);
+        }
         AssignmentStatus previousStatus = assignment.getStatus();
         applyRequest(assignment, request);
         if (request.getStatus() != null) {
@@ -304,19 +361,46 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     @Transactional
-    public void delete(Long id) {
+    public void delete(Long id, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
+        requireAssignmentBatchOwnership(assignment, principal);
         List<AssignmentSubmission> submissions = submissionRepository.findByAssignmentId(id);
         if (submissions != null && !submissions.isEmpty()) {
+            for (AssignmentSubmission sub : submissions) {
+                if (sub.getFileUrl() != null) {
+                    fileStorageService.delete(sub.getFileUrl());
+                }
+                if (sub.getAttachments() != null) {
+                    sub.getAttachments().forEach(att -> {
+                        if (att != null && att.getFileUrl() != null) {
+                            fileStorageService.delete(att.getFileUrl());
+                        }
+                    });
+                }
+            }
             submissionRepository.deleteAll(submissions);
         }
+
+        // Clean up assignment attachments from storage
+        if (assignment.getAttachmentUrl() != null) {
+            fileStorageService.delete(assignment.getAttachmentUrl());
+        }
+        if (assignment.getAttachments() != null) {
+            assignment.getAttachments().forEach(att -> {
+                if (att != null && att.getFileUrl() != null) {
+                    fileStorageService.delete(att.getFileUrl());
+                }
+            });
+        }
+
         assignmentRepository.delete(assignment);
     }
 
     @Override
     @Transactional
-    public AssignmentResponse publish(Long id) {
+    public AssignmentResponse publish(Long id, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
+        requireAssignmentBatchOwnership(assignment, principal);
 
         // If the publish/start date is still in the future, mark as SCHEDULED.
         // The scheduler (AssignmentSchedulerService) will auto-publish at the right time.
@@ -352,8 +436,9 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     @Transactional
-    public AssignmentResponse close(Long id) {
+    public AssignmentResponse close(Long id, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
+        requireAssignmentBatchOwnership(assignment, principal);
         assignment.setStatus(AssignmentStatus.CLOSED);
         Assignment saved = assignmentRepository.save(assignment);
 
@@ -369,8 +454,9 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     @Transactional
-    public AssignmentResponse reopen(Long id) {
+    public AssignmentResponse reopen(Long id, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
+        requireAssignmentBatchOwnership(assignment, principal);
         assignment.setStatus(AssignmentStatus.PUBLISHED);
         Assignment saved = assignmentRepository.save(assignment);
 
@@ -437,24 +523,32 @@ public class AssignmentServiceImpl implements AssignmentService {
     private void applyRequest(Assignment assignment, AssignmentRequest request) {
         boolean isDraft = request.getStatus() == AssignmentStatus.DRAFT;
 
+        // Course and Batch are required for BOTH Save as Draft and Publish
+        if (request.getCourseId() == null) {
+            throw new BadRequestException("Course is required");
+        }
+        if (request.getBatchId() == null) {
+            throw new BadRequestException("Batch is required");
+        }
+
         if (!isDraft) {
             if (request.getDescription() == null || request.getDescription().trim().isEmpty()) {
                 throw new BadRequestException("Description is required");
             }
-            if (request.getCourseId() == null) {
-                throw new BadRequestException("Course is required");
-            }
-            if (request.getBatchId() == null) {
-                throw new BadRequestException("Batch is required");
-            }
             if (request.getStartDate() == null) {
-                throw new BadRequestException("Publish / Start Date is required");
+                throw new BadRequestException("Start Date is required");
+            }
+            if (request.getPublishTime() == null) {
+                throw new BadRequestException("Publish Time is required");
             }
             if (request.getDueDate() == null) {
-                throw new BadRequestException("Due date is required");
+                throw new BadRequestException("End Date is required");
+            }
+            if (request.getCloseTime() == null) {
+                throw new BadRequestException("Close Time is required");
             }
             if (request.getTotalMarks() == null || request.getTotalMarks() < 1 || request.getTotalMarks() > 100) {
-                throw new BadRequestException("Please enter correct value below 100");
+                throw new BadRequestException("Total Marks must be between 1 and 100");
             }
         }
 
@@ -491,12 +585,31 @@ public class AssignmentServiceImpl implements AssignmentService {
         assignment.setDueDate(request.getDueDate());
         assignment.setCloseTime(request.getCloseTime());
         assignment.setTotalMarks(request.getTotalMarks() != null && request.getTotalMarks() >= 1 ? request.getTotalMarks() : 100);
-        assignment.setAttachmentUrl(request.getAttachmentUrl());
-        assignment.setAttachmentName(request.getAttachmentName());
+        if (request.getAttachments() != null) {
+            List<AssignmentAttachment> attList = request.getAttachments().stream()
+                    .map(a -> new AssignmentAttachment(a.fileUrl(), a.fileName()))
+                    .toList();
+            assignment.setAttachments(new ArrayList<>(attList));
+            if (!attList.isEmpty()) {
+                assignment.setAttachmentUrl(attList.get(0).getFileUrl());
+                assignment.setAttachmentName(attList.get(0).getFileName());
+            } else {
+                assignment.setAttachmentUrl(null);
+                assignment.setAttachmentName(null);
+            }
+        } else if (request.getAttachmentUrl() != null && !request.getAttachmentUrl().isBlank()) {
+            assignment.setAttachmentUrl(request.getAttachmentUrl());
+            assignment.setAttachmentName(request.getAttachmentName());
+            assignment.setAttachments(new ArrayList<>(List.of(new AssignmentAttachment(request.getAttachmentUrl(), request.getAttachmentName()))));
+        } else {
+            assignment.setAttachmentUrl(null);
+            assignment.setAttachmentName(null);
+            assignment.setAttachments(new ArrayList<>());
+        }
     }
 
     private Specification<Assignment> buildSpecification(String search, Long courseId, Long batchId,
-            AssignmentStatus status, LocalDate dueDateFrom,
+            List<Long> allowedBatchIds, AssignmentStatus status, LocalDate dueDateFrom,
             LocalDate dueDateTo) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -510,6 +623,8 @@ public class AssignmentServiceImpl implements AssignmentService {
             }
             if (batchId != null) {
                 predicates.add(cb.equal(root.get("batch").get("id"), batchId));
+            } else if (allowedBatchIds != null) {
+                predicates.add(root.get("batch").get("id").in(allowedBatchIds));
             }
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));

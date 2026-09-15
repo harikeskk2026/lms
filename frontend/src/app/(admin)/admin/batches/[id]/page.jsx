@@ -1,23 +1,21 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, UserPlus, Trash2, CheckSquare, UserCheck, Pencil, Search, Paperclip, Eye, FileText, Check, X, Award, Lock } from 'lucide-react'
+import { ArrowLeft, UserPlus, Trash2, UserCheck, Pencil, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import { useAuth } from '@/context/AuthContext'
-import { adminApi, resolveFileUrl } from '@/lib/api'
+import { adminApi } from '@/lib/api'
 import studentService from '@/services/studentService'
 import reportService from '@/services/reportService'
 import courseService from '@/services/courseService'
-import assignmentService from '@/services/assignmentService'
-import submissionService from '@/services/submissionService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import CustomSelect from '@/components/ui/CustomSelect'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
-const TABS = ['Overview', 'Students', 'Attendance', 'Assignments']
+const TABS = ['Overview', 'Students', 'Attendance']
 
 const PLACEMENT_COLORS = {
   SEEKING: 'bg-blue-100 text-blue-700',
@@ -35,22 +33,8 @@ export default function BatchDetailPage() {
   const [classes, setClasses] = useState([])
   const [roster, setRoster] = useState([])
   const [trainers, setTrainers] = useState([])
-  const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedAssignment, setSelectedAssignment] = useState(null)
-  const [submissionsPanel, setSubmissionsPanel] = useState(false)
-  const [submissionsLoading, setSubmissionsLoading] = useState(false)
-  const [panelActionLoading, setPanelActionLoading] = useState({})
-  const [submissionsList, setSubmissionsList] = useState([])
-  const [submissionsSummary, setSubmissionsSummary] = useState(null)
-  const [submissionsFilter, setSubmissionsFilter] = useState('SUBMITTED')
   const [tab, setTab] = useState('Overview')
-  const [viewingFile, setViewingFile] = useState(null)
-  const [panelGradeInputs, setPanelGradeInputs] = useState({})
-  const [panelFeedbackInputs, setPanelFeedbackInputs] = useState({})
-  const [panelGradingLoading, setPanelGradingLoading] = useState({})
-  const [editingFeedbackId, setEditingFeedbackId] = useState({})
-  const [editingFeedbackText, setEditingFeedbackText] = useState({})
   const [attPanel, setAttPanel] = useState(false)
   const [attClass, setAttClass] = useState(null)
   const [attSheet, setAttSheet] = useState(null)
@@ -76,172 +60,6 @@ export default function BatchDetailPage() {
       s.enrollmentNo?.toLowerCase().includes(q)
     )
   })
-
-  const handleViewSubmissions = async (a) => {
-    setSelectedAssignment(a)
-    setSubmissionsPanel(true)
-    setSubmissionsLoading(true)
-    setSubmissionsFilter('SUBMITTED')
-    try {
-      const res = await submissionService.list(a.id)
-      const data = res.data?.data || res.data || {}
-      const subs = data.submissions || []
-      setSubmissionsList(subs)
-      setSubmissionsSummary(data.summary || null)
-      const grades = {}
-      const feedbacks = {}
-      subs.forEach(sub => {
-        if (sub.submissionId) {
-          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
-          feedbacks[sub.submissionId] = sub.feedback || ''
-        }
-      })
-      setPanelGradeInputs(grades)
-      setPanelFeedbackInputs(feedbacks)
-    } catch (err) {
-      toast.error(err.message || 'Failed to load submissions')
-      setSubmissionsList([])
-    } finally {
-      setSubmissionsLoading(false)
-    }
-  }
-
-  const handleSaveMarks = async (s) => {
-    if (!selectedAssignment || !s.submissionId) return
-    const rawMarks = panelGradeInputs[s.submissionId]
-    if (rawMarks === '' || rawMarks === undefined || rawMarks === null) {
-      toast.error('Please enter marks to allocate')
-      return
-    }
-    const max = selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100
-    const marks = Number(rawMarks)
-    if (isNaN(marks) || marks < 0 || marks > max) {
-      toast.error(`Marks must be between 0 and ${max}`)
-      return
-    }
-
-    setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: true }))
-    try {
-      await submissionService.grade(selectedAssignment.id, s.submissionId, {
-        marks: marks,
-        feedback: panelFeedbackInputs[s.submissionId]?.trim() || '',
-        reviewed: true,
-      })
-      toast.success(`Marks allocated permanently for ${s.studentName}`)
-      const res = await submissionService.list(selectedAssignment.id)
-      const data = res.data?.data || res.data || {}
-      const subs = data.submissions || []
-      setSubmissionsList(subs)
-      setSubmissionsSummary(data.summary || null)
-      const grades = {}
-      const feedbacks = {}
-      subs.forEach(sub => {
-        if (sub.submissionId) {
-          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
-          feedbacks[sub.submissionId] = sub.feedback || ''
-        }
-      })
-      setPanelGradeInputs(grades)
-      setPanelFeedbackInputs(feedbacks)
-      load()
-    } catch (err) {
-      toast.error(err.message || 'Failed to allocate marks')
-    } finally {
-      setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: false }))
-    }
-  }
-
-  const handleUpdateFeedback = async (s) => {
-    if (!selectedAssignment || !s.submissionId) return
-    const newFeedback = (editingFeedbackText[s.submissionId] ?? '').trim()
-    setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: true }))
-    try {
-      await submissionService.grade(selectedAssignment.id, s.submissionId, {
-        marks: s.marks,
-        feedback: newFeedback,
-        reviewed: true,
-      })
-      toast.success(`Feedback updated for ${s.studentName}`)
-      const res = await submissionService.list(selectedAssignment.id)
-      const data = res.data?.data || res.data || {}
-      const subs = data.submissions || []
-      setSubmissionsList(subs)
-      setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: false }))
-      load()
-    } catch (err) {
-      toast.error(err.message || 'Failed to update feedback')
-    } finally {
-      setPanelGradingLoading(prev => ({ ...prev, [s.submissionId]: false }))
-    }
-  }
-
-  const handlePanelApprove = async (s) => {
-    if (!selectedAssignment || !s.submissionId) return
-    setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: true }))
-    try {
-      await submissionService.approveOrReject(selectedAssignment.id, s.submissionId, { action: 'APPROVE' })
-      toast.success(`Submission approved for ${s.studentName}`)
-      const res = await submissionService.list(selectedAssignment.id)
-      const data = res.data?.data || res.data || {}
-      const subs = data.submissions || []
-      setSubmissionsList(subs)
-      setSubmissionsSummary(data.summary || null)
-      const grades = {}
-      const feedbacks = {}
-      subs.forEach(sub => {
-        if (sub.submissionId) {
-          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
-          feedbacks[sub.submissionId] = sub.feedback || ''
-        }
-      })
-      setPanelGradeInputs(grades)
-      setPanelFeedbackInputs(feedbacks)
-      load()
-    } catch (err) {
-      toast.error(err.message || 'Failed to approve submission')
-    } finally {
-      setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: false }))
-    }
-  }
-
-  const handlePanelReject = async (s) => {
-    if (!selectedAssignment || !s.submissionId) return
-    setRejectModal({ open: true, student: s, reason: '' })
-  }
-
-  const submitReject = async () => {
-    const s = rejectModal.student
-    if (!s) return
-    setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: true }))
-    try {
-      await submissionService.approveOrReject(selectedAssignment.id, s.submissionId, {
-        action: 'REJECT',
-        reason: rejectModal.reason.trim() || undefined,
-      })
-      toast.success(`Submission rejected for ${s.studentName}`)
-      const res = await submissionService.list(selectedAssignment.id)
-      const data = res.data?.data || res.data || {}
-      const subs = data.submissions || []
-      setSubmissionsList(subs)
-      setSubmissionsSummary(data.summary || null)
-      const grades = {}
-      const feedbacks = {}
-      subs.forEach(sub => {
-        if (sub.submissionId) {
-          grades[sub.submissionId] = sub.marks !== null && sub.marks !== undefined ? sub.marks : ''
-          feedbacks[sub.submissionId] = sub.feedback || ''
-        }
-      })
-      setPanelGradeInputs(grades)
-      setPanelFeedbackInputs(feedbacks)
-      setRejectModal({ open: false, student: null, reason: '' })
-      load()
-    } catch (err) {
-      toast.error(err.message || 'Failed to reject submission')
-    } finally {
-      setPanelActionLoading(prev => ({ ...prev, [s.submissionId]: false }))
-    }
-  }
 
   const handleAssignTrainer = async (newTrainerId) => {
     const errMsg = validateBatchDates(batch.startDate, batch.endDate, batch.course?.duration)
@@ -320,20 +138,14 @@ export default function BatchDetailPage() {
       const batchRes = await adminApi.getBatchDetail(id)
       setBatch(batchRes.data.data)
 
-      const [classesRes, studentsRes, perfRes, assignmentsRes] = await Promise.allSettled([
+      const [classesRes, studentsRes, perfRes] = await Promise.allSettled([
         adminApi.getClasses({ batchId: id }),
         studentService.list({ batchId: id, limit: 500 }),
         reportService.getPerformance({ batchId: id }),
-        assignmentService.list({ batchId: id, limit: 100 }),
       ])
 
       if (classesRes.status === 'fulfilled') {
         setClasses(classesRes.value.data?.data || [])
-      }
-      if (assignmentsRes.status === 'fulfilled') {
-        const rawAssignments = assignmentsRes.value?.data?.assignments || assignmentsRes.value?.data?.data?.assignments || []
-        setAssignments(rawAssignments)
-        setBatch(prev => prev ? { ...prev, assignments: rawAssignments } : prev)
       }
       const students = studentsRes.status === 'fulfilled' ? (studentsRes.value.data?.students || []) : []
       const perfById = perfRes.status === 'fulfilled' ? Object.fromEntries((perfRes.value.data?.students || []).map(p => [p.studentId, p])) : {}
@@ -455,7 +267,7 @@ export default function BatchDetailPage() {
     try {
       const params = new URLSearchParams(window.location.search)
       const tabParam = params.get('tab')
-      const validTabs = ['Overview', 'Students', 'Attendance', 'Assignments']
+      const validTabs = ['Overview', 'Students', 'Attendance']
       const match = validTabs.find(t => t.toLowerCase() === (tabParam || '').toLowerCase())
       if (match) {
         setTab(match)
@@ -786,370 +598,6 @@ export default function BatchDetailPage() {
         </div>
       )}
 
-      {/* Assignments Tab */}
-      {tab === 'Assignments' && (
-        <div className="glass-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[500px] text-sm">
-              <thead>
-                <tr className="bg-purple-50/50 border-b border-purple-100">
-                  {['Title', 'Due Date', 'Max Marks', 'Submissions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(assignments || batch?.assignments || []).length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No assignments assigned to this batch</td></tr>
-                ) : (
-                  (assignments.length > 0 ? assignments : (batch?.assignments || [])).map(a => (
-                    <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">
-                        <button
-                          type="button"
-                          onClick={() => handleViewSubmissions(a)}
-                          className="hover:text-purple-600 hover:underline font-semibold text-left text-gray-800 dark:text-white transition-colors"
-                          title="Click to view submitted persons details"
-                        >
-                          {a.title}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
-                        {a.dueDate ? format(new Date(a.dueDate), 'dd MMM yyyy') : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
-                        {a.totalMarks ?? a.maxMarks ?? '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => handleViewSubmissions(a)}
-                          className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1.5 shadow-xs"
-                          title="Click to view submitted persons details"
-                        >
-                          <span>{a.submissionCount ?? a._count?.submissions ?? 0}</span>
-                          <span className="text-[10px] text-purple-600 font-normal">view</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Submissions Details SlidePanel */}
-      <SlidePanel
-        open={submissionsPanel}
-        onClose={() => setSubmissionsPanel(false)}
-        title={selectedAssignment ? `Submissions: ${selectedAssignment.title}` : 'Submissions'}
-        subtitle={selectedAssignment ? `Max Marks: ${selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? '—'} · Due: ${selectedAssignment.dueDate ? format(new Date(selectedAssignment.dueDate), 'dd MMM yyyy') : '—'}` : ''}
-        width="w-[660px]"
-      >
-        {selectedAssignment && (
-          <div className="space-y-4">
-            {/* Quick Stats */}
-            <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/30 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="text-gray-600 dark:text-gray-300">
-                  Total Students: <strong className="text-gray-900 dark:text-white">{submissionsList.length}</strong>
-                </span>
-                <span className="text-gray-300 dark:text-gray-600">|</span>
-                <span className="text-purple-700 dark:text-purple-300 font-semibold">
-                  Submitted: {submissionsList.filter(s => s.status !== 'PENDING').length}
-                </span>
-                <span className="text-gray-300 dark:text-gray-600">|</span>
-                <span className="text-amber-600 font-medium">
-                  Pending: {submissionsList.filter(s => s.status === 'PENDING').length}
-                </span>
-              </div>
-            </div>
-
-            {/* Filter Buttons */}
-            <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
-              <button
-                type="button"
-                onClick={() => setSubmissionsFilter('SUBMITTED')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  submissionsFilter === 'SUBMITTED'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                }`}
-              >
-                Submitted Students ({submissionsList.filter(s => s.status !== 'PENDING').length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSubmissionsFilter('ALL')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  submissionsFilter === 'ALL'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                }`}
-              >
-                All Students ({submissionsList.length})
-              </button>
-            </div>
-
-            {/* Submissions List */}
-            {submissionsLoading ? (
-              <div className="py-12 text-center text-sm text-gray-400">Loading submitted persons details...</div>
-            ) : (() => {
-              const displayed = submissionsFilter === 'SUBMITTED'
-                ? submissionsList.filter(s => s.status !== 'PENDING')
-                : submissionsList
-
-              if (displayed.length === 0) {
-                return (
-                  <div className="py-12 text-center text-gray-400 text-sm">
-                    {submissionsFilter === 'SUBMITTED' ? 'No students have submitted this assignment yet.' : 'No students found in this batch.'}
-                  </div>
-                )
-              }
-
-              return (
-                <div className="space-y-3 max-h-[62vh] overflow-y-auto pr-1">
-                  {displayed.map(s => {
-                    const statusBadgeColors = {
-                      SUBMITTED: 'bg-blue-100 text-blue-700',
-                      GRADED: 'bg-green-100 text-green-700',
-                      LATE: 'bg-orange-100 text-orange-700',
-                      PENDING_APPROVAL: 'bg-amber-100 text-amber-800 border border-amber-200',
-                      REJECTED: 'bg-red-100 text-red-700',
-                      PENDING: 'bg-gray-100 text-gray-500',
-                    }
-                    const files = s.files && s.files.length > 0
-                      ? s.files
-                      : (s.fileUrl ? [{ fileUrl: s.fileUrl, fileName: s.fileName }] : [])
-
-                    return (
-                      <div
-                        key={s.studentId}
-                        className="p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 hover:bg-white dark:hover:bg-gray-900 transition-all shadow-xs space-y-2.5"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                              {s.studentName?.[0]?.toUpperCase() || 'S'}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{s.studentName}</p>
-                              <p className="text-xs text-gray-400">{s.studentEmail}</p>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${statusBadgeColors[s.status] || 'bg-gray-100 text-gray-600'}`}>
-                              {s.status}
-                            </span>
-                            {s.submittedAt && (
-                              <span className="text-[11px] text-gray-400">
-                                {format(new Date(s.submittedAt), 'dd MMM yyyy, hh:mm a')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Files Submitted */}
-                        {files.length > 0 ? (
-                          <div className="pt-2 border-t border-gray-100 dark:border-gray-800/80">
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Submitted Files ({files.length}):</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {files.map((f, fIdx) => (
-                                <button
-                                  key={fIdx}
-                                  type="button"
-                                  onClick={() => setViewingFile({ url: resolveFileUrl(f.fileUrl), name: f.fileName || `Submission File ${fIdx + 1}` })}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-50 transition-colors shadow-2xs cursor-pointer"
-                                  title="Preview file within platform"
-                                >
-                                  <Paperclip size={12} className="text-purple-500" />
-                                   <span className="break-words">{f.fileName || `File ${fIdx + 1}`}</span>
-                                  <Eye size={12} className="text-purple-600 ml-0.5" />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ) : s.status !== 'PENDING' ? (
-                          <p className="text-xs text-gray-400 italic">No files attached</p>
-                        ) : null}
-
-                        {/* Notes */}
-                        {s.notes && (
-                          <div className="p-2 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100/60 dark:border-purple-900/20 text-xs text-gray-600 dark:text-gray-300">
-                            <span className="font-semibold text-purple-700 dark:text-purple-300">Student Notes: </span>
-                            {s.notes}
-                          </div>
-                        )}
-
-                        {/* Marks & Feedback */}
-                        {(s.marks != null || s.reviewed) ? (
-                          <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-xs space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Award size={14} className="text-emerald-600 dark:text-emerald-400" />
-                                <span className="font-bold text-emerald-800 dark:text-emerald-300">
-                                  Score: {s.marks ?? '—'} / {selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100}
-                                </span>
-                              </div>
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
-                                <Lock size={10} /> Marks Locked
-                              </span>
-                            </div>
-
-                            {/* Feedback Section with User Edit Ability */}
-                            {editingFeedbackId[s.submissionId] ? (
-                              <div className="flex items-center gap-2 pt-1 border-t border-emerald-100 dark:border-emerald-900/40">
-                                <input
-                                  type="text"
-                                  value={editingFeedbackText[s.submissionId] ?? ''}
-                                  onChange={(e) => setEditingFeedbackText(prev => ({ ...prev, [s.submissionId]: e.target.value }))}
-                                  placeholder="Enter feedback for student..."
-                                  className="flex-1 text-xs px-2.5 py-1 rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
-                                  autoFocus
-                                />
-                                <button
-                                  type="button"
-                                  disabled={panelGradingLoading[s.submissionId]}
-                                  onClick={() => handleUpdateFeedback(s)}
-                                  className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: false }))}
-                                  className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 text-[11px] font-semibold cursor-pointer"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between pt-1 border-t border-emerald-100 dark:border-emerald-900/40">
-                                <div className="flex-1 pr-2">
-                                  {s.feedback ? (
-                                    <p className="text-gray-600 dark:text-gray-300 text-[11px] italic pl-5">
-                                      "{s.feedback}"
-                                    </p>
-                                  ) : (
-                                    <p className="text-gray-400 dark:text-gray-500 text-[11px] italic pl-5">
-                                      No feedback provided.
-                                    </p>
-                                  )}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingFeedbackId(prev => ({ ...prev, [s.submissionId]: true }))
-                                    setEditingFeedbackText(prev => ({ ...prev, [s.submissionId]: s.feedback || '' }))
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300 hover:text-purple-900 bg-white/80 dark:bg-gray-800 border border-purple-200 dark:border-purple-700/60 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex-shrink-0"
-                                >
-                                  <Pencil size={10} />
-                                  <span>{s.feedback ? 'Edit Feedback' : 'Add Feedback'}</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (s.status !== 'PENDING' && s.status !== 'PENDING_APPROVAL' && s.status !== 'REJECTED' && s.submissionId) ? (
-                          <div className="p-3 rounded-xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/30 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-purple-900 dark:text-purple-200 flex items-center gap-1">
-                                <Award size={13} className="text-purple-600" /> Allocate Marks
-                              </span>
-                              <span className="text-[11px] text-gray-500">
-                                Max Marks: {selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-24">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={selectedAssignment.totalMarks ?? selectedAssignment.maxMarks ?? 100}
-                                  value={panelGradeInputs[s.submissionId] ?? ''}
-                                  onChange={(e) => setPanelGradeInputs(prev => ({ ...prev, [s.submissionId]: e.target.value }))}
-                                  placeholder="Marks"
-                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <input
-                                  type="text"
-                                  value={panelFeedbackInputs[s.submissionId] ?? ''}
-                                  onChange={(e) => setPanelFeedbackInputs(prev => ({ ...prev, [s.submissionId]: e.target.value }))}
-                                  placeholder="Feedback (optional)..."
-                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                disabled={panelGradingLoading[s.submissionId]}
-                                onClick={() => handleSaveMarks(s)}
-                                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-60 flex-shrink-0 cursor-pointer"
-                              >
-                                {panelGradingLoading[s.submissionId] ? 'Saving...' : 'Allocate'}
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {/* Rejection reason if any */}
-                        {s.status === 'REJECTED' && s.rejectionReason && (
-                          <div className="p-2 rounded-xl bg-red-50 border border-red-100 text-xs text-red-700">
-                            <span className="font-semibold">Rejection Reason: </span>
-                            {s.rejectionReason}
-                          </div>
-                        )}
-
-                        {/* Approve & Reject buttons for Pending Approval */}
-                        {s.status === 'PENDING_APPROVAL' && s.submissionId && (
-                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                            <span className="text-xs text-amber-700 font-semibold">Review Submission:</span>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handlePanelApprove(s)}
-                                disabled={panelActionLoading[s.submissionId]}
-                                className="inline-flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded-lg shadow-xs transition-colors disabled:opacity-60"
-                                title="Approve submission"
-                              >
-                                <Check size={12} />
-                                <span>Approve</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handlePanelReject(s)}
-                                disabled={panelActionLoading[s.submissionId]}
-                                className="inline-flex items-center gap-1 text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold px-2 py-1 rounded-lg transition-colors disabled:opacity-60"
-                                title="Reject submission"
-                              >
-                                <X size={12} />
-                                <span>Reject</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
-
-            <div className="pt-2 sticky bottom-0 bg-white dark:bg-gray-900">
-              <button
-                type="button"
-                onClick={() => setSubmissionsPanel(false)}
-                className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-      </SlidePanel>
 
       {/* Attendance Mark Panel */}
       <SlidePanel open={attPanel} onClose={() => setAttPanel(false)} title="Mark Attendance" width="w-[560px]">
@@ -1305,52 +753,8 @@ export default function BatchDetailPage() {
           )
         })()}
       </SlidePanel>
-      {/* Attachment Preview Modal */}
-      {viewingFile && (
-        <ViewAttachmentModal
-          url={viewingFile.url}
-          name={viewingFile.name}
-          onClose={() => setViewingFile(null)}
-        />
-      )}
-
-      {/* Reject Submission Modal */}
-      {rejectModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="glass-card bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="font-display text-lg font-bold text-gray-900 dark:text-white">Reject Submission</h3>
-            <p className="text-sm text-gray-500">
-              Provide an optional rejection reason for {rejectModal.student?.studentName || 'this student'}:
-            </p>
-            <textarea
-              rows={3}
-              value={rejectModal.reason}
-              onChange={(e) => setRejectModal(m => ({ ...m, reason: e.target.value }))}
-              placeholder="Reason for rejection (optional)..."
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none text-gray-800 dark:text-gray-200"
-            />
-            <div className="flex gap-3 justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setRejectModal({ open: false, student: null, reason: '' })}
-                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={panelActionLoading[rejectModal.student?.submissionId]}
-                onClick={submitReject}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-md shadow-red-500/20 disabled:opacity-60"
-              >
-                {panelActionLoading[rejectModal.student?.submissionId] ? 'Rejecting...' : 'Reject Submission'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {confirmModal}
     </div>
   )
 }
+

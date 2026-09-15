@@ -21,5 +21,9 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long>, J
 
     List<Assignment> findByBatchIdInAndStatusIn(List<Long> batchIds, List<AssignmentStatus> statuses);
 
+    List<Assignment> findByStatus(AssignmentStatus status);
+
+    List<Assignment> findByStatusIn(List<AssignmentStatus> statuses);
+
     long countByStatus(AssignmentStatus status);
 }

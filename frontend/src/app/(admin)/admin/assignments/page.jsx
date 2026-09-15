@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar, Clock } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar, Clock, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatAssignmentDueDate, format12HourTime } from '@/utils/assignmentDate'
 import toast from 'react-hot-toast'
@@ -26,8 +27,9 @@ const STATUS_COLORS = {
 
 const EMPTY_FORM = {
   title: '', description: '', courseId: '', batchId: '',
-  startDate: '', publishTime: '', dueDate: '', closeTime: '', totalMarks: 100,
+  startDate: '', publishTime: '', dueDate: '', closeTime: '', totalMarks: '',
   attachmentUrl: '', attachmentName: '',
+  attachments: [],
 }
 
 const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
@@ -54,7 +56,7 @@ function validateAssignmentDates(startDate, publishTime, dueDate, closeTime) {
 
 function validateTotalMarks(val) {
   if (val === '' || val === null || val === undefined) {
-    return 'Please enter correct value below 100'
+    return null
   }
   const strVal = String(val).trim()
   if (!/^\d+$/.test(strVal)) {
@@ -97,8 +99,22 @@ export default function AssignmentsPage() {
   const [errors, setErrors] = useState({})
   const searchTimer = useRef(null)
 
+  const { user } = useAuth()
+  const isTrainer = user?.role === 'TRAINER'
+
   const dateError = validateAssignmentDates(form.startDate, form.publishTime, form.dueDate, form.closeTime)
   const marksError = validateTotalMarks(form.totalMarks)
+  const isFutureStart = isPublishDateInFuture(form.startDate, form.publishTime)
+
+  const trainerBatchIds = useMemo(() => new Set(batches.map(b => String(b.id))), [batches])
+
+  const displayedAssignments = useMemo(() => {
+    if (!isTrainer) return assignments
+    if (batches.length === 0) return []
+    return assignments.filter(a => a.batch && trainerBatchIds.has(String(a.batch.id)))
+  }, [assignments, isTrainer, batches, trainerBatchIds])
+
+  const displayedTotal = isTrainer ? displayedAssignments.length : total
 
   const load = useCallback(() => {
     setLoading(true)
@@ -143,61 +159,151 @@ export default function AssignmentsPage() {
 
   const openEdit = (assignment) => {
     setEditAssignment(assignment)
+    const existingAtts = assignment.attachments?.length > 0
+      ? assignment.attachments
+      : (assignment.attachmentUrl ? [{ fileUrl: assignment.attachmentUrl, fileName: assignment.attachmentName }] : [])
+
     setForm({
       title: assignment.title,
       description: assignment.description,
-      courseId: String(assignment.course.id),
-      batchId: String(assignment.batch.id),
+      courseId: assignment.course?.id ? String(assignment.course.id) : '',
+      batchId: assignment.batch?.id ? String(assignment.batch.id) : '',
       startDate: assignment.startDate || '',
       publishTime: assignment.publishTime ? assignment.publishTime.substring(0, 5) : '',
       dueDate: assignment.dueDate,
       closeTime: assignment.closeTime ? assignment.closeTime.substring(0, 5) : '',
-      totalMarks: assignment.totalMarks,
+      totalMarks: assignment.totalMarks != null ? assignment.totalMarks : '',
       attachmentUrl: assignment.attachmentUrl || '',
       attachmentName: assignment.attachmentName || '',
+      attachments: existingAtts,
     })
     setErrors({})
     setPanelOpen(true)
   }
 
+  const ALLOWED_ASSIGNMENT_EXTENSIONS = ['.pdf', '.doc', '.docx']
+
   const handleFileChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
-    if (!['.pdf', '.docx', '.doc'].includes(ext)) {
-      toast.error(`"${file.name}" is not supported. Only PDF or DOCX files are allowed`)
+    const pickedFiles = Array.from(e.target.files || [])
+    if (pickedFiles.length === 0) return
+
+    // Validate all selected files against allowed formats
+    const invalidFiles = []
+    const validFiles = []
+    for (const file of pickedFiles) {
+      const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+      if (!ALLOWED_ASSIGNMENT_EXTENSIONS.includes(ext)) {
+        invalidFiles.push(file.name)
+      } else {
+        validFiles.push(file)
+      }
+    }
+
+    if (invalidFiles.length > 0) {
+      const errMsg = `Only PDF (.pdf) and Word (.doc, .docx) files are allowed. Unsupported file: "${invalidFiles.join(', ')}"`
+      setErrors(prev => ({ ...prev, attachment: errMsg }))
+      toast.error(errMsg)
       e.target.value = ''
       return
     }
+
+    // Clear any previous attachment errors since all files are valid
+    setErrors(prev => {
+      const next = { ...prev }
+      delete next.attachment
+      return next
+    })
+
     setUploading(true)
     try {
-      const r = await assignmentService.upload(file)
-      setForm(f => ({ ...f, attachmentUrl: r.data.url, attachmentName: r.data.fileName }))
-      toast.success('File uploaded')
+      const uploadResults = await Promise.allSettled(
+        validFiles.map(file => assignmentService.upload(file).then(r => ({ ...r.data, originalFileName: file.name })))
+      )
+      const successful = []
+      const failed = []
+
+      uploadResults.forEach((res, i) => {
+        if (res.status === 'fulfilled' && res.value?.url) {
+          successful.push({
+            fileUrl: res.value.url,
+            fileName: res.value.fileName || res.value.originalFileName || validFiles[i].name
+          })
+        } else {
+          failed.push(validFiles[i].name)
+        }
+      })
+
+      if (successful.length > 0) {
+        setForm(f => {
+          const currentList = f.attachments?.length > 0
+            ? f.attachments
+            : (f.attachmentUrl ? [{ fileUrl: f.attachmentUrl, fileName: f.attachmentName }] : [])
+          const merged = [...currentList, ...successful]
+          return {
+            ...f,
+            attachments: merged,
+            attachmentUrl: merged[0]?.fileUrl || '',
+            attachmentName: merged[0]?.fileName || '',
+          }
+        })
+        toast.success(`${successful.length} file${successful.length > 1 ? 's' : ''} uploaded successfully`)
+      }
+
+      if (failed.length > 0) {
+        const errMsg = `Failed to upload: ${failed.join(', ')}`
+        setErrors(prev => ({ ...prev, attachment: errMsg }))
+        toast.error(errMsg)
+      }
     } catch (err) {
-      toast.error(err.message || 'Only PDF and DOC/DOCX files are allowed')
+      const errMsg = err.message || 'Failed to upload attachments'
+      setErrors(prev => ({ ...prev, attachment: errMsg }))
+      toast.error(errMsg)
     } finally {
       setUploading(false)
       e.target.value = ''
     }
   }
 
-  const buildPayload = (status) => ({
-    title: form.title.trim(),
-    description: form.description?.trim() || '',
-    courseId: form.courseId ? Number(form.courseId) : null,
-    batchId: form.batchId ? Number(form.batchId) : null,
-    startDate: form.startDate || null,
-    publishTime: form.publishTime || null,
-    dueDate: form.dueDate || null,
-    closeTime: form.closeTime || null,
-    totalMarks: form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined
-      ? Number(form.totalMarks)
-      : (status === 'DRAFT' ? 100 : null),
-    attachmentUrl: form.attachmentUrl || null,
-    attachmentName: form.attachmentName || null,
-    status,
-  })
+  const handleRemoveAttachment = (indexToRemove) => {
+    setForm(f => {
+      const currentList = f.attachments?.length > 0
+        ? f.attachments
+        : (f.attachmentUrl ? [{ fileUrl: f.attachmentUrl, fileName: f.attachmentName }] : [])
+      const updated = currentList.filter((_, idx) => idx !== indexToRemove)
+      return {
+        ...f,
+        attachments: updated,
+        attachmentUrl: updated[0]?.fileUrl || '',
+        attachmentName: updated[0]?.fileName || '',
+      }
+    })
+    setErrors(prev => {
+      const next = { ...prev }
+      delete next.attachment
+      return next
+    })
+  }
+
+  const buildPayload = (status) => {
+    const attList = form.attachments && form.attachments.length > 0 ? form.attachments : []
+    return {
+      title: form.title.trim(),
+      description: form.description?.trim() || '',
+      courseId: form.courseId ? Number(form.courseId) : null,
+      batchId: form.batchId ? Number(form.batchId) : null,
+      startDate: form.startDate || null,
+      publishTime: form.publishTime || null,
+      dueDate: form.dueDate || null,
+      closeTime: form.closeTime || null,
+      totalMarks: form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined
+        ? Number(form.totalMarks)
+        : (status === 'DRAFT' ? 100 : null),
+      attachments: attList,
+      attachmentUrl: attList[0]?.fileUrl || form.attachmentUrl || null,
+      attachmentName: attList[0]?.fileName || form.attachmentName || null,
+      status,
+    }
+  }
 
   const validateForm = (status) => {
     const errs = {}
@@ -206,21 +312,29 @@ export default function AssignmentsPage() {
       errs.title = 'Please enter assignment Title'
     }
 
+    if (!form.courseId) {
+      errs.courseId = 'Please select a Course'
+    }
+
+    if (!form.batchId) {
+      errs.batchId = 'Please select a Batch'
+    }
+
     if (status !== 'DRAFT') {
       if (!form.description?.trim()) {
         errs.description = 'Please enter assignment Description'
       }
-      if (!form.courseId) {
-        errs.courseId = 'Please select a Course'
-      }
-      if (!form.batchId) {
-        errs.batchId = 'Please select a Batch'
-      }
       if (!form.startDate) {
         errs.startDate = 'Please select a Start Date'
       }
+      if (!form.publishTime) {
+        errs.publishTime = 'Please select a Publish Time'
+      }
       if (!form.dueDate) {
         errs.dueDate = 'Please select an End Date'
+      }
+      if (!form.closeTime) {
+        errs.closeTime = 'Please select a Close Time'
       }
       if (form.totalMarks === '' || form.totalMarks === null || form.totalMarks === undefined) {
         errs.totalMarks = 'Please enter Total Marks (1 to 100)'
@@ -236,6 +350,16 @@ export default function AssignmentsPage() {
       if (marksError && !errs.totalMarks) {
         errs.totalMarks = marksError
       }
+    } else {
+      if (form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined) {
+        const marksNum = Number(form.totalMarks)
+        if (isNaN(marksNum) || marksNum < 1 || marksNum > 100) {
+          errs.totalMarks = 'Total Marks must be between 1 and 100'
+        }
+      }
+      if (form.startDate && form.dueDate && dateError) {
+        errs.date = dateError
+      }
     }
 
     return errs
@@ -245,8 +369,6 @@ export default function AssignmentsPage() {
     const errs = validateForm(status)
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
-      const firstError = Object.values(errs)[0]
-      toast.error(firstError)
       return
     }
     setErrors({})
@@ -276,22 +398,10 @@ export default function AssignmentsPage() {
   }
 
   const handlePublishSubmit = () => {
-    if (isPublishDateInFuture(form.startDate, form.publishTime)) {
-      toast.error('Please click Schedule option')
-      return
-    }
     handleSubmit('PUBLISHED')
   }
 
   const handleScheduleSubmit = () => {
-    if (!form.startDate) {
-      toast.error('Please select a Publish / Start Date to schedule')
-      return
-    }
-    if (!isPublishDateInFuture(form.startDate, form.publishTime)) {
-      toast.error('Publish date and time must be in the future to schedule')
-      return
-    }
     handleSubmit('SCHEDULED')
   }
 
@@ -390,7 +500,7 @@ export default function AssignmentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Assignments</h1>
-          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
+          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{displayedTotal}</span>
         </div>
         <button onClick={openCreate}
           className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
@@ -523,10 +633,10 @@ export default function AssignmentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {assignments.length === 0 ? (
+                {displayedAssignments.length === 0 ? (
                   <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">No assignments found</td></tr>
                 ) : (
-                  assignments.map(a => (
+                  displayedAssignments.map(a => (
                     <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
                       <td className="px-4 py-3">
                         <button onClick={() => router.push(`/admin/assignments/${a.id}`)}
@@ -534,8 +644,8 @@ export default function AssignmentsPage() {
                           {a.title}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course.title}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch.name}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course?.title ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch?.name ?? '—'}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{formatAssignmentDueDate(a.dueDate, a.closeTime, a.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy')}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.totalMarks}</td>
                       <td className="px-4 py-3">
@@ -595,7 +705,7 @@ export default function AssignmentsPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}</p>
+          <p className="text-sm text-gray-500">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, displayedTotal)} of {displayedTotal}</p>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
               className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
@@ -628,14 +738,14 @@ export default function AssignmentsPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assignment Title *</label>
             <input
               value={form.title}
               onChange={e => {
                 setForm(f => ({ ...f, title: e.target.value }))
                 if (errors.title) setErrors(prev => ({ ...prev, title: undefined }))
               }}
-              placeholder="Java Basics Assignment"
+              placeholder="Enter your Title"
               className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
                 errors.title ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
               }`}
@@ -645,13 +755,14 @@ export default function AssignmentsPage() {
             )}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description</label>
             <textarea
               value={form.description}
               onChange={e => {
                 setForm(f => ({ ...f, description: e.target.value }))
                 if (errors.description) setErrors(prev => ({ ...prev, description: undefined }))
               }}
+              placeholder="Enter your Description"
               rows={4}
               className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 resize-none ${
                 errors.description ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
@@ -694,7 +805,7 @@ export default function AssignmentsPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
               <input
                 type="date"
                 min={new Date().toISOString().slice(0, 10)}
@@ -720,14 +831,21 @@ export default function AssignmentsPage() {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish Time</label>
               <TimePicker12
                 value={form.publishTime}
-                onChange={val => setForm(f => ({ ...f, publishTime: val }))}
+                error={!!errors.publishTime}
+                onChange={val => {
+                  setForm(f => ({ ...f, publishTime: val }))
+                  if (errors.publishTime) setErrors(prev => ({ ...prev, publishTime: undefined }))
+                }}
               />
+              {errors.publishTime && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.publishTime}</p>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date</label>
               <input
                 type="date"
                 min={form.startDate || new Date().toISOString().slice(0, 10)}
@@ -748,8 +866,15 @@ export default function AssignmentsPage() {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Close Time</label>
               <TimePicker12
                 value={form.closeTime}
-                onChange={val => setForm(f => ({ ...f, closeTime: val }))}
+                error={!!errors.closeTime}
+                onChange={val => {
+                  setForm(f => ({ ...f, closeTime: val }))
+                  if (errors.closeTime) setErrors(prev => ({ ...prev, closeTime: undefined }))
+                }}
               />
+              {errors.closeTime && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.closeTime}</p>
+              )}
             </div>
           </div>
 
@@ -757,13 +882,14 @@ export default function AssignmentsPage() {
             <p className="text-xs text-red-500 font-medium -mt-1">{dateError}</p>
           )}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total Marks *</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total Marks</label>
             <input
               type="number"
               min="1"
               max="100"
               step="1"
               value={form.totalMarks}
+              placeholder="Enter your marks"
               onKeyDown={e => {
                 // Disallow minus (-), plus (+), e/E, and period (.)
                 if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
@@ -784,37 +910,77 @@ export default function AssignmentsPage() {
             )}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Attachment (PDF or DOCX only)</label>
-            {form.attachmentName ? (
-              <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
-                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 min-w-0">
-                  <Paperclip size={14} className="text-purple-500 flex-shrink-0" /> <span className="break-words">{form.attachmentName}</span>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Attachments (PDF, DOC, DOCX only)
+              </label>
+              {(form.attachments?.length > 0 || form.attachmentName) && (
+                <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">
+                  {(form.attachments?.length || (form.attachmentName ? 1 : 0))} file{(form.attachments?.length || (form.attachmentName ? 1 : 0)) > 1 ? 's' : ''}
                 </span>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewFile({ url: resolveFileUrl(form.attachmentUrl), name: form.attachmentName })}
-                    className="flex items-center gap-1 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 px-2 py-1 rounded-lg transition-colors"
-                    title="Preview file"
+              )}
+            </div>
+
+            {/* List of Attached Files */}
+            {(form.attachments?.length > 0 ? form.attachments : (form.attachmentName ? [{ fileUrl: form.attachmentUrl, fileName: form.attachmentName }] : [])).length > 0 && (
+              <div className="space-y-1.5 mb-2.5 max-h-40 overflow-y-auto pr-1">
+                {(form.attachments?.length > 0 ? form.attachments : [{ fileUrl: form.attachmentUrl, fileName: form.attachmentName }]).map((att, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/40 dark:bg-gray-800/80 px-3.5 py-2 text-xs"
                   >
-                    <Eye size={13} /> Preview
-                  </button>
-                  <button type="button" onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentName: '' }))}
-                    className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Remove file">
-                    <X size={14} />
-                  </button>
-                </div>
+                    <span className="flex items-center gap-2 text-gray-700 dark:text-gray-300 min-w-0 font-medium">
+                      <Paperclip size={13} className="text-purple-500 flex-shrink-0" />
+                      <span className="break-words truncate max-w-[280px]">{att.fileName}</span>
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewFile({ url: resolveFileUrl(att.fileUrl), name: att.fileName })}
+                        className="flex items-center gap-1 font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                        title="Preview file"
+                      >
+                        <Eye size={12} /> Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAttachment(idx)}
+                        className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                        title="Remove file"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : (
+            )}
+
+            {/* File Upload Input */}
+            <div className="relative">
               <input
                 type="file"
-                accept=".pdf,.docx,.doc,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip"
+                multiple
+                accept=".pdf,.docx,.doc,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 onChange={handleFileChange}
                 disabled={uploading}
-                className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:text-sm file:font-semibold hover:file:bg-purple-100"
+                className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 dark:file:bg-purple-950/50 file:text-purple-600 dark:file:text-purple-300 file:text-sm file:font-semibold hover:file:bg-purple-100 dark:hover:file:bg-purple-900/50 cursor-pointer"
               />
+            </div>
+
+            {/* Inline Error Message */}
+            {errors.attachment && (
+              <div className="mt-1.5 p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium animate-fadeIn">
+                <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
+                <span>{errors.attachment}</span>
+              </div>
             )}
-            {uploading && <p className="text-xs text-purple-500 mt-1">Uploading...</p>}
+
+            {uploading && (
+              <p className="text-xs text-purple-500 mt-1.5 flex items-center gap-1.5 font-medium">
+                <Clock size={12} className="animate-spin" /> Uploading file(s)...
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2 pt-2">
@@ -830,19 +996,22 @@ export default function AssignmentsPage() {
             ) : (
               <>
                 <button type="button" disabled={saving} onClick={() => handleSubmit('DRAFT')}
-                  className="flex-1 py-2.5 px-2 rounded-xl border border-purple-200 dark:border-purple-800/60 text-purple-600 dark:text-purple-400 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors disabled:opacity-60">
+                  className="flex-1 py-2.5 px-2 rounded-xl border border-purple-200 dark:border-purple-800/60 text-purple-600 dark:text-purple-400 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors disabled:opacity-60 cursor-pointer">
                   Save as Draft
                 </button>
-                <button type="button" disabled={saving} onClick={handleScheduleSubmit}
-                  className="flex-1 py-2.5 px-2 rounded-xl border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:border-blue-800/60 dark:text-blue-300 text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm">
-                  <Clock size={15} />
-                  <span>Schedule</span>
-                </button>
-                <button type="button" disabled={saving} onClick={handlePublishSubmit}
-                  className="flex-1 py-2.5 px-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/20">
-                  <Send size={15} />
-                  <span>{saving ? 'Saving...' : 'Publish'}</span>
-                </button>
+                {isFutureStart ? (
+                  <button type="button" disabled={saving} onClick={handleScheduleSubmit}
+                    className="flex-1 py-2.5 px-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm shadow-blue-500/20 cursor-pointer">
+                    <Clock size={15} />
+                    <span>{saving ? 'Scheduling...' : 'Schedule'}</span>
+                  </button>
+                ) : (
+                  <button type="button" disabled={saving} onClick={handlePublishSubmit}
+                    className="flex-1 py-2.5 px-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/20 cursor-pointer">
+                    <Send size={15} />
+                    <span>{saving ? 'Publishing...' : 'Publish'}</span>
+                  </button>
+                )}
               </>
             )}
           </div>

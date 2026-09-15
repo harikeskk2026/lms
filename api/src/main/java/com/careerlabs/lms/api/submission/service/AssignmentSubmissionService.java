@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.submission.service;
 
+import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.submission.dto.request.ApproveRejectSubmissionRequest;
 import com.careerlabs.lms.api.submission.dto.request.GradeSubmissionRequest;
 import com.careerlabs.lms.api.submission.dto.response.SubmissionListResponse;
@@ -10,11 +11,20 @@ import java.util.List;
 
 public interface AssignmentSubmissionService {
 
-    SubmissionListResponse listByAssignment(Long assignmentId);
+    SubmissionListResponse listByAssignment(Long assignmentId, JwtUserPrincipal principal);
+    default SubmissionListResponse listByAssignment(Long assignmentId) {
+        return listByAssignment(assignmentId, null);
+    }
 
-    SubmissionRowResponse grade(Long assignmentId, Long submissionId, GradeSubmissionRequest request);
+    SubmissionRowResponse grade(Long assignmentId, Long submissionId, GradeSubmissionRequest request, JwtUserPrincipal principal);
+    default SubmissionRowResponse grade(Long assignmentId, Long submissionId, GradeSubmissionRequest request) {
+        return grade(assignmentId, submissionId, request, null);
+    }
 
-    SubmissionRowResponse approveOrReject(Long assignmentId, Long submissionId, ApproveRejectSubmissionRequest request, String reviewerEmail);
+    SubmissionRowResponse approveOrReject(Long assignmentId, Long submissionId, ApproveRejectSubmissionRequest request, String reviewerEmail, JwtUserPrincipal principal);
+    default SubmissionRowResponse approveOrReject(Long assignmentId, Long submissionId, ApproveRejectSubmissionRequest request, String reviewerEmail) {
+        return approveOrReject(assignmentId, submissionId, request, reviewerEmail, null);
+    }
 
     default SubmissionRowResponse submit(Long assignmentId, Long userId, MultipartFile file, String notes) {
         return submit(assignmentId, userId, file != null ? List.of(file) : List.of(), notes);

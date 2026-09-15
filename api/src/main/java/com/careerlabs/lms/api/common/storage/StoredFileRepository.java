@@ -11,4 +11,6 @@ public interface StoredFileRepository extends JpaRepository<StoredFileEntity, Lo
     Optional<StoredFileEntity> findByPath(String path);
 
     boolean existsByPath(String path);
+
+    void deleteByPath(String path);
 }

@@ -287,7 +287,7 @@ export default function TrainerDashboardView() {
                       {item.submittedAt && <span className="ml-1 text-gray-300 dark:text-gray-600">· {formatDistanceToNow(new Date(item.submittedAt), { addSuffix: true })}</span>}
                     </p>
                   </div>
-                  <button onClick={() => router.push('/admin/assignments')}
+                  <button onClick={() => router.push(item.assignmentId ? `/admin/assignments/${item.assignmentId}` : '/admin/assignments')}
                     className="flex-shrink-0 px-3 py-1 text-xs font-semibold text-purple-600 border border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors">
                     Grade
                   </button>

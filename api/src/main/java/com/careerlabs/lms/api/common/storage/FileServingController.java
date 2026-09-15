@@ -60,7 +60,7 @@ public class FileServingController {
             if (path.startsWith("/uploads/")) {
                 String subPath = path.substring("/uploads/".length());
                 Path diskPath = root.resolve(subPath).normalize();
-                if (Files.exists(diskPath) && Files.isRegularFile(diskPath)) {
+                if (diskPath.startsWith(root) && Files.exists(diskPath) && Files.isRegularFile(diskPath)) {
                     byte[] data = Files.readAllBytes(diskPath);
                     String probed = Files.probeContentType(diskPath);
                     MediaType mediaType = probed != null ? MediaType.parseMediaType(probed) : MediaType.APPLICATION_OCTET_STREAM;

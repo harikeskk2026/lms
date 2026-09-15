@@ -13,8 +13,9 @@ import { resolveFileUrl } from '@/lib/api'
 function getFileType(name, url) {
   const combined = `${name || ''} ${url || ''}`.toLowerCase()
   if (/\.pdf($|\?)/i.test(combined)) return 'pdf'
+  if (/\.docx?($|\?)/i.test(combined)) return 'docx'
   if (/\.(png|jpe?g|webp|gif|svg|bmp|ico)($|\?)/i.test(combined)) return 'image'
-  if (/\.(docx?|xlsx?|pptx?)($|\?)/i.test(combined)) return 'office'
+  if (/\.(xlsx?|pptx?)($|\?)/i.test(combined)) return 'office'
   return 'pdf' // default: attempt PDF/binary render
 }
 
@@ -26,43 +27,127 @@ function SecurityWatermark() {
 }
 
 /**
- * Native in-browser DOCX viewer powered by docx-preview.
- * Renders DOCX files directly on client DOM without external cloud dependencies.
+ * Helper to extract readable structured text from document buffer (.doc binary / XML fallback).
  */
-function DocxViewer({ url, name }) {
+function extractTextFromDocumentBuffer(buffer) {
+  try {
+    const bytes = new Uint8Array(buffer)
+    const paragraphs = []
+
+    // 1. Check for XML / zipped tags (e.g., inside docx XML)
+    const utf8Text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    const xmlMatches = utf8Text.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)
+    if (xmlMatches && xmlMatches.length > 0) {
+      let currentP = ''
+      for (const m of xmlMatches) {
+        const clean = m.replace(/<[^>]+>/g, '').trim()
+        if (clean) {
+          currentP += (currentP ? ' ' : '') + clean
+          if (currentP.length > 120 || /[.!?]$/.test(clean)) {
+            paragraphs.push(currentP)
+            currentP = ''
+          }
+        }
+      }
+      if (currentP) paragraphs.push(currentP)
+      if (paragraphs.length > 0) return paragraphs
+    }
+
+    // 2. Try UTF-16LE strings (standard in Microsoft Word .doc binary files)
+    const utf16Text = new TextDecoder('utf-16le', { fatal: false }).decode(bytes)
+    const u16Clean = utf16Text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+    const u16Lines = u16Clean.split(/[\r\n]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 3 && /[a-zA-Z0-9]/.test(s) && !/^[\W_]+$/.test(s))
+
+    if (u16Lines.length > 0) {
+      return u16Lines.slice(0, 100)
+    }
+
+    // 3. Fallback: UTF-8 lines
+    const u8Clean = utf8Text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+    const u8Lines = u8Clean.split(/[\r\n]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 3 && /[a-zA-Z0-9]/.test(s) && !/^[\W_]+$/.test(s))
+
+    if (u8Lines.length > 0) {
+      return u8Lines.slice(0, 100)
+    }
+
+    return []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Native in-browser Word Document (.docx / .doc) viewer.
+ * Renders modern DOCX files directly on client DOM without external cloud dependencies.
+ * If docx-preview fails or for legacy binary .doc files, extracts structured text into a styled reader.
+ * Download options are completely removed for content security.
+ */
+function DocxViewer({ url, name, zoomLevel = 1.0 }) {
   const containerRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [fallbackParagraphs, setFallbackParagraphs] = useState([])
 
   useEffect(() => {
-    if (!url) return
+    if (!url) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
+    setFallbackParagraphs([])
 
     ;(async () => {
       try {
-        const res = await fetch(url)
-        if (!res.ok) throw new Error('Failed to fetch file')
-        const blob = await res.blob()
+        const token = tokenStorage.getToken()
+        const headers = token ? { Authorization: `Bearer ${token}` } : {}
+        const res = await fetch(url, { headers, cache: 'no-store' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch file`)
+        const buffer = await res.arrayBuffer()
         if (cancelled) return
 
-        const { renderAsync } = await import('docx-preview')
-        if (containerRef.current) {
-          containerRef.current.innerHTML = ''
-          await renderAsync(blob, containerRef.current, null, {
-            className: 'docx-preview-wrapper',
-            inWrapper: true,
-            ignoreWidth: false,
-            ignoreHeight: false,
-            ignoreFonts: false,
-            breakPages: true,
-            useBase64URL: true,
-          })
+        if (!buffer || buffer.byteLength === 0) {
+          throw new Error('Document file is empty')
+        }
+
+        let rendered = false
+        try {
+          const { renderAsync } = await import('docx-preview')
+          if (containerRef.current) {
+            containerRef.current.innerHTML = ''
+            await renderAsync(buffer, containerRef.current, null, {
+              className: 'docx-preview-wrapper',
+              inWrapper: true,
+              ignoreWidth: false,
+              ignoreHeight: false,
+              ignoreFonts: false,
+              breakPages: true,
+              useBase64URL: true,
+            })
+            rendered = true
+          }
+        } catch (renderErr) {
+          console.warn('docx-preview could not render directly, falling back to text extractor:', renderErr)
+        }
+
+        if (cancelled) return
+
+        if (!rendered) {
+          const extracted = extractTextFromDocumentBuffer(buffer)
+          if (extracted && extracted.length > 0) {
+            setFallbackParagraphs(extracted)
+          } else {
+            setError('This document format cannot be previewed in the browser.')
+          }
         }
       } catch (err) {
         console.error('DocxViewer rendering error:', err)
-        if (!cancelled) setError('Failed to render document preview')
+        if (!cancelled) setError(err.message || 'Failed to render document preview')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -77,34 +162,54 @@ function DocxViewer({ url, name }) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-gray-400">
         <Loader2 size={32} className="animate-spin text-purple-400" />
-        <p className="text-sm font-medium">Rendering document preview…</p>
+        <p className="text-sm font-medium">Rendering Word document preview…</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center px-4 my-auto">
-        <AlertCircle size={36} className="text-red-400 mb-1" />
-        <p className="text-sm font-semibold text-gray-300">{error}</p>
-        <p className="text-xs text-gray-500 mb-3">You can download the document to view it on your device.</p>
-        <a
-          href={url}
-          download={name || 'document.docx'}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl shadow transition-colors"
-        >
-          Download Document
-        </a>
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center px-4 my-auto max-w-md">
+        <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mb-2">
+          <FileText size={32} />
+        </div>
+        <p className="text-sm font-semibold text-gray-200">{error}</p>
+        <p className="text-xs text-gray-400">Document preview is not available for this file.</p>
       </div>
     )
   }
 
   return (
-    <div className="w-full flex justify-center p-2 sm:p-6 overflow-x-auto select-none my-2">
+    <div
+      className="w-full flex flex-col items-center justify-center p-2 sm:p-6 overflow-x-auto select-none my-2"
+      style={{
+        transform: `scale(${zoomLevel})`,
+        transformOrigin: 'top center',
+        transition: 'transform 0.15s ease-out',
+      }}
+    >
       <div
         ref={containerRef}
-        className="docx-viewer-content w-full max-w-4xl bg-white text-gray-900 rounded-lg shadow-2xl p-6 sm:p-12 overflow-x-auto select-none"
+        className="docx-viewer-content w-full max-w-4xl bg-white text-gray-900 rounded-lg shadow-2xl p-6 sm:p-12 overflow-x-auto select-none empty:hidden"
       />
+
+      {fallbackParagraphs.length > 0 && (
+        <div className="w-full max-w-4xl bg-white text-gray-900 rounded-xl shadow-2xl p-8 sm:p-12 my-2 space-y-4 font-sans leading-relaxed border border-gray-100 select-none">
+          <div className="border-b border-gray-200 pb-3 mb-4">
+            <h2 className="text-lg font-bold text-gray-800">{name || 'Document Content'}</h2>
+            <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-md">
+              Microsoft Word Document Preview
+            </span>
+          </div>
+          <div className="space-y-3">
+            {fallbackParagraphs.map((para, idx) => (
+              <p key={idx} className="text-sm text-gray-800 leading-relaxed break-words">
+                {para}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -158,9 +263,11 @@ function PdfCanvasViewer({ url, zoomLevel, onNumPagesChange, containerRef }) {
         const pdfjsLib = await import('pdfjs-dist')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
+        const token = tokenStorage.getToken()
+        const headers = token ? { Authorization: `Bearer ${token}` } : {}
         let loadingTask
         try {
-          const res = await fetch(url)
+          const res = await fetch(url, { headers })
           if (res.ok) {
             const arrayBuffer = await res.arrayBuffer()
             loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) })
@@ -594,6 +701,8 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
           <div className="flex items-center gap-2 min-w-0 truncate">
             {fileType === 'image' ? (
               <ImageIcon size={18} className="text-purple-400 flex-shrink-0" />
+            ) : fileType === 'docx' || fileType === 'doc' ? (
+              <FileText size={18} className="text-blue-400 flex-shrink-0" />
             ) : (
               <FileText size={18} className="text-purple-400 flex-shrink-0" />
             )}
@@ -601,7 +710,24 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
               {name || 'File Preview'}
             </span>
 
-            {numPages > 0 && (
+            {/* Document Format Badges */}
+            {fileType === 'pdf' && (
+              <span className="text-[10px] font-semibold text-rose-300 bg-rose-950/60 border border-rose-800/40 px-2 py-0.5 rounded-md hidden sm:inline-flex flex-shrink-0">
+                PDF
+              </span>
+            )}
+            {fileType === 'docx' && (
+              <span className="text-[10px] font-semibold text-blue-300 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-md hidden sm:inline-flex flex-shrink-0">
+                DOCX
+              </span>
+            )}
+            {fileType === 'doc' && (
+              <span className="text-[10px] font-semibold text-sky-300 bg-sky-950/60 border border-sky-800/40 px-2 py-0.5 rounded-md hidden sm:inline-flex flex-shrink-0">
+                DOC
+              </span>
+            )}
+
+            {numPages > 0 && fileType === 'pdf' && (
               <span className="text-[11px] font-medium text-gray-400 bg-gray-800/80 px-2 py-0.5 rounded-md border border-gray-700/60 hidden sm:inline-flex flex-shrink-0">
                 {numPages} {numPages === 1 ? 'page' : 'pages'}
               </span>
@@ -616,7 +742,7 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
 
         {/* Right: Zoom Controls & Close Button */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {fileType === 'pdf' && numPages > 0 && (
+          {((fileType === 'pdf' && numPages > 0) || fileType === 'docx' || fileType === 'image') && (
             <div className="flex items-center gap-1 bg-gray-800/90 border border-gray-700/70 px-2 py-1 rounded-xl">
               <button
                 type="button"
@@ -723,6 +849,11 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
             <img
               src={fileUrl}
               alt={name || 'Preview'}
+              style={{
+                transform: zoomLevel !== 1 ? `scale(${zoomLevel})` : undefined,
+                transformOrigin: 'center center',
+                transition: 'transform 0.15s ease-out',
+              }}
               className="max-h-[calc(100vh-120px)] max-w-full object-contain rounded-lg shadow-2xl border border-gray-800 select-none pointer-events-none"
               onContextMenu={e => e.preventDefault()}
               onDragStart={e => e.preventDefault()}
@@ -731,11 +862,12 @@ export default function ViewAttachmentModal({ url, name, onClose }) {
           </div>
         )}
 
-        {/* Office documents (DOCX, etc.) preview via native client-side DocxViewer */}
-        {fileType === 'office' && fileUrl && (
+        {/* Word Document (.docx / .doc / office) preview via native client-side DocxViewer */}
+        {(fileType === 'docx' || fileType === 'doc' || fileType === 'office') && fileUrl && (
           <DocxViewer
             url={fileUrl}
             name={name}
+            zoomLevel={zoomLevel}
           />
         )}
 

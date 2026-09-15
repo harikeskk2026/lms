@@ -2,8 +2,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Eye, Download,
+  ArrowLeft, BookOpen, Users, Calendar, Award, Paperclip, Eye,
   Send, Lock, Unlock, Trash2, CheckCircle2, Search, RefreshCw, Check, X, Clock,
+  MessageSquare, FileText, Files,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatAssignmentDueDate, format12HourTime } from '@/utils/assignmentDate'
@@ -56,6 +57,8 @@ export default function AssignmentDetailPage() {
   const [subLoading, setSubLoading] = useState(true)
   const [subError, setSubError] = useState(false)
   const [viewingFile, setViewingFile] = useState(null)
+  const [viewingFilesModal, setViewingFilesModal] = useState(null)
+  const [viewingTextModal, setViewingTextModal] = useState(null)
   const [actionLoading, setActionLoading] = useState({})
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -67,6 +70,7 @@ export default function AssignmentDetailPage() {
   const [evaluatingRow, setEvaluatingRow] = useState(null)
   const [evalMarks, setEvalMarks] = useState('')
   const [evalFeedback, setEvalFeedback] = useState('')
+  const [evalErrors, setEvalErrors] = useState({})
   const [evalSaving, setEvalSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -140,7 +144,7 @@ export default function AssignmentDetailPage() {
   const isEvaluated = (s) => Boolean(s && (s.reviewed || s.marks != null))
   const isPendingEvaluation = (s) => Boolean(
     s && s.submissionId &&
-    (s.status === 'SUBMITTED' || s.status === 'LATE') &&
+    (s.status === 'SUBMITTED' || s.status === 'LATE' || s.status === 'PENDING_APPROVAL') &&
     !s.reviewed &&
     s.marks == null
   )
@@ -149,7 +153,7 @@ export default function AssignmentDetailPage() {
   // filters/search applied to the table below.
   const stats = useMemo(() => ({
     totalStudents: submissions.length,
-    submitted: submissions.filter(s => s.status === 'SUBMITTED').length,
+    submitted: submissions.filter(s => s.status === 'SUBMITTED' || s.status === 'PENDING_APPROVAL').length,
     notSubmitted: submissions.filter(s => s.status === 'PENDING').length,
     late: submissions.filter(s => s.status === 'LATE').length,
     evaluated: submissions.filter(isEvaluated).length,
@@ -274,23 +278,33 @@ export default function AssignmentDetailPage() {
     setEvaluatingRow(row)
     setEvalMarks(row.marks != null ? String(row.marks) : '')
     setEvalFeedback(row.feedback || '')
+    setEvalErrors({})
   }
 
   const handleSaveEvaluation = async (e) => {
     e?.preventDefault?.()
     if (!evaluatingRow) return
-    const marksNum = evalMarks === '' ? null : Number(evalMarks)
-    if (evalMarks !== '' && (isNaN(marksNum) || marksNum < 0)) {
-      return toast.error('Please enter valid marks')
+    const cleanMarks = String(evalMarks || '').trim()
+    if (!cleanMarks) {
+      setEvalErrors({ marks: 'Please enter marks' })
+      return
     }
-    if (assignment?.totalMarks && marksNum != null && marksNum > assignment.totalMarks) {
-      return toast.error(`Marks cannot exceed total marks (${assignment.totalMarks})`)
+    const marksNum = Number(cleanMarks)
+    if (isNaN(marksNum) || marksNum < 0) {
+      setEvalErrors({ marks: 'Please enter a valid numeric score' })
+      return
     }
+    const maxMarks = assignment?.totalMarks || 100
+    if (marksNum > maxMarks) {
+      setEvalErrors({ marks: `Marks cannot exceed total marks (${maxMarks})` })
+      return
+    }
+    setEvalErrors({})
     setEvalSaving(true)
     try {
       await submissionService.grade(id, evaluatingRow.submissionId, {
         marks: marksNum,
-        feedback: evalFeedback.trim(),
+        feedback: evalFeedback.trim() || undefined,
       })
       toast.success('Evaluation saved successfully!')
       setEvaluatingRow(null)
@@ -324,7 +338,7 @@ export default function AssignmentDetailPage() {
               <h1 className="font-display text-xl font-extrabold text-gray-900 dark:text-white">{assignment.title}</h1>
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[assignment.status]}`}>{assignment.status}</span>
             </div>
-            <p className="text-sm text-gray-500">{assignment.course.title} · {assignment.batch.name}</p>
+            <p className="text-sm text-gray-500">{assignment.course?.title ?? '—'} · {assignment.batch?.name ?? '—'}</p>
           </div>
           <div className="flex gap-2">
             {assignment.status === 'DRAFT' && (
@@ -363,8 +377,8 @@ export default function AssignmentDetailPage() {
         <div className="lg:col-span-2 glass-card p-6 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { icon: BookOpen, label: 'Course', value: assignment.course.title },
-              { icon: Users, label: 'Batch', value: assignment.batch.name },
+              { icon: BookOpen, label: 'Course', value: assignment.course?.title ?? '—' },
+              { icon: Users, label: 'Batch', value: assignment.batch?.name ?? '—' },
               { icon: Calendar, label: 'End Date', value: formatAssignmentDueDate(assignment.dueDate, assignment.closeTime, assignment.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy') },
               { icon: Award, label: 'Total Marks', value: assignment.totalMarks },
             ].map(({ icon: Icon, label, value }) => (
@@ -383,32 +397,26 @@ export default function AssignmentDetailPage() {
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Description</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{assignment.description}</p>
           </div>
-          {assignment.attachmentUrl && (
+          {((assignment.attachments && assignment.attachments.length > 0) || assignment.attachmentUrl) && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Attachment</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                Attachment{((assignment.attachments?.length || 1) > 1) ? 's' : ''} ({assignment.attachments?.length || 1})
+              </h3>
               <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setViewingFile({ url: resolveFileUrl(assignment.attachmentUrl), name: assignment.attachmentName || 'Attachment' })}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/60 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors shadow-2xs"
-                  title="Preview attachment in viewer"
-                >
-                  <Paperclip size={14} className="text-purple-600 dark:text-purple-400" />
-                  <span className="truncate max-w-[260px]">{assignment.attachmentName || 'Attachment'}</span>
-                  <Eye size={13} className="text-purple-600 dark:text-purple-400 ml-0.5" />
-                  <span className="ml-1 text-[10px] font-bold uppercase tracking-wider bg-purple-200/60 dark:bg-purple-800/60 px-1.5 py-0.5 rounded">Preview</span>
-                </button>
-                <a
-                  href={resolveFileUrl(assignment.attachmentUrl)}
-                  download={assignment.attachmentName || 'attachment'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
-                  title="Download attachment file"
-                >
-                  <Download size={13} />
-                  <span>Download</span>
-                </a>
+                {(assignment.attachments?.length > 0 ? assignment.attachments : [{ fileUrl: assignment.attachmentUrl, fileName: assignment.attachmentName || 'Attachment' }]).map((att, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setViewingFile({ url: resolveFileUrl(att.fileUrl), name: att.fileName || `Attachment ${idx + 1}` })}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/60 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors shadow-2xs cursor-pointer"
+                    title="Preview attachment in viewer"
+                  >
+                    <Paperclip size={14} className="text-purple-600 dark:text-purple-400" />
+                    <span className="truncate max-w-[260px]">{att.fileName || `Attachment ${idx + 1}`}</span>
+                    <Eye size={13} className="text-purple-600 dark:text-purple-400 ml-0.5" />
+                    <span className="ml-1 text-[10px] font-bold uppercase tracking-wider bg-purple-200/60 dark:bg-purple-800/60 px-1.5 py-0.5 rounded">Preview</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -518,107 +526,149 @@ export default function AssignmentDetailPage() {
                       <p className="font-semibold text-gray-800 dark:text-white">{row.studentName}</p>
                       <p className="text-xs text-gray-400">{row.studentEmail}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROW_STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${ROW_STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>
                         {ROW_STATUS_LABELS[row.status] || row.status}
                       </span>
                       {row.status === 'REJECTED' && row.rejectionReason && (
-                        <p className="text-[10px] text-red-500 italic mt-1 break-words" title={row.rejectionReason}>
-                          Reason: {row.rejectionReason}
-                        </p>
+                        <div className="mt-1">
+                          <button
+                            type="button"
+                            onClick={() => setViewingTextModal({
+                              title: 'Rejection Reason',
+                              subtitle: `Submission from ${row.studentName}`,
+                              content: row.rejectionReason,
+                              icon: X,
+                              tone: 'red',
+                            })}
+                            className="inline-flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 hover:text-red-700 hover:underline font-medium cursor-pointer"
+                            title="Click to view rejection reason"
+                          >
+                            <Eye size={11} />
+                            <span>View Reason</span>
+                          </button>
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {row.submittedAt ? format(new Date(row.submittedAt), 'dd MMM, HH:mm') : '—'}
                     </td>
-                    <td className="px-4 py-3">
-                      {row.files && row.files.length > 0 ? (
-                        <div className="flex flex-col gap-1">
-                          {row.files.map((f, idx) => (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {(() => {
+                        const fileList = row.files && row.files.length > 0
+                          ? row.files
+                          : (row.fileUrl ? [{ fileUrl: row.fileUrl, fileName: row.fileName || 'Submitted File' }] : [])
+
+                        if (fileList.length === 0) {
+                          return <span className="text-gray-300 text-xs">—</span>
+                        }
+                        if (fileList.length === 1) {
+                          const single = fileList[0]
+                          return (
                             <button
-                              key={idx}
                               type="button"
-                              onClick={() => setViewingFile({ url: resolveFileUrl(f.fileUrl), name: f.fileName || `File ${idx + 1}` })}
-                              className="inline-flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 hover:underline font-semibold whitespace-nowrap"
-                              title="Preview file"
+                              onClick={() => setViewingFile({ url: resolveFileUrl(single.fileUrl), name: single.fileName || 'Submitted File' })}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-semibold border border-purple-100 dark:border-purple-800/40 transition-colors max-w-[180px] cursor-pointer shadow-2xs"
+                              title={single.fileName || 'Preview file'}
                             >
-                              <Paperclip size={12} className="text-purple-500" />
-                               <span className="break-words">{f.fileName || `File ${idx + 1}`}</span>
+                              <Paperclip size={12} className="text-purple-500 flex-shrink-0" />
+                              <span className="truncate">{single.fileName || 'File'}</span>
                               <Eye size={12} className="text-purple-500 flex-shrink-0 ml-0.5" />
                             </button>
-                          ))}
-                        </div>
-                      ) : row.fileUrl ? (
+                          )
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setViewingFilesModal({ studentName: row.studentName, files: fileList })}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-semibold border border-purple-200 dark:border-purple-800/60 shadow-2xs transition-colors cursor-pointer"
+                            title="Click to view all submitted files"
+                          >
+                            <Paperclip size={12} className="text-purple-600 dark:text-purple-400" />
+                            <span>{fileList.length} Files</span>
+                            <Eye size={12} className="text-purple-500 ml-0.5" />
+                          </button>
+                        )
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {row.notes ? (
                         <button
                           type="button"
-                          onClick={() => setViewingFile({ url: resolveFileUrl(row.fileUrl), name: row.fileName || 'File' })}
-                          className="inline-flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 hover:underline font-semibold whitespace-nowrap"
-                          title="Preview file"
+                          onClick={() => setViewingTextModal({
+                            title: 'Student Description / Notes',
+                            subtitle: `Submitted by ${row.studentName}`,
+                            content: row.notes,
+                            icon: MessageSquare,
+                            tone: 'purple',
+                          })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 hover:bg-purple-50 dark:bg-gray-800 dark:hover:bg-purple-950/40 text-gray-700 dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 text-xs font-medium border border-gray-200 dark:border-gray-700 hover:border-purple-200 transition-colors max-w-[160px] group cursor-pointer shadow-2xs"
+                          title="Click to view full note"
                         >
-                          <Paperclip size={12} className="text-purple-500" />
-                           <span className="break-words">{row.fileName || 'File'}</span>
-                          <Eye size={12} className="text-purple-500 flex-shrink-0 ml-0.5" />
+                          <MessageSquare size={12} className="text-gray-400 group-hover:text-purple-500 flex-shrink-0" />
+                          <span className="truncate italic">"{row.notes}"</span>
                         </button>
-                      ) : <span className="text-gray-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.notes ? (
-                        <p className="text-xs text-gray-700 dark:text-gray-300 italic max-w-[180px] truncate" title={row.notes}>
-                          "{row.notes}"
-                        </p>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') && !isEvaluated(row) ? (
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
-                          <input
-                            type="number"
-                            min="0"
-                            max={assignment?.totalMarks || 100}
-                            value={gradeInputs[row.submissionId] ?? ''}
-                            onChange={e => setGradeInputs(prev => ({ ...prev, [row.submissionId]: e.target.value }))}
-                            placeholder="0"
-                            className="w-16 px-2 py-1 text-xs rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 font-semibold text-gray-800 dark:text-white text-center"
-                          />
-                          <span className="text-xs text-gray-400 font-medium">/ {assignment?.totalMarks || 100}</span>
-                        </div>
-                      ) : row.marks != null ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800/60 shadow-2xs whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {row.marks != null ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEvaluate(row)}
+                          className="inline-flex items-center gap-1 font-bold text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800/60 shadow-2xs hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors cursor-pointer"
+                          title="Click to view or edit grade"
+                        >
                           <Award size={12} className="text-purple-600 dark:text-purple-400" />
                           {row.marks} / {assignment?.totalMarks || 100}
-                        </span>
+                        </button>
+                      ) : (row.status === 'SUBMITTED' || row.status === 'LATE' || row.status === 'PENDING_APPROVAL') ? (
+                        <span className="text-gray-400 text-xs font-medium italic">Pending</span>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      {row.submissionId && (row.status === 'SUBMITTED' || row.status === 'LATE') && !isEvaluated(row) ? (
-                        <input
-                          type="text"
-                          value={feedbackInputs[row.submissionId] ?? ''}
-                          onChange={e => setFeedbackInputs(prev => ({ ...prev, [row.submissionId]: e.target.value }))}
-                          placeholder="Add feedback..."
-                          className="w-48 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-100"
-                        />
-                      ) : row.feedback ? (
-                        <p className="text-xs text-gray-700 dark:text-gray-300 italic max-w-[200px] truncate" title={row.feedback}>
-                          "{row.feedback}"
-                        </p>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {row.feedback ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewingTextModal({
+                            title: 'Trainer Feedback',
+                            subtitle: `Feedback for ${row.studentName}`,
+                            content: row.feedback,
+                            icon: FileText,
+                            tone: 'blue',
+                          })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 hover:bg-blue-50 dark:bg-gray-800 dark:hover:bg-blue-950/40 text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 text-xs font-medium border border-gray-200 dark:border-gray-700 hover:border-blue-200 transition-colors max-w-[160px] group cursor-pointer shadow-2xs"
+                          title="Click to view full feedback"
+                        >
+                          <FileText size={12} className="text-gray-400 group-hover:text-blue-500 flex-shrink-0" />
+                          <span className="truncate italic">"{row.feedback}"</span>
+                        </button>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {isEvaluated(row) ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-200 dark:border-green-800/40">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEvaluate(row)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-200 dark:border-green-800/40 hover:bg-green-200 transition-colors cursor-pointer"
+                          title="Click to view evaluation"
+                        >
                           <CheckCircle2 size={12} /> Evaluated
-                        </span>
+                        </button>
                       ) : (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEvaluate(row)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 hover:bg-blue-200 transition-colors cursor-pointer"
+                          title="Click to evaluate submission"
+                        >
                           <Check size={12} /> Approved
-                        </span>
+                        </button>
                       ) : row.status === 'PENDING_APPROVAL' ? (
                         <span className="text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
                           Needs Review
@@ -658,35 +708,24 @@ export default function AssignmentDetailPage() {
                       ) : (row.status === 'SUBMITTED' || row.status === 'LATE') ? (
                         <div className="flex items-center gap-1.5 whitespace-nowrap">
                           {!isEvaluated(row) ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleGradeInline(row)}
-                                disabled={savingInline[row.submissionId]}
-                                className="inline-flex items-center gap-1 text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold px-2.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-60"
-                                title="Save score & feedback"
-                              >
-                                <Check size={13} />
-                                <span>{savingInline[row.submissionId] ? 'Saving...' : 'Save'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEvaluate(row)}
-                                className="inline-flex items-center gap-1 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 font-semibold px-2 py-1.5 rounded-lg transition-colors"
-                                title="Open full evaluation modal"
-                              >
-                                <Award size={13} />
-                              </button>
-                            </>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEvaluate(row)}
+                              className="inline-flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold px-3 py-1.5 rounded-lg shadow-xs hover:shadow transition-all"
+                              title="Evaluate and enter score & feedback"
+                            >
+                              <Award size={13} />
+                              <span>Evaluate</span>
+                            </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => handleOpenEvaluate(row)}
-                              className="inline-flex items-center gap-1.5 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
-                              title="Update evaluation"
+                              className="inline-flex items-center gap-1.5 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                              title="Update score & feedback"
                             >
                               <Award size={13} />
-                              <span>Update</span>
+                              <span>Update Grade</span>
                             </button>
                           )}
                         </div>
@@ -842,21 +881,62 @@ export default function AssignmentDetailPage() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSaveEvaluation} className="space-y-4">
+            <form onSubmit={handleSaveEvaluation} noValidate className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Marks / Score (out of {assignment?.totalMarks || 100}) *
                 </label>
                 <input
-                  type="number"
-                  min="0"
-                  max={assignment?.totalMarks || 100}
+                  type="text"
+                  inputMode="numeric"
                   value={evalMarks}
-                  onChange={e => setEvalMarks(e.target.value)}
                   placeholder={`Enter score 0 - ${assignment?.totalMarks || 100}`}
-                  required
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  onKeyDown={e => {
+                    // Disallow scientific notation ('e', 'E'), negative sign ('-'), plus ('+'), and decimals ('.')
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                      e.preventDefault()
+                    }
+                  }}
+                  onPaste={e => {
+                    e.preventDefault()
+                    const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '')
+                    if (pasted) {
+                      if (evalErrors.marks) setEvalErrors(prev => ({ ...prev, marks: undefined }))
+                      const max = assignment?.totalMarks || 100
+                      const num = Number(pasted)
+                      if (num > max) {
+                        setEvalMarks(String(max))
+                        setEvalErrors({ marks: `Marks cannot exceed total marks (${max})` })
+                      } else {
+                        setEvalMarks(pasted)
+                      }
+                    }
+                  }}
+                  onChange={e => {
+                    if (evalErrors.marks) setEvalErrors(prev => ({ ...prev, marks: undefined }))
+                    const clean = e.target.value.replace(/[^0-9]/g, '')
+                    if (clean === '') {
+                      setEvalMarks('')
+                      return
+                    }
+                    const max = assignment?.totalMarks || 100
+                    const num = Number(clean)
+                    if (num > max) {
+                      setEvalMarks(String(max))
+                      setEvalErrors({ marks: `Marks cannot exceed total marks (${max})` })
+                    } else {
+                      setEvalMarks(clean)
+                    }
+                  }}
+                  className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:ring-2 font-semibold text-gray-800 dark:text-white transition-colors ${
+                    evalErrors.marks
+                      ? 'border-red-400 focus:ring-red-400 bg-red-50/20 dark:bg-red-950/20'
+                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-purple-500'
+                  }`}
                 />
+                {evalErrors.marks && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{evalErrors.marks}</p>
+                )}
               </div>
 
               <div>
@@ -868,7 +948,7 @@ export default function AssignmentDetailPage() {
                   onChange={e => setEvalFeedback(e.target.value)}
                   placeholder="Provide feedback on the submission, strengths, improvements..."
                   rows={3}
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
               </div>
 
@@ -876,14 +956,14 @@ export default function AssignmentDetailPage() {
                 <button
                   type="button"
                   onClick={() => setEvaluatingRow(null)}
-                  className="px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={evalSaving}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check size={13} />
                   <span>{evalSaving ? 'Saving...' : 'Save Evaluation'}</span>
@@ -899,6 +979,117 @@ export default function AssignmentDetailPage() {
           name={viewingFile.name}
           onClose={() => setViewingFile(null)}
         />
+      )}
+
+      {/* Submitted Files Modal */}
+      {viewingFilesModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-gray-100 dark:border-gray-800">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                  <Files size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Submitted Files</h3>
+                  <p className="text-xs text-gray-500">
+                    Student: <strong className="text-gray-700 dark:text-gray-300">{viewingFilesModal.studentName}</strong> ({viewingFilesModal.files.length} file{viewingFilesModal.files.length !== 1 ? 's' : ''})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingFilesModal(null)}
+                className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {viewingFilesModal.files.map((file, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 text-xs"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Paperclip size={14} className="text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                    <span className="font-medium text-gray-800 dark:text-gray-200 break-all">{file.fileName || `File ${idx + 1}`}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setViewingFile({ url: resolveFileUrl(file.fileUrl), name: file.fileName || `File ${idx + 1}` })}
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-colors cursor-pointer"
+                      title="Preview file"
+                    >
+                      <Eye size={12} />
+                      <span>Preview</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setViewingFilesModal(null)}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Text View Modal (Notes / Feedback / Rejection Reason) */}
+      {viewingTextModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-gray-100 dark:border-gray-800">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  viewingTextModal.tone === 'blue'
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                    : viewingTextModal.tone === 'red'
+                    ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                    : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                }`}>
+                  {viewingTextModal.icon ? <viewingTextModal.icon size={16} /> : <MessageSquare size={16} />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">{viewingTextModal.title}</h3>
+                  {viewingTextModal.subtitle && (
+                    <p className="text-xs text-gray-500">{viewingTextModal.subtitle}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingTextModal(null)}
+                className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 text-xs text-gray-700 dark:text-gray-300 max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+              {viewingTextModal.content}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setViewingTextModal(null)}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Confirmation Modal (matches Image 3) */}

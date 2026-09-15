@@ -155,4 +155,25 @@ public class FileStorageService {
             default -> "application/octet-stream";
         };
     }
+
+    /**
+     * Safely deletes a stored file from both the database entity store and disk cache.
+     */
+    public void delete(String storedUrl) {
+        if (storedUrl == null || storedUrl.isBlank() || !storedUrl.startsWith("/uploads/")) {
+            return;
+        }
+        try {
+            storedFileRepository.deleteByPath(storedUrl);
+        } catch (Exception ignored) {
+        }
+        try {
+            String relative = storedUrl.substring("/uploads/".length());
+            Path target = root.resolve(relative).normalize();
+            if (target.startsWith(root) && Files.exists(target)) {
+                Files.deleteIfExists(target);
+            }
+        } catch (Exception ignored) {
+        }
+    }
 }

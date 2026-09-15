@@ -28,16 +28,15 @@ public class AssignmentSchedulerService {
         this.assignmentService = assignmentService;
     }
 
-    /** Every minute: auto-publish DRAFT assignments whose publish date & time has arrived, and auto-close PUBLISHED assignments whose close date & time has passed. */
+    /** Every minute: auto-publish SCHEDULED assignments whose publish date & time has arrived, and auto-close PUBLISHED assignments whose close date & time has passed. */
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void processScheduledAssignmentTransitions() {
         LocalDateTime now = LocalDateTime.now();
 
-        // 1. Auto-publish DRAFT or SCHEDULED assignments whose publish date & time has arrived
-        List<Assignment> pendingAssignments = assignmentRepository.findAll().stream()
-                .filter(a -> (a.getStatus() == AssignmentStatus.DRAFT || a.getStatus() == AssignmentStatus.SCHEDULED)
-                        && a.getStartDate() != null)
+        // 1. Auto-publish ONLY SCHEDULED assignments whose publish date & time has arrived (NEVER DRAFT)
+        List<Assignment> scheduledAssignments = assignmentRepository.findByStatus(AssignmentStatus.SCHEDULED).stream()
+                .filter(a -> a.getStartDate() != null)
                 .filter(a -> {
                     LocalDateTime publishDateTime = a.getPublishTime() != null
                             ? LocalDateTime.of(a.getStartDate(), a.getPublishTime())
@@ -46,18 +45,18 @@ public class AssignmentSchedulerService {
                 })
                 .toList();
 
-        for (Assignment a : pendingAssignments) {
+        for (Assignment a : scheduledAssignments) {
             try {
                 assignmentService.publish(a.getId());
-                log.info("Auto-published assignment ID {}", a.getId());
+                log.info("Auto-published scheduled assignment ID {}", a.getId());
             } catch (Exception e) {
                 log.warn("Failed to auto-publish assignment ID {}: {}", a.getId(), e.getMessage());
             }
         }
 
         // 2. Auto-close PUBLISHED assignments whose due/close date & time has passed
-        List<Assignment> dueAssignments = assignmentRepository.findAll().stream()
-                .filter(a -> a.getStatus() == AssignmentStatus.PUBLISHED && a.getDueDate() != null)
+        List<Assignment> dueAssignments = assignmentRepository.findByStatus(AssignmentStatus.PUBLISHED).stream()
+                .filter(a -> a.getDueDate() != null)
                 .filter(a -> {
                     LocalDateTime closeDateTime = a.getCloseTime() != null
                             ? LocalDateTime.of(a.getDueDate(), a.getCloseTime())

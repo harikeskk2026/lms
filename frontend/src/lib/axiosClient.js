@@ -104,12 +104,14 @@ export function resolveFileUrl(path) {
   if (/^https?:\/\//i.test(path)) return path
   // Ensure the path starts with a slash
   const normalized = path.startsWith('/') ? path : `/${path}`
+  const token = typeof window !== 'undefined' ? tokenStorage.getToken() : null
+  const tokenQuery = token ? (normalized.includes('?') ? `&token=${encodeURIComponent(token)}` : `?token=${encodeURIComponent(token)}`) : ''
   // /uploads/** paths are proxied by Next.js (same-origin) — return them relative
   // so the iframe loads from port 3040 instead of 7000, avoiding cross-origin issues
-  if (normalized.startsWith('/uploads/')) return normalized
+  if (normalized.startsWith('/uploads/')) return `${normalized}${tokenQuery}`
   // All other relative paths (e.g. /api/**) get the full API origin prepended
   const apiOrigin = getApiBaseUrl().replace(/\/api\/?$/, '')
-  return `${apiOrigin}${normalized}`
+  return `${apiOrigin}${normalized}${tokenQuery}`
 }
 
 export default api

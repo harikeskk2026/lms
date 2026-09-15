@@ -128,12 +128,12 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public void notifyAdmins(String title, String body, NotificationType type, String link) {
         List<Notification> notifications = userRepository.findAll().stream()
-                .filter(u -> u.getRole() == Role.ADMIN && u.isActive())
+                .filter(u -> (u.getRole() == Role.ADMIN || u.getRole() == Role.SUPERADMIN || u.getRole() == Role.TRAINER) && u.isActive())
                 .map(user -> buildNotification(user, title, body, type, link))
                 .toList();
         if (!notifications.isEmpty()) {
             notificationRepository.saveAll(notifications);
-            log.debug("Admin notification sent to {} admins: {}", notifications.size(), title);
+            log.debug("Staff notification sent to {} recipients: {}", notifications.size(), title);
         }
     }
 

@@ -6,6 +6,7 @@ import com.careerlabs.lms.api.assignment.entity.AssignmentStatus;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 public record AssignmentResponse(
                 Long id,
@@ -20,6 +21,7 @@ public record AssignmentResponse(
                 int totalMarks,
                 String attachmentUrl,
                 String attachmentName,
+                List<AssignmentAttachmentResponse> attachments,
                 AssignmentStatus status,
                 Instant createdAt,
                 Instant updatedAt,
@@ -30,6 +32,14 @@ public record AssignmentResponse(
         }
 
         public static AssignmentResponse from(Assignment assignment, int submissionCount) {
+                List<AssignmentAttachmentResponse> attList = assignment.getAttachments() != null && !assignment.getAttachments().isEmpty()
+                                ? assignment.getAttachments().stream()
+                                                .map(a -> new AssignmentAttachmentResponse(a.getFileUrl(), a.getFileName()))
+                                                .toList()
+                                : (assignment.getAttachmentUrl() != null && !assignment.getAttachmentUrl().isBlank()
+                                                ? List.of(new AssignmentAttachmentResponse(assignment.getAttachmentUrl(), assignment.getAttachmentName()))
+                                                : List.of());
+
                 return new AssignmentResponse(
                                 assignment.getId(),
                                 assignment.getTitle(),
@@ -43,6 +53,7 @@ public record AssignmentResponse(
                                 assignment.getTotalMarks(),
                                 assignment.getAttachmentUrl(),
                                 assignment.getAttachmentName(),
+                                attList,
                                 assignment.getStatus(),
                                 assignment.getCreatedAt(),
                                 assignment.getUpdatedAt(),
@@ -55,3 +66,4 @@ public record AssignmentResponse(
         public record BatchSummary(Long id, String name) {
         }
 }
+

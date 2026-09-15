@@ -21,6 +21,7 @@ public record StudentAssignmentResponse(
                 int maxMarks,
                 String attachmentUrl,
                 String attachmentName,
+                List<AssignmentAttachmentResponse> attachments,
                 boolean isOverdue,
                 AssignmentStatus status,
                 SubmissionInfo submission) {
@@ -28,10 +29,22 @@ public record StudentAssignmentResponse(
         public StudentAssignmentResponse(
                 Long id, String title, String description, String batchName,
                 LocalDate startDate, LocalTime publishTime, LocalDate dueDate, LocalTime closeTime,
+                int maxMarks, String attachmentUrl, String attachmentName,
+                List<AssignmentAttachmentResponse> attachments, boolean isOverdue,
+                AssignmentStatus status, SubmissionInfo submission) {
+            this(id, title, description, batchName, null, startDate, publishTime, dueDate, closeTime,
+                 maxMarks, attachmentUrl, attachmentName, attachments, isOverdue, status, submission);
+        }
+
+        public StudentAssignmentResponse(
+                Long id, String title, String description, String batchName,
+                LocalDate startDate, LocalTime publishTime, LocalDate dueDate, LocalTime closeTime,
                 int maxMarks, String attachmentUrl, String attachmentName, boolean isOverdue,
                 AssignmentStatus status, SubmissionInfo submission) {
             this(id, title, description, batchName, null, startDate, publishTime, dueDate, closeTime,
-                 maxMarks, attachmentUrl, attachmentName, isOverdue, status, submission);
+                 maxMarks, attachmentUrl, attachmentName,
+                 (attachmentUrl != null ? List.of(new AssignmentAttachmentResponse(attachmentUrl, attachmentName)) : List.of()),
+                 isOverdue, status, submission);
         }
 
         public StudentAssignmentResponse(
@@ -40,7 +53,9 @@ public record StudentAssignmentResponse(
                 int maxMarks, String attachmentUrl, String attachmentName, boolean isOverdue,
                 SubmissionInfo submission) {
             this(id, title, description, batchName, null, startDate, publishTime, dueDate, closeTime,
-                 maxMarks, attachmentUrl, attachmentName, isOverdue, AssignmentStatus.PUBLISHED, submission);
+                 maxMarks, attachmentUrl, attachmentName,
+                 (attachmentUrl != null ? List.of(new AssignmentAttachmentResponse(attachmentUrl, attachmentName)) : List.of()),
+                 isOverdue, AssignmentStatus.PUBLISHED, submission);
         }
 
         public record SubmissionInfo(

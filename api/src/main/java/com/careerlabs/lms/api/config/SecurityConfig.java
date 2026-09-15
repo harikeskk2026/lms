@@ -52,11 +52,9 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // Uploaded files (assignment attachments, etc.) are viewed inline in an <iframe> by the
-    // frontend, which runs on a different origin than this API. Spring Security's default
-    // X-Frame-Options: DENY blocks that framing entirely, so this path gets its own chain
-    // with frame options relaxed to same-origin-with-the-serving-origin (the file itself has
-    // no auth check either way — see the permitAll below).
+    // Uploaded files (assignment attachments, submissions, materials, etc.) require valid
+    // authentication. The jwtAuthenticationFilter validates tokens from Authorization header
+    // or token query parameter.
     @Bean
     @Order(1)
     public SecurityFilterChain uploadsFilterChain(HttpSecurity http) throws Exception {
@@ -65,8 +63,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                .headers(headers -> headers.frameOptions(frame -> frame.disable()));
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
+                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

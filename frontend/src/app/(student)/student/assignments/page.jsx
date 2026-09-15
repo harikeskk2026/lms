@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import { format, formatDistanceToNow } from 'date-fns'
-import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye, Clock, Award, Lock } from 'lucide-react'
+import { ClipboardList, Upload, X, ChevronDown, ChevronUp, Paperclip, Eye, Clock, Award, Lock, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAssignments } from '@/hooks/useStudentDashboard'
 import { studentApi, resolveFileUrl } from '@/lib/api'
 import toast from 'react-hot-toast'
@@ -11,7 +11,7 @@ import SkeletonCard from '@/components/student/SkeletonCard'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 const FILTERS = ['All', 'Pending', 'Pending Approval', 'Submitted', 'Graded', 'Overdue', 'Closed']
-const ALLOWED_SUBMISSION_EXTENSIONS = ['.pdf', '.docx']
+const ALLOWED_SUBMISSION_EXTENSIONS = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.txt', '.csv', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.zip']
 
 export function parseAssignmentDueDate(dueDate, closeTime) {
   if (!dueDate) return null
@@ -89,6 +89,7 @@ function formatFileSize(bytes) {
 function SubmitModal({ assignment, onClose, onSuccess }) {
   const [mounted, setMounted] = useState(false)
   const [files, setFiles] = useState([])
+  const [fileError, setFileError] = useState('')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -116,19 +117,28 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
 
   const processFiles = (pickedFiles) => {
     if (!pickedFiles || pickedFiles.length === 0) return
+    const invalid = []
     const valid = []
     for (const f of pickedFiles) {
       const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase()
       if (!ALLOWED_SUBMISSION_EXTENSIONS.includes(ext)) {
-        toast.error(`"${f.name}" is not supported. Only PDF or DOCX files are allowed`)
-        continue
+        invalid.push(f.name)
+      } else {
+        if (!files.some(existing => existing.name === f.name && existing.size === f.size) &&
+            !valid.some(v => v.name === f.name && v.size === f.size)) {
+          valid.push(f)
+        }
       }
-      if (files.some(existing => existing.name === f.name && existing.size === f.size) ||
-          valid.some(v => v.name === f.name && v.size === f.size)) {
-        continue
-      }
-      valid.push(f)
     }
+
+    if (invalid.length > 0) {
+      const errMsg = `Unsupported file type: "${invalid.join(', ')}". Allowed formats: PDF, Word, PowerPoint, Text, Sheets, Images, and ZIP.`
+      setFileError(errMsg)
+      toast.error(errMsg)
+    } else {
+      setFileError('')
+    }
+
     if (valid.length > 0) {
       setFiles(prev => [...prev, ...valid])
     }
@@ -158,31 +168,19 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
     setLoading(true)
     try {
       const form = new FormData()
-      files.forEach(f => {
-        form.append('files', f)
-      })
-      if (files[0]) {
-        form.append('file', files[0])
-      }
-      form.append('notes', notes)
+      files.forEach(f => form.append('files', f))
+      if (notes.trim()) form.append('notes', notes.trim())
       await studentApi.submitAssignment(assignment.id, form)
       toast.success('Assignment submitted successfully!')
-      onSuccess()
-      onClose()
-    } catch (e) {
-      const rawMsg = e?.response?.data?.message || e?.message || ''
-      let friendlyMsg = 'Submission failed. Please try again.'
-      if (rawMsg) {
-        const lower = rawMsg.toLowerCase()
-        if (lower.includes('value too long') || lower.includes('character varying')) {
-          friendlyMsg = 'Notes or file details exceed allowed length. Please shorten your notes and try again.'
-        } else if (lower.includes('dataintegrityviolation') || lower.includes('could not execute statement') || lower.includes('check constraint')) {
-          friendlyMsg = 'Unable to save submission. Please review your submission notes and try again.'
-        } else {
-          friendlyMsg = rawMsg
-        }
+      onSuccess?.()
+      onClose?.()
+    } catch (err) {
+      const serverMsg = err.response?.data?.message || err.message || 'Submission failed'
+      if (err.response?.status === 400 || serverMsg.includes('closed') || serverMsg.includes('deadline')) {
+        toast.error('Assignment is closed or deadline has passed. Submissions are no longer accepted.')
+      } else {
+        toast.error(serverMsg)
       }
-      toast.error(friendlyMsg)
     } finally {
       setLoading(false)
     }
@@ -191,12 +189,22 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
   if (!mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <h3 className="font-display font-bold text-gray-800 dark:text-white text-base">Submit Assignment</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"><X size={16} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={onClose} />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh] space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="text-purple-600 dark:text-purple-400" size={20} />
+            <h2 className="font-display font-bold text-lg text-gray-800 dark:text-white">Submit Assignment</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <X size={18} />
+          </button>
         </div>
+
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{assignment.title}</p>
 
@@ -213,9 +221,23 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
           >
             <Upload size={24} className="mx-auto text-purple-600 dark:text-purple-400 mb-2" />
             <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Click to browse or drag & drop files</p>
-            <p className="text-xs text-gray-400 mt-1">Upload single or multiple files (PDF, DOCX, Images, ZIP)</p>
-            <input type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip" className="hidden" onChange={handleFileChange} />
+            <p className="text-xs text-gray-400 mt-1">Upload single or multiple files (PDF, DOC, DOCX, PPT, Images, ZIP)</p>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </label>
+
+          {/* Inline Error Message */}
+          {fileError && (
+            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium">
+              <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
+              <span>{fileError}</span>
+            </div>
+          )}
 
           {/* Selected files list */}
           {files.length > 0 && (
@@ -587,11 +609,21 @@ export default function AssignmentsPage() {
   return (
     <div className="page-wrapper">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Assignments</h1>
           <p className="text-sm text-gray-500">{assignments?.length || 0} total assignments</p>
         </div>
+
+        <button
+          onClick={() => refetch()}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-gray-800 border border-purple-100 dark:border-purple-800 text-gray-600 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:border-purple-200 dark:hover:border-purple-700 hover:text-purple-600 transition-all disabled:opacity-50 cursor-pointer shadow-2xs self-start sm:self-auto"
+          title="Refresh assignments"
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {/* Filter tabs */}

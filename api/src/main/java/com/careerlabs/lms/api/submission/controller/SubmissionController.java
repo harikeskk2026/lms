@@ -36,15 +36,17 @@ public class SubmissionController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<SubmissionListResponse>> list(@PathVariable Long assignmentId) {
-        return ResponseEntity.ok(ApiResponse.of(submissionService.listByAssignment(assignmentId)));
+    public ResponseEntity<ApiResponse<SubmissionListResponse>> list(@PathVariable Long assignmentId,
+                                                                    @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(submissionService.listByAssignment(assignmentId, principal)));
     }
 
     @PatchMapping("/{submissionId}")
     public ResponseEntity<ApiResponse<SubmissionRowResponse>> grade(@PathVariable Long assignmentId,
                                                                       @PathVariable Long submissionId,
-                                                                      @Valid @RequestBody GradeSubmissionRequest request) {
-        SubmissionRowResponse response = submissionService.grade(assignmentId, submissionId, request);
+                                                                      @Valid @RequestBody GradeSubmissionRequest request,
+                                                                      @AuthenticationPrincipal JwtUserPrincipal principal) {
+        SubmissionRowResponse response = submissionService.grade(assignmentId, submissionId, request, principal);
         return ResponseEntity.ok(ApiResponse.of("Submission graded", response));
     }
 
@@ -55,7 +57,7 @@ public class SubmissionController {
             @Valid @RequestBody ApproveRejectSubmissionRequest request,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
         SubmissionRowResponse response = submissionService.approveOrReject(
-                assignmentId, submissionId, request, principal != null ? principal.email() : "Admin");
+                assignmentId, submissionId, request, principal != null ? principal.email() : "Admin", principal);
         return ResponseEntity.ok(ApiResponse.of("Submission " + request.getAction().toLowerCase() + "d", response));
     }
 
