@@ -35,6 +35,7 @@ export default function RecordedSessionsPage() {
   const [batches, setBatches] = useState([])
   const [panelOpen, setPanelOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [touched, setTouched] = useState({})
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [uploadTarget, setUploadTarget] = useState(null)
@@ -52,18 +53,64 @@ export default function RecordedSessionsPage() {
   const [deletingSession, setDeletingSession] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  const isValidUrl = (url) => {
+    if (!url || !url.trim()) return true
+    try {
+      const parsed = new URL(url)
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    } catch {
+      return false
+    }
+  }
+
+  const getSessionFieldError = (field, val) => {
+    if (field === 'title') {
+      if (!val || !val.trim()) return 'Title is required'
+    }
+    if (field === 'courseId') {
+      if (!val) return 'Course is required'
+    }
+    if (field === 'thumbnailUrl') {
+      if (val && !isValidUrl(val)) return 'Please enter a valid URL (http:// or https://)'
+    }
+    if (field === 'availableUntil') {
+      if (form.availableFrom && val && new Date(form.availableFrom) >= new Date(val)) {
+        return 'Available until must be after available from'
+      }
+    }
+    return null
+  }
+
+  const isSessionValid = Boolean(
+    form.title?.trim() &&
+    form.courseId &&
+    isValidUrl(form.thumbnailUrl) &&
+    (!form.availableFrom || !form.availableUntil || new Date(form.availableFrom) < new Date(form.availableUntil))
+  )
+
+  const isSessionFormDirty = Boolean(
+    form.title || form.description || form.courseId || form.batchId ||
+    form.instructorName || form.thumbnailUrl || form.tags || form.sessionDate ||
+    form.availableFrom || form.availableUntil
+  )
+
   const load = () => {
     setLoading(true)
-    recordedSessionService.listSessions()
-      .then(r => setSessions(r.data || []))
-      .catch(() => toast.error('Failed to load recorded sessions'))
-      .finally(() => setLoading(false))
+    Promise.all([
+      recordedSessionService.listSessions(),
+      courseService.list(),
+      batchService.list(),
+    ]).then(([sRes, cRes, bRes]) => {
+      setSessions(sRes.data || [])
+      setCourses(cRes.data || [])
+      setBatches(bRes.data || [])
+    }).catch(err => {
+      toast.error(err.message || 'Failed to load data')
+    }).finally(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
-    courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
-    batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
   }, [])
 
   // Poll processing status for any session stuck in PROCESSING. Runs silently
@@ -84,6 +131,7 @@ export default function RecordedSessionsPage() {
 
   const openCreate = () => {
     setForm(EMPTY_FORM)
+    setTouched({})
     setEditingId(null)
     setPanelOpen(true)
   }
@@ -95,6 +143,7 @@ export default function RecordedSessionsPage() {
       tags: session.tags || '', sessionDate: session.sessionDate || '',
       availableFrom: session.availableFrom || '', availableUntil: session.availableUntil || '',
     })
+    setTouched({})
     setEditingId(session.id)
     setPanelOpen(true)
   }
@@ -333,28 +382,55 @@ export default function RecordedSessionsPage() {
       </div>
 
       {/* Create/Edit panel */}
-      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Session' : 'Create Session'} width="w-[520px]">
+      <SlidePanel open={panelOpen} isDirty={isSessionFormDirty} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Session' : 'Create Session'} width="w-[520px]">
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
-            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <label className="block text-sm font-semibold text-gray-700 mb-1">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={form.title}
+              onBlur={() => setTouched(t => ({ ...t, title: true }))}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Enter session title"
+              className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                touched.title && getSessionFieldError('title', form.title)
+                  ? 'border-red-500 focus:ring-red-400'
+                  : 'border-gray-200 focus:ring-purple-500'
+              }`}
+            />
+            {touched.title && getSessionFieldError('title', form.title) && (
+              <p className="text-xs text-red-500 mt-1">{getSessionFieldError('title', form.title)}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+            <textarea
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              rows={2}
+              placeholder="Enter session description"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Course</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Course <span className="text-red-500">*</span>
+              </label>
               <CustomSelect
                 value={form.courseId}
-                onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
+                onChange={(val) => {
+                  setForm(f => ({ ...f, courseId: val }))
+                  setTouched(t => ({ ...t, courseId: true }))
+                }}
                 options={courses.map(c => ({ value: c.id, label: c.title }))}
                 placeholder="Select course"
                 searchable={courses.length >= 10}
               />
+              {touched.courseId && !form.courseId && (
+                <p className="text-xs text-red-500 mt-1">Course is required</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Batch (optional)</label>
@@ -372,25 +448,49 @@ export default function RecordedSessionsPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Instructor</label>
-            <input value={form.instructorName} onChange={e => setForm(f => ({ ...f, instructorName: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <input
+              value={form.instructorName}
+              onChange={e => setForm(f => ({ ...f, instructorName: e.target.value }))}
+              placeholder="Enter instructor name"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Session Date</label>
-              <input type="date" value={form.sessionDate} onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <input
+                type="date"
+                value={form.sessionDate}
+                onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Thumbnail URL</label>
-              <input value={form.thumbnailUrl} onChange={e => setForm(f => ({ ...f, thumbnailUrl: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <input
+                value={form.thumbnailUrl}
+                onBlur={() => setTouched(t => ({ ...t, thumbnailUrl: true }))}
+                onChange={e => setForm(f => ({ ...f, thumbnailUrl: e.target.value }))}
+                placeholder="Enter thumbnail image URL"
+                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                  touched.thumbnailUrl && getSessionFieldError('thumbnailUrl', form.thumbnailUrl)
+                    ? 'border-red-500 focus:ring-red-400'
+                    : 'border-gray-200 focus:ring-purple-500'
+                }`}
+              />
+              {touched.thumbnailUrl && getSessionFieldError('thumbnailUrl', form.thumbnailUrl) && (
+                <p className="text-xs text-red-500 mt-1">{getSessionFieldError('thumbnailUrl', form.thumbnailUrl)}</p>
+              )}
             </div>
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Tags (comma-separated)</label>
-            <input value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+            <input
+              value={form.tags}
+              onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
+              placeholder="Enter comma-separated tags"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            />
           </div>
           <div className="space-y-3">
             <div>
@@ -406,10 +506,17 @@ export default function RecordedSessionsPage() {
                 value={form.availableUntil}
                 onChange={val => setForm(f => ({ ...f, availableUntil: val }))}
               />
+              {form.availableFrom && form.availableUntil && new Date(form.availableFrom) >= new Date(form.availableUntil) && (
+                <p className="text-xs text-red-500 mt-1">Available until must be after available from</p>
+              )}
             </div>
           </div>
-          <button onClick={handleSave} disabled={saving || !form.title || !form.courseId}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !isSessionValid}
+            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
             {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Session'}
           </button>
         </div>
@@ -435,8 +542,12 @@ export default function RecordedSessionsPage() {
                 <div className="h-2 rounded-full bg-purple-600 transition-all" style={{ width: `${uploadProgress}%` }} />
               </div>
             )}
-            <button onClick={handleUpload} disabled={!uploadFile || uploading}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={!uploadFile || uploading}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
               {uploading ? `Uploading... ${uploadProgress}%` : 'Upload'}
             </button>
             <p className="text-[11px] text-gray-400">Max file size: 400MB. Stored privately in Google Drive & transcoded to encrypted HLS in background.</p>

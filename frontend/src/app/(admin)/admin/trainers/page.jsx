@@ -1,15 +1,28 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
-import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
+import {
+  isValidEmail,
+  EMAIL_ERROR_MESSAGE,
+  isValidName,
+  NAME_ERROR_MESSAGE,
+  filterNameKey,
+  filterPhoneKey,
+  sanitizePhone,
+  isValidPhone,
+  PHONE_ERROR_MESSAGE,
+  isValidPassword,
+  PASSWORD_ERROR_MESSAGE
+} from '@/utilities/validators'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import CustomSelect from '@/components/ui/CustomSelect'
+import FormDrawer from '@/components/ui/FormDrawer'
+import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 import clsx from 'clsx'
 
 const EMPTY_FORM = {
@@ -135,9 +148,66 @@ export default function TrainersPage() {
     }
   }, [fetchTrainers])
 
+  const [touched, setTouched] = useState({})
+  const [formSubmitted, setFormSubmitted] = useState(false)
+
+  const isFormDirty = Object.values(form).some(v => v !== '')
+
+  const createErrors = {
+    name: !form.name.trim()
+      ? 'Full Name is required'
+      : !isValidName(form.name.trim())
+      ? NAME_ERROR_MESSAGE
+      : null,
+    email: !form.email.trim()
+      ? 'Email Address is required'
+      : !isValidEmail(form.email.trim())
+      ? EMAIL_ERROR_MESSAGE
+      : null,
+    password: !form.password
+      ? 'Initial Password is required'
+      : !isValidPassword(form.password)
+      ? PASSWORD_ERROR_MESSAGE
+      : null,
+    phone: form.phone && form.phone.trim() && !isValidPhone(form.phone.trim())
+      ? PHONE_ERROR_MESSAGE
+      : null,
+  }
+
+  const isCreateValid = !createErrors.name && !createErrors.email && !createErrors.password && !createErrors.phone && Boolean(form.name.trim() && form.email.trim() && form.password)
+
+  const editErrors = {
+    name: !form.name.trim()
+      ? 'Full Name is required'
+      : !isValidName(form.name.trim())
+      ? NAME_ERROR_MESSAGE
+      : null,
+    email: !form.email.trim()
+      ? 'Email Address is required'
+      : !isValidEmail(form.email.trim())
+      ? EMAIL_ERROR_MESSAGE
+      : null,
+    phone: form.phone && form.phone.trim() && !isValidPhone(form.phone.trim())
+      ? PHONE_ERROR_MESSAGE
+      : null,
+  }
+
+  const isEditValid = !editErrors.name && !editErrors.email && !editErrors.phone && Boolean(form.name.trim() && form.email.trim())
+  const isEditDirty = Boolean(
+    editingTrainer && (
+      form.name !== (editingTrainer.name || '') ||
+      form.email !== (editingTrainer.email || '') ||
+      form.phone !== (editingTrainer.phone || '') ||
+      form.designation !== (editingTrainer.designation || '') ||
+      form.department !== (editingTrainer.department || '')
+    )
+  )
+
   // Open Create Modal
   function handleOpenAdd() {
     setForm({ ...EMPTY_FORM, password: '', courseId: '', batchId: '' })
+    setTouched({})
+    setFormSubmitted(false)
     setFormErr({})
     setShowAddModal(true)
     loadCoursesAndBatches()
@@ -158,6 +228,8 @@ export default function TrainersPage() {
       courseId: matchingBatch?.course?.id ? String(matchingBatch.course.id) : '',
       batchId: existingBatchId ? String(existingBatchId) : '',
     })
+    setTouched({})
+    setFormSubmitted(false)
     setFormErr({})
     setShowEditModal(true)
     loadCoursesAndBatches()
@@ -169,29 +241,11 @@ export default function TrainersPage() {
     setShowDeleteModal(true)
   }
 
-  // Validate form
-  function validate(isEdit = false) {
-    const errs = {}
-    if (!form.name.trim()) errs.name = 'Name is required'
-    if (!form.email.trim()) errs.email = 'Email is required'
-    else if (!isValidEmail(form.email.trim())) errs.email = EMAIL_ERROR_MESSAGE
-
-    if (!isEdit) {
-      if (!form.password) errs.password = 'Password is required'
-      else if (form.password.length < 6) errs.password = 'Min 6 characters'
-    }
-
-    if (form.phone && form.phone.trim() && form.phone.trim().length !== 10) {
-      errs.phone = 'Phone number must be exactly 10 digits'
-    }
-    setFormErr(errs)
-    return Object.keys(errs).length === 0
-  }
-
   // Submit Create Trainer
   async function handleCreateTrainer(e) {
     e.preventDefault()
-    if (!validate(false)) return
+    setFormSubmitted(true)
+    if (!isCreateValid) return
     setSubmitting(true)
     try {
       await adminApi.createTrainer({
@@ -206,6 +260,9 @@ export default function TrainersPage() {
       })
       toast.success('Trainer created successfully!')
       setShowAddModal(false)
+      setForm({ ...EMPTY_FORM })
+      setTouched({})
+      setFormSubmitted(false)
       fetchTrainers()
       loadCoursesAndBatches()
     } catch (err) {
@@ -218,7 +275,8 @@ export default function TrainersPage() {
   // Submit Update Trainer
   async function handleUpdateTrainer(e) {
     e.preventDefault()
-    if (!validate(true)) return
+    setFormSubmitted(true)
+    if (!isEditValid) return
     setSubmitting(true)
     try {
       await adminApi.updateTrainer(editingTrainer.id, {
@@ -232,6 +290,8 @@ export default function TrainersPage() {
       })
       toast.success('Trainer updated successfully!')
       setShowEditModal(false)
+      setTouched({})
+      setFormSubmitted(false)
       fetchTrainers()
       loadCoursesAndBatches()
     } catch (err) {
@@ -525,312 +585,373 @@ export default function TrainersPage() {
         )}
       </div>
 
-      {/* Add Trainer Modal */}
-      {showAddModal && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp border border-slate-100 dark:border-gray-800 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
-              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Add New Trainer</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
-                <X size={20} />
+      {/* Add Trainer Drawer */}
+      <FormDrawer
+        open={showAddModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setForm({ ...EMPTY_FORM })
+          setTouched({})
+          setFormSubmitted(false)
+        }}
+        title="Add New Trainer"
+        subtitle="Create a trainer account with course and batch assignments"
+        isDirty={isFormDirty}
+      >
+        <form onSubmit={handleCreateTrainer} noValidate className="space-y-4">
+          <div>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Full Name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onKeyDown={filterNameKey}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              onBlur={() => setTouched(t => ({ ...t, name: true }))}
+              placeholder="Enter full name"
+              className={clsx(
+                'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                (touched.name || formSubmitted) && createErrors.name && 'border-red-500'
+              )}
+            />
+            {(touched.name || formSubmitted) && createErrors.name && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.name}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Email Address *</label>
+            <div className="relative">
+              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                onBlur={() => setTouched(t => ({ ...t, email: true }))}
+                placeholder="Enter email address"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-9 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  (touched.email || formSubmitted) && createErrors.email && 'border-red-500'
+                )}
+              />
+            </div>
+            {(touched.email || formSubmitted) && createErrors.email && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm mb-0">Initial Password *</label>
+              <button
+                type="button"
+                onClick={() => {
+                  const p = genPassword()
+                  setForm({ ...form, password: p })
+                  setTouched(t => ({ ...t, password: true }))
+                }}
+                className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-semibold"
+              >
+                Generate Random
               </button>
             </div>
+            <div className="relative">
+              <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={form.password}
+                onChange={e => setForm({ ...form, password: e.target.value })}
+                onBlur={() => setTouched(t => ({ ...t, password: true }))}
+                placeholder="Enter password"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-9 pr-4 py-2.5 text-sm font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  (touched.password || formSubmitted) && createErrors.password && 'border-red-500'
+                )}
+              />
+            </div>
+            {form.password && <PasswordStrengthMeter password={form.password} />}
+            {(touched.password || formSubmitted) && createErrors.password && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.password}</p>
+            )}
+          </div>
 
-            <form onSubmit={handleCreateTrainer} noValidate className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.phone}
+                onKeyDown={filterPhoneKey}
+                onChange={e => setForm({ ...form, phone: sanitizePhone(e.target.value) })}
+                onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                placeholder="Enter phone number"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  (touched.phone || formSubmitted) && createErrors.phone && 'border-red-500'
+                )}
+              />
+              {(touched.phone || formSubmitted) && createErrors.phone && (
+                <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.phone}</p>
+              )}
+            </div>
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Designation</label>
+              <input
+                type="text"
+                value={form.designation}
+                onChange={e => setForm({ ...form, designation: e.target.value })}
+                placeholder="Enter designation"
+                className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Department</label>
+            <input
+              type="text"
+              value={form.department}
+              onChange={e => setForm({ ...form, department: e.target.value })}
+              placeholder="Enter department"
+              className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <SearchableSelect
+                options={courseOptions}
+                value={form.courseId}
+                onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
+                placeholder="Select Course"
+                searchPlaceholder="Search course..."
+                emptyLabel="No courses found"
+              />
+            </div>
+
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <SearchableSelect
+                options={batchOptions}
+                value={form.batchId}
+                onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
+                placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
+                searchPlaceholder="Search batch..."
+                disabled={!form.courseId}
+                emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !isCreateValid}
+              className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
+            >
+              {submitting ? 'Creating...' : 'Create Trainer'}
+            </button>
+          </div>
+        </form>
+      </FormDrawer>
+
+      {/* Edit Trainer FormDrawer */}
+      <FormDrawer
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit Trainer Profile"
+        subtitle="Update trainer details and assignments"
+        isDirty={isEditDirty}
+        width="w-full sm:w-[500px]"
+      >
+        <form onSubmit={handleUpdateTrainer} noValidate className="p-4 sm:p-6 space-y-4">
+          <div>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Full Name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onKeyDown={filterNameKey}
+              onBlur={() => setTouched(prev => ({ ...prev, edit_name: true }))}
+              onChange={e => {
+                const val = e.target.value
+                setForm(prev => ({ ...prev, name: val }))
+                if (formErr.name) setFormErr(prev => ({ ...prev, name: null }))
+              }}
+              placeholder="Enter full name"
+              className={clsx(
+                'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                ((touched.edit_name || formSubmitted) && editErrors.name) && 'border-red-500'
+              )}
+            />
+            {(touched.edit_name || formSubmitted) && editErrors.name && (
+              <p className="text-xs text-red-500 mt-1">{editErrors.name}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Email Address *</label>
+            <input
+              type="email"
+              value={form.email}
+              onBlur={() => setTouched(prev => ({ ...prev, edit_email: true }))}
+              onChange={e => {
+                const val = e.target.value
+                setForm(prev => ({ ...prev, email: val }))
+                if (formErr.email) setFormErr(prev => ({ ...prev, email: null }))
+              }}
+              placeholder="Enter email address"
+              className={clsx(
+                'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                ((touched.edit_email || formSubmitted) && editErrors.email) && 'border-red-500'
+              )}
+            />
+            {(touched.edit_email || formSubmitted) && editErrors.email && (
+              <p className="text-xs text-red-500 mt-1">{editErrors.email}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                onKeyDown={filterPhoneKey}
+                value={form.phone}
+                onBlur={() => setTouched(prev => ({ ...prev, edit_phone: true }))}
+                onChange={e => {
+                  const val = sanitizePhone(e.target.value)
+                  setForm(prev => ({ ...prev, phone: val }))
+                  if (formErr.phone) setFormErr(prev => ({ ...prev, phone: null }))
+                }}
+                placeholder="Enter phone number"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  ((touched.edit_phone || formSubmitted) && editErrors.phone) && 'border-red-500'
+                )}
+              />
+              {(touched.edit_phone || formSubmitted) && editErrors.phone && (
+                <p className="text-xs text-red-500 mt-1">{editErrors.phone}</p>
+              )}
+            </div>
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Designation</label>
+              <input
+                type="text"
+                value={form.designation}
+                onChange={e => setForm(prev => ({ ...prev, designation: e.target.value }))}
+                placeholder="Enter designation"
+                className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Department</label>
+            <input
+              type="text"
+              value={form.department}
+              onChange={e => setForm(prev => ({ ...prev, department: e.target.value }))}
+              placeholder="Enter department"
+              className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+            />
+          </div>
+
+          {editingTrainer && !editingTrainer.active ? (
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-200">
+              <p className="font-semibold mb-0.5">Trainer account is inactive</p>
+              <p className="text-amber-700 dark:text-amber-300">Batches cannot be assigned to an inactive trainer. Please activate this trainer account before assigning batches.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Full Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Dr. Alex Johnson"
-                  className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.name && 'border-red-500')}
+                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                  Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <SearchableSelect
+                  options={courseOptions}
+                  value={form.courseId}
+                  onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
+                  placeholder="Select Course"
+                  searchPlaceholder="Search course..."
+                  emptyLabel="No courses found"
                 />
-                {formErr.name && <p className="text-xs text-red-500 mt-1">{formErr.name}</p>}
               </div>
 
               <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Email Address *</label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                    placeholder="e.g. alex@careerlabs.com"
-                    className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-9 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.email && 'border-red-500')}
-                  />
-                </div>
-                {formErr.email && <p className="text-xs text-red-500 mt-1">{formErr.email}</p>}
+                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+                  Assign Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <SearchableSelect
+                  options={batchOptions}
+                  value={form.batchId}
+                  onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
+                  placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
+                  searchPlaceholder="Search batch..."
+                  disabled={!form.courseId}
+                  emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
+                />
               </div>
+            </div>
+          )}
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm mb-0">Initial Password *</label>
-                  <button
-                    type="button"
-                    onClick={() => setForm({ ...form, password: genPassword() })}
-                    className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-semibold"
+          {editingTrainer?.batches && editingTrainer.batches.length > 0 && (
+            <div className="p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-xl border border-purple-100 dark:border-purple-800/40 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-purple-900 dark:text-purple-200">
+                  Assigned Batches ({editingTrainer.batches.length})
+                </p>
+                <span className="text-[10px] text-purple-600 dark:text-purple-400">Click to view</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {editingTrainer.batches.map(b => (
+                  <Link
+                    key={b.id}
+                    href={`/admin/batches/${b.id}`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 hover:border-purple-400 shadow-2xs transition-all"
+                    title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || ''}`}
                   >
-                    Generate Random
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                    placeholder="Enter password or click Generate Random"
-                    className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-9 pr-4 py-2.5 text-sm font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.password && 'border-red-500')}
-                  />
-                </div>
-                {formErr.password && <p className="text-xs text-red-500 mt-1">{formErr.password}</p>}
+                    <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
+                    <span className="break-words">{b.name}</span>
+                  </Link>
+                ))}
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                    placeholder="e.g. 9876543210"
-                    className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.phone && 'border-red-500')}
-                  />
-                  {formErr.phone && <p className="text-xs text-red-500 mt-1">{formErr.phone}</p>}
-                </div>
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Designation</label>
-                  <input
-                    type="text"
-                    value={form.designation}
-                    onChange={e => setForm({ ...form, designation: e.target.value })}
-                    placeholder="e.g. Senior Trainer"
-                    className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Department</label>
-                <input
-                  type="text"
-                  value={form.department}
-                  onChange={e => setForm({ ...form, department: e.target.value })}
-                  placeholder="Computer Science / Full Stack"
-                  className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                    Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <SearchableSelect
-                    options={courseOptions}
-                    value={form.courseId}
-                    onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
-                    placeholder="Select Course"
-                    searchPlaceholder="Search course..."
-                    emptyLabel="No courses found"
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                    Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <SearchableSelect
-                    options={batchOptions}
-                    value={form.batchId}
-                    onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
-                    placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
-                    searchPlaceholder="Search batch..."
-                    disabled={!form.courseId}
-                    emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 min-w-[100px]"
-                >
-                  {submitting ? 'Creating...' : 'Create Trainer'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Edit Trainer Modal */}
-      {showEditModal && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp border border-slate-100 dark:border-gray-800 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
-              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Edit Trainer Profile</h3>
-              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
-                <X size={20} />
-              </button>
             </div>
+          )}
 
-            <form onSubmit={handleUpdateTrainer} className="space-y-4">
-              <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Full Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.name && 'border-red-500')}
-                />
-                {formErr.name && <p className="text-xs text-red-500 mt-1">{formErr.name}</p>}
-              </div>
-
-              <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Email Address *</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.email && 'border-red-500')}
-                />
-                {formErr.email && <p className="text-xs text-red-500 mt-1">{formErr.email}</p>}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                    placeholder="9876543210"
-                    className={clsx('w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all', formErr.phone && 'border-red-500')}
-                  />
-                  {formErr.phone && <p className="text-xs text-red-500 mt-1">{formErr.phone}</p>}
-                </div>
-                <div>
-                  <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Designation</label>
-                  <input
-                    type="text"
-                    value={form.designation}
-                    onChange={e => setForm({ ...form, designation: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Department</label>
-                <input
-                  type="text"
-                  value={form.department}
-                  onChange={e => setForm({ ...form, department: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                />
-              </div>
-
-              {editingTrainer && !editingTrainer.active ? (
-                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-200">
-                  <p className="font-semibold mb-0.5">Trainer account is inactive</p>
-                  <p className="text-amber-700 dark:text-amber-300">Batches cannot be assigned to an inactive trainer. Please activate this trainer account before assigning batches.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                      Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                    </label>
-                    <SearchableSelect
-                      options={courseOptions}
-                      value={form.courseId}
-                      onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
-                      placeholder="Select Course"
-                      searchPlaceholder="Search course..."
-                      emptyLabel="No courses found"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                      Assign Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                    </label>
-                    <SearchableSelect
-                      options={batchOptions}
-                      value={form.batchId}
-                      onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
-                      placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
-                      searchPlaceholder="Search batch..."
-                      disabled={!form.courseId}
-                      emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {editingTrainer?.batches && editingTrainer.batches.length > 0 && (
-                <div className="p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-xl border border-purple-100 dark:border-purple-800/40 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-purple-900 dark:text-purple-200">
-                      Assigned Batches ({editingTrainer.batches.length})
-                    </p>
-                    <span className="text-[10px] text-purple-600 dark:text-purple-400">Click to view</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {editingTrainer.batches.map(b => (
-                      <Link
-                        key={b.id}
-                        href={`/admin/batches/${b.id}`}
-                        target="_blank"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 hover:border-purple-400 shadow-2xs transition-all"
-                        title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || ''}`}
-                      >
-                        <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
-                        <span className="break-words">{b.name}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 min-w-[100px]"
-                >
-                  {submitting ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !isEditValid}
+              className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
+            >
+              {submitting ? 'Saving...' : 'Save Changes'}
+            </button>
           </div>
-        </div>,
-        document.body
-      )}
+        </form>
+      </FormDrawer>
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && deletingTrainer && mounted && createPortal(

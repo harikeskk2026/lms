@@ -417,6 +417,16 @@ export default function BatchesPage() {
           onClose={() => setPanelOpen(false)}
           title={editingBatch ? 'Edit Batch' : 'Create Batch'}
           subtitle={editingBatch ? 'Update batch details and schedule' : 'Set up a new training batch'}
+          isDirty={editingBatch
+          ? Boolean(
+              form.name !== (editingBatch.name || '') ||
+              form.courseId !== (editingBatch.course?.id ? String(editingBatch.course.id) : '') ||
+              form.startDate !== (editingBatch.startDate ? editingBatch.startDate.slice(0, 10) : '') ||
+              form.endDate !== (editingBatch.endDate ? editingBatch.endDate.slice(0, 10) : '') ||
+              startTime || endTime ||
+              form.maxStudents !== (editingBatch.maxStudents || '')
+            )
+          : Boolean(form.name || form.courseId || form.startDate || form.endDate || startTime || endTime || form.maxStudents)}
         >
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Batch Name */}
@@ -426,7 +436,7 @@ export default function BatchesPage() {
                 type="text"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Python Batch Jan 2026"
+                placeholder="Enter batch name"
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 required
               />
@@ -480,7 +490,7 @@ export default function BatchesPage() {
                   type="time"
                   value={startTime}
                   onChange={e => setStartTime(e.target.value)}
-                  placeholder="e.g. 09:00 AM"
+                  placeholder="Select start time"
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
               </div>
@@ -490,11 +500,15 @@ export default function BatchesPage() {
                   type="time"
                   value={endTime}
                   onChange={e => setEndTime(e.target.value)}
-                  placeholder="e.g. 12:00 PM"
+                  placeholder="Select end time"
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
               </div>
             </div>
+
+            {startTime && endTime && startTime >= endTime && (
+              <p className="text-xs text-red-500 font-medium">End time must be after start time</p>
+            )}
 
             {/* Dates */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -558,28 +572,46 @@ export default function BatchesPage() {
                   max="100"
                   value={form.maxStudents}
                   onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))}
-                  placeholder="e.g. 30"
+                  placeholder="Enter max students (1-100)"
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
+                {form.maxStudents && (Number(form.maxStudents) < 1 || Number(form.maxStudents) > 100) && (
+                  <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 100</p>
+                )}
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setPanelOpen(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all shadow-md shadow-purple-500/20"
-              >
-                {saving ? (editingBatch ? 'Saving...' : 'Creating...') : (editingBatch ? 'Save Changes' : 'Create Batch')}
-              </button>
-            </div>
+            {(() => {
+              const isTimeValid = (!startTime && !endTime) || (Boolean(startTime) && Boolean(endTime) && startTime < endTime)
+              const isMaxStudentsValid = !form.maxStudents || (Number(form.maxStudents) >= 1 && Number(form.maxStudents) <= 100)
+              const isBatchFormValid = Boolean(
+                form.name?.trim() &&
+                form.courseId &&
+                form.startDate &&
+                form.endDate &&
+                !batchDateError &&
+                isTimeValid &&
+                isMaxStudentsValid
+              )
+              return (
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setPanelOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving || !isBatchFormValid}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-purple-500/20"
+                  >
+                    {saving ? (editingBatch ? 'Saving...' : 'Creating...') : (editingBatch ? 'Save Changes' : 'Create Batch')}
+                  </button>
+                </div>
+              )
+            })()}
           </form>
         </SlidePanel>
       )}

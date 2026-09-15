@@ -30,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -74,7 +75,7 @@ class EnrollmentAuthorizationTest {
     void setUp() {
         validator = new BatchScheduleConflictValidator(enrollmentRepository);
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
-        enrollmentService = new EnrollmentServiceImpl(enrollmentRepository, studentRepository, courseRepository, batchRepository, validator, accessGuard);
+        enrollmentService = new EnrollmentServiceImpl(enrollmentRepository, studentRepository, courseRepository, batchRepository, validator, accessGuard, null);
         contactService = new EnrollmentContactServiceImpl(userRepository);
 
         publishedCourse = makeCourse(1L, "Java Bootcamp", CourseStatus.PUBLISHED);

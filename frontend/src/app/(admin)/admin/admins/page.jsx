@@ -1,14 +1,27 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, X, Mail, Phone, Building2, Briefcase } from 'lucide-react'
+import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
-import { isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
+import {
+  isValidEmail,
+  EMAIL_ERROR_MESSAGE,
+  isValidName,
+  NAME_ERROR_MESSAGE,
+  filterNameKey,
+  filterPhoneKey,
+  sanitizePhone,
+  isValidPhone,
+  PHONE_ERROR_MESSAGE,
+  isValidPassword,
+  PASSWORD_ERROR_MESSAGE
+} from '@/utilities/validators'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import FormDrawer from '@/components/ui/FormDrawer'
+import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 import clsx from 'clsx'
 
 const EMPTY_FORM = { name: '', email: '', password: '', phone: '', designation: '', department: '' }
@@ -75,21 +88,38 @@ export default function AdminsPage() {
     if (user?.role === 'SUPERADMIN') fetchAdmins()
   }, [fetchAdmins, user])
 
-  function validate() {
-    const errs = {}
-    if (!form.name.trim()) errs.name = 'Name is required'
-    if (!form.email.trim()) errs.email = 'Email is required'
-    else if (!isValidEmail(form.email.trim())) errs.email = EMAIL_ERROR_MESSAGE
-    if (!form.password) errs.password = 'Password is required'
-    else if (form.password.length < 8) errs.password = 'Min 8 characters'
-    if (form.phone && form.phone.trim() && form.phone.trim().length !== 10) errs.phone = 'Phone must be exactly 10 digits'
-    setFormErr(errs)
-    return Object.keys(errs).length === 0
+  const [touched, setTouched] = useState({})
+  const [formSubmitted, setFormSubmitted] = useState(false)
+
+  const isFormDirty = Object.values(form).some(v => v !== '')
+
+  const errors = {
+    name: !form.name.trim()
+      ? 'Full Name is required'
+      : !isValidName(form.name.trim())
+      ? NAME_ERROR_MESSAGE
+      : null,
+    email: !form.email.trim()
+      ? 'Email Address is required'
+      : !isValidEmail(form.email.trim())
+      ? EMAIL_ERROR_MESSAGE
+      : null,
+    password: !form.password
+      ? 'Password is required'
+      : !isValidPassword(form.password)
+      ? PASSWORD_ERROR_MESSAGE
+      : null,
+    phone: form.phone && form.phone.trim() && !isValidPhone(form.phone.trim())
+      ? PHONE_ERROR_MESSAGE
+      : null,
   }
+
+  const isFormValid = !errors.name && !errors.email && !errors.password && !errors.phone && Boolean(form.name.trim() && form.email.trim() && form.password)
 
   async function handleCreate(e) {
     e.preventDefault()
-    if (!validate()) return
+    setFormSubmitted(true)
+    if (!isFormValid) return
     setSubmitting(true)
     try {
       await adminApi.createAdmin({
@@ -103,6 +133,8 @@ export default function AdminsPage() {
       toast.success('Admin created successfully!')
       setShowAddModal(false)
       setForm(EMPTY_FORM)
+      setTouched({})
+      setFormSubmitted(false)
       fetchAdmins()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create admin')
@@ -135,7 +167,7 @@ export default function AdminsPage() {
           </div>
           <p className="text-slate-500 text-sm mt-1">SUPERADMIN only — create, manage and reset Admin credentials.</p>
         </div>
-        <button onClick={() => { setForm({ ...EMPTY_FORM }); setFormErr({}); setShowAddModal(true) }}
+        <button onClick={() => { setForm({ ...EMPTY_FORM }); setTouched({}); setFormSubmitted(false); setShowAddModal(true) }}
           className="inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-brand-500/20">
           <Plus size={18} /> Add Admin
         </button>
@@ -229,30 +261,160 @@ export default function AdminsPage() {
         )}
       </div>
 
-      {showAddModal && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
-              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Add New Admin</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            </div>
-            <form onSubmit={handleCreate} noValidate className="space-y-4">
-              <div><label className="form-label">Full Name *</label><input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Alex Morgan" className={clsx('input-field text-sm', formErr.name && 'border-red-500')} />{formErr.name && <p className="text-xs text-red-500 mt-1">{formErr.name}</p>}</div>
-              <div><label className="form-label">Email Address *</label><div className="relative"><Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="admin@careerlabs.com" className={clsx('input-field pl-9 text-sm', formErr.email && 'border-red-500')} /></div>{formErr.email && <p className="text-xs text-red-500 mt-1">{formErr.email}</p>}</div>
-              <div><div className="flex items-center justify-between mb-1"><label className="form-label mb-0">Password *</label><button type="button" onClick={() => setForm({ ...form, password: genPassword() })} className="text-xs text-brand-600 hover:underline font-semibold">Generate Random</button></div><input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Min 8 chars, click Generate" className={clsx('input-field text-sm font-mono', formErr.password && 'border-red-500')} />{formErr.password && <p className="text-xs text-red-500 mt-1">{formErr.password}</p>}</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="form-label">Phone</label><input type="tel" inputMode="numeric" maxLength={10} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value.replace(/\D/g,'').slice(0,10) })} placeholder="9876543210" className={clsx('input-field text-sm', formErr.phone && 'border-red-500')} />{formErr.phone && <p className="text-xs text-red-500 mt-1">{formErr.phone}</p>}</div>
-                <div><label className="form-label">Designation</label><input type="text" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="Admin" className="input-field text-sm" /></div>
-              </div>
-              <div><label className="form-label">Department</label><input type="text" value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} placeholder="Operations" className="input-field text-sm" /></div>
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
-                <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary text-sm">Cancel</button>
-                <button type="submit" disabled={submitting} className="btn-primary text-sm min-w-[100px]">{submitting ? 'Creating...' : 'Create Admin'}</button>
-              </div>
-            </form>
+      <FormDrawer
+        open={showAddModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setForm(EMPTY_FORM)
+          setTouched({})
+          setFormSubmitted(false)
+        }}
+        title="Add New Admin"
+        subtitle="Create an administrator account with platform management access"
+        isDirty={isFormDirty}
+      >
+        <form onSubmit={handleCreate} noValidate className="space-y-4">
+          <div>
+            <label className="form-label">Full Name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onKeyDown={filterNameKey}
+              onChange={e => {
+                const val = e.target.value
+                setForm(f => ({ ...f, name: val }))
+              }}
+              onBlur={() => setTouched(t => ({ ...t, name: true }))}
+              placeholder="Enter full name"
+              className={clsx(
+                'input-field text-sm',
+                (touched.name || formSubmitted) && errors.name && 'border-red-500 focus:ring-red-400'
+              )}
+            />
+            {(touched.name || formSubmitted) && errors.name && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{errors.name}</p>
+            )}
           </div>
-        </div>, document.body
-      )}
+
+          <div>
+            <label className="form-label">Email Address *</label>
+            <div className="relative">
+              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                onBlur={() => setTouched(t => ({ ...t, email: true }))}
+                placeholder="Enter email address"
+                className={clsx(
+                  'input-field pl-9 text-sm',
+                  (touched.email || formSubmitted) && errors.email && 'border-red-500 focus:ring-red-400'
+                )}
+              />
+            </div>
+            {(touched.email || formSubmitted) && errors.email && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{errors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="form-label mb-0">Password *</label>
+              <button
+                type="button"
+                onClick={() => {
+                  const p = genPassword()
+                  setForm(f => ({ ...f, password: p }))
+                  setTouched(t => ({ ...t, password: true }))
+                }}
+                className="text-xs text-brand-600 hover:underline font-semibold"
+              >
+                Generate Random
+              </button>
+            </div>
+            <input
+              type="text"
+              value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              onBlur={() => setTouched(t => ({ ...t, password: true }))}
+              placeholder="Enter password"
+              className={clsx(
+                'input-field text-sm font-mono',
+                (touched.password || formSubmitted) && errors.password && 'border-red-500 focus:ring-red-400'
+              )}
+            />
+            {form.password && <PasswordStrengthMeter password={form.password} />}
+            {(touched.password || formSubmitted) && errors.password && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{errors.password}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label">Phone Number</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.phone}
+                onKeyDown={filterPhoneKey}
+                onChange={e => {
+                  const val = sanitizePhone(e.target.value)
+                  setForm(f => ({ ...f, phone: val }))
+                }}
+                onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                placeholder="Enter phone number"
+                className={clsx(
+                  'input-field text-sm',
+                  (touched.phone || formSubmitted) && errors.phone && 'border-red-500 focus:ring-red-400'
+                )}
+              />
+              {(touched.phone || formSubmitted) && errors.phone && (
+                <p className="text-xs text-red-500 mt-1 font-medium">{errors.phone}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="form-label">Designation</label>
+              <input
+                type="text"
+                value={form.designation}
+                onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
+                placeholder="Enter designation"
+                className="input-field text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">Department</label>
+            <input
+              type="text"
+              value={form.department}
+              onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+              placeholder="Enter department"
+              className="input-field text-sm"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="btn-secondary text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !isFormValid}
+              className="btn-primary text-sm min-w-[110px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Creating...' : 'Create Admin'}
+            </button>
+          </div>
+        </form>
+      </FormDrawer>
 
       <ResetPasswordModal open={!!resetTarget} user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={fetchAdmins} />
     </div>

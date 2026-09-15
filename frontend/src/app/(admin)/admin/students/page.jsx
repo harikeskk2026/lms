@@ -7,12 +7,25 @@ import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 import courseService from '@/services/courseService'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
-import { isValidPhone, PHONE_ERROR_MESSAGE, isValidPassword, PASSWORD_ERROR_MESSAGE, isValidEmail, EMAIL_ERROR_MESSAGE } from '@/utilities/validators'
+import {
+  isValidPhone,
+  PHONE_ERROR_MESSAGE,
+  isValidPassword,
+  PASSWORD_ERROR_MESSAGE,
+  isValidEmail,
+  EMAIL_ERROR_MESSAGE,
+  isValidName,
+  NAME_ERROR_MESSAGE,
+  filterNameKey,
+  filterPhoneKey,
+  sanitizePhone,
+} from '@/utilities/validators'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import BulkImportModal from '@/components/admin/BulkImportModal'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
@@ -108,11 +121,33 @@ export default function StudentsPage() {
   }
 
   const [emailError, setEmailError] = useState('')
+  const [touched, setTouched] = useState({})
+  const [submitted, setSubmitted] = useState(false)
+
+  const isNameValid = isValidName(form.name)
+  const isPhoneValid = !form.phone || isValidPhone(form.phone)
+  const isEmailValid = isValidEmail(form.email)
+  const isPasswordValid = isValidPassword(form.password)
+
+  const isFormValid = isNameValid && isPhoneValid && Boolean(form.courseId) && (editStudent ? true : (isEmailValid && isPasswordValid))
+
+  const isDirty = editStudent
+    ? Boolean(
+        form.name !== (editStudent.name || '') ||
+        form.phone !== (editStudent.phone || '') ||
+        form.collegeName !== (editStudent.college?.name || '') ||
+        form.placementStatus !== (editStudent.placementStatus || 'SEEKING') ||
+        form.courseId !== (editStudent.courses?.[0]?.id ? String(editStudent.courses[0].id) : '') ||
+        form.batchId !== (editStudent.batches?.[0]?.id ? String(editStudent.batches[0].id) : '')
+      )
+    : Boolean(form.name || form.email || form.phone || form.collegeName || form.password || form.courseId || form.batchId)
 
   const openCreate = () => {
     setEditStudent(null)
     setForm(EMPTY_FORM)
     setEmailError('')
+    setTouched({})
+    setSubmitted(false)
     setPanelOpen(true)
   }
 
@@ -131,6 +166,8 @@ export default function StudentsPage() {
       placementStatus: student.placementStatus || 'SEEKING',
     })
     setEmailError('')
+    setTouched({})
+    setSubmitted(false)
     setPanelOpen(true)
   }
 
@@ -143,30 +180,14 @@ export default function StudentsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setSubmitted(true)
     setEmailError('')
-    if (!form.courseId) {
-      toast.error('Please select a course')
-      return
-    }
-    if (!editStudent) {
-      if (!form.email || !form.email.trim()) {
-        const msg = 'Email is required'
-        setEmailError(msg)
-        toast.error(msg)
-        return
-      }
-      if (!isValidEmail(form.email.trim())) {
-        setEmailError(EMAIL_ERROR_MESSAGE)
-        toast.error(EMAIL_ERROR_MESSAGE)
-        return
-      }
-    }
-    if (form.phone && !isValidPhone(form.phone)) {
-      toast.error(PHONE_ERROR_MESSAGE)
-      return
-    }
-    if (!editStudent && !isValidPassword(form.password)) {
-      toast.error(PASSWORD_ERROR_MESSAGE)
+    if (!isFormValid) {
+      if (!isNameValid) toast.error(NAME_ERROR_MESSAGE)
+      else if (!form.courseId) toast.error('Please select a course')
+      else if (!editStudent && !isEmailValid) toast.error(EMAIL_ERROR_MESSAGE)
+      else if (!isPhoneValid) toast.error(PHONE_ERROR_MESSAGE)
+      else if (!editStudent && !isPasswordValid) toast.error(PASSWORD_ERROR_MESSAGE)
       return
     }
     setSaving(true)
@@ -175,19 +196,19 @@ export default function StudentsPage() {
       const courseId = form.courseId ? Number(form.courseId) : null
       if (editStudent) {
         await studentService.update(editStudent.id, {
-          name: form.name,
-          phone: form.phone,
-          collegeName: form.collegeName,
+          name: form.name.trim(),
+          phone: form.phone.trim() || null,
+          collegeName: form.collegeName.trim() || null,
           placementStatus: form.placementStatus,
           batchId, courseId,
         })
         toast.success('Student updated successfully')
       } else {
         await studentService.create({
-          name: form.name,
-          email: form.email,
-          phone: form.phone,
-          collegeName: form.collegeName,
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || null,
+          collegeName: form.collegeName.trim() || null,
           password: form.password,
           batchId, courseId,
         })
@@ -196,6 +217,8 @@ export default function StudentsPage() {
       setPanelOpen(false)
       setForm(EMPTY_FORM)
       setEditStudent(null)
+      setTouched({})
+      setSubmitted(false)
       load()
     } catch (err) {
       toast.error(err.message || `Failed to ${editStudent ? 'update' : 'create'} student`)
@@ -503,6 +526,7 @@ export default function StudentsPage() {
         onClose={() => setPanelOpen(false)}
         title={editStudent ? 'Edit Student' : 'Add Student'}
         subtitle={editStudent ? 'Update student profile' : 'Create a new student account'}
+        isDirty={isDirty}
       >
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
@@ -510,39 +534,54 @@ export default function StudentsPage() {
             <input
               type="text"
               value={form.name}
+              onKeyDown={filterNameKey}
+              onBlur={() => setTouched(t => ({ ...t, name: true }))}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Rahul Sharma"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Enter full name"
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                (touched.name || submitted) && !isNameValid
+                  ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                  : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+              }`}
               required
             />
+            {(touched.name || submitted) && !isNameValid && (
+              <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                {!form.name.trim() ? 'Full Name is required' : NAME_ERROR_MESSAGE}
+              </p>
+            )}
           </div>
+
           {!editStudent && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Email *</label>
               <input
                 type="email"
                 value={form.email}
+                onBlur={() => setTouched(t => ({ ...t, email: true }))}
                 onChange={e => {
                   const val = e.target.value
                   setForm(f => ({ ...f, email: val }))
                   if (emailError && isValidEmail(val.trim())) setEmailError('')
                 }}
-                placeholder="e.g. rahul.sharma@example.com"
+                placeholder="Enter email address"
                 className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
-                  emailError
+                  (touched.email || submitted) && !isEmailValid
                     ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
                     : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
                 }`}
                 required
               />
-              {emailError && (
+              {(touched.email || submitted) && !isEmailValid && (
                 <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                  {emailError}
+                  {!form.email.trim() ? 'Email is required' : EMAIL_ERROR_MESSAGE}
                 </p>
               )}
             </div>
           )}
+
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Phone</label>
             <input
@@ -550,21 +589,35 @@ export default function StudentsPage() {
               inputMode="numeric"
               maxLength={10}
               value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-              placeholder="e.g. 9876543210"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              onKeyDown={filterPhoneKey}
+              onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+              onChange={e => setForm(f => ({ ...f, phone: sanitizePhone(e.target.value) }))}
+              placeholder="Enter phone number"
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                (touched.phone || submitted) && !isPhoneValid
+                  ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                  : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+              }`}
             />
+            {(touched.phone || submitted) && !isPhoneValid && (
+              <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                {PHONE_ERROR_MESSAGE}
+              </p>
+            )}
           </div>
+
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
             <input
               type="text"
               value={form.collegeName}
               onChange={e => setForm(f => ({ ...f, collegeName: e.target.value }))}
-              placeholder="e.g. Anna University"
+              placeholder="Enter college name"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
+
           {!editStudent && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Password *</label>
@@ -572,26 +625,35 @@ export default function StudentsPage() {
                 <input
                   type="text"
                   value={form.password}
+                  onBlur={() => setTouched(t => ({ ...t, password: true }))}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="Min 8 chars, upper+lower+number+symbol"
-                  className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Enter password"
+                  className={`flex-1 rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                    (touched.password || submitted) && !isPasswordValid
+                      ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                      : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
                   required
                 />
                 <button type="button" onClick={() => setForm(f => ({ ...f, password: genPassword() }))}
-                  className="px-3 py-2 bg-purple-50 text-purple-600 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors whitespace-nowrap">
+                  className="px-3 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors whitespace-nowrap">
                   Generate
                 </button>
               </div>
+              {(touched.password || submitted) && !isPasswordValid && (
+                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {!form.password ? 'Password is required' : PASSWORD_ERROR_MESSAGE}
+                </p>
+              )}
+              {form.password && <PasswordStrengthMeter password={form.password} />}
             </div>
           )}
 
           {/*
             Course + Batch: what CareerLabs is training this student on.
             Course lists every course ever created; Batch is filtered down
-            to batches that belong to the selected course. (College
-            background, and the student's own personal-info fields, are now
-            managed entirely by the student via My Profile - see
-            docs/LMS_MODULE_WORKFLOWS.md.)
+            to batches that belong to the selected course.
           */}
           <div className="pt-1">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
@@ -606,6 +668,9 @@ export default function StudentsPage() {
                   searchPlaceholder="Search course..."
                   emptyLabel="No published courses available"
                 />
+                {submitted && !form.courseId && (
+                  <p className="text-xs text-red-500 mt-1.5 font-semibold">Please select a course</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign to Batch</label>
@@ -641,11 +706,11 @@ export default function StudentsPage() {
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
+            <button type="submit" disabled={saving || !isFormValid}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
               {saving ? 'Saving...' : editStudent ? 'Save Changes' : 'Create Student'}
             </button>
           </div>

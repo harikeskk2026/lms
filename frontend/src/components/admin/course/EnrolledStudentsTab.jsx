@@ -23,6 +23,7 @@ import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
 import { useAuth } from '@/context/AuthContext'
 import CustomSelect from '@/components/ui/CustomSelect'
+import FormDrawer from '@/components/ui/FormDrawer'
 
 export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatus }) {
   const { user } = useAuth()
@@ -59,6 +60,10 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
   const [selectedStudentIds, setSelectedStudentIds] = useState([])
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [enrolling, setEnrolling] = useState(false)
+
+  // Bulk enrollment failure details
+  const [enrollmentFailures, setEnrollmentFailures] = useState([])
+  const [failureModalOpen, setFailureModalOpen] = useState(false)
 
   const searchTimer = useRef(null)
 
@@ -171,20 +176,25 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         batchId: selectedBatchId ? Number(selectedBatchId) : null,
       }
 
-      try {
-        await courseService.bulkEnrollStudents(courseId, payload)
-      } catch (bulkErr) {
-        // Fallback to sequential single enrollments if bulk endpoint is unavailable
-        for (const sid of selectedStudentIds) {
-          await courseService.enrollStudent(courseId, {
-            studentId: Number(sid),
-            batchId: selectedBatchId ? Number(selectedBatchId) : null,
-          })
+      const res = await courseService.bulkEnrollStudents(courseId, payload)
+      const data = res.data
+
+      if (data && typeof data.successful === 'number') {
+        if (data.failed === 0) {
+          toast.success(`Successfully enrolled ${data.successful} student${data.successful !== 1 ? 's' : ''}`)
+        } else {
+          toast.warning(`${data.successful} enrolled, ${data.failed} failed`)
+          const failures = (data.results || []).filter(r => !r.success)
+          if (failures.length > 0) {
+            setEnrollmentFailures(failures)
+            setFailureModalOpen(true)
+          }
         }
+      } else {
+        const count = selectedStudentIds.length
+        toast.success(`Successfully enrolled ${count} student${count > 1 ? 's' : ''}`)
       }
 
-      const count = selectedStudentIds.length
-      toast.success(`Successfully enrolled ${count} student${count > 1 ? 's' : ''}`)
       setEnrollModalOpen(false)
       loadEnrollments()
     } catch (err) {
@@ -567,29 +577,16 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         </>
       )}
 
-      {/* Enroll Students Modal */}
-      {enrollModalOpen && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-xl w-full shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center">
-                  <Plus size={20} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Enroll Students</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Enroll one or multiple students into {courseTitle}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEnrollModalOpen(false)}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleEnrollSubmit} className="p-4 sm:p-6 space-y-4">
+      {/* Enroll Students FormDrawer */}
+      <FormDrawer
+        open={enrollModalOpen}
+        onClose={() => setEnrollModalOpen(false)}
+        title="Enroll Students"
+        subtitle={`Enroll one or multiple students into ${courseTitle}`}
+        isDirty={selectedStudentIds.length > 0 || Boolean(selectedBatchId)}
+        width="w-full sm:w-[540px]"
+      >
+        <form onSubmit={handleEnrollSubmit} className="p-4 sm:p-6 space-y-4">
               {/* Selected Students Chips summary */}
               {selectedStudentIds.length > 0 && (
                 <div className="space-y-1.5 bg-purple-50/60 dark:bg-purple-950/30 p-3 rounded-2xl border border-purple-100 dark:border-purple-900/40">
@@ -748,10 +745,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                 </button>
               </div>
             </form>
-          </div>
-        </div>,
-        document.body
-      )}
+      </FormDrawer>
 
       {/* Unenroll Confirmation Modal */}
       {unenrollModalData && mounted && createPortal(
@@ -787,6 +781,54 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
               >
                 {unenrolling ? <Loader2 size={14} className="animate-spin" /> : <UserMinus size={14} />}
                 {unenrolling ? 'Unenrolling...' : 'Yes, Unenroll'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Enrollment Failure Details Modal */}
+      {failureModalOpen && enrollmentFailures.length > 0 && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl border border-gray-100 dark:border-gray-800 p-6 space-y-4 max-h-[80vh] flex flex-col">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center mx-auto">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Enrollment Failures</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {enrollmentFailures.length} student{enrollmentFailures.length !== 1 ? 's' : ''} could not be enrolled
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto border border-gray-100 dark:border-gray-800 rounded-xl">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
+                    <th className="text-left py-2 px-3 font-semibold text-gray-600 dark:text-gray-400">Student</th>
+                    <th className="text-left py-2 px-3 font-semibold text-gray-600 dark:text-gray-400">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {enrollmentFailures.map((f, i) => (
+                    <tr key={i} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
+                      <td className="py-2 px-3">
+                        <p className="font-semibold text-gray-900 dark:text-white">{f.studentName || `Student #${f.studentId}`}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">{f.email || '—'}</p>
+                      </td>
+                      <td className="py-2 px-3 text-gray-600 dark:text-gray-400">{f.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => { setFailureModalOpen(false); setEnrollmentFailures([]) }}
+                className="py-2 px-6 rounded-xl bg-gray-100 dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import profileService from '@/services/profileService'
 import { isValidPassword, PASSWORD_ERROR_MESSAGE } from '@/utilities/validators'
+import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 
 const INPUT_CLS = 'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500'
 const LABEL_CLS = 'block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1'
@@ -63,6 +64,7 @@ export default function ChangePasswordForm() {
             setForm(f => ({ ...f, currentPassword: e.target.value }))
             if (errors.currentPassword && e.target.value) setErrors(err => ({ ...err, currentPassword: undefined }))
           }}
+          placeholder="Enter current password"
           className={`${INPUT_CLS} ${errors.currentPassword ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
         {errors.currentPassword && (
           <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -78,6 +80,7 @@ export default function ChangePasswordForm() {
             setForm(f => ({ ...f, newPassword: e.target.value }))
             if (errors.newPassword && isValidPassword(e.target.value)) setErrors(err => ({ ...err, newPassword: undefined }))
           }}
+          placeholder="Enter new password"
           className={`${INPUT_CLS} ${errors.newPassword ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
         {errors.newPassword && (
           <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -85,6 +88,7 @@ export default function ChangePasswordForm() {
             {errors.newPassword}
           </p>
         )}
+        {form.newPassword && <PasswordStrengthMeter password={form.newPassword} />}
       </div>
       <div>
         <label className={LABEL_CLS}>Confirm New Password *</label>
@@ -93,6 +97,7 @@ export default function ChangePasswordForm() {
             setForm(f => ({ ...f, confirmPassword: e.target.value }))
             if (errors.confirmPassword && e.target.value === form.newPassword) setErrors(err => ({ ...err, confirmPassword: undefined }))
           }}
+          placeholder="Re-enter new password"
           className={`${INPUT_CLS} ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
         {errors.confirmPassword && (
           <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -102,8 +107,8 @@ export default function ChangePasswordForm() {
         )}
       </div>
       <div className="flex justify-end pt-2">
-        <button type="submit" disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-60">
+        <button type="submit" disabled={saving || !form.currentPassword || !isValidPassword(form.newPassword) || form.newPassword !== form.confirmPassword}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-50">
           <Lock size={12} /> {saving ? 'Updating...' : 'Change Password'}
         </button>
       </div>

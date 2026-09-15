@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -633,17 +633,17 @@ function ResumeBuilderTab({ hub, refreshHub }) {
               <div className="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-800">
                 {sec.id === 'personal' && (
                   <div className="space-y-3">
-                    <FormInput label="Professional Headline" placeholder="Full Stack Python Developer" value={resumeData.headline || ''} onChange={v => updateField('headline', v)} />
-                    <FormTextarea label="Professional Summary" placeholder="Passionate developer with experience in..." value={resumeData.summary || ''} onChange={v => updateField('summary', v)} rows={3} />
+                    <FormInput label="Professional Headline" placeholder="Enter professional headline" value={resumeData.headline || ''} onChange={v => updateField('headline', v)} />
+                    <FormTextarea label="Professional Summary" placeholder="Enter professional summary" value={resumeData.summary || ''} onChange={v => updateField('summary', v)} rows={3} />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <FormInput label="Phone" placeholder="9876543210" value={resumeData.phone || ''} onChange={v => updateField('phone', v.replace(/\D/g, '').slice(0, 10))} />
-                      <FormInput label="Location" placeholder="Chennai, Tamil Nadu" value={resumeData.location || ''} onChange={v => updateField('location', v)} />
+                      <FormInput label="Phone" placeholder="Enter 10-digit phone number" value={resumeData.phone || ''} onChange={v => updateField('phone', v.replace(/\D/g, '').slice(0, 10))} />
+                      <FormInput label="Location" placeholder="Enter location (City, State)" value={resumeData.location || ''} onChange={v => updateField('location', v)} />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <FormInput label="LinkedIn URL" placeholder="linkedin.com/in/yourname" value={resumeData.linkedinUrl || ''} onChange={v => updateField('linkedinUrl', v)} />
-                      <FormInput label="GitHub URL" placeholder="github.com/yourname" value={resumeData.githubUrl || ''} onChange={v => updateField('githubUrl', v)} />
+                      <FormInput label="LinkedIn URL" placeholder="Enter LinkedIn profile URL" value={resumeData.linkedinUrl || ''} onChange={v => updateField('linkedinUrl', v)} />
+                      <FormInput label="GitHub URL" placeholder="Enter GitHub profile URL" value={resumeData.githubUrl || ''} onChange={v => updateField('githubUrl', v)} />
                     </div>
-                    <FormInput label="Portfolio URL" placeholder="yourportfolio.com" value={resumeData.portfolioUrl || ''} onChange={v => updateField('portfolioUrl', v)} />
+                    <FormInput label="Portfolio URL" placeholder="Enter portfolio website URL" value={resumeData.portfolioUrl || ''} onChange={v => updateField('portfolioUrl', v)} />
                   </div>
                 )}
 
@@ -653,10 +653,10 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onRemove={(i) => removeItem('education', i)}
                     renderItem={(edu, i) => (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <FormInput label="Degree/Course" placeholder="B.Tech CSE" value={edu.degree || ''} onChange={v => updateArrayItem('education', i, 'degree', v)} />
-                        <FormInput label="Institution" placeholder="Anna University" value={edu.institution || ''} onChange={v => updateArrayItem('education', i, 'institution', v)} />
-                        <FormInput label="Year" placeholder="2020-2024" value={edu.year || ''} onChange={v => updateArrayItem('education', i, 'year', v)} />
-                        <FormInput label="Grade/%" placeholder="78%" value={edu.grade || ''} onChange={v => updateArrayItem('education', i, 'grade', v)} />
+                        <FormInput label="Degree/Course" placeholder="Enter degree or course name" value={edu.degree || ''} onChange={v => updateArrayItem('education', i, 'degree', v)} />
+                        <FormInput label="Institution" placeholder="Enter institution name" value={edu.institution || ''} onChange={v => updateArrayItem('education', i, 'institution', v)} />
+                        <FormInput label="Year" placeholder="Enter years of study" value={edu.year || ''} onChange={v => updateArrayItem('education', i, 'year', v)} />
+                        <FormInput label="Grade/%" placeholder="Enter grade or percentage" value={edu.grade || ''} onChange={v => updateArrayItem('education', i, 'grade', v)} />
                       </div>
                     )}
                   />
@@ -669,11 +669,11 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     renderItem={(exp, i) => (
                       <div className="space-y-2">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <FormInput label="Role" placeholder="Junior Developer" value={exp.role || ''} onChange={v => updateArrayItem('experience', i, 'role', v)} />
-                          <FormInput label="Company" placeholder="TCS" value={exp.company || ''} onChange={v => updateArrayItem('experience', i, 'company', v)} />
+                          <FormInput label="Role" placeholder="Enter job role" value={exp.role || ''} onChange={v => updateArrayItem('experience', i, 'role', v)} />
+                          <FormInput label="Company" placeholder="Enter company name" value={exp.company || ''} onChange={v => updateArrayItem('experience', i, 'company', v)} />
                         </div>
-                        <FormInput label="Duration" placeholder="Jun 2023 - Dec 2023" value={exp.duration || ''} onChange={v => updateArrayItem('experience', i, 'duration', v)} />
-                        <FormTextarea label="Description" placeholder="Key responsibilities and achievements..." value={exp.description || ''} onChange={v => updateArrayItem('experience', i, 'description', v)} rows={2} />
+                        <FormInput label="Duration" placeholder="Enter duration" value={exp.duration || ''} onChange={v => updateArrayItem('experience', i, 'duration', v)} />
+                        <FormTextarea label="Description" placeholder="Enter responsibilities and achievements" value={exp.description || ''} onChange={v => updateArrayItem('experience', i, 'description', v)} rows={2} />
                       </div>
                     )}
                   />
@@ -685,12 +685,12 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onRemove={(i) => removeItem('projects', i)}
                     renderItem={(proj, i) => (
                       <div className="space-y-2">
-                        <FormInput label="Project Name" placeholder="E-Commerce Platform" value={proj.name || ''} onChange={v => updateArrayItem('projects', i, 'name', v)} />
-                        <FormInput label="Tech Stack (comma separated)" placeholder="Python, Django, PostgreSQL" value={proj.tech || ''} onChange={v => updateArrayItem('projects', i, 'tech', v)} />
-                        <FormTextarea label="Description" placeholder="Brief description of what this project does..." value={proj.description || ''} onChange={v => updateArrayItem('projects', i, 'description', v)} rows={2} />
+                        <FormInput label="Project Name" placeholder="Enter project name" value={proj.name || ''} onChange={v => updateArrayItem('projects', i, 'name', v)} />
+                        <FormInput label="Tech Stack (comma separated)" placeholder="Enter tech stack (comma-separated)" value={proj.tech || ''} onChange={v => updateArrayItem('projects', i, 'tech', v)} />
+                        <FormTextarea label="Description" placeholder="Enter project description" value={proj.description || ''} onChange={v => updateArrayItem('projects', i, 'description', v)} rows={2} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <FormInput label="GitHub Link" placeholder="github.com/..." value={proj.github || ''} onChange={v => updateArrayItem('projects', i, 'github', v)} />
-                          <FormInput label="Live Link" placeholder="yourapp.com" value={proj.live || ''} onChange={v => updateArrayItem('projects', i, 'live', v)} />
+                          <FormInput label="GitHub Link" placeholder="Enter GitHub repository link" value={proj.github || ''} onChange={v => updateArrayItem('projects', i, 'github', v)} />
+                          <FormInput label="Live Link" placeholder="Enter live project URL" value={proj.live || ''} onChange={v => updateArrayItem('projects', i, 'live', v)} />
                         </div>
                       </div>
                     )}
@@ -703,10 +703,10 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onRemove={(i) => removeItem('certifications', i)}
                     renderItem={(cert, i) => (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <FormInput label="Certificate Name" placeholder="AWS Cloud Practitioner" value={cert.name || ''} onChange={v => updateArrayItem('certifications', i, 'name', v)} />
-                        <FormInput label="Issuer" placeholder="Amazon Web Services" value={cert.issuer || ''} onChange={v => updateArrayItem('certifications', i, 'issuer', v)} />
-                        <FormInput label="Date" placeholder="Jan 2024" value={cert.date || ''} onChange={v => updateArrayItem('certifications', i, 'date', v)} />
-                        <FormInput label="Credential URL" placeholder="credly.com/badges/..." value={cert.url || ''} onChange={v => updateArrayItem('certifications', i, 'url', v)} />
+                        <FormInput label="Certificate Name" placeholder="Enter certificate name" value={cert.name || ''} onChange={v => updateArrayItem('certifications', i, 'name', v)} />
+                        <FormInput label="Issuer" placeholder="Enter issuing organization" value={cert.issuer || ''} onChange={v => updateArrayItem('certifications', i, 'issuer', v)} />
+                        <FormInput label="Date" placeholder="Enter issue date" value={cert.date || ''} onChange={v => updateArrayItem('certifications', i, 'date', v)} />
+                        <FormInput label="Credential URL" placeholder="Enter credential verification URL" value={cert.url || ''} onChange={v => updateArrayItem('certifications', i, 'url', v)} />
                       </div>
                     )}
                   />
@@ -718,7 +718,7 @@ function ResumeBuilderTab({ hub, refreshHub }) {
                     onRemove={(i) => removeItem('languages', i)}
                     renderItem={(lang, i) => (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <FormInput label="Language" placeholder="English" value={lang.name || ''} onChange={v => updateArrayItem('languages', i, 'name', v)} />
+                        <FormInput label="Language" placeholder="Enter language" value={lang.name || ''} onChange={v => updateArrayItem('languages', i, 'name', v)} />
                         <div>
                           <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">Proficiency</label>
                           <CustomSelect

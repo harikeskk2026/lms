@@ -719,6 +719,7 @@ export default function AdminMeetingLinksPage() {
         title={editingId ? 'Edit Scheduled Class' : 'Schedule Class'}
         subtitle={editingId ? 'Update meeting details, date/time or batch targeting' : 'Publish a new live class meeting link'}
         width="w-full max-w-lg md:max-w-xl"
+        isDirty={Boolean(form.title || form.meetingUrl || form.courseId || form.batchId || form.hostName || form.scheduledStart || form.description)}
       >
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           {Object.keys(errors).length > 0 && (
@@ -739,7 +740,7 @@ export default function AdminMeetingLinksPage() {
             </label>
             <input
               type="text"
-              placeholder="e.g. React & Next.js Live Class"
+              placeholder="Enter meeting title"
               value={form.title}
               onChange={e => {
                 setForm(f => ({ ...f, title: e.target.value }))
@@ -812,7 +813,7 @@ export default function AdminMeetingLinksPage() {
             </label>
             <input
               type="text"
-              placeholder="https://zoom.us/j/123456789"
+              placeholder="Enter meeting URL"
               value={form.meetUrl}
               onChange={e => {
                 setForm(f => ({ ...f, meetUrl: e.target.value }))
@@ -860,7 +861,7 @@ export default function AdminMeetingLinksPage() {
 
             <input
               type="text"
-              placeholder="e.g. David Kumar or John Mathew"
+              placeholder="Enter host / instructor name"
               value={form.hostName}
               onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
@@ -909,7 +910,7 @@ export default function AdminMeetingLinksPage() {
             </label>
             <input
               type="text"
-              placeholder="e.g. 123456"
+              placeholder="Enter meeting passcode (optional)"
               value={form.passcode}
               onChange={e => setForm(f => ({ ...f, passcode: e.target.value }))}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
@@ -922,36 +923,52 @@ export default function AdminMeetingLinksPage() {
             </label>
             <textarea
               rows={3}
-              placeholder="Topics to be covered in this live session..."
+              placeholder="Enter session agenda or description (optional)..."
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
             />
           </div>
 
-          <div className="flex gap-3 pt-3">
-            <button
-              type="button"
-              onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <RefreshCw size={15} className="animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                editingId ? 'Save Changes' : 'Schedule Class'
-              )}
-            </button>
-          </div>
+          {(() => {
+            const isUrlValid = Boolean(form.meetUrl?.trim() && /^(https?:\/\/)?([\w.-]+\.[a-z]{2,})(:[0-9]+)?(\/.*)?$/i.test(form.meetUrl.trim()))
+            const isEndValid = !form.scheduledEnd || !form.scheduledStart || new Date(form.scheduledEnd) > new Date(form.scheduledStart)
+            const isMeetingFormValid = Boolean(
+              form.title?.trim() &&
+              isUrlValid &&
+              form.scheduledStart &&
+              isEndValid &&
+              !errors.scheduledStart &&
+              !errors.scheduledEnd &&
+              !errors.meetUrl &&
+              !errors.title
+            )
+            return (
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !isMeetingFormValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    editingId ? 'Save Changes' : 'Schedule Class'
+                  )}
+                </button>
+              </div>
+            )
+          })()}
         </form>
       </SlidePanel>
 

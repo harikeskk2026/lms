@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.enrollment.service;
 
 import com.careerlabs.lms.api.enrollment.dto.request.BulkEnrollStudentsRequest;
 import com.careerlabs.lms.api.enrollment.dto.request.EnrollStudentRequest;
+import com.careerlabs.lms.api.enrollment.dto.response.BulkEnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPageResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
@@ -20,7 +21,7 @@ public interface EnrollmentService {
 
     CourseEnrolledStudentResponse enrollStudentByAdmin(Long courseId, EnrollStudentRequest request);
 
-    List<CourseEnrolledStudentResponse> bulkEnrollStudentsByAdmin(Long courseId, BulkEnrollStudentsRequest request);
+    BulkEnrollmentResponse bulkEnrollStudentsByAdmin(Long courseId, BulkEnrollStudentsRequest request);
 
     void unenrollStudentByAdmin(Long courseId, Long enrollmentId);
 }

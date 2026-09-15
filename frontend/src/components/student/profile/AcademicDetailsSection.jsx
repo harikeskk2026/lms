@@ -186,7 +186,7 @@ export default function AcademicDetailsSection({ onSaved }) {
             <label className={LABEL_CLS}>Percentage (%)</label>
             <input type="number" step="0.01" min="0" max="100" value={form.tenthPercentage}
               onChange={e => setForm(f => ({ ...f, tenthPercentage: e.target.value }))}
-              placeholder="e.g. 85.50"
+              placeholder="Enter percentage (0-100)"
               className={INPUT_CLS} />
           </div>
         </div>
@@ -214,7 +214,7 @@ export default function AcademicDetailsSection({ onSaved }) {
             <label className={LABEL_CLS}>Percentage (%)</label>
             <input type="number" step="0.01" min="0" max="100" value={form.twelfthPercentage}
               onChange={e => setForm(f => ({ ...f, twelfthPercentage: e.target.value }))}
-              placeholder="e.g. 85.50"
+              placeholder="Enter percentage (0-100)"
               className={INPUT_CLS} />
           </div>
         </div>
@@ -243,7 +243,7 @@ export default function AcademicDetailsSection({ onSaved }) {
             <label className={LABEL_CLS}>Percentage (%)</label>
             <input type="number" step="0.01" min="0" max="100" value={form.diplomaPercentage}
               onChange={e => setForm(f => ({ ...f, diplomaPercentage: e.target.value }))}
-              placeholder="e.g. 85.50"
+              placeholder="Enter percentage (0-100)"
               className={INPUT_CLS} />
           </div>
         </div>
@@ -262,14 +262,14 @@ export default function AcademicDetailsSection({ onSaved }) {
             <label className={LABEL_CLS}>Degree / Course</label>
             <input type="text" value={form.ugDegree}
               onChange={e => setForm(f => ({ ...f, ugDegree: e.target.value }))}
-              placeholder="e.g. B.Tech / B.E"
+              placeholder="Enter degree / course"
               className={INPUT_CLS} />
           </div>
           <div>
             <label className={LABEL_CLS}>Department</label>
             <input type="text" value={form.ugDepartment}
               onChange={e => setForm(f => ({ ...f, ugDepartment: e.target.value }))}
-              placeholder="e.g. Computer Science"
+              placeholder="Enter department"
               className={INPUT_CLS} />
           </div>
         </div>
@@ -336,14 +336,14 @@ export default function AcademicDetailsSection({ onSaved }) {
             <label className={LABEL_CLS}>Degree / Course</label>
             <input type="text" value={form.pgDegree}
               onChange={e => setForm(f => ({ ...f, pgDegree: e.target.value }))}
-              placeholder="e.g. M.Tech / M.E"
+              placeholder="Enter degree / course"
               className={INPUT_CLS} />
           </div>
           <div>
             <label className={LABEL_CLS}>Department</label>
             <input type="text" value={form.pgDepartment}
               onChange={e => setForm(f => ({ ...f, pgDepartment: e.target.value }))}
-              placeholder="e.g. Computer Science"
+              placeholder="Enter department"
               className={INPUT_CLS} />
           </div>
         </div>
@@ -397,13 +397,26 @@ export default function AcademicDetailsSection({ onSaved }) {
       </AccordionCard>
 
       <div className="flex justify-end pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-60"
-        >
-          {saving ? 'Saving...' : 'Save Academic Details'}
-        </button>
+        {(() => {
+          const isTenthValid = !form.tenthPercentage || (Number(form.tenthPercentage) >= 0 && Number(form.tenthPercentage) <= 100)
+          const isTwelfthValid = !form.twelfthPercentage || (Number(form.twelfthPercentage) >= 0 && Number(form.twelfthPercentage) <= 100)
+          const isDiplomaValid = !form.diplomaPercentage || (Number(form.diplomaPercentage) >= 0 && Number(form.diplomaPercentage) <= 100)
+          const isUgScoreValid = !form.ugScore || (Number(form.ugScore) >= 0 && Number(form.ugScore) <= (form.ugScoreType === 'CGPA' ? 10 : 100))
+          const isPgScoreValid = !form.pgScore || (Number(form.pgScore) >= 0 && Number(form.pgScore) <= (form.pgScoreType === 'CGPA' ? 10 : 100))
+          const isUgBacklogsValid = !form.ugBacklogs || (Number(form.ugBacklogs) >= 0 && Number(form.ugBacklogs) <= 50)
+          const isPgBacklogsValid = !form.pgBacklogs || (Number(form.pgBacklogs) >= 0 && Number(form.pgBacklogs) <= 50)
+          const isFormDirty = Boolean(initialForm && JSON.stringify(form) !== JSON.stringify(initialForm))
+          const isAcademicValid = isTenthValid && isTwelfthValid && isDiplomaValid && isUgScoreValid && isPgScoreValid && isUgBacklogsValid && isPgBacklogsValid && isFormDirty
+          return (
+            <button
+              type="submit"
+              disabled={saving || !isAcademicValid}
+              className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Saving...' : 'Save Academic Details'}
+            </button>
+          )
+        })()}
       </div>
     </form>
   )

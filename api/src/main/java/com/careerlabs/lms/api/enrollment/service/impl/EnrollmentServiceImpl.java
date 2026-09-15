@@ -11,8 +11,10 @@ import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.dto.request.BulkEnrollStudentsRequest;
 import com.careerlabs.lms.api.enrollment.dto.request.EnrollStudentRequest;
+import com.careerlabs.lms.api.enrollment.dto.response.BulkEnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPageResponse;
+import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResultItem;
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.entity.Enrollment;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
@@ -24,6 +26,8 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.Role;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,6 +36,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -42,23 +47,28 @@ import java.util.Optional;
 @Service
 public class EnrollmentServiceImpl implements EnrollmentService {
 
+    private static final Logger log = LoggerFactory.getLogger(EnrollmentServiceImpl.class);
+
     private final EnrollmentRepository enrollmentRepository;
     private final StudentRepository studentRepository;
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
     private final BatchScheduleConflictValidator batchScheduleConflictValidator;
     private final CourseAccessGuard accessGuard;
+    private final TransactionTemplate transactionTemplate;
 
     public EnrollmentServiceImpl(EnrollmentRepository enrollmentRepository, StudentRepository studentRepository,
                                   CourseRepository courseRepository, BatchRepository batchRepository,
                                   BatchScheduleConflictValidator batchScheduleConflictValidator,
-                                  CourseAccessGuard accessGuard) {
+                                  CourseAccessGuard accessGuard,
+                                  TransactionTemplate transactionTemplate) {
         this.enrollmentRepository = enrollmentRepository;
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.batchScheduleConflictValidator = batchScheduleConflictValidator;
         this.accessGuard = accessGuard;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Override
@@ -275,24 +285,84 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     }
 
     @Override
-    @Transactional
-    public List<CourseEnrolledStudentResponse> bulkEnrollStudentsByAdmin(Long courseId, BulkEnrollStudentsRequest request) {
+    public BulkEnrollmentResponse bulkEnrollStudentsByAdmin(Long courseId, BulkEnrollStudentsRequest request) {
         if (request.studentIds() == null || request.studentIds().isEmpty()) {
             throw new BadRequestException("At least one student must be selected for enrollment");
         }
 
-        List<CourseEnrolledStudentResponse> responses = new ArrayList<>();
+        List<EnrollmentResultItem> results = new ArrayList<>();
         for (Long studentId : request.studentIds()) {
-            try {
-                EnrollStudentRequest singleReq = new EnrollStudentRequest(studentId, request.batchId());
-                CourseEnrolledStudentResponse response = enrollStudentByAdmin(courseId, singleReq);
-                responses.add(response);
-            } catch (ConflictException e) {
-                // If student is already enrolled, continue processing remaining students
-            }
+            EnrollmentResultItem result = processSingleStudent(courseId, studentId, request.batchId());
+            results.add(result);
         }
-        return responses;
+
+        long successful = results.stream().filter(EnrollmentResultItem::success).count();
+        long failed = results.size() - successful;
+
+        return new BulkEnrollmentResponse(
+            results.size(), (int) successful, (int) failed, results,
+            String.format("Bulk enrollment completed: %d enrolled, %d failed", successful, failed)
+        );
     }
+
+    private EnrollmentResultItem processSingleStudent(Long courseId, Long studentId, Long batchId) {
+        StudentIdentity identity = resolveStudentIdentity(studentId);
+
+        try {
+            EnrollmentResultItem result = transactionTemplate.execute(status -> {
+                return executeEnrollment(courseId, studentId, batchId, identity);
+            });
+            return result;
+        } catch (Exception e) {
+            log.error("Unexpected error processing enrollment for student {} in course {}", studentId, courseId, e);
+            return EnrollmentResultItem.failure(studentId, identity.name(), identity.email(),
+                    "An unexpected error occurred. Please try again.");
+        }
+    }
+
+    private EnrollmentResultItem executeEnrollment(Long courseId, Long studentId, Long batchId, StudentIdentity identity) {
+        try {
+            EnrollStudentRequest req = new EnrollStudentRequest(studentId, batchId);
+            CourseEnrolledStudentResponse response = enrollStudentByAdmin(courseId, req);
+            return EnrollmentResultItem.success(studentId, identity.name(), identity.email(),
+                    "Enrolled successfully", response.enrollmentId());
+        } catch (ConflictException e) {
+            return EnrollmentResultItem.failure(studentId, identity.name(), identity.email(),
+                    sanitizeMessage(e.getMessage()));
+        } catch (BadRequestException e) {
+            return EnrollmentResultItem.failure(studentId, identity.name(), identity.email(),
+                    sanitizeMessage(e.getMessage()));
+        } catch (ResourceNotFoundException e) {
+            return EnrollmentResultItem.failure(studentId, identity.name(), identity.email(),
+                    sanitizeMessage(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Unexpected error enrolling student {} in course {}", studentId, courseId, e);
+            return EnrollmentResultItem.failure(studentId, identity.name(), identity.email(),
+                    "An unexpected error occurred. Please try again.");
+        }
+    }
+
+    private StudentIdentity resolveStudentIdentity(Long studentId) {
+        try {
+            return studentRepository.findById(studentId)
+                .map(s -> new StudentIdentity(
+                    s.getUser() != null ? s.getUser().getName() : null,
+                    s.getUser() != null ? s.getUser().getEmail() : null))
+                .orElse(new StudentIdentity(null, null));
+        } catch (Exception e) {
+            log.warn("Could not resolve identity for student {}", studentId, e);
+            return new StudentIdentity(null, null);
+        }
+    }
+
+    private String sanitizeMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return "Enrollment failed";
+        }
+        return message.length() > 200 ? message.substring(0, 200) + "..." : message;
+    }
+
+    private record StudentIdentity(String name, String email) {}
 
     @Override
     @Transactional

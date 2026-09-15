@@ -1,9 +1,9 @@
 'use client'
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import { X, KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
+import FormDrawer from '@/components/ui/FormDrawer'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 import { isValidPassword, PASSWORD_ERROR_MESSAGE } from '@/utilities/validators'
 import clsx from 'clsx'
@@ -31,32 +31,45 @@ export default function ResetPasswordModal({ open, onClose, user, onSuccess }) {
   const [showNew, setShowNew] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [err, setErr] = useState('')
+  const [touched, setTouched] = useState({})
+  const [submitted, setSubmitted] = useState(false)
+  const [apiErr, setApiErr] = useState('')
 
   if (!open || !user) return null
 
+  const isPasswordValid = isValidPassword(newPassword)
+  const isMatch = newPassword === confirmPwd && Boolean(confirmPwd)
+  const isFormValid = isPasswordValid && isMatch
+  const isDirty = Boolean(newPassword || confirmPwd)
+
+  const passwordError = !newPassword
+    ? 'New password is required'
+    : !isPasswordValid
+    ? PASSWORD_ERROR_MESSAGE
+    : null
+
+  const confirmError = !confirmPwd
+    ? 'Please confirm the new password'
+    : newPassword !== confirmPwd
+    ? 'Passwords do not match'
+    : null
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setErr('')
-    if (!isValidPassword(newPassword)) {
-      setErr(PASSWORD_ERROR_MESSAGE)
-      return
-    }
-    if (newPassword !== confirmPwd) {
-      setErr('Passwords do not match')
-      return
-    }
+    setSubmitted(true)
+    setApiErr('')
+
+    if (!isFormValid) return
+
     setLoading(true)
     try {
       await adminApi.resetUserPassword(user.id, newPassword)
       toast.success(`Password reset for ${user.name}`)
-      setNewPassword('')
-      setConfirmPwd('')
+      handleClose()
       onSuccess?.()
-      onClose()
     } catch (error) {
       const msg = error.response?.data?.message || error.message || 'Failed to reset password'
-      setErr(msg)
+      setApiErr(msg)
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -66,90 +79,158 @@ export default function ResetPasswordModal({ open, onClose, user, onSuccess }) {
   const handleClose = () => {
     setNewPassword('')
     setConfirmPwd('')
-    setErr('')
+    setTouched({})
+    setSubmitted(false)
+    setApiErr('')
     onClose()
   }
 
-  const content = (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-5 animate-scaleUp mx-4">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600">
-              <KeyRound size={18} />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm">Reset Password</h3>
-              <p className="text-xs text-slate-500">{user.name} · {user.email}</p>
-            </div>
+  return (
+    <FormDrawer
+      open={open}
+      onClose={handleClose}
+      title="Reset Password"
+      subtitle={`${user?.name || ''} · ${user?.email || ''}`}
+      isDirty={isDirty}
+      width="w-full sm:w-[480px]"
+    >
+      <div className="p-4 sm:p-6 space-y-5">
+        <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-gray-800/60 rounded-xl border border-slate-100 dark:border-gray-800">
+          <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center flex-shrink-0">
+            <KeyRound size={16} />
           </div>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-gray-200">
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className={clsx('text-[11px] font-bold px-2 py-0.5 rounded-full',
-            user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
-            user.role === 'TRAINER' ? 'bg-green-100 text-green-700' :
-            'bg-blue-100 text-blue-700'
-          )}>{user.role}</span>
-          {user.active === false && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>}
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{user.name}</p>
+            <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className={clsx(
+              'text-[10px] font-bold px-2 py-0.5 rounded-full',
+              user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' :
+              user.role === 'TRAINER' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
+              'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+            )}>
+              {user.role}
+            </span>
+            {user.active === false && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300">
+                Inactive
+              </span>
+            )}
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="form-label mb-0">New Password *</label>
-              <button type="button" onClick={() => setNewPassword(genPassword())} className="text-xs text-brand-600 hover:underline font-semibold">Generate</button>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm mb-0">
+                New Password *
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const gen = genPassword()
+                  setNewPassword(gen)
+                  setConfirmPwd(gen)
+                }}
+                className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400 font-semibold"
+              >
+                Generate strong password
+              </button>
             </div>
             <div className="relative">
               <input
                 type={showNew ? 'text' : 'password'}
                 value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="Min 8 chars, uppercase + number"
-                autoFocus
-                className={clsx('input-field pr-10 text-sm font-mono', err && 'border-red-500')}
+                onBlur={() => setTouched(prev => ({ ...prev, newPassword: true }))}
+                onChange={e => {
+                  setNewPassword(e.target.value)
+                  if (apiErr) setApiErr('')
+                }}
+                placeholder="Enter new password"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pr-10 pl-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono transition-all',
+                  ((touched.newPassword || submitted) && passwordError) && 'border-red-500'
+                )}
               />
-              <button type="button" onClick={() => setShowNew(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" tabIndex={-1}>
+              <button
+                type="button"
+                onClick={() => setShowNew(v => !v)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-300"
+                tabIndex={-1}
+              >
                 {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            {(touched.newPassword || submitted) && passwordError && (
+              <p className="text-xs text-red-500 mt-1">{passwordError}</p>
+            )}
             {newPassword && <PasswordStrengthMeter password={newPassword} />}
           </div>
 
           <div>
-            <label className="form-label">Confirm Password *</label>
+            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
+              Confirm New Password *
+            </label>
             <div className="relative">
               <input
                 type={showConfirm ? 'text' : 'password'}
                 value={confirmPwd}
-                onChange={e => setConfirmPwd(e.target.value)}
-                placeholder="Repeat new password"
-                className={clsx('input-field pr-10 text-sm', err && 'border-red-500')}
+                onBlur={() => setTouched(prev => ({ ...prev, confirmPwd: true }))}
+                onChange={e => {
+                  setConfirmPwd(e.target.value)
+                  if (apiErr) setApiErr('')
+                }}
+                placeholder="Re-enter new password"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pr-10 pl-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono transition-all',
+                  ((touched.confirmPwd || submitted) && confirmError) && 'border-red-500'
+                )}
               />
-              <button type="button" onClick={() => setShowConfirm(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" tabIndex={-1}>
+              <button
+                type="button"
+                onClick={() => setShowConfirm(v => !v)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-300"
+                tabIndex={-1}
+              >
                 {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            {(touched.confirmPwd || submitted) && confirmError && (
+              <p className="text-xs text-red-500 mt-1">{confirmError}</p>
+            )}
           </div>
 
-          {err && <p className="text-xs text-red-500 font-semibold">{err}</p>}
+          {apiErr && (
+            <p className="text-xs text-red-500 font-semibold p-2 bg-red-50 dark:bg-red-950/40 rounded-lg">
+              {apiErr}
+            </p>
+          )}
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-gray-800">
-            <button type="button" onClick={handleClose} className="btn-secondary text-sm">Cancel</button>
-            <button type="submit" disabled={loading} className="btn-primary text-sm min-w-[110px]">
+          <div className="pt-2">
+            <p className="text-[11px] text-slate-400">
+              Resetting will immediately invalidate the user's active login sessions.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !isFormValid}
+              className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px]"
+            >
               {loading ? 'Resetting...' : 'Reset Password'}
             </button>
           </div>
         </form>
-
-        <p className="text-[11px] text-slate-400 text-center">This will immediately invalidate the user's active sessions.</p>
       </div>
-    </div>
+    </FormDrawer>
   )
-
-  if (typeof document !== 'undefined') return createPortal(content, document.body)
-  return content
 }

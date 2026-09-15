@@ -1801,7 +1801,11 @@ export default function PlacementPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setPrepPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !prepForm.title?.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Saving...' : (editPrep ? 'Update' : 'Create')}
             </button>
           </div>
@@ -1861,13 +1865,16 @@ export default function PlacementPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-bold text-gray-800 dark:text-white">Questions ({prepDetail.questionsCount || 0})</h4>
-                <button onClick={() => handleSavePrepQuestions(prepDetail.id)} disabled={savingQuestions || prepDetail.status === 'ARCHIVED'}
-                  className="text-xs bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-purple-100 disabled:opacity-50">
+                <button
+                  onClick={() => handleSavePrepQuestions(prepDetail.id)}
+                  disabled={savingQuestions || prepDetail.status === 'ARCHIVED' || !prepQuestionsText?.trim()}
+                  className="text-xs bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
                   {savingQuestions ? 'Saving...' : 'Save Questions'}
                 </button>
               </div>
               <textarea value={prepQuestionsText} onChange={e => setPrepQuestionsText(e.target.value)} rows={10} disabled={prepDetail.status === 'ARCHIVED'}
-                placeholder={'One question per line: Question | Answer\nExample:\nWhat is Big-O notation? | It describes how runtime grows with input size.'}
+                placeholder="Enter one question per line formatted as: Question | Answer"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none font-mono disabled:opacity-50" />
               <p className="text-[10px] text-gray-400 mt-1">Format: <code>Question | Answer</code> per line. Lines without a question are ignored.</p>
             </div>
@@ -2060,16 +2067,37 @@ export default function PlacementPage() {
             <textarea value={mockForm.instructions} onChange={e => setMockForm(f => ({ ...f, instructions: e.target.value }))} rows={2} placeholder="Arrive 5 minutes early, keep your college ID ready..."
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => { setMockPanel(false); setMockForm(INITIAL_MOCK_FORM) }} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
-            <button
-              type="submit"
-              disabled={saving || isPastMockTime || !mockForm.scheduledAt}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed shadow-sm hover:shadow transition-all"
-            >
-              {saving ? 'Scheduling...' : 'Schedule'}
-            </button>
-          </div>
+          {(() => {
+            const isMockCandidatesValid = Boolean(
+              mockForm.lockedStudent ||
+              (mockForm.selectionType === 'MANUAL' && mockForm.studentIds?.length > 0) ||
+              (mockForm.selectionType === 'BATCH' && mockForm.batchIds?.length > 0) ||
+              (mockForm.selectionType === 'COURSE' && mockForm.courseIds?.length > 0) ||
+              (mockForm.selectionType === 'RANDOM' && mockForm.randomCount && Number(mockForm.randomCount) > 0)
+            )
+            const isMockLocationValid = Boolean(
+              (mockForm.mode === 'ONLINE' && mockForm.meetLink?.trim()) ||
+              (mockForm.mode === 'OFFLINE' && mockForm.location?.trim())
+            )
+            const isMockValid = Boolean(
+              !isPastMockTime &&
+              mockForm.scheduledAt &&
+              isMockLocationValid &&
+              isMockCandidatesValid
+            )
+            return (
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => { setMockPanel(false); setMockForm(INITIAL_MOCK_FORM) }} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={saving || !isMockValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow transition-all"
+                >
+                  {saving ? 'Scheduling...' : 'Schedule'}
+                </button>
+              </div>
+            )
+          })()}
         </form>
       </SlidePanel>
 
@@ -2114,7 +2142,11 @@ export default function PlacementPage() {
           ))}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setFeedbackPanel(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !feedbackForm.status}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Saving...' : 'Save Feedback'}
             </button>
           </div>
@@ -2210,12 +2242,34 @@ export default function PlacementPage() {
               </>
             )}
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setDrivePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-              {saving ? (editingDrive ? 'Saving...' : 'Creating...') : (editingDrive ? 'Save Changes' : 'Create Drive')}
-            </button>
-          </div>
+          {(() => {
+            const isDriveDeadlineValid = Boolean(
+              driveForm.driveDate &&
+              driveForm.applyDeadline &&
+              driveForm.applyDeadline < driveForm.driveDate
+            )
+            const hasNoDriveErrors = Object.values(driveErrors).filter(Boolean).length === 0
+            const isDriveFormValid = Boolean(
+              driveForm.companyName?.trim() &&
+              driveForm.role?.trim() &&
+              driveForm.description?.trim() &&
+              driveForm.driveType &&
+              isDriveDeadlineValid &&
+              hasNoDriveErrors
+            )
+            return (
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setDrivePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={saving || !isDriveFormValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                >
+                  {saving ? (editingDrive ? 'Saving...' : 'Creating...') : (editingDrive ? 'Save Changes' : 'Create Drive')}
+                </button>
+              </div>
+            )
+          })()}
         </form>
       </SlidePanel>
 
@@ -2254,57 +2308,75 @@ export default function PlacementPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setIqPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !iqForm.question?.trim() || !iqForm.answer?.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Saving...' : (editIq ? 'Update' : 'Add Question')}
             </button>
           </div>
         </form>
       </SlidePanel>
 
-      <SlidePanel open={aptPanel} onClose={() => setAptPanel(false)} title={editApt ? 'Edit Aptitude Tips' : 'Add Aptitude Tips'}>
+      <SlidePanel
+        open={aptPanel}
+        onClose={() => setAptPanel(false)}
+        title={editApt ? 'Edit Aptitude Tips' : 'Add Aptitude Tips'}
+        isDirty={Boolean(aptForm.topic || aptForm.formula || aptForm.example)}
+      >
         <form onSubmit={handleSaveApt} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Topic *</label>
-            <input value={aptForm.topic} onChange={e => setAptForm(f => ({ ...f, topic: e.target.value }))} placeholder="e.g. Time & Work"
+            <input value={aptForm.topic} onChange={e => setAptForm(f => ({ ...f, topic: e.target.value }))} placeholder="Enter aptitude topic"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Formula *</label>
             <textarea value={aptForm.formula} onChange={e => setAptForm(f => ({ ...f, formula: e.target.value }))} rows={2}
-              placeholder="e.g. Combined Rate = 1/A + 1/B; Time = 1/Rate"
+              placeholder="Enter formula or concept"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" required />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Example *</label>
             <textarea value={aptForm.example} onChange={e => setAptForm(f => ({ ...f, example: e.target.value }))} rows={3}
-              placeholder="A worked example showing the formula in action"
+              placeholder="Enter a worked example"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" required />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setAptPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !aptForm.topic?.trim() || !aptForm.formula?.trim() || !aptForm.example?.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Saving...' : (editApt ? 'Update' : 'Add Tip')}
             </button>
           </div>
         </form>
       </SlidePanel>
 
-      <SlidePanel open={resPanel} onClose={() => setResPanel(false)} title={editRes ? 'Edit Resource' : 'Add Resource'}>
+      <SlidePanel
+        open={resPanel}
+        onClose={() => setResPanel(false)}
+        title={editRes ? 'Edit Resource' : 'Add Resource'}
+        isDirty={Boolean(resForm.title || resForm.description || resForm.url)}
+      >
         <form onSubmit={handleSaveRes} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
-            <input value={resForm.title} onChange={e => setResForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Cracking the Coding Interview"
+            <input value={resForm.title} onChange={e => setResForm(f => ({ ...f, title: e.target.value }))} placeholder="Enter resource title"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Description *</label>
             <textarea value={resForm.description} onChange={e => setResForm(f => ({ ...f, description: e.target.value }))} rows={3}
-              placeholder="What is this resource and why is it useful?"
+              placeholder="Enter resource description"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" required />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">URL *</label>
-            <input value={resForm.url} onChange={e => setResForm(f => ({ ...f, url: e.target.value }))} placeholder="https://..."
+            <input value={resForm.url} onChange={e => setResForm(f => ({ ...f, url: e.target.value }))} placeholder="Enter resource URL (https://...)"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
           </div>
           <div>
@@ -2314,7 +2386,11 @@ export default function PlacementPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setResPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !resForm.title?.trim() || !resForm.description?.trim() || !resForm.url?.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Saving...' : (editRes ? 'Update' : 'Add Resource')}
             </button>
           </div>
@@ -2368,7 +2444,11 @@ export default function PlacementPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setOfferPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !offerForm.applicationId || !offerForm.role?.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Issuing...' : 'Issue Offer'}
             </button>
           </div>
@@ -2436,12 +2516,22 @@ export default function PlacementPage() {
             <textarea value={roundForm.description} onChange={e => setRoundForm(f => ({ ...f, description: e.target.value }))} rows={2}
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setRoundPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-              {saving ? 'Creating...' : 'Add Round'}
-            </button>
-          </div>
+          {(() => {
+            const isScoreRangeValid = !roundForm.minimumScore || !roundForm.maxScore || Number(roundForm.minimumScore) <= Number(roundForm.maxScore)
+            const isRoundValid = Boolean(roundForm.name?.trim() && roundForm.sequence && isScoreRangeValid)
+            return (
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setRoundPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={saving || !isRoundValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                >
+                  {saving ? 'Creating...' : 'Add Round'}
+                </button>
+              </div>
+            )
+          })()}
         </form>
       </SlidePanel>
 
@@ -2518,7 +2608,11 @@ export default function PlacementPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setIntPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving || !intForm.roundId || !intForm.studentId || !intForm.scheduledAt}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+            >
               {saving ? 'Scheduling...' : 'Schedule'}
             </button>
           </div>
@@ -2560,12 +2654,23 @@ export default function PlacementPage() {
           <p className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-800/60 rounded-xl px-3 py-2">
             A PASS on the final configured round automatically moves the candidate to SELECTED, so an offer can then be issued.
           </p>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setCompletePanel(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
+          {(() => {
+            const isCompleteScoreValid = !completeForm.score || (Number(completeForm.score) >= 0 && Number(completeForm.score) <= 100)
+            const isCompleteResultValid = completeForm.status !== 'COMPLETED' || Boolean(completeForm.result)
+            const isCompleteValid = Boolean(completeForm.status && isCompleteResultValid && isCompleteScoreValid)
+            return (
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setCompletePanel(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={saving || !isCompleteValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            )
+          })()}
         </form>
       </SlidePanel>
       {confirmModal}

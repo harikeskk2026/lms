@@ -617,8 +617,8 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
             <button
               type="button"
               onClick={handleImportAll}
-              disabled={importing}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 flex items-center gap-1.5"
+              disabled={importing || extractedQuestions.length === 0}
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all"
             >
               {importing ? 'Importing...' : `Import All ${extractedQuestions.length} Questions →`}
             </button>

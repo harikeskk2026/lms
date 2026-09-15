@@ -71,7 +71,7 @@ export default function EligibilityCriteriaFields({ value, onChange, errors = {}
           <label className="block text-sm font-semibold text-gray-700 mb-1">Max Backlogs</label>
           <input type="number" step="1" min="0" value={value.maxBacklogs ?? ''}
             onChange={e => onChange({ maxBacklogs: e.target.value === '' ? null : Number(e.target.value) })}
-            placeholder="e.g. 0"
+            placeholder="Enter max backlogs"
             className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
         </div>
       </div>

@@ -229,7 +229,16 @@ export default function CourseManagePage({ params }) {
       )}
 
       {/* Edit Course Slide Panel */}
-      <SlidePanel open={editingCourse} onClose={() => setEditingCourse(false)} title="Edit Course">
+      <SlidePanel
+        open={editingCourse}
+        onClose={() => setEditingCourse(false)}
+        title="Edit Course"
+        isDirty={Boolean(course && (
+          editForm.title !== (course.title || '') ||
+          editForm.courseCode !== (course.courseCode || '') ||
+          editForm.description !== (course.description || '')
+        ))}
+      >
         <form onSubmit={handleSaveCourse} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
@@ -238,7 +247,7 @@ export default function CourseManagePage({ params }) {
               required
               value={editForm.title}
               onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
-              placeholder="e.g. Python Full Stack Development"
+              placeholder="Enter course title"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
@@ -246,13 +255,13 @@ export default function CourseManagePage({ params }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Course Code <span className="text-xs text-gray-400 font-normal">(e.g. PY-101)</span>
+                Course Code
               </label>
               <input
                 type="text"
                 value={editForm.courseCode}
                 onChange={e => setEditForm(f => ({ ...f, courseCode: e.target.value }))}
-                placeholder="e.g. PY-101"
+                placeholder="Enter course code"
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 uppercase"
               />
             </div>
@@ -265,7 +274,7 @@ export default function CourseManagePage({ params }) {
               rows={4}
               value={editForm.description}
               onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Detailed description of the course..."
+              placeholder="Enter course description"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
             />
           </div>
@@ -280,7 +289,7 @@ export default function CourseManagePage({ params }) {
                   required
                   value={editForm.durationValue}
                   onChange={e => setEditForm(f => ({ ...f, durationValue: e.target.value }))}
-                  placeholder="e.g. 3"
+                  placeholder="Enter duration"
                   className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
                 />
                 <CustomSelect
@@ -398,13 +407,27 @@ export default function CourseManagePage({ params }) {
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={savingCourse}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-60"
-            >
-              {savingCourse ? 'Saving...' : 'Save Changes'}
-            </button>
+            {(() => {
+              const isEditCourseValid = Boolean(
+                editForm.title?.trim() &&
+                editForm.title.trim().length >= 3 &&
+                editForm.description?.trim() &&
+                editForm.durationValue &&
+                Number(editForm.durationValue) >= 1 &&
+                editForm.durationUnit &&
+                editForm.level &&
+                editForm.status
+              )
+              return (
+                <button
+                  type="submit"
+                  disabled={savingCourse || !isEditCourseValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingCourse ? 'Saving...' : 'Save Changes'}
+                </button>
+              )
+            })()}
           </div>
         </form>
       </SlidePanel>
@@ -1801,7 +1824,11 @@ function MaterialsTab({ courseId }) {
                 </label>
                 <div className="flex gap-2">
                   {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}
-                  <button type="submit" disabled={saving} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+                  <button
+                    type="submit"
+                    disabled={saving || !form.title?.trim() || !form.url?.trim()}
+                    className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                  >
                     {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Material'}
                   </button>
                 </div>
@@ -1933,7 +1960,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
         <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch Name *</label>
-            <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Batch A"
+            <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Enter batch name"
               className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
 
@@ -2022,9 +2049,28 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
               className="w-full rounded-xl border border-gray-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
 
-          <button type="submit" disabled={saving} className="sm:col-span-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60 transition-all shadow-md">
-            {saving ? 'Creating...' : 'Create Batch'}
-          </button>
+          {(() => {
+            const isNewBatchValid = Boolean(
+              form.name?.trim() &&
+              form.startDate &&
+              form.endDate &&
+              form.startDate <= form.endDate &&
+              (!startTime || !endTime || startTime < endTime) &&
+              form.mode &&
+              form.maxStudents &&
+              Number(form.maxStudents) >= 1 &&
+              Number(form.maxStudents) <= 500
+            )
+            return (
+              <button
+                type="submit"
+                disabled={saving || !isNewBatchValid}
+                className="sm:col-span-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+              >
+                {saving ? 'Creating...' : 'Create Batch'}
+              </button>
+            )
+          })()}
         </form>
       )}
 

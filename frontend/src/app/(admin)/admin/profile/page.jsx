@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import profileService from '@/services/profileService'
 import { useAuth } from '@/context/AuthContext'
 import tokenStorage from '@/utilities/tokenStorage'
-import { isValidPhone, PHONE_ERROR_MESSAGE } from '@/utilities/validators'
+import { isValidPhone, PHONE_ERROR_MESSAGE, isValidName, NAME_ERROR_MESSAGE, filterNameKey, filterPhoneKey, sanitizePhone } from '@/utilities/validators'
 import ProfilePhotoUploader from '@/components/shared/profile/ProfilePhotoUploader'
 import ChangePasswordForm from '@/components/shared/profile/ChangePasswordForm'
 
@@ -64,6 +64,8 @@ export default function AdminProfilePage() {
     const errs = {}
     if (!form.name || !form.name.trim()) {
       errs.name = 'Full Name is required'
+    } else if (!isValidName(form.name)) {
+      errs.name = NAME_ERROR_MESSAGE
     }
     if (form.phone && !isValidPhone(form.phone)) {
       errs.phone = PHONE_ERROR_MESSAGE
@@ -154,10 +156,12 @@ export default function AdminProfilePage() {
             <div>
               <label className={LABEL_CLS}>Full Name *</label>
               <input type="text" required value={form.name}
+                onKeyDown={filterNameKey}
                 onChange={e => {
                   setForm(f => ({ ...f, name: e.target.value }))
-                  if (errors.name && e.target.value.trim()) setErrors(err => ({ ...err, name: undefined }))
+                  if (errors.name && isValidName(e.target.value)) setErrors(err => ({ ...err, name: undefined }))
                 }}
+                placeholder="Enter full name"
                 className={`${INPUT_CLS} ${errors.name ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
               {errors.name && (
                 <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -178,12 +182,13 @@ export default function AdminProfilePage() {
             <div>
               <label className={LABEL_CLS}><Phone size={10} className="inline mr-1" />Phone</label>
               <input type="tel" inputMode="numeric" maxLength={10} value={form.phone}
+                onKeyDown={filterPhoneKey}
                 onChange={e => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  const val = sanitizePhone(e.target.value)
                   setForm(f => ({ ...f, phone: val }))
                   if (errors.phone && isValidPhone(val)) setErrors(err => ({ ...err, phone: undefined }))
                 }}
-                placeholder="9876543210"
+                placeholder="Enter phone number"
                 className={`${INPUT_CLS} ${errors.phone ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
               {errors.phone && (
                 <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -194,20 +199,34 @@ export default function AdminProfilePage() {
             </div>
             <div>
               <label className={LABEL_CLS}><Briefcase size={10} className="inline mr-1" />Designation</label>
-              <input type="text" placeholder="e.g. Placement Officer" value={form.designation}
+              <input type="text" placeholder="Enter designation" value={form.designation}
                 onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
                 className={INPUT_CLS} />
             </div>
             <div>
               <label className={LABEL_CLS}><Building2 size={10} className="inline mr-1" />Department</label>
-              <input type="text" placeholder="e.g. Training & Placement" value={form.department}
+              <input type="text" placeholder="Enter department" value={form.department}
                 onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
                 className={INPUT_CLS} />
             </div>
-            <button type="submit" disabled={saving}
-              className="w-full py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+            {(() => {
+              const isProfileValid = Boolean(
+                form.name?.trim() &&
+                isValidName(form.name) &&
+                (!form.phone || isValidPhone(form.phone)) &&
+                !errors.name &&
+                !errors.phone
+              )
+              return (
+                <button
+                  type="submit"
+                  disabled={saving || !isProfileValid}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              )
+            })()}
           </form>
         </div>
 

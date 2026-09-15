@@ -52,8 +52,8 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
     watch,
     setValue,
     reset,
-    formState: { errors, isSubmitting },
-  } = useForm({ resolver: zodResolver(questionSchema), defaultValues: defaultValues || EMPTY_FORM })
+    formState: { errors, isSubmitting, isValid },
+  } = useForm({ resolver: zodResolver(questionSchema), defaultValues: defaultValues || EMPTY_FORM, mode: 'onChange' })
 
   useEffect(() => {
     reset(defaultValues || EMPTY_FORM)
@@ -232,8 +232,11 @@ export default function QuestionForm({ topics = [], courses = [], onTopicsChange
           className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">
           Cancel
         </button>
-        <button type="submit" disabled={saving || isSubmitting}
-          className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+        <button
+          type="submit"
+          disabled={saving || isSubmitting || !isValid}
+          className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+        >
           {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Question'}
         </button>
       </div>

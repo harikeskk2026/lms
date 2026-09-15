@@ -7,7 +7,7 @@ import Link from 'next/link'
 import profileService from '@/services/profileService'
 import { useAuth } from '@/context/AuthContext'
 import tokenStorage from '@/utilities/tokenStorage'
-import { isValidPhone, PHONE_ERROR_MESSAGE, isValidUrl, LINKEDIN_URL_ERROR_MESSAGE, GITHUB_URL_ERROR_MESSAGE } from '@/utilities/validators'
+import { isValidPhone, PHONE_ERROR_MESSAGE, isValidUrl, LINKEDIN_URL_ERROR_MESSAGE, GITHUB_URL_ERROR_MESSAGE, isValidName, NAME_ERROR_MESSAGE, filterNameKey, filterPhoneKey, sanitizePhone } from '@/utilities/validators'
 import ProfilePhotoUploader from '@/components/shared/profile/ProfilePhotoUploader'
 import AcademicDetailsSection from '@/components/student/profile/AcademicDetailsSection'
 
@@ -61,6 +61,8 @@ export default function StudentProfilePage() {
     const errs = {}
     if (!form.name || !form.name.trim()) {
       errs.name = 'Full Name is required'
+    } else if (!isValidName(form.name)) {
+      errs.name = NAME_ERROR_MESSAGE
     }
     if (form.phone && !isValidPhone(form.phone)) {
       errs.phone = PHONE_ERROR_MESSAGE
@@ -177,10 +179,12 @@ export default function StudentProfilePage() {
             <div>
               <label className={LABEL_CLS}>Full Name *</label>
               <input type="text" required value={form.name}
+                onKeyDown={filterNameKey}
                 onChange={e => {
                   setForm(f => ({ ...f, name: e.target.value }))
-                  if (errors.name && e.target.value.trim()) setErrors(err => ({ ...err, name: undefined }))
+                  if (errors.name && isValidName(e.target.value)) setErrors(err => ({ ...err, name: undefined }))
                 }}
+                placeholder="Enter full name"
                 className={`${INPUT_CLS} ${errors.name ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
               {errors.name && (
                 <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -192,12 +196,13 @@ export default function StudentProfilePage() {
             <div>
               <label className={LABEL_CLS}><Phone size={10} className="inline mr-1" />Phone</label>
               <input type="tel" inputMode="numeric" maxLength={10} value={form.phone}
+                onKeyDown={filterPhoneKey}
                 onChange={e => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  const val = sanitizePhone(e.target.value)
                   setForm(f => ({ ...f, phone: val }))
                   if (errors.phone && isValidPhone(val)) setErrors(err => ({ ...err, phone: undefined }))
                 }}
-                placeholder="e.g. 9876543210"
+                placeholder="Enter phone number"
                 className={`${INPUT_CLS} ${errors.phone ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : ''}`} />
               {errors.phone && (
                 <p className="text-xs text-red-500 mt-1 font-semibold flex items-center gap-1.5">
@@ -218,7 +223,7 @@ export default function StudentProfilePage() {
               <label className={LABEL_CLS}><Award size={10} className="inline mr-1" />Qualification</label>
               <input type="text" value={form.qualification}
                 onChange={e => setForm(f => ({ ...f, qualification: e.target.value }))}
-                placeholder="e.g. B.Tech Computer Science & Engineering"
+                placeholder="Enter qualification"
                 className={INPUT_CLS} />
             </div>
           </div>
@@ -227,7 +232,7 @@ export default function StudentProfilePage() {
             <label className={LABEL_CLS}><MapPin size={10} className="inline mr-1" />Address</label>
             <input type="text" value={form.address}
               onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-              placeholder="e.g. 123 Main St, Madurai, Tamil Nadu"
+              placeholder="Enter residential address"
               className={INPUT_CLS} />
           </div>
 
@@ -267,10 +272,28 @@ export default function StudentProfilePage() {
           </div>
 
           <div className="pt-2 flex justify-end">
-            <button type="submit" disabled={saving}
-              className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-medium hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-60">
-              {saving ? 'Saving...' : 'Save Personal Information'}
-            </button>
+            {(() => {
+              const isStudentProfileValid = Boolean(
+                form.name?.trim() &&
+                isValidName(form.name) &&
+                (!form.phone || isValidPhone(form.phone)) &&
+                (!form.linkedinUrl || isValidUrl(form.linkedinUrl)) &&
+                (!form.githubUrl || isValidUrl(form.githubUrl)) &&
+                !errors.name &&
+                !errors.phone &&
+                !errors.linkedinUrl &&
+                !errors.githubUrl
+              )
+              return (
+                <button
+                  type="submit"
+                  disabled={saving || !isStudentProfileValid}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Saving...' : 'Save Personal Information'}
+                </button>
+              )
+            })()}
           </div>
         </form>
       </div>

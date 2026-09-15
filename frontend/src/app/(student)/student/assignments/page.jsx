@@ -9,6 +9,7 @@ import { studentApi, resolveFileUrl } from '@/lib/api'
 import toast from 'react-hot-toast'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
+import FormDrawer from '@/components/ui/FormDrawer'
 
 const FILTERS = ['All', 'Pending', 'Pending Approval', 'Submitted', 'Graded', 'Overdue', 'Closed']
 const ALLOWED_SUBMISSION_EXTENSIONS = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.txt', '.csv', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.zip']
@@ -125,7 +126,7 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
         invalid.push(f.name)
       } else {
         if (!files.some(existing => existing.name === f.name && existing.size === f.size) &&
-            !valid.some(v => v.name === f.name && v.size === f.size)) {
+          !valid.some(v => v.name === f.name && v.size === f.size)) {
           valid.push(f)
         }
       }
@@ -186,7 +187,7 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
     }
   }
 
-  if (!mounted) return null
+  const isDirty = files.length > 0 || Boolean(notes.trim())
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -206,18 +207,15 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{assignment.title}</p>
-
           {/* Drop zone */}
           <label
             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            className={`block w-full border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-colors ${
-              dragOver
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30'
-                : 'border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-            }`}
+            className={`block w-full border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-colors ${dragOver
+              ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30'
+              : 'border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+              }`}
           >
             <Upload size={24} className="mx-auto text-purple-600 dark:text-purple-400 mb-2" />
             <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Click to browse or drag & drop files</p>
@@ -287,18 +285,34 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
             </div>
           )}
 
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Add any notes for your trainer (optional)..."
-            rows={3}
-            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-          />
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              Submission Notes <span className="text-gray-400 font-normal">(Optional)</span>
+            </label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Enter submission notes (optional)..."
+              rows={3}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-purple-500 resize-none transition-all"
+            />
+          </div>
         </div>
 
-        <div className="flex gap-3 pt-2 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={loading || files.length === 0} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading || files.length === 0}
+            className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 min-w-[110px]"
+          >
             {loading ? 'Submitting…' : `Submit${files.length > 1 ? ` (${files.length} files)` : ''}`}
           </button>
         </div>
@@ -328,14 +342,14 @@ function AssignmentCard({ a, onSubmit }) {
   const { text: dueText, cls: dueCls } = dueDateLabel(a.dueDate, a.closeTime, isClosed)
 
   const statusColors = {
-    GRADED:           'bg-green-100 text-green-700',
-    SUBMITTED:        'bg-blue-100 text-blue-700',
+    GRADED: 'bg-green-100 text-green-700',
+    SUBMITTED: 'bg-blue-100 text-blue-700',
     PENDING_APPROVAL: 'bg-amber-100 text-amber-800 border border-amber-200',
-    REJECTED:         'bg-red-100 text-red-700 border border-red-200',
-    PENDING:          'bg-yellow-100 text-yellow-800',
-    OVERDUE:          'bg-yellow-200 text-yellow-900',
-    LATE:             'bg-orange-100 text-orange-700',
-    CLOSED:           'bg-red-100 text-red-700 border border-red-200',
+    REJECTED: 'bg-red-100 text-red-700 border border-red-200',
+    PENDING: 'bg-yellow-100 text-yellow-800',
+    OVERDUE: 'bg-yellow-200 text-yellow-900',
+    LATE: 'bg-orange-100 text-orange-700',
+    CLOSED: 'bg-red-100 text-red-700 border border-red-200',
   }
 
   return (
@@ -517,11 +531,10 @@ function AssignmentCard({ a, onSubmit }) {
           {s?.grade !== null && s?.grade !== undefined && (
             <div className="flex items-center gap-2 flex-wrap">
               <div
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs border ${
-                  s.grade >= 80
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
-                    : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
-                }`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs border ${s.grade >= 80
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
+                  : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
+                  }`}
               >
                 <Award size={14} className={s.grade >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'} />
                 <span className="font-medium opacity-80">Grade:</span>
@@ -596,13 +609,13 @@ export default function AssignmentsPage() {
   }, [])
 
   const filtered = !assignments ? [] : assignments.filter(a => {
-    if (filter === 'All')              return true
-    if (filter === 'Pending')          return (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED'
+    if (filter === 'All') return true
+    if (filter === 'Pending') return (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED'
     if (filter === 'Pending Approval') return a.submission?.status === 'PENDING_APPROVAL'
-    if (filter === 'Submitted')        return a.submission?.status === 'SUBMITTED'
-    if (filter === 'Graded')           return a.submission?.status === 'GRADED'
-    if (filter === 'Overdue')          return a.isOverdue && a.status !== 'CLOSED'
-    if (filter === 'Closed')           return a.status === 'CLOSED'
+    if (filter === 'Submitted') return a.submission?.status === 'SUBMITTED'
+    if (filter === 'Graded') return a.submission?.status === 'GRADED'
+    if (filter === 'Overdue') return a.isOverdue && a.status !== 'CLOSED'
+    if (filter === 'Closed') return a.status === 'CLOSED'
     return true
   })
 
@@ -630,17 +643,16 @@ export default function AssignmentsPage() {
       <div className="flex gap-1.5 flex-wrap mb-4">
         {FILTERS.map(f => {
           const count = !assignments ? 0 : f === 'All' ? assignments.length :
-            f === 'Pending'          ? assignments.filter(a => (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED').length :
-            f === 'Pending Approval' ? assignments.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
-            f === 'Submitted'        ? assignments.filter(a => a.submission?.status === 'SUBMITTED').length :
-            f === 'Graded'           ? assignments.filter(a => a.submission?.status === 'GRADED').length :
-            f === 'Overdue'          ? assignments.filter(a => a.isOverdue && a.status !== 'CLOSED').length :
-            f === 'Closed'           ? assignments.filter(a => a.status === 'CLOSED').length : 0
+            f === 'Pending' ? assignments.filter(a => (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED').length :
+              f === 'Pending Approval' ? assignments.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
+                f === 'Submitted' ? assignments.filter(a => a.submission?.status === 'SUBMITTED').length :
+                  f === 'Graded' ? assignments.filter(a => a.submission?.status === 'GRADED').length :
+                    f === 'Overdue' ? assignments.filter(a => a.isOverdue && a.status !== 'CLOSED').length :
+                      f === 'Closed' ? assignments.filter(a => a.status === 'CLOSED').length : 0
           return (
             <button key={f} onClick={() => setFilter(f)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                filter === f ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-purple-100 dark:border-purple-800 hover:bg-brand-50 dark:hover:bg-brand-900/20'
-              }`}>
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === f ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-purple-100 dark:border-purple-800 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+                }`}>
               {f}
               {count > 0 && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filter === f ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
@@ -654,7 +666,7 @@ export default function AssignmentsPage() {
 
       {/* Assignments List */}
       {loading ? (
-        <div className="space-y-3">{[0,1,2,3].map(i => <SkeletonCard key={i} lines={3} />)}</div>
+        <div className="space-y-3">{[0, 1, 2, 3].map(i => <SkeletonCard key={i} lines={3} />)}</div>
       ) : filtered.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <ClipboardList size={32} className="mx-auto text-gray-300 mb-3" />

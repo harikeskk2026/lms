@@ -446,8 +446,12 @@ Explanation: <optional>`}
             <button type="button" onClick={onCancel} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50">
               Cancel
             </button>
-            <button type="button" onClick={handleImportAll} disabled={importing}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleImportAll}
+              disabled={importing || extracted.length === 0}
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all"
+            >
               {importing ? 'Importing...' : `Import All ${extracted.length} Questions →`}
             </button>
           </div>

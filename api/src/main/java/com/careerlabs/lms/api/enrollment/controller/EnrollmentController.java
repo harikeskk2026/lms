@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.enrollment.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.enrollment.dto.request.BulkEnrollStudentsRequest;
 import com.careerlabs.lms.api.enrollment.dto.request.EnrollStudentRequest;
+import com.careerlabs.lms.api.enrollment.dto.response.BulkEnrollmentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.CourseEnrolledStudentsPageResponse;
 import com.careerlabs.lms.api.enrollment.dto.response.EnrollmentResponse;
@@ -70,11 +71,11 @@ public class EnrollmentController {
     }
 
     @PostMapping("/{id}/enrollments/bulk")
-    public ResponseEntity<ApiResponse<List<CourseEnrolledStudentResponse>>> bulkEnrollStudents(
+    public ResponseEntity<ApiResponse<BulkEnrollmentResponse>> bulkEnrollStudents(
             @PathVariable Long id,
             @Valid @RequestBody BulkEnrollStudentsRequest request) {
-        List<CourseEnrolledStudentResponse> response = enrollmentService.bulkEnrollStudentsByAdmin(id, request);
-        return ResponseEntity.status(201).body(ApiResponse.of("Students enrolled successfully", response));
+        BulkEnrollmentResponse response = enrollmentService.bulkEnrollStudentsByAdmin(id, request);
+        return ResponseEntity.ok(ApiResponse.of(response.message(), response));
     }
 
     @DeleteMapping("/{id}/enrollments/{enrollmentId}")

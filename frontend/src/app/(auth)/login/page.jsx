@@ -40,8 +40,8 @@ export default function LoginPage() {
     register,
     handleSubmit,
     setValue,
-    formState: { errors, isSubmitting }
-  } = useForm({ resolver: zodResolver(loginSchema), mode: 'onSubmit', reValidateMode: 'onSubmit', shouldFocusError: false })
+    formState: { errors, isSubmitting, isValid }
+  } = useForm({ resolver: zodResolver(loginSchema), mode: 'onChange', reValidateMode: 'onChange', shouldFocusError: false })
 
   // Clean any sensitive query params if native submit happened previously
   useEffect(() => {
@@ -215,8 +215,8 @@ export default function LoginPage() {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="btn-primary w-full mt-1"
+                disabled={isSubmitting || !isValid}
+                className="btn-primary w-full mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>

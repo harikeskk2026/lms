@@ -26,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -60,7 +61,7 @@ class BatchStudentRemovalLifecycleTest {
     void setUp() {
         adminBatchController = new AdminBatchController(batchRepository, studentRepository, studentService, enrollmentRepository);
         enrollmentService = new EnrollmentServiceImpl(enrollmentRepository, studentRepository, courseRepository,
-                batchRepository, batchScheduleConflictValidator, null);
+                batchRepository, batchScheduleConflictValidator, null, null);
 
         courseA = new Course();
         setId(courseA, 10L);

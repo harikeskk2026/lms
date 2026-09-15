@@ -778,7 +778,7 @@ export default function AssignmentDetailPage() {
               <textarea
                 value={rejectReason}
                 onChange={e => setRejectReason(e.target.value)}
-                placeholder="e.g. Incomplete solution, file corrupted, or incorrect format. Please fix and resubmit."
+                placeholder="Enter rejection reason or feedback for the student (optional)..."
                 rows={3}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs outline-none focus:ring-2 focus:ring-red-500"
               />
@@ -928,11 +928,10 @@ export default function AssignmentDetailPage() {
                       setEvalMarks(clean)
                     }
                   }}
-                  className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:ring-2 font-semibold text-gray-800 dark:text-white transition-colors ${
-                    evalErrors.marks
+                  className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:ring-2 font-semibold text-gray-800 dark:text-white transition-colors ${evalErrors.marks
                       ? 'border-red-400 focus:ring-red-400 bg-red-50/20 dark:bg-red-950/20'
                       : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-purple-500'
-                  }`}
+                    }`}
                 />
                 {evalErrors.marks && (
                   <p className="text-xs text-red-500 font-medium mt-1">{evalErrors.marks}</p>
@@ -1050,13 +1049,12 @@ export default function AssignmentDetailPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                  viewingTextModal.tone === 'blue'
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${viewingTextModal.tone === 'blue'
                     ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
                     : viewingTextModal.tone === 'red'
-                    ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                    : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
-                }`}>
+                      ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                      : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                  }`}>
                   {viewingTextModal.icon ? <viewingTextModal.icon size={16} /> : <MessageSquare size={16} />}
                 </div>
                 <div>

@@ -70,6 +70,7 @@ export default function QuizzesPage() {
   const [pickerTypeFilter, setPickerTypeFilter] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErrors, setFormErrors] = useState({})
+  const [touched, setTouched] = useState({})
   const [selectedQuestionIds, setSelectedQuestionIds] = useState([])
   const [quizPage, setQuizPage]     = useState(1)
   const [quizPageSize, setQuizPageSize] = useState(10)
@@ -220,6 +221,48 @@ export default function QuizzesPage() {
     return true
   })
 
+  const getFieldError = (field, val) => {
+    if (field === 'title') {
+      if (!val || !val.trim()) return 'Title is required'
+      if (val.trim().length < 3) return 'Title must be at least 3 characters'
+    }
+    if (field === 'duration') {
+      const num = Number(val)
+      if (val === '' || val === null || val === undefined || isNaN(num) || num < 1) return 'Min 1 minute'
+      if (num > 1440) return 'Max 1440 min'
+    }
+    if (field === 'passingScore') {
+      const num = Number(val)
+      if (val === '' || val === null || val === undefined || isNaN(num) || num < 0 || num > 100) return 'Between 0-100%'
+    }
+    if (field === 'maxAttempts') {
+      const num = Number(val)
+      if (val === '' || val === null || val === undefined || isNaN(num) || num < 1) return 'Min 1 attempt'
+      if (num > 100) return 'Max 100 attempts'
+    }
+    if (field === 'scheduledEnd') {
+      if (form.scheduledStart && val && new Date(form.scheduledStart) >= new Date(val)) {
+        return 'End time must be after start time'
+      }
+    }
+    return null
+  }
+
+  const isSettingsValid = Boolean(
+    form.title?.trim() && form.title.trim().length >= 3 &&
+    form.duration !== '' && !isNaN(Number(form.duration)) && Number(form.duration) >= 1 && Number(form.duration) <= 1440 &&
+    form.passingScore !== '' && !isNaN(Number(form.passingScore)) && Number(form.passingScore) >= 0 && Number(form.passingScore) <= 100 &&
+    form.maxAttempts !== '' && !isNaN(Number(form.maxAttempts)) && Number(form.maxAttempts) >= 1 && Number(form.maxAttempts) <= 100 &&
+    (!form.scheduledStart || !form.scheduledEnd || new Date(form.scheduledStart) < new Date(form.scheduledEnd))
+  )
+  const isAssignmentValid = Boolean(form.courseId || form.batchId || selectedBatchIds.length > 0 || selectedCourseIds.length > 0)
+  const isDraftValid = isSettingsValid && selectedQuestionIds.length > 0
+  const isPublishValid = isDraftValid && isAssignmentValid
+  const isQuizFormDirty = Boolean(
+    form.title || form.description || (form.duration !== '30' && form.duration !== '') || (form.passingScore !== '50' && form.passingScore !== '') ||
+    (form.maxAttempts !== '1' && form.maxAttempts !== '') || form.courseId || form.batchId || selectedQuestionIds.length > 0
+  )
+
   const validateSettings = () => {
     const errs = {}
     if (!form.title || !form.title.trim()) {
@@ -260,6 +303,7 @@ export default function QuizzesPage() {
   const openCreate = () => {
     setForm(EMPTY_FORM)
     setFormErrors({})
+    setTouched({})
     setSelectedQuestionIds([])
     setQuestionMarks({})
     setSelectedBatchIds([])
@@ -658,7 +702,7 @@ export default function QuizzesPage() {
       )}
 
       {/* Create Quiz Panel */}
-      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[680px]">
+      <SlidePanel open={panelOpen} isDirty={isQuizFormDirty} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[680px]">
         {/* Steps */}
         <div className="flex mb-5 gap-1.5">
           {STEP_LABELS.map((l, i) => (
@@ -676,16 +720,21 @@ export default function QuizzesPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
               <input
                 value={form.title}
+                onBlur={() => setTouched(t => ({ ...t, title: true }))}
                 onChange={e => {
                   setForm(f => ({ ...f, title: e.target.value }))
                   if (formErrors.title) setFormErrors(prev => ({ ...prev, title: undefined }))
                 }}
-                placeholder="Python Fundamentals Quiz"
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 ${
-                  formErrors.title ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                placeholder="Enter quiz title"
+                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                  (touched.title || formErrors.title) && getFieldError('title', form.title)
+                    ? 'border-red-500 focus:ring-red-400'
+                    : 'border-gray-200 focus:ring-purple-500'
                 }`}
               />
-              {formErrors.title && <p className="text-xs text-red-500 mt-1">{formErrors.title}</p>}
+              {(touched.title || formErrors.title) && getFieldError('title', form.title) && (
+                <p className="text-xs text-red-500 mt-1">{getFieldError('title', form.title)}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
@@ -757,8 +806,9 @@ export default function QuizzesPage() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  placeholder="30"
+                  placeholder="Enter duration (min)"
                   value={form.duration}
+                  onBlur={() => setTouched(t => ({ ...t, duration: true }))}
                   onKeyDown={e => {
                     if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
                   }}
@@ -767,11 +817,15 @@ export default function QuizzesPage() {
                     setForm(f => ({ ...f, duration: val }))
                     if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined }))
                   }}
-                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${
-                    formErrors.duration ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                    (touched.duration || formErrors.duration) && getFieldError('duration', form.duration)
+                      ? 'border-red-500 focus:ring-red-400'
+                      : 'border-gray-200 focus:ring-purple-500'
                   }`}
                 />
-                {formErrors.duration && <p className="text-xs text-red-500 mt-1">{formErrors.duration}</p>}
+                {(touched.duration || formErrors.duration) && getFieldError('duration', form.duration) && (
+                  <p className="text-xs text-red-500 mt-1">{getFieldError('duration', form.duration)}</p>
+                )}
               </div>
 
               <div>
@@ -779,8 +833,9 @@ export default function QuizzesPage() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  placeholder="50"
+                  placeholder="Enter passing %"
                   value={form.passingScore}
+                  onBlur={() => setTouched(t => ({ ...t, passingScore: true }))}
                   onKeyDown={e => {
                     if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
                   }}
@@ -790,11 +845,15 @@ export default function QuizzesPage() {
                     setForm(f => ({ ...f, passingScore: val }))
                     if (formErrors.passingScore) setFormErrors(prev => ({ ...prev, passingScore: undefined }))
                   }}
-                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${
-                    formErrors.passingScore ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                    (touched.passingScore || formErrors.passingScore) && getFieldError('passingScore', form.passingScore)
+                      ? 'border-red-500 focus:ring-red-400'
+                      : 'border-gray-200 focus:ring-purple-500'
                   }`}
                 />
-                {formErrors.passingScore && <p className="text-xs text-red-500 mt-1">{formErrors.passingScore}</p>}
+                {(touched.passingScore || formErrors.passingScore) && getFieldError('passingScore', form.passingScore) && (
+                  <p className="text-xs text-red-500 mt-1">{getFieldError('passingScore', form.passingScore)}</p>
+                )}
               </div>
 
               <div>
@@ -802,8 +861,9 @@ export default function QuizzesPage() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  placeholder="1"
+                  placeholder="Enter max attempts"
                   value={form.maxAttempts}
+                  onBlur={() => setTouched(t => ({ ...t, maxAttempts: true }))}
                   onKeyDown={e => {
                     if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
                   }}
@@ -812,11 +872,15 @@ export default function QuizzesPage() {
                     setForm(f => ({ ...f, maxAttempts: val }))
                     if (formErrors.maxAttempts) setFormErrors(prev => ({ ...prev, maxAttempts: undefined }))
                   }}
-                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${
-                    formErrors.maxAttempts ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'
+                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                    (touched.maxAttempts || formErrors.maxAttempts) && getFieldError('maxAttempts', form.maxAttempts)
+                      ? 'border-red-500 focus:ring-red-400'
+                      : 'border-gray-200 focus:ring-purple-500'
                   }`}
                 />
-                {formErrors.maxAttempts && <p className="text-xs text-red-500 mt-1">{formErrors.maxAttempts}</p>}
+                {(touched.maxAttempts || formErrors.maxAttempts) && getFieldError('maxAttempts', form.maxAttempts) && (
+                  <p className="text-xs text-red-500 mt-1">{getFieldError('maxAttempts', form.maxAttempts)}</p>
+                )}
               </div>
             </div>
             <div className="space-y-3">
@@ -833,6 +897,9 @@ export default function QuizzesPage() {
                   value={form.scheduledEnd}
                   onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
                 />
+                {form.scheduledStart && form.scheduledEnd && new Date(form.scheduledStart) >= new Date(form.scheduledEnd) && (
+                  <p className="text-xs text-red-500 mt-1">End time must be after start time</p>
+                )}
               </div>
             </div>
             <div>
@@ -1192,12 +1259,20 @@ export default function QuizzesPage() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button onClick={() => handleSave(false)} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60">
-                {saving ? '...' : 'Save Draft'}
+              <button
+                type="button"
+                onClick={() => handleSave(false)}
+                disabled={saving || !isDraftValid}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {saving ? 'Saving...' : 'Save Draft'}
               </button>
-              <button onClick={() => handleSave(true)} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
+                disabled={saving || !isPublishValid}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
                 {saving ? 'Publishing...' : 'Publish Quiz'}
               </button>
             </div>

@@ -539,8 +539,8 @@ export default function BatchDetailPage() {
               />
               <button
                 type="submit"
-                disabled={addStudentSearching}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-60 transition-all"
+                disabled={addStudentSearching || !addStudentQuery.trim()}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {addStudentSearching ? 'Searching...' : 'Search'}
               </button>
@@ -640,8 +640,11 @@ export default function BatchDetailPage() {
             </div>
             <div className="flex gap-3 pt-2 sticky bottom-0 bg-white dark:bg-gray-900 pb-2">
               <button onClick={() => setAttPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-              <button onClick={saveAttendance} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
+              <button
+                onClick={saveAttendance}
+                disabled={saving || !attSheet || attSheet.length === 0 || !attSheet.every(s => attStatuses[s.studentId])}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+              >
                 {saving ? 'Saving...' : 'Save Attendance'}
               </button>
             </div>
@@ -650,7 +653,21 @@ export default function BatchDetailPage() {
       </SlidePanel>
 
       {/* Edit Batch Panel */}
-      <SlidePanel open={editPanel} onClose={() => setEditPanel(false)} title="Edit Batch" subtitle="Update batch details">
+      <SlidePanel
+        open={editPanel}
+        onClose={() => setEditPanel(false)}
+        title="Edit Batch"
+        subtitle="Update batch details"
+        isDirty={Boolean(batch && (
+          editForm.name !== (batch.name || '') ||
+          editForm.courseId !== (batch.course?.id ? String(batch.course.id) : '') ||
+          editForm.startDate !== (batch.startDate ? batch.startDate.slice(0, 10) : '') ||
+          editForm.endDate !== (batch.endDate ? batch.endDate.slice(0, 10) : '') ||
+          editForm.timing !== (batch.timing || '') ||
+          editForm.mode !== (batch.mode || 'ONLINE') ||
+          editForm.maxStudents !== (batch.maxStudents || '')
+        ))}
+      >
         {batch && (() => {
           const selectedForEdit = courses.find(c => String(c.id) === String(editForm.courseId)) || batch.course
           const editDateError = validateBatchDates(editForm.startDate, editForm.endDate, selectedForEdit?.duration)
@@ -660,7 +677,7 @@ export default function BatchDetailPage() {
             <form onSubmit={handleUpdateBatch} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Batch Name *</label>
-                <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Python Batch Jan 2026"
+                <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="Enter batch name"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
               </div>
               <div>
@@ -741,14 +758,34 @@ export default function BatchDetailPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Max Students</label>
                   <input type="number" min="1" max="500" value={editForm.maxStudents} onChange={e => setEditForm(f => ({ ...f, maxStudents: e.target.value }))}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                  {editForm.maxStudents && (Number(editForm.maxStudents) < 1 || Number(editForm.maxStudents) > 500) && (
+                    <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 500</p>
+                  )}
                 </div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setEditPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60">
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
+              {(() => {
+                const isMaxStudentsValid = !editForm.maxStudents || (Number(editForm.maxStudents) >= 1 && Number(editForm.maxStudents) <= 500)
+                const isEditValid = Boolean(
+                  editForm.name?.trim() &&
+                  editForm.courseId &&
+                  editForm.startDate &&
+                  editForm.endDate &&
+                  !editDateError &&
+                  isMaxStudentsValid
+                )
+                return (
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setEditPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
+                    <button
+                      type="submit"
+                      disabled={saving || !isEditValid}
+                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                )
+              })()}
             </form>
           )
         })()}

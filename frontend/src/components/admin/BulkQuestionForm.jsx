@@ -409,13 +409,27 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-60"
-          >
-            {saving ? 'Saving Questions...' : `Save All ${questions.length} Questions`}
-          </button>
+          {(() => {
+            const isBulkValid = questions.length > 0 && questions.every(q => {
+              if (!q.questionText?.trim() || !q.courseId || !q.points || Number(q.points) < 1) return false
+              if (!q.options || q.options.length < 1) return false
+              if (q.options.some(o => !o.optionText?.trim())) return false
+              const correctCount = q.options.filter(o => o.correct).length
+              const isSingle = SINGLE_CORRECT_TYPES.includes(q.questionType)
+              if (isSingle && correctCount !== 1) return false
+              if (!isSingle && correctCount < 1) return false
+              return true
+            })
+            return (
+              <button
+                type="submit"
+                disabled={saving || !isBulkValid}
+                className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-semibold shadow-md hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {saving ? 'Saving Questions...' : `Save All ${questions.length} Questions`}
+              </button>
+            )
+          })()}
         </div>
       </div>
     </form>

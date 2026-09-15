@@ -58,8 +58,8 @@ export default function CourseCatalogPage() {
     reset,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
-  } = useForm({ resolver: zodResolver(courseSchema), defaultValues: EMPTY_FORM })
+    formState: { errors, isSubmitting, isDirty, isValid },
+  } = useForm({ resolver: zodResolver(courseSchema), defaultValues: EMPTY_FORM, mode: 'onChange' })
 
   const thumbnailValue = watch('thumbnail')
 
@@ -329,11 +329,16 @@ export default function CourseCatalogPage() {
         </div>
       )}
 
-      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Course' : 'Add Course'}>
+      <SlidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={editingId ? 'Edit Course' : 'Add Course'}
+        isDirty={isDirty}
+      >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
-            <input {...register('title')} placeholder="Full Stack Python"
+            <input {...register('title')} placeholder="Enter course title"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             {errors.title && <span className="text-xs text-red-500 mt-1 block">{errors.title.message}</span>}
           </div>
@@ -343,7 +348,7 @@ export default function CourseCatalogPage() {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 Course Code
               </label>
-              <input {...register('courseCode')} placeholder="e.g. PY-101"
+              <input {...register('courseCode')} placeholder="Enter course code"
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 uppercase" />
               {errors.courseCode && <span className="text-xs text-red-500 mt-1 block">{errors.courseCode.message}</span>}
             </div>
@@ -351,7 +356,7 @@ export default function CourseCatalogPage() {
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
-            <textarea {...register('description')} rows={3}
+            <textarea {...register('description')} rows={3} placeholder="Enter course description"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
             {errors.description && <span className="text-xs text-red-500 mt-1 block">{errors.description.message}</span>}
           </div>
@@ -359,7 +364,7 @@ export default function CourseCatalogPage() {
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
             <div className="flex gap-2">
-              <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="e.g. 3"
+              <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="Enter duration"
                 className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
               <CustomSelect
                 value={watch('durationUnit')}
@@ -473,16 +478,24 @@ export default function CourseCatalogPage() {
             )}
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving || isSubmitting}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-60 hover:from-purple-700 hover:to-violet-700 transition-colors">
-              {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Course'}
-            </button>
-          </div>
+          {(() => {
+            const isFormValid = isValid && Boolean(watch('title')?.trim() && watch('description')?.trim() && watch('durationValue'))
+            return (
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setPanelOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || isSubmitting || !isFormValid}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                >
+                  {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Course'}
+                </button>
+              </div>
+            )
+          })()}
         </form>
       </SlidePanel>
 
