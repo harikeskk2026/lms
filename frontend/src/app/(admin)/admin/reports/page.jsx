@@ -104,6 +104,17 @@ function downloadCSV(data, filename) {
   URL.revokeObjectURL(url)
 }
 
+function getPageWindow(current, total, size = 5) {
+  if (total <= size) return Array.from({ length: total }, (_, i) => i + 1)
+  let start = Math.max(1, current - Math.floor(size / 2))
+  let end = start + size - 1
+  if (end > total) {
+    end = total
+    start = end - size + 1
+  }
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
 function getGradeFromScore(score) {
   if (score == null) return { grade: 'B', status: 'Good', pill: 'bg-blue-50 text-blue-700 border-blue-200' }
   if (score >= 90) return { grade: 'A', status: 'Excellent', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
@@ -148,15 +159,10 @@ export default function ReportsPage() {
   const [tab, setTab] = useState('Attendance')
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
-  const [trainers, setTrainers] = useState([])
-  
+
   // Filter States
   const [batchFilter, setBatchFilter] = useState('')
   const [courseFilter, setCourseFilter] = useState('')
-  const [trainerFilter, setTrainerFilter] = useState('')
-  const [assessmentTypeFilter, setAssessmentTypeFilter] = useState('')
-  const [driveFilter, setDriveFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -198,7 +204,7 @@ export default function ReportsPage() {
   // Attendance Analytics States
   const [attAnalyticsData, setAttAnalyticsData] = useState(null)
   const [attDays, setAttDays] = useState(30)
-  const [showAllTrainers, setShowAllTrainers] = useState(false)
+  const [attBreakdownView, setAttBreakdownView] = useState('batch')
   const [attSearch, setAttSearch] = useState('')
   const [attPage, setAttPage] = useState(1)
   const [attPageSize, setAttPageSize] = useState(10)
@@ -244,12 +250,24 @@ export default function ReportsPage() {
   useEffect(() => {
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
-    adminApi.getTrainers().then(r => {
-      const data = r.data?.data || r.data || []
-      setTrainers(Array.isArray(data) ? data : [])
-    }).catch(() => {})
     reportService.getBatchLeaderboard().then(r => setBatchLeaderboard(r.data || [])).catch(() => {})
   }, [])
+
+  // Batches scoped to the selected course; falls back to all batches when no course is selected
+  const filteredBatches = useMemo(() => {
+    if (!courseFilter) return batches
+    return batches.filter(b => String(b.course?.id ?? b.courseId) === String(courseFilter))
+  }, [batches, courseFilter])
+
+  // Clear the batch filter if it no longer belongs to the newly selected course.
+  // Depends on `batches` too, since courseFilter can be set before the initial batch fetch resolves.
+  useEffect(() => {
+    if (!courseFilter || !batchFilter) return
+    if (!filteredBatches.some(b => String(b.id) === String(batchFilter))) {
+      setBatchFilter('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseFilter, batches])
 
   // Auto-reload on filter updates
   useEffect(() => {
@@ -265,7 +283,7 @@ export default function ReportsPage() {
   useEffect(() => {
     loadPlacement()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchFilter])
+  }, [batchFilter, courseFilter])
 
   // Sync columns when export type changes
   useEffect(() => {
@@ -276,6 +294,7 @@ export default function ReportsPage() {
 
   const loadAttendance = async () => {
     setAttLoading(true)
+    setAttPage(1)
     try {
       const [r, analyticsRes] = await Promise.all([
         reportService.getAttendance({
@@ -286,7 +305,8 @@ export default function ReportsPage() {
         }),
         adminApi.getAttendanceAnalytics({
           days: attDays || 30,
-          ...(batchFilter ? { batchId: batchFilter } : {})
+          ...(batchFilter ? { batchId: batchFilter } : {}),
+          ...(courseFilter ? { courseId: courseFilter } : {})
         }).catch(() => ({ data: { data: null } }))
       ])
       setAttData(r.data)
@@ -302,6 +322,7 @@ export default function ReportsPage() {
 
   const loadPerformance = async () => {
     setPerfLoading(true)
+    setPerfPage(1)
     try {
       const params = {
         batchId: batchFilter || undefined,
@@ -311,7 +332,7 @@ export default function ReportsPage() {
       }
       const [perf, health, quiz, assignments, engagement, trend, top, declining, corr] = await Promise.all([
         reportService.getPerformance(params),
-        reportService.getBatchHealth().catch(() => ({ data: [] })),
+        reportService.getBatchHealth(batchFilter || undefined).catch(() => ({ data: [] })),
         reportService.getQuizAnalytics(params).catch(() => ({ data: null })),
         reportService.getAssignmentAnalytics({ batchId: params.batchId }).catch(() => ({ data: null })),
         reportService.getEngagement({ batchId: params.batchId }).catch(() => ({ data: null })),
@@ -340,10 +361,11 @@ export default function ReportsPage() {
 
   const loadPlacement = async () => {
     setPlacementLoading(true)
+    setPlacementPage(1)
     try {
       const [placement, readiness] = await Promise.all([
-        reportService.getPlacement({ batchId: batchFilter || undefined }),
-        reportService.getPlacementReadiness({ batchId: batchFilter || undefined }),
+        reportService.getPlacement({ batchId: batchFilter || undefined, courseId: courseFilter || undefined }),
+        reportService.getPlacementReadiness({ batchId: batchFilter || undefined, courseId: courseFilter || undefined }),
       ])
       setPlacementReport(placement.data)
       setPlacementReadiness(readiness.data || [])
@@ -376,6 +398,7 @@ export default function ReportsPage() {
       const r = await reportService.export({
         type: selectedExportType,
         batchId: batchFilter || undefined,
+        courseId: courseFilter || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
       })
@@ -402,6 +425,7 @@ export default function ReportsPage() {
       const r = await reportService.export({
         type: selectedExportType,
         batchId: batchFilter || undefined,
+        courseId: courseFilter || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
       })
@@ -548,7 +572,6 @@ export default function ReportsPage() {
   const ATTENDANCE_STATUS_COLOR = { PRESENT: '#10b981', ABSENT: '#ef4444', LATE: '#f59e0b', EXCUSED: '#9ca3af' }
   const attendanceDistributionData = useMemo(() => (attData?.attendanceDistribution || [])
     .map(d => ({ name: d.status, value: d.count, fill: ATTENDANCE_STATUS_COLOR[d.status] || '#9ca3af' })), [attData])
-  const attendanceDistributionTotal = attendanceDistributionData.reduce((a, d) => a + d.value, 0)
 
   // Day-of-week analysis for Attendance
   const mostAbsentDay = useMemo(() => {
@@ -652,19 +675,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Batch */}
-              <div className="min-w-[140px]">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
-                <CustomSelect
-                  value={batchFilter}
-                  onChange={(val) => setBatchFilter(val)}
-                  options={batches.map(b => ({ value: b.id, label: b.name }))}
-                  placeholder="All Batches"
-                  compact
-                  searchable={batches.length >= 10}
-                />
-              </div>
-
               {/* Course */}
               <div className="min-w-[140px]">
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Course</label>
@@ -675,6 +685,19 @@ export default function ReportsPage() {
                   placeholder="All Courses"
                   compact
                   searchable={courses.length >= 10}
+                />
+              </div>
+
+              {/* Batch */}
+              <div className="min-w-[140px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
+                <CustomSelect
+                  value={batchFilter}
+                  onChange={(val) => setBatchFilter(val)}
+                  options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All Batches"
+                  compact
+                  searchable={filteredBatches.length >= 10}
                 />
               </div>
 
@@ -852,139 +875,90 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Trainer Performance & Attendance by Batch */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Trainer Performance */}
-            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex flex-col justify-between">
+          {/* Attendance Breakdown — Batch / Weekly / Monthly (single tab, switched via dropdown) */}
+          <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div>
-                    <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Trainer Performance</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Attendance by trainer</p>
-                  </div>
-                  {attAnalyticsData?.trainerPerformance && attAnalyticsData.trainerPerformance.length > 4 && (
-                    <button
-                      onClick={() => setShowAllTrainers(!showAllTrainers)}
-                      className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-800 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      {showAllTrainers ? 'Show Top Trainers' : 'View All Trainers →'}
-                    </button>
-                  )}
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        <th className="pb-3 font-semibold">Trainer</th>
-                        <th className="pb-3 font-semibold text-center">Classes Conducted</th>
-                        <th className="pb-3 font-semibold text-right">Attendance %</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60 text-xs">
-                      {(!attAnalyticsData?.trainerPerformance || attAnalyticsData.trainerPerformance.length === 0) ? (
-                        <tr>
-                          <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No trainer attendance data for this period</td>
-                        </tr>
-                      ) : (
-                        (showAllTrainers ? attAnalyticsData.trainerPerformance : attAnalyticsData.trainerPerformance.slice(0, 5)).map((t, idx) => {
-                          const pct = t.attendancePct
-                          const badgeClass = pct >= 85
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                            : pct >= 75
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
-                          return (
-                            <tr key={t.trainerId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                              <td className="py-3 font-bold text-gray-800 dark:text-gray-200">{t.trainerName}</td>
-                              <td className="py-3 text-center text-gray-600 dark:text-gray-300 font-medium">{t.classesConducted}</td>
-                              <td className="py-3 text-right">
-                                <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-extrabold ${badgeClass}`}>
-                                  {pct}%
-                                </span>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance Breakdown</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  {attBreakdownView === 'batch' && 'Compare attendance across all batches'}
+                  {attBreakdownView === 'weekly' && 'Weekly attendance rate trend'}
+                  {attBreakdownView === 'monthly' && 'Monthly attendance breakdown'}
+                </p>
+              </div>
+              <div className="w-full sm:w-56">
+                <CustomSelect
+                  value={attBreakdownView}
+                  onChange={(val) => setAttBreakdownView(val)}
+                  options={[
+                    { value: 'batch', label: 'Attendance by Batch' },
+                    { value: 'weekly', label: 'Weekly Attendance Rate' },
+                    { value: 'monthly', label: 'Monthly Breakdown' },
+                  ]}
+                  compact
+                />
               </div>
             </div>
 
-            {/* Attendance by Batch */}
-            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="mb-4">
-                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight">Attendance by Batch</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Compare attendance across all batches</p>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        <th className="pb-3 font-semibold">Batch Name</th>
-                        <th className="pb-3 font-semibold text-center">Classes Conducted</th>
-                        <th className="pb-3 font-semibold min-w-[140px] text-right">Attendance %</th>
+            {attBreakdownView === 'batch' && (
+              <div className="overflow-x-auto overflow-y-auto max-h-[360px]">
+                <table className="w-full text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
+                    <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      <th className="pb-3 font-semibold">Batch Name</th>
+                      <th className="pb-3 font-semibold text-center">Classes Conducted</th>
+                      <th className="pb-3 font-semibold min-w-[140px] text-right">Attendance %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60 text-xs">
+                    {(!attAnalyticsData?.batchAttendance || attAnalyticsData.batchAttendance.length === 0) ? (
+                      <tr>
+                        <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No batch attendance data for this period</td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60 text-xs">
-                      {(!attAnalyticsData?.batchAttendance || attAnalyticsData.batchAttendance.length === 0) ? (
-                        <tr>
-                          <td colSpan={3} className="py-6 text-center text-xs text-gray-400">No batch attendance data for this period</td>
-                        </tr>
-                      ) : (
-                        attAnalyticsData.batchAttendance.map((b, idx) => {
-                          const colors = [
-                            'bg-emerald-500',
-                            'bg-purple-600',
-                            'bg-blue-500',
-                            'bg-amber-500',
-                            'bg-pink-500',
-                            'bg-indigo-500'
-                          ]
-                          const barColor = colors[idx % colors.length]
-                          return (
-                            <tr key={b.batchId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                              <td className="py-3.5 font-bold text-gray-800 dark:text-gray-200">{b.batchName}</td>
-                              <td className="py-3.5 text-center text-gray-600 dark:text-gray-300 font-medium">{b.classesConducted}</td>
-                              <td className="py-3.5">
-                                <div className="flex items-center justify-end gap-3">
-                                  <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden flex-1 max-w-[120px]">
-                                    <div
-                                      className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-                                      style={{ width: `${Math.min(100, Math.max(0, b.attendancePct))}%` }}
-                                    />
-                                  </div>
-                                  <span className="font-extrabold text-xs text-gray-800 dark:text-gray-200 min-w-[32px] text-right">
-                                    {b.attendancePct}%
-                                  </span>
+                    ) : (
+                      attAnalyticsData.batchAttendance.map((b, idx) => {
+                        const colors = [
+                          'bg-emerald-500',
+                          'bg-purple-600',
+                          'bg-blue-500',
+                          'bg-amber-500',
+                          'bg-pink-500',
+                          'bg-indigo-500'
+                        ]
+                        const barColor = colors[idx % colors.length]
+                        return (
+                          <tr key={b.batchId || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                            <td className="py-3.5 font-bold text-gray-800 dark:text-gray-200">{b.batchName}</td>
+                            <td className="py-3.5 text-center text-gray-600 dark:text-gray-300 font-medium">{b.classesConducted}</td>
+                            <td className="py-3.5">
+                              <div className="flex items-center justify-end gap-3">
+                                <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden flex-1 max-w-[120px]">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                                    style={{ width: `${Math.min(100, Math.max(0, b.attendancePct))}%` }}
+                                  />
                                 </div>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                <span className="font-extrabold text-xs text-gray-800 dark:text-gray-200 min-w-[32px] text-right">
+                                  {b.attendancePct}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </div>
+            )}
 
-          {/* Weekly + Monthly Charts */}
-          <div className="grid sm:grid-cols-2 gap-5">
-            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
-              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4">Weekly Attendance Rate</h3>
+            {attBreakdownView === 'weekly' && (
               <WeeklyAttendanceRateChart data={attAnalyticsData?.weeklyTrend || []} />
-            </div>
+            )}
 
-            <div className="glass-card p-5 sm:p-6 rounded-2xl border border-purple-100/60 dark:border-purple-900/30 shadow-xs">
-              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4">Monthly Breakdown</h3>
+            {attBreakdownView === 'monthly' && (
               <MonthlyAttendanceBreakdownChart data={attAnalyticsData?.monthlyTrend || []} />
-            </div>
+            )}
           </div>
 
           {/* Heatmap */}
@@ -1085,7 +1059,7 @@ export default function ReportsPage() {
                   >
                     <ChevronLeft size={14} />
                   </button>
-                  {Array.from({ length: Math.min(5, attTotalPages) }, (_, i) => i + 1).map(p => (
+                  {getPageWindow(attPage, attTotalPages).map(p => (
                     <button
                       key={p}
                       onClick={() => setAttPage(p)}
@@ -1137,19 +1111,6 @@ export default function ReportsPage() {
           {/* Dynamic Filter Bar */}
           <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs flex flex-wrap items-end justify-between gap-4">
             <div className="flex flex-wrap items-end gap-3 flex-1">
-              {/* Batch */}
-              <div className="min-w-[140px]">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
-                <CustomSelect
-                  value={batchFilter}
-                  onChange={(val) => setBatchFilter(val)}
-                  options={batches.map(b => ({ value: b.id, label: b.name }))}
-                  placeholder="All Batches"
-                  compact
-                  searchable={batches.length >= 10}
-                />
-              </div>
-
               {/* Course */}
               <div className="min-w-[140px]">
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Course</label>
@@ -1163,33 +1124,16 @@ export default function ReportsPage() {
                 />
               </div>
 
-              {/* Dynamic Trainer List */}
-              <div className="min-w-[130px]">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Trainer</label>
-                <CustomSelect
-                  value={trainerFilter}
-                  onChange={(val) => setTrainerFilter(val)}
-                  options={trainers.map(t => ({ value: t.id, label: t.name || t.user?.name || `Trainer #${t.id}` }))}
-                  placeholder="All Trainers"
-                  compact
-                />
-              </div>
-
-              {/* Assessment Type */}
+              {/* Batch */}
               <div className="min-w-[140px]">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Assessment Type</label>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
                 <CustomSelect
-                  value={assessmentTypeFilter}
-                  onChange={(val) => setAssessmentTypeFilter(val)}
-                  options={[
-                    { value: '', label: 'All Types' },
-                    { value: 'quizzes', label: 'Quizzes' },
-                    { value: 'assignments', label: 'Assignments' },
-                    { value: 'tests', label: 'Tests' },
-                    { value: 'projects', label: 'Projects' }
-                  ]}
-                  placeholder="All Types"
+                  value={batchFilter}
+                  onChange={(val) => setBatchFilter(val)}
+                  options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All Batches"
                   compact
+                  searchable={filteredBatches.length >= 10}
                 />
               </div>
 
@@ -1500,7 +1444,7 @@ export default function ReportsPage() {
                 >
                   <ChevronLeft size={14} />
                 </button>
-                {Array.from({ length: Math.min(5, perfTotalPages) }, (_, i) => i + 1).map(p => (
+                {getPageWindow(perfPage, perfTotalPages).map(p => (
                   <button
                     key={p}
                     onClick={() => setPerfPage(p)}
@@ -1551,19 +1495,6 @@ export default function ReportsPage() {
           {/* Dynamic Filter Bar */}
           <div className="glass-card p-5 rounded-2xl border border-purple-100/70 dark:border-purple-900/30 shadow-xs flex flex-wrap items-end justify-between gap-4">
             <div className="flex flex-wrap items-end gap-3 flex-1">
-              {/* Batch */}
-              <div className="min-w-[150px]">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
-                <CustomSelect
-                  value={batchFilter}
-                  onChange={(val) => setBatchFilter(val)}
-                  options={batches.map(b => ({ value: b.id, label: b.name }))}
-                  placeholder="All Batches"
-                  compact
-                  searchable={batches.length >= 10}
-                />
-              </div>
-
               {/* Course */}
               <div className="min-w-[150px]">
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Course</label>
@@ -1577,20 +1508,16 @@ export default function ReportsPage() {
                 />
               </div>
 
-              {/* Drive */}
-              <div className="min-w-[140px]">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Drive</label>
+              {/* Batch */}
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Batch</label>
                 <CustomSelect
-                  value={driveFilter}
-                  onChange={(val) => setDriveFilter(val)}
-                  options={[
-                    { value: '', label: 'All Drives' },
-                    { value: 'oncampus', label: 'On-Campus Drive' },
-                    { value: 'offcampus', label: 'Off-Campus Drive' },
-                    { value: 'referral', label: 'Referral Program' },
-                  ]}
-                  placeholder="All Drives"
+                  value={batchFilter}
+                  onChange={(val) => setBatchFilter(val)}
+                  options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All Batches"
                   compact
+                  searchable={filteredBatches.length >= 10}
                 />
               </div>
 
@@ -1629,7 +1556,6 @@ export default function ReportsPage() {
                 onClick={() => {
                   setBatchFilter('')
                   setCourseFilter('')
-                  setDriveFilter('')
                   setStartDate('')
                   setEndDate('')
                   loadPlacement()
@@ -1895,7 +1821,7 @@ export default function ReportsPage() {
                 >
                   <ChevronLeft size={14} />
                 </button>
-                {Array.from({ length: Math.min(5, placementTotalPages) }, (_, i) => i + 1).map(p => (
+                {getPageWindow(placementPage, placementTotalPages).map(p => (
                   <button
                     key={p}
                     onClick={() => setPlacementPage(p)}
@@ -2026,20 +1952,7 @@ export default function ReportsPage() {
             {/* Step 2: Apply Filters */}
             <div>
               <h3 className="text-xs font-bold text-gray-800 dark:text-white mb-3">2. Apply Filters</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                {/* Batch */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Batch</label>
-                  <CustomSelect
-                    value={batchFilter}
-                    onChange={(val) => setBatchFilter(val)}
-                    options={batches.map(b => ({ value: b.id, label: b.name }))}
-                    placeholder="All Batches"
-                    compact
-                    searchable={batches.length >= 10}
-                  />
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {/* Course */}
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1">Course</label>
@@ -2053,15 +1966,16 @@ export default function ReportsPage() {
                   />
                 </div>
 
-                {/* Trainer */}
+                {/* Batch */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Trainer</label>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Batch</label>
                   <CustomSelect
-                    value={trainerFilter}
-                    onChange={(val) => setTrainerFilter(val)}
-                    options={trainers.map(t => ({ value: t.id, label: t.name || t.user?.name || `Trainer #${t.id}` }))}
-                    placeholder="All Trainers"
+                    value={batchFilter}
+                    onChange={(val) => setBatchFilter(val)}
+                    options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
+                    placeholder="All Batches"
                     compact
+                    searchable={filteredBatches.length >= 10}
                   />
                 </div>
 
@@ -2089,22 +2003,6 @@ export default function ReportsPage() {
                       className="bg-transparent outline-none w-full text-[11px] text-gray-700 dark:text-gray-200 cursor-pointer"
                     />
                   </div>
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Status</label>
-                  <CustomSelect
-                    value={statusFilter}
-                    onChange={(val) => setStatusFilter(val)}
-                    options={[
-                      { value: '', label: 'All Statuses' },
-                      { value: 'active', label: 'Active' },
-                      { value: 'at_risk', label: 'At Risk' },
-                    ]}
-                    placeholder="All Statuses"
-                    compact
-                  />
                 </div>
               </div>
             </div>

@@ -34,7 +34,7 @@ public interface ReportService {
 
     PlacementReportResponse getPlacementReport(PlacementReportRequest request);
 
-    List<Map<String, Object>> export(String type, Long batchId, LocalDate startDate, LocalDate endDate);
+    List<Map<String, Object>> export(String type, Long batchId, Long courseId, LocalDate startDate, LocalDate endDate);
 
     OverviewResponse getOverview();
 
@@ -58,7 +58,7 @@ public interface ReportService {
 
     List<DecliningStudentResponse> getDecliningStudents(Long batchId);
 
-    List<PlacementReadinessResponse> getPlacementReadiness(Long batchId);
+    List<PlacementReadinessResponse> getPlacementReadiness(Long batchId, Long courseId);
 
     List<CorrelationResponse> getCorrelations(Long batchId);
 }

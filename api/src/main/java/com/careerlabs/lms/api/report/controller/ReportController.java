@@ -75,9 +75,10 @@ public class ReportController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> export(
             @RequestParam String type,
             @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) Long courseId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ResponseEntity.ok(ApiResponse.of(reportService.export(type, batchId, startDate, endDate)));
+        return ResponseEntity.ok(ApiResponse.of(reportService.export(type, batchId, courseId, startDate, endDate)));
     }
 
     @GetMapping("/overview")
@@ -139,8 +140,9 @@ public class ReportController {
 
     @GetMapping("/placement-readiness")
     public ResponseEntity<ApiResponse<List<PlacementReadinessResponse>>> getPlacementReadiness(
-            @RequestParam(required = false) Long batchId) {
-        return ResponseEntity.ok(ApiResponse.of(reportService.getPlacementReadiness(batchId)));
+            @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(ApiResponse.of(reportService.getPlacementReadiness(batchId, courseId)));
     }
 
     @GetMapping("/correlations")

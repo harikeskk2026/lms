@@ -327,7 +327,21 @@ public class ReportServiceImpl implements ReportService {
                 .sorted(Comparator.comparing(ReportStudentResponse::studentName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
-        List<Course> allCourses = courseRepository.findAllByOrderByCreatedAtDesc();
+        List<Course> allCourses;
+        List<Batch> allBatches;
+        if (batchId != null) {
+            allBatches = batchRepository.findById(batchId).map(List::of).orElse(List.of());
+            allCourses = allBatches.isEmpty() ? List.of() : List.of(allBatches.get(0).getCourse());
+        } else if (courseId != null) {
+            allCourses = courseRepository.findById(courseId).map(List::of).orElse(List.of());
+            allBatches = batchRepository.findAllByOrderByCreatedAtDesc().stream()
+                    .filter(b -> b.getCourse() != null && courseId.equals(b.getCourse().getId()))
+                    .toList();
+        } else {
+            allCourses = courseRepository.findAllByOrderByCreatedAtDesc();
+            allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
+        }
+
         Map<Long, List<Assignment>> assignmentsByCourse = allCourses.isEmpty() ? Map.of() : assignmentRepository
                 .findByCourseIdIn(allCourses.stream().map(Course::getId).toList()).stream()
                 .collect(Collectors.groupingBy(a -> a.getCourse().getId()));
@@ -341,7 +355,6 @@ public class ReportServiceImpl implements ReportService {
                 .map(c -> toCourseBreakdown(c, assignmentsByCourse.getOrDefault(c.getId(), List.of()), courseSubmissionsByAssignmentId))
                 .toList();
 
-        List<Batch> allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
         Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : enrollmentRepository
                 .findByBatchIdInAndActiveTrue(allBatches.stream().map(Batch::getId).toList()).stream()
                 .filter(e -> e.getBatch() != null && e.getStudent() != null)
@@ -464,15 +477,17 @@ public class ReportServiceImpl implements ReportService {
     @Transactional(readOnly = true)
     public PlacementReportResponse getPlacementReport(PlacementReportRequest request) {
         Long batchId = request.getBatchId();
+        Long courseId = request.getCourseId();
         reportValidator.validateBatchExists(batchId);
+        reportValidator.validateCourseExists(courseId);
 
         Map<PlacementStatus, Long> statusCounts = new LinkedHashMap<>();
         for (PlacementStatus status : PlacementStatus.values()) {
             statusCounts.put(status, 0L);
         }
 
-        if (batchId != null) {
-            for (Student student : enrollmentRepository.findActiveStudentsByBatchId(batchId)) {
+        if (batchId != null || courseId != null) {
+            for (Student student : filterStudents(batchId, courseId)) {
                 statusCounts.merge(student.getPlacementStatus(), 1L, Long::sum);
             }
         } else {
@@ -485,7 +500,21 @@ public class ReportServiceImpl implements ReportService {
         long placed = statusCounts.getOrDefault(PlacementStatus.PLACED, 0L);
         double conversionRate = total > 0 ? round1(placed * 100.0 / total) : 0.0;
 
-        List<Batch> allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
+        List<Batch> allBatches;
+        List<Course> allCourses;
+        if (batchId != null) {
+            allBatches = batchRepository.findById(batchId).map(List::of).orElse(List.of());
+            allCourses = allBatches.isEmpty() ? List.of() : List.of(allBatches.get(0).getCourse());
+        } else if (courseId != null) {
+            allCourses = courseRepository.findById(courseId).map(List::of).orElse(List.of());
+            allBatches = batchRepository.findAllByOrderByCreatedAtDesc().stream()
+                    .filter(b -> b.getCourse() != null && courseId.equals(b.getCourse().getId()))
+                    .toList();
+        } else {
+            allBatches = batchRepository.findAllByOrderByCreatedAtDesc();
+            allCourses = courseRepository.findAllByOrderByCreatedAtDesc();
+        }
+
         Map<Long, List<Student>> studentsByBatch = allBatches.isEmpty() ? Map.of() : enrollmentRepository
                 .findByBatchIdInAndActiveTrue(allBatches.stream().map(Batch::getId).toList()).stream()
                 .filter(e -> e.getBatch() != null && e.getStudent() != null)
@@ -494,7 +523,6 @@ public class ReportServiceImpl implements ReportService {
                 .map(b -> toBatchPlacement(b, studentsByBatch.getOrDefault(b.getId(), List.of())))
                 .toList();
 
-        List<Course> allCourses = courseRepository.findAllByOrderByCreatedAtDesc();
         Map<Long, List<Student>> studentsByCourse = allCourses.isEmpty() ? Map.of() : studentRepository
                 .findByCourseIdIn(allCourses.stream().map(Course::getId).toList()).stream()
                 .collect(Collectors.groupingBy(s -> s.getCourse().getId()));
@@ -507,15 +535,16 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> export(String type, Long batchId, LocalDate startDate, LocalDate endDate) {
+    public List<Map<String, Object>> export(String type, Long batchId, Long courseId, LocalDate startDate, LocalDate endDate) {
         reportValidator.validateBatchExists(batchId);
+        reportValidator.validateCourseExists(courseId);
         reportValidator.validateDateRange(startDate, endDate);
 
         return switch (type.toLowerCase()) {
-            case "students" -> exportStudents(batchId);
-            case "performance" -> exportPerformance(batchId);
-            case "attendance" -> exportAttendance(batchId);
-            case "placement" -> exportPlacement(batchId);
+            case "students" -> exportStudents(batchId, courseId);
+            case "performance" -> exportPerformance(batchId, courseId);
+            case "attendance" -> exportAttendance(batchId, courseId, startDate, endDate);
+            case "placement" -> exportPlacement(batchId, courseId);
             default -> throw new BadRequestException("Unknown export type: " + type);
         };
     }
@@ -776,9 +805,10 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PlacementReadinessResponse> getPlacementReadiness(Long batchId) {
+    public List<PlacementReadinessResponse> getPlacementReadiness(Long batchId, Long courseId) {
         reportValidator.validateBatchExists(batchId);
-        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
+        reportValidator.validateCourseExists(courseId);
+        List<Student> students = filterStudents(batchId, courseId);
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         Map<Long, List<AssignmentSubmission>> byStudent = submissionsByStudent(studentIds);
         Map<Long, List<QuizAttempt>> quizByStudent = quizAttemptsByStudent(studentIds);
@@ -1015,8 +1045,8 @@ public class ReportServiceImpl implements ReportService {
                 quizAvg, placementRate, healthScore, healthStatus(healthScore));
     }
 
-    private List<Map<String, Object>> exportStudents(Long batchId) {
-        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
+    private List<Map<String, Object>> exportStudents(Long batchId, Long courseId) {
+        List<Student> students = filterStudents(batchId, courseId);
         return students.stream()
                 .map(s -> {
                     Map<String, Object> row = new LinkedHashMap<>();
@@ -1032,9 +1062,10 @@ public class ReportServiceImpl implements ReportService {
                 .toList();
     }
 
-    private List<Map<String, Object>> exportPerformance(Long batchId) {
+    private List<Map<String, Object>> exportPerformance(Long batchId, Long courseId) {
         PerformanceReportRequest request = new PerformanceReportRequest();
         request.setBatchId(batchId);
+        request.setCourseId(courseId);
         return getPerformanceReport(request).students().stream()
                 .map(row -> {
                     Map<String, Object> map = new LinkedHashMap<>();
@@ -1049,11 +1080,20 @@ public class ReportServiceImpl implements ReportService {
                 .toList();
     }
 
-    private List<Map<String, Object>> exportAttendance(Long batchId) {
-        List<Student> students = batchId != null ? enrollmentRepository.findActiveStudentsByBatchId(batchId) : studentRepository.findAll();
+    private List<Map<String, Object>> exportAttendance(Long batchId, Long courseId, LocalDate startDate, LocalDate endDate) {
+        List<Student> students = filterStudents(batchId, courseId);
+        List<Long> studentIds = students.stream().map(Student::getId).toList();
+        Map<Long, List<Attendance>> byStudent = attendanceByStudent(studentIds);
+
+        LocalDateTime rangeStart = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime rangeEnd = endDate != null ? endDate.atTime(LocalTime.MAX) : null;
+
         return students.stream()
                 .map(s -> {
-                    List<Attendance> attendances = attendanceRepository.findByStudentId(s.getId());
+                    List<Attendance> attendances = byStudent.getOrDefault(s.getId(), List.of()).stream()
+                            .filter(a -> (rangeStart == null || !a.getDailyClass().getDate().isBefore(rangeStart))
+                                    && (rangeEnd == null || !a.getDailyClass().getDate().isAfter(rangeEnd)))
+                            .toList();
                     long present = attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
                     long absent = attendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
                     long late = attendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
@@ -1075,8 +1115,8 @@ public class ReportServiceImpl implements ReportService {
                 .toList();
     }
 
-    private List<Map<String, Object>> exportPlacement(Long batchId) {
-        return getPlacementReadiness(batchId).stream()
+    private List<Map<String, Object>> exportPlacement(Long batchId, Long courseId) {
+        return getPlacementReadiness(batchId, courseId).stream()
                 .map(r -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("name", r.studentName() != null ? r.studentName() : "");
