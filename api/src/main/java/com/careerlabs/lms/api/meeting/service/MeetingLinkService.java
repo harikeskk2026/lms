@@ -20,6 +20,8 @@ public interface MeetingLinkService {
 
     MeetingLinkResponse getMeetingById(Long id, JwtUserPrincipal principal);
 
+    List<MeetingLinkResponse> getAdminMeetings(Long courseId, Long batchId, MeetingStatus status, String search, JwtUserPrincipal principal);
+
     List<MeetingLinkResponse> getAdminMeetings(Long batchId, MeetingStatus status, JwtUserPrincipal principal);
 
     List<MeetingLinkResponse> getStudentMeetings(Long currentUserId);

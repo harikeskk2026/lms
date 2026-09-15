@@ -51,11 +51,13 @@ public class AdminMeetingLinkController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<MeetingLinkResponse>>> list(
+            @RequestParam(required = false) Long courseId,
             @RequestParam(required = false) Long batchId,
             @RequestParam(required = false) MeetingStatus status,
+            @RequestParam(required = false) String search,
             @AuthenticationPrincipal JwtUserPrincipal principal
     ) {
-        List<MeetingLinkResponse> list = meetingLinkService.getAdminMeetings(batchId, status, principal);
+        List<MeetingLinkResponse> list = meetingLinkService.getAdminMeetings(courseId, batchId, status, search, principal);
         return ResponseEntity.ok(ApiResponse.of(list));
     }
 

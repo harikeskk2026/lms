@@ -7,6 +7,32 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { studentApi } from '@/lib/api'
 
+// Platform badge helper: detects meeting provider from URL or explicitly saved platform, returns null if not recognized
+const getPlatformBadge = (meetUrl, platform) => {
+  const url = (meetUrl || '').toLowerCase().trim()
+  const plat = (platform || '').toUpperCase().trim()
+
+  if (plat === 'ZOOM' || url.includes('zoom.us') || url.includes('zoomgov.com')) {
+    return { name: 'Zoom', className: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' }
+  }
+  if (plat === 'GOOGLE_MEET' || plat === 'MEET' || url.includes('meet.google.com')) {
+    return { name: 'Google Meet', className: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' }
+  }
+  if (plat === 'TEAMS' || url.includes('teams.microsoft.com') || url.includes('teams.live.com')) {
+    return { name: 'MS Teams', className: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' }
+  }
+  if (plat === 'WEBEX' || url.includes('webex.com')) {
+    return { name: 'Webex', className: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800' }
+  }
+  if (plat === 'YOUTUBE' || url.includes('youtube.com') || url.includes('youtu.be')) {
+    return { name: 'YouTube Live', className: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' }
+  }
+  if (plat && plat !== 'CUSTOM' && plat !== 'OTHER') {
+    return { name: plat, className: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' }
+  }
+  return null
+}
+
 // Get the current local date-time as an ISO string "YYYY-MM-DDTHH:MM:SS"
 const getLocalISONow = () => {
   const now = new Date()
@@ -94,7 +120,9 @@ export default function StudentMeetingLinksPage() {
     setLoading(true)
     try {
       const allRes = await studentApi.getMeetings()
-      setMeetings(extractList(allRes?.data) || extractList(allRes) || [])
+      const mList = extractList(allRes?.data) || extractList(allRes) || []
+      const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
+      setMeetings(unique)
     } catch {
       toast.error('Failed to load meeting links')
     } finally {
@@ -107,7 +135,9 @@ export default function StudentMeetingLinksPage() {
     const interval = setInterval(() => {
       studentApi.getMeetings()
         .then(allRes => {
-          setMeetings(extractList(allRes?.data) || extractList(allRes) || [])
+          const mList = extractList(allRes?.data) || extractList(allRes) || []
+          const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
+          setMeetings(unique)
         })
         .catch(() => {})
     }, 15000)
@@ -138,7 +168,7 @@ export default function StudentMeetingLinksPage() {
             Live Meetings & Classes
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Join your scheduled batch sessions, live lectures, and Zoom meetings.
+            Join your scheduled batch sessions, live lectures, and interactive classes.
           </p>
         </div>
         <button
@@ -170,9 +200,15 @@ export default function StudentMeetingLinksPage() {
                       Class in Session · Live Now
                     </span>
 
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-400/15 border border-purple-400/30 text-purple-200 text-xs font-bold">
-                      <Video size={13} /> {lm.platform || 'ZOOM'}
-                    </span>
+                    {(() => {
+                      const badge = getPlatformBadge(lm.meetUrl, lm.platform)
+                      if (!badge) return null
+                      return (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-400/15 border border-purple-400/30 text-purple-200 text-xs font-bold">
+                          <Video size={13} /> {badge.name}
+                        </span>
+                      )
+                    })()}
 
                     {lm.courseTitle && (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-400/15 border border-emerald-400/30 text-emerald-200 text-xs font-semibold">
@@ -276,9 +312,15 @@ export default function StudentMeetingLinksPage() {
                       {m.title}
                     </h3>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                        {m.platform || 'ZOOM'}
-                      </span>
+                      {(() => {
+                        const badge = getPlatformBadge(m.meetUrl, m.platform)
+                        if (!badge) return null
+                        return (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.className}`}>
+                            {badge.name}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </div>
 
@@ -428,9 +470,15 @@ export default function StudentMeetingLinksPage() {
 
                   {/* Course, Batch & Platform Badges */}
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40">
-                      {m.platform || 'ZOOM'}
-                    </span>
+                    {(() => {
+                      const badge = getPlatformBadge(m.meetUrl, m.platform)
+                      if (!badge) return null
+                      return (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${badge.className}`}>
+                          {badge.name}
+                        </span>
+                      )
+                    })()}
                     {m.courseTitle && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
                         <BookOpen size={11} /> {m.courseTitle}

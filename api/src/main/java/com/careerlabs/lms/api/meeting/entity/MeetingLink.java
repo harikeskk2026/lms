@@ -40,7 +40,7 @@ public class MeetingLink {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private MeetingPlatform platform = MeetingPlatform.ZOOM;
+    private MeetingPlatform platform = MeetingPlatform.CUSTOM;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "batch_id")

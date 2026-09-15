@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Video, Plus, Copy, ExternalLink, Calendar, Clock, Users,
   CheckCircle, PlayCircle, XCircle, Edit3, Trash2, Search, Filter, Shield, RefreshCw, AlertCircle,
@@ -16,13 +16,38 @@ import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import SlidePanel from '@/components/admin/SlidePanel'
 import CustomSelect from '@/components/ui/CustomSelect'
 
-const PLATFORMS = ['ZOOM']
+// Platform badge helper: detects meeting provider from URL or explicitly saved platform, returns null if not recognized
+const getPlatformBadge = (meetUrl, platform) => {
+  const url = (meetUrl || '').toLowerCase().trim()
+  const plat = (platform || '').toUpperCase().trim()
+
+  if (plat === 'ZOOM' || url.includes('zoom.us') || url.includes('zoomgov.com')) {
+    return { name: 'Zoom', className: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' }
+  }
+  if (plat === 'GOOGLE_MEET' || plat === 'MEET' || url.includes('meet.google.com')) {
+    return { name: 'Google Meet', className: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' }
+  }
+  if (plat === 'TEAMS' || url.includes('teams.microsoft.com') || url.includes('teams.live.com')) {
+    return { name: 'MS Teams', className: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' }
+  }
+  if (plat === 'WEBEX' || url.includes('webex.com')) {
+    return { name: 'Webex', className: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800' }
+  }
+  if (plat === 'YOUTUBE' || url.includes('youtube.com') || url.includes('youtu.be')) {
+    return { name: 'YouTube Live', className: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' }
+  }
+  if (plat && plat !== 'CUSTOM' && plat !== 'OTHER') {
+    return { name: plat, className: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' }
+  }
+  return null
+}
+
 const STATUSES = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED']
 
 // Display status badge styles (derived on the fly from timing)
 const DISPLAY_STATUS_BADGE = {
-  UPCOMING:  'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-  ONGOING:   'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 animate-pulse',
+  UPCOMING: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+  ONGOING: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 animate-pulse',
   COMPLETED: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700',
   CANCELLED: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
 }
@@ -99,7 +124,7 @@ const emptyForm = {
   title: '',
   description: '',
   meetUrl: '',
-  platform: 'ZOOM',
+  platform: '',
   batchId: '',
   courseId: '',
   hostName: '',
@@ -123,6 +148,7 @@ export default function AdminMeetingLinksPage() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
+  const isSubmittingRef = useRef(false)
   const [form, setForm] = useState(emptyForm)
   const [errors, setErrors] = useState({})
   const [deletingMeeting, setDeletingMeeting] = useState(null)
@@ -164,9 +190,15 @@ export default function AdminMeetingLinksPage() {
   const loadMeetings = async () => {
     setLoading(true)
     try {
-      const mRes = await adminApi.getMeetings({ batchId: filterBatch || undefined, status: filterStatus || undefined })
+      const mRes = await adminApi.getMeetings({
+        courseId: filterCourse || undefined,
+        batchId: filterBatch || undefined,
+        status: filterStatus || undefined,
+        search: searchQuery.trim() || undefined
+      })
       const mList = extractList(mRes?.data) || extractList(mRes) || []
-      setMeetings(mList)
+      const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
+      setMeetings(unique)
     } catch {
       toast.error('Failed to load scheduled classes')
     } finally {
@@ -206,17 +238,30 @@ export default function AdminMeetingLinksPage() {
   }, [])
 
   useEffect(() => {
-    loadMeetings()
+    const timeout = setTimeout(() => {
+      loadMeetings()
+    }, 200)
+
     const interval = setInterval(() => {
-      adminApi.getMeetings({ batchId: filterBatch || undefined, status: filterStatus || undefined })
+      adminApi.getMeetings({
+        courseId: filterCourse || undefined,
+        batchId: filterBatch || undefined,
+        status: filterStatus || undefined,
+        search: searchQuery.trim() || undefined
+      })
         .then(mRes => {
           const mList = extractList(mRes?.data) || extractList(mRes) || []
-          setMeetings(mList)
+          const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
+          setMeetings(unique)
         })
-        .catch(() => {})
+        .catch(() => { })
     }, 15000)
-    return () => clearInterval(interval)
-  }, [filterBatch, filterStatus])
+
+    return () => {
+      clearTimeout(timeout)
+      clearInterval(interval)
+    }
+  }, [filterCourse, filterBatch, filterStatus, searchQuery])
 
   const isOnlineOrHybridBatch = (b) => {
     if (!b) return false
@@ -230,7 +275,37 @@ export default function AdminMeetingLinksPage() {
     ? onlineAndHybridBatches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
     : onlineAndHybridBatches
 
+  const availableTrainersForForm = (() => {
+    if (form.batchId) {
+      const selectedBatch = batches.find(b => String(b.id) === String(form.batchId))
+      const trainerId = selectedBatch?.trainerId || selectedBatch?.trainer?.id
+      const trainerName = selectedBatch?.trainer?.name || selectedBatch?.trainerName || selectedBatch?.trainer?.fullName
+
+      const list = []
+      if (trainerId) {
+        const match = trainers.find(t => String(t.id) === String(trainerId))
+        if (match) list.push(match)
+      }
+      if (trainerName && !list.some(t => (t.name || t.fullName) === trainerName)) {
+        const match = trainers.find(t => (t.name || t.fullName) === trainerName)
+        if (match) list.push(match)
+        else list.push({ id: `b-tr-${trainerId || '0'}`, name: trainerName, fullName: trainerName, email: '' })
+      }
+      if (list.length > 0) return list
+    }
+    if (form.courseId) {
+      const courseBatches = batches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
+      const trainerIds = new Set(courseBatches.map(b => b.trainerId || b.trainer?.id).filter(Boolean).map(String))
+      const trainerNames = new Set(courseBatches.map(b => b.trainer?.name || b.trainerName || b.trainer?.fullName).filter(Boolean))
+
+      const matched = trainers.filter(t => trainerIds.has(String(t.id)) || trainerNames.has(t.name || t.fullName))
+      if (matched.length > 0) return matched
+    }
+    return []
+  })()
+
   const openCreate = () => {
+    isSubmittingRef.current = false
     setErrors({})
     setEditingId(null)
     setForm(emptyForm)
@@ -238,19 +313,20 @@ export default function AdminMeetingLinksPage() {
   }
 
   const openEdit = (m) => {
+    isSubmittingRef.current = false
     setErrors({})
     setEditingId(m.id)
     const matchingBatch = batches.find(b => String(b.id) === String(m.batchId))
     const courseId = m.courseId
       ? String(m.courseId)
       : matchingBatch
-      ? String(getBatchCourseId(matchingBatch))
-      : ''
+        ? String(getBatchCourseId(matchingBatch))
+        : ''
     setForm({
       title: m.title || '',
       description: m.description || '',
       meetUrl: m.meetUrl || '',
-      platform: m.platform || 'ZOOM',
+      platform: m.platform || '',
       batchId: m.batchId ? String(m.batchId) : '',
       courseId: courseId,
       hostName: m.hostName || '',
@@ -263,12 +339,20 @@ export default function AdminMeetingLinksPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (saving) return
+    if (isSubmittingRef.current || saving) return
 
     const newErrors = {}
 
     if (!form.title?.trim()) {
       newErrors.title = 'Title is required'
+    }
+
+    if (!form.courseId) {
+      newErrors.courseId = 'Course is required'
+    }
+
+    if (!form.batchId) {
+      newErrors.batchId = 'Target Batch is required'
     }
 
     if (!form.meetUrl?.trim()) {
@@ -277,7 +361,7 @@ export default function AdminMeetingLinksPage() {
       const urlStr = form.meetUrl.trim()
       const urlPattern = /^(https?:\/\/)?([\w.-]+\.[a-z]{2,})(:[0-9]+)?(\/.*)?$/i
       if (!urlPattern.test(urlStr)) {
-        newErrors.meetUrl = 'Please enter a valid meeting URL (e.g. https://zoom.us/j/...)'
+        newErrors.meetUrl = 'Please enter a valid meeting URL (e.g. https://meet.google.com/... or https://zoom.us/j/...)'
       }
     }
 
@@ -298,13 +382,14 @@ export default function AdminMeetingLinksPage() {
       return
     }
 
+    isSubmittingRef.current = true
     setSaving(true)
     try {
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
         meetUrl: form.meetUrl.trim(),
-        platform: form.platform,
+        platform: form.platform || null,
         batchId: form.batchId ? Number(form.batchId) : null,
         courseId: form.courseId ? Number(form.courseId) : null,
         hostName: form.hostName?.trim() || null,
@@ -327,6 +412,7 @@ export default function AdminMeetingLinksPage() {
       toast.error(msg, { id: 'save-meeting-toast' })
     } finally {
       setSaving(false)
+      isSubmittingRef.current = false
     }
   }
 
@@ -374,24 +460,6 @@ export default function AdminMeetingLinksPage() {
     }
   }
 
-  const filteredMeetings = meetings.filter(m => {
-    if (filterCourse) {
-      const matchesCourse = String(m.courseId) === String(filterCourse) || (m.batchId && batches.some(b => String(b.id) === String(m.batchId) && String(getBatchCourseId(b)) === String(filterCourse)))
-      if (!matchesCourse) return false
-    }
-    if (filterBatch && String(m.batchId) !== String(filterBatch)) return false
-    if (filterStatus && m.status !== filterStatus) return false
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      m.title?.toLowerCase().includes(q) ||
-      m.hostName?.toLowerCase().includes(q) ||
-      m.batchName?.toLowerCase().includes(q) ||
-      m.courseTitle?.toLowerCase().includes(q) ||
-      m.meetUrl?.toLowerCase().includes(q)
-    )
-  })
-
   const filterBatchesList = filterCourse
     ? onlineAndHybridBatches.filter(b => String(getBatchCourseId(b)) === String(filterCourse))
     : onlineAndHybridBatches
@@ -404,9 +472,9 @@ export default function AdminMeetingLinksPage() {
     return 3
   }
 
-  const sortedMeetings = [...filteredMeetings].sort((a, b) => statusOrder(a) - statusOrder(b))
+  const sortedMeetings = [...meetings].sort((a, b) => statusOrder(a) - statusOrder(b))
 
-  const ongoingCount  = meetings.filter(m => getDisplayStatus(m) === 'ONGOING').length
+  const ongoingCount = meetings.filter(m => getDisplayStatus(m) === 'ONGOING').length
   const upcomingCount = meetings.filter(m => getDisplayStatus(m) === 'UPCOMING').length
 
   return (
@@ -419,7 +487,7 @@ export default function AdminMeetingLinksPage() {
             Scheduled Class
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Pick a course and batch, paste your Zoom (or other) meeting link, and publish it for the class.
+            Pick a course and batch, paste your meeting link (Google Meet, Zoom, MS Teams, etc.), and publish it for the class.
           </p>
         </div>
         <button
@@ -565,9 +633,15 @@ export default function AdminMeetingLinksPage() {
                 )}
 
                 <div className="flex flex-wrap gap-2 text-xs pt-1">
-                  <span className="bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold px-2 py-0.5 rounded-md">
-                    {m.platform || 'ZOOM'}
-                  </span>
+                  {(() => {
+                    const badge = getPlatformBadge(m.meetUrl, m.platform)
+                    if (!badge) return null
+                    return (
+                      <span className={`font-bold px-2 py-0.5 rounded-md border ${badge.className}`}>
+                        {badge.name}
+                      </span>
+                    )
+                  })()}
                   {m.courseTitle && (
                     <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-md">
                       {m.courseTitle}
@@ -593,12 +667,12 @@ export default function AdminMeetingLinksPage() {
                         const endISO = toISOStr(m.scheduledEnd)
                         if (!startISO) return 'TBD'
                         const sp = startISO.split(/[T:-]/).map(Number)
-                        const startDateObj = new Date(sp[0], sp[1]-1, sp[2], sp[3]||0, sp[4]||0, sp[5]||0)
+                        const startDateObj = new Date(sp[0], sp[1] - 1, sp[2], sp[3] || 0, sp[4] || 0, sp[5] || 0)
                         const startFormatted = format(startDateObj, 'dd MMM yyyy, hh:mm a')
                         if (!endISO) return startFormatted
 
                         const ep = endISO.split(/[T:-]/).map(Number)
-                        const endDateObj = new Date(ep[0], ep[1]-1, ep[2], ep[3]||0, ep[4]||0, ep[5]||0)
+                        const endDateObj = new Date(ep[0], ep[1] - 1, ep[2], ep[3] || 0, ep[4] || 0, ep[5] || 0)
 
                         const startDateStr = startISO.slice(0, 10)
                         const endDateStr = endISO.slice(0, 10)
@@ -663,33 +737,19 @@ export default function AdminMeetingLinksPage() {
                   </button>
                 </div>
 
-                {/* Status Action Buttons */}
+                {/* Status / Action Bar */}
                 <div className="flex items-center justify-between text-[11px] font-semibold pt-1">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {m.status !== 'LIVE' && m.status !== 'COMPLETED' && m.status !== 'CANCELLED' && (
-                      <button
-                        onClick={() => handleStatusChange(m.id, 'LIVE')}
-                        className="text-emerald-600 dark:text-emerald-400 hover:underline"
-                      >
-                        Go Live
-                      </button>
-                    )}
-                    {m.status !== 'COMPLETED' && m.status !== 'CANCELLED' && (
-                      <button
-                        onClick={() => handleStatusChange(m.id, 'COMPLETED')}
-                        className="text-gray-600 dark:text-gray-300 hover:underline"
-                      >
-                        Mark Completed
-                      </button>
-                    )}
-                    {m.status !== 'CANCELLED' && m.status !== 'COMPLETED' && (
+                  <div>
+                    {m.status !== 'CANCELLED' && getDisplayStatus(m) !== 'COMPLETED' ? (
                       <button
                         onClick={() => handleStatusChange(m.id, 'CANCELLED')}
                         className="text-red-500 dark:text-red-400 hover:underline"
                       >
-                        Cancel
+                        Cancel Class
                       </button>
-                    )}
+                    ) : m.status === 'CANCELLED' ? (
+                      <span className="text-red-500 dark:text-red-400 font-medium">Cancelled</span>
+                    ) : null}
                   </div>
 
                   <div className="flex gap-2">
@@ -699,7 +759,7 @@ export default function AdminMeetingLinksPage() {
                     <button onClick={() => openEdit(m)} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300">
                       <Edit3 size={13} />
                     </button>
-                    {getDisplayStatus(m) !== 'ONGOING' && (
+                    {getDisplayStatus(m) !== 'ONGOING' && getDisplayStatus(m) !== 'COMPLETED' && m.status !== 'COMPLETED' && (
                       <button onClick={() => setDeletingMeeting(m)} title="Delete Class" className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">
                         <Trash2 size={13} />
                       </button>
@@ -722,18 +782,6 @@ export default function AdminMeetingLinksPage() {
         isDirty={Boolean(form.title || form.meetingUrl || form.courseId || form.batchId || form.hostName || form.scheduledStart || form.description)}
       >
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          {Object.keys(errors).length > 0 && (
-            <div className="p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl flex items-start gap-2.5 text-red-600 dark:text-red-400 text-xs animate-in fade-in duration-200">
-              <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
-              <div>
-                <p className="font-bold">Please fill in all mandatory fields</p>
-                <p className="text-[11px] text-red-500/90 mt-0.5">
-                  All mandatory fields highlighted in red below are required before scheduling.
-                </p>
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
               Title <span className="text-red-500">*</span>
@@ -746,11 +794,10 @@ export default function AdminMeetingLinksPage() {
                 setForm(f => ({ ...f, title: e.target.value }))
                 if (errors.title) setErrors(err => ({ ...err, title: undefined }))
               }}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${
-                errors.title
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${errors.title
                   ? 'border-red-500 dark:border-red-500 focus:ring-2 focus:ring-red-500/20'
                   : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
-              }`}
+                }`}
             />
             {errors.title && (
               <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
@@ -760,25 +807,36 @@ export default function AdminMeetingLinksPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Course
+                Course <span className="text-red-500">*</span>
               </label>
               <CustomSelect
                 value={form.courseId}
                 onChange={(val) => {
                   setForm(f => {
                     const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(val))
-                    return { ...f, courseId: val, batchId: stillValid ? f.batchId : '' }
+                    const selectedBatch = stillValid ? batches.find(b => String(b.id) === String(f.batchId)) : null
+                    const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName || selectedBatch?.trainer?.fullName
+                    return {
+                      ...f,
+                      courseId: val,
+                      batchId: stillValid ? f.batchId : '',
+                      hostName: batchTrainer || (stillValid ? f.hostName : '')
+                    }
                   })
+                  if (errors.courseId) setErrors(err => ({ ...err, courseId: undefined }))
                 }}
                 options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
                 placeholder="Select Course"
                 searchable={courses.length >= 10}
               />
+              {errors.courseId && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
+              )}
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Target Batch
+                Target Batch <span className="text-red-500">*</span>
               </label>
               <CustomSelect
                 value={form.batchId}
@@ -786,13 +844,15 @@ export default function AdminMeetingLinksPage() {
                   if (val) {
                     const selectedBatch = batches.find(b => String(b.id) === String(val))
                     const bCourseId = getBatchCourseId(selectedBatch)
-                    const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName
+                    const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName || selectedBatch?.trainer?.fullName
                     setForm(f => ({
                       ...f,
                       batchId: val,
                       ...(bCourseId && !f.courseId ? { courseId: String(bCourseId) } : {}),
-                      ...(batchTrainer && !f.hostName ? { hostName: batchTrainer } : {})
+                      hostName: batchTrainer || f.hostName
                     }))
+                    if (errors.batchId) setErrors(err => ({ ...err, batchId: undefined }))
+                    if (errors.courseId && bCourseId) setErrors(err => ({ ...err, courseId: undefined }))
                     return
                   }
                   setForm(f => ({ ...f, batchId: val }))
@@ -801,9 +861,12 @@ export default function AdminMeetingLinksPage() {
                   value: b.id,
                   label: `${b.name || b.title} ${b.mode ? `· ${b.mode}` : ''} ${!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}`
                 }))}
-                placeholder={form.courseId ? 'Select Batch (or all batches in course)' : 'Select Batch'}
+                placeholder={form.courseId ? 'Select Batch' : 'Select Batch'}
                 searchable={batchOptionsForForm.length >= 10}
               />
+              {errors.batchId && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.batchId}</p>
+              )}
             </div>
           </div>
 
@@ -813,17 +876,16 @@ export default function AdminMeetingLinksPage() {
             </label>
             <input
               type="text"
-              placeholder="Enter meeting URL"
+              placeholder="https://zoom.us/j/123456789"
               value={form.meetUrl}
               onChange={e => {
                 setForm(f => ({ ...f, meetUrl: e.target.value }))
                 if (errors.meetUrl) setErrors(err => ({ ...err, meetUrl: undefined }))
               }}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${
-                errors.meetUrl
+              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${errors.meetUrl
                   ? 'border-red-500 dark:border-red-500 focus:ring-2 focus:ring-red-500/20'
                   : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
-              }`}
+                }`}
             />
             {errors.meetUrl && (
               <p className="text-xs text-red-500 font-medium mt-1">{errors.meetUrl}</p>
@@ -835,28 +897,34 @@ export default function AdminMeetingLinksPage() {
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 Trainer / Host Name
               </label>
-              {trainers.length > 0 && (
+              {availableTrainersForForm.length > 0 && (
                 <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
-                  Select or type custom
+                  {form.batchId ? 'Assigned Batch Trainer' : 'Course Trainers'}
                 </span>
               )}
             </div>
 
-            {trainers.length > 0 && (
+            {availableTrainersForForm.length > 0 ? (
               <CustomSelect
-                value={trainers.some(t => (t.name || t.fullName) === form.hostName) ? form.hostName : ''}
+                value={availableTrainersForForm.some(t => (t.name || t.fullName) === form.hostName) ? form.hostName : ''}
                 onChange={(val) => {
                   if (val) {
                     setForm(f => ({ ...f, hostName: val }))
                   }
                 }}
-                options={trainers.filter(t => t.active === true).map(t => ({
+                options={availableTrainersForForm.map(t => ({
                   value: t.name || t.fullName,
                   label: `${t.name || t.fullName}${t.email ? ` (${t.email})` : ''}`
                 }))}
-                placeholder="-- Select Registered Trainer --"
-                searchable={trainers.length >= 10}
+                placeholder={form.batchId ? '-- Assigned Trainer --' : '-- Select Course Trainer --'}
+                searchable={availableTrainersForForm.length >= 10}
               />
+            ) : (
+              <p className="text-[11px] text-gray-400 italic mb-1.5">
+                {form.batchId || form.courseId
+                  ? 'No registered trainer assigned to this selection. Enter custom host name below:'
+                  : 'Select a Course and Batch to see assigned trainers, or enter custom host name below:'}
+              </p>
             )}
 
             <input

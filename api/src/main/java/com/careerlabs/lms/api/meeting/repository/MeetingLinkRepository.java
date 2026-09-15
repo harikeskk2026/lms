@@ -30,53 +30,53 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
      * it's course-wide (no batch set, but the course matches the student's course), or
      * it's fully global (no batch and no course set at all).
      */
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "(m.batch.id = :batchId) OR " +
             "(m.batch IS NULL AND m.course.id = :courseId) OR " +
             "(m.batch IS NULL AND m.course IS NULL) " +
             "ORDER BY m.scheduledStart DESC")
     List<MeetingLink> findVisibleToStudent(@Param("batchId") Long batchId, @Param("courseId") Long courseId);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "(m.batch.id IN :batchIds) OR " +
             "(m.course.id IN :courseIds) OR " +
             "(m.batch IS NULL AND m.course IS NULL) " +
             "ORDER BY m.scheduledStart DESC")
     List<MeetingLink> findVisibleByBatchIdsOrCourseIds(@Param("batchIds") java.util.Collection<Long> batchIds, @Param("courseIds") java.util.Collection<Long> courseIds);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "(m.batch.id IN :batchIds) OR " +
             "(m.batch IS NULL AND m.course IS NULL) " +
             "ORDER BY m.scheduledStart DESC")
     List<MeetingLink> findVisibleByBatchIds(@Param("batchIds") java.util.Collection<Long> batchIds);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "(m.course.id IN :courseIds) OR " +
             "(m.batch IS NULL AND m.course IS NULL) " +
             "ORDER BY m.scheduledStart DESC")
     List<MeetingLink> findVisibleByCourseIds(@Param("courseIds") java.util.Collection<Long> courseIds);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "((m.batch.id = :batchId) OR " +
             "(m.batch IS NULL AND m.course.id = :courseId) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +
             "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
     List<MeetingLink> findLiveMeetingsVisibleToStudent(@Param("batchId") Long batchId, @Param("courseId") Long courseId);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "((m.batch.id IN :batchIds) OR " +
             "(m.course.id IN :courseIds) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +
             "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
     List<MeetingLink> findLiveVisibleByBatchIdsOrCourseIds(@Param("batchIds") java.util.Collection<Long> batchIds, @Param("courseIds") java.util.Collection<Long> courseIds);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "((m.batch.id IN :batchIds) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +
             "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
     List<MeetingLink> findLiveVisibleByBatchIds(@Param("batchIds") java.util.Collection<Long> batchIds);
 
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "((m.course.id IN :courseIds) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +
             "AND m.status = 'LIVE' ORDER BY m.scheduledStart ASC")
@@ -115,7 +115,7 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
             LocalDateTime endOfDay, LocalDateTime startOfDay);
 
     /** Active meetings on a date window — catches both single-day meetings and multi-day / ongoing meetings. */
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "(m.scheduledStart >= :startOfDay AND m.scheduledStart <= :endOfDay) OR " +
             "(m.scheduledStart <= :endOfDay AND m.scheduledEnd IS NOT NULL AND m.scheduledEnd >= :startOfDay) " +
             "ORDER BY m.scheduledStart ASC")
@@ -130,7 +130,7 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
     /** Same visibility rule as {@link #findVisibleToStudent}, narrowed to a single day —
      *  used to surface Scheduled Class sessions on the student's attendance calendar even
      *  when no DailyClass/attendance record exists for them yet. */
-    @Query("SELECT m FROM MeetingLink m WHERE " +
+    @Query("SELECT DISTINCT m FROM MeetingLink m WHERE " +
             "((m.batch.id = :batchId) OR " +
             "(m.batch IS NULL AND m.course.id = :courseId) OR " +
             "(m.batch IS NULL AND m.course IS NULL)) " +

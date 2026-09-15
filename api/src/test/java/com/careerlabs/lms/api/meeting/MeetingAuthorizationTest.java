@@ -249,6 +249,20 @@ class MeetingAuthorizationTest {
     }
 
     @Test
+    @DisplayName("Deleting completed meeting throws BadRequestException")
+    void deleteCompletedMeeting_throwsBadRequest() {
+        MeetingLink completedMeeting = new MeetingLink();
+        setId(completedMeeting, 1005L);
+        completedMeeting.setBatch(trainerABatch);
+        completedMeeting.setStatus(MeetingStatus.COMPLETED);
+
+        when(meetingLinkRepository.findById(1005L)).thenReturn(Optional.of(completedMeeting));
+
+        assertThrows(com.careerlabs.lms.api.common.exception.BadRequestException.class,
+                () -> meetingService.deleteMeetingLink(1005L, superAdminPrincipal));
+    }
+
+    @Test
     @DisplayName("Student cannot create meeting -> 403")
     void studentCreate_meeting_forbidden() {
         when(batchRepository.findById(100L)).thenReturn(Optional.of(trainerABatch));
@@ -284,5 +298,30 @@ class MeetingAuthorizationTest {
 
         assertThrows(ForbiddenException.class,
                 () -> meetingService.getAdminMeetings(200L, null, trainerAPrincipal));
+    }
+
+    @Test
+    @DisplayName("Creating duplicate meeting with same batch, time and title throws BadRequestException")
+    void createDuplicateMeeting_throwsBadRequest() {
+        LocalDateTime startTime = LocalDateTime.now().plusHours(2);
+        MeetingLink existing = new MeetingLink();
+        setId(existing, 2001L);
+        existing.setBatch(trainerABatch);
+        existing.setTitle("Duplicate Check");
+        existing.setMeetUrl("https://zoom.us/duplicate");
+        existing.setScheduledStart(startTime);
+        existing.setStatus(MeetingStatus.SCHEDULED);
+
+        when(batchRepository.findById(100L)).thenReturn(Optional.of(trainerABatch));
+        when(meetingLinkRepository.findByBatchIdOrderByScheduledStartDesc(100L)).thenReturn(List.of(existing));
+
+        CreateMeetingLinkRequest req = new CreateMeetingLinkRequest();
+        req.setTitle("Duplicate Check");
+        req.setMeetUrl("https://zoom.us/other");
+        req.setBatchId(100L);
+        req.setScheduledStart(startTime);
+
+        assertThrows(com.careerlabs.lms.api.common.exception.BadRequestException.class,
+                () -> meetingService.createMeetingLink(req, trainerAPrincipal));
     }
 }

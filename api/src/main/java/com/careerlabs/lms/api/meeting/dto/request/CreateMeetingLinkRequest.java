@@ -17,7 +17,7 @@ public class CreateMeetingLinkRequest {
     @NotBlank(message = "Meeting URL is required")
     private String meetUrl;
 
-    private MeetingPlatform platform = MeetingPlatform.ZOOM;
+    private MeetingPlatform platform = MeetingPlatform.CUSTOM;
 
     private Long batchId;
 
