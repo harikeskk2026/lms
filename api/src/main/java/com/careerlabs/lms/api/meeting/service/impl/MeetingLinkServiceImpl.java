@@ -131,10 +131,16 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         }
 
         MeetingLink m = new MeetingLink();
-        m.setTitle(request.getTitle());
+        String rawTitle = StringUtils.hasText(request.getTitle()) ? request.getTitle().trim() : "Scheduled Class";
+        final String safeTitle = rawTitle.length() > 255 ? rawTitle.substring(0, 255) : rawTitle;
+        m.setTitle(safeTitle);
+
+        String rawUrl = request.getMeetUrl() != null ? request.getMeetUrl().trim() : "";
+        final String safeUrl = rawUrl.length() > 255 ? rawUrl.substring(0, 255) : rawUrl;
+        m.setMeetUrl(safeUrl);
+
         m.setDescription(request.getDescription());
-        m.setMeetUrl(request.getMeetUrl());
-        m.setPlatform(resolvePlatform(request.getMeetUrl(), request.getPlatform()));
+        m.setPlatform(resolvePlatform(safeUrl, request.getPlatform()));
         m.setHostName(request.getHostName());
         m.setScheduledStart(request.getScheduledStart());
         m.setScheduledEnd(request.getScheduledEnd());
@@ -164,7 +170,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
                     .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + request.getDailyClassId()));
             m.setDailyClass(dailyClass);
             if (dailyClass.getMeetLink() == null || dailyClass.getMeetLink().isBlank()) {
-                dailyClass.setMeetLink(request.getMeetUrl());
+                dailyClass.setMeetLink(safeUrl);
             }
         } else if (m.getBatch() != null) {
             LocalDateTime start = m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now();
@@ -172,8 +178,8 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
             DailyClass dc = existingClasses != null ? existingClasses.stream()
                     .filter(c -> c.getStatus() != ClassStatus.CANCELLED &&
                             ((c.getDate() != null && Math.abs(java.time.Duration.between(c.getDate(), start).toMinutes()) < 15) ||
-                             (c.getMeetLink() != null && c.getMeetLink().equalsIgnoreCase(m.getMeetUrl())) ||
-                             (c.getTitle() != null && c.getTitle().trim().equalsIgnoreCase(m.getTitle().trim()) &&
+                             (c.getMeetLink() != null && c.getMeetLink().equalsIgnoreCase(safeUrl)) ||
+                             (c.getTitle() != null && c.getTitle().trim().equalsIgnoreCase(safeTitle) &&
                               c.getDate() != null && c.getDate().toLocalDate().equals(start.toLocalDate()))))
                     .findFirst()
                     .orElse(null) : null;
@@ -182,17 +188,50 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
                 dc = new DailyClass();
                 dc.setBatch(m.getBatch());
                 dc.setDate(start);
-                dc.setTitle(m.getTitle());
-                dc.setMeetLink(m.getMeetUrl());
+                dc.setTitle(safeTitle);
+                dc.setMeetLink(safeUrl);
                 dc.setStatus(ClassStatus.SCHEDULED);
                 dc = dailyClassRepository.save(dc);
             } else {
                 if (dc.getMeetLink() == null || dc.getMeetLink().isBlank()) {
-                    dc.setMeetLink(m.getMeetUrl());
+                    dc.setMeetLink(safeUrl);
                     dc = dailyClassRepository.save(dc);
                 }
             }
             m.setDailyClass(dc);
+        } else {
+            List<Batch> targetBatches;
+            if (m.getCourse() != null) {
+                targetBatches = batchRepository.findByCourseId(m.getCourse().getId());
+            } else {
+                targetBatches = batchRepository.findAll();
+            }
+            LocalDateTime start = m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now();
+            DailyClass firstCreatedDc = null;
+            if (targetBatches != null) {
+                for (Batch targetBatch : targetBatches) {
+                    List<DailyClass> existingClasses = dailyClassRepository.findByBatchIdOrderByDateDesc(targetBatch.getId());
+                    boolean exists = existingClasses != null && existingClasses.stream()
+                            .anyMatch(c -> c.getStatus() != ClassStatus.CANCELLED &&
+                                    c.getTitle() != null && c.getTitle().trim().equalsIgnoreCase(safeTitle) &&
+                                    c.getDate() != null && c.getDate().toLocalDate().equals(start.toLocalDate()));
+                    if (!exists) {
+                        DailyClass dc = new DailyClass();
+                        dc.setBatch(targetBatch);
+                        dc.setDate(start);
+                        dc.setTitle(safeTitle);
+                        dc.setMeetLink(safeUrl);
+                        dc.setStatus(ClassStatus.SCHEDULED);
+                        dc = dailyClassRepository.save(dc);
+                        if (firstCreatedDc == null) {
+                            firstCreatedDc = dc;
+                        }
+                    }
+                }
+            }
+            if (firstCreatedDc != null) {
+                m.setDailyClass(firstCreatedDc);
+            }
         }
 
         MeetingLink saved = meetingLinkRepository.save(m);
@@ -537,19 +576,14 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
     }
 
     private MeetingPlatform resolvePlatform(String meetUrl, MeetingPlatform explicitPlatform) {
-        if (explicitPlatform != null && explicitPlatform != MeetingPlatform.CUSTOM) {
-            return explicitPlatform;
+        if (meetUrl != null && !meetUrl.isBlank()) {
+            String u = meetUrl.toLowerCase();
+            if (u.contains("zoom.us") || u.contains("zoomgov.com")) {
+                return MeetingPlatform.ZOOM;
+            }
         }
-        if (meetUrl == null) return MeetingPlatform.CUSTOM;
-        String u = meetUrl.toLowerCase();
-        if (u.contains("zoom.us") || u.contains("zoomgov.com")) {
+        if (explicitPlatform == MeetingPlatform.ZOOM) {
             return MeetingPlatform.ZOOM;
-        } else if (u.contains("meet.google.com") || u.contains("google.com/meet")) {
-            return MeetingPlatform.GOOGLE_MEET;
-        } else if (u.contains("teams.microsoft.com") || u.contains("teams.live.com")) {
-            return MeetingPlatform.TEAMS;
-        } else if (u.contains("webex.com")) {
-            return MeetingPlatform.WEBEX;
         }
         return MeetingPlatform.CUSTOM;
     }

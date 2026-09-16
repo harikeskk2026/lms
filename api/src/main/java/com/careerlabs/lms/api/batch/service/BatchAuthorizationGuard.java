@@ -67,6 +67,9 @@ public class BatchAuthorizationGuard {
         if (principal == null || isAdmin(principal)) {
             return;
         }
+        if (batchId == null) {
+            return;
+        }
         requireBatchOwnership(principal, batchId);
     }
 

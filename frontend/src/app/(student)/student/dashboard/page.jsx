@@ -5,7 +5,8 @@ import { format, formatDistanceToNow, isToday } from 'date-fns'
 import {
   BookOpen, ClipboardList, Trophy, Calendar,
   BarChart3, Clock, Zap, Briefcase, Edit3,
-  Megaphone, ChevronRight, ExternalLink, RefreshCw, CheckCircle
+  Megaphone, ChevronRight, ExternalLink, RefreshCw, CheckCircle,
+  FileText, Paperclip
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDashboard } from '@/hooks/useStudentDashboard'
@@ -77,6 +78,16 @@ function LiveClock() {
       </p>
     </>
   )
+}
+
+function parseClassNotesAndAttachments(description) {
+  if (!description || typeof description !== 'string') return { notesText: '', attachments: [] }
+  const attachments = []
+  const notesText = description.replace(/\[Attachment:\s*([^\]]+)\]\(([^)]+)\)/g, (match, name, url) => {
+    attachments.push({ name: name.trim(), url: url.trim() })
+    return ''
+  }).trim()
+  return { notesText, attachments }
 }
 
 export default function StudentDashboardPage() {
@@ -337,17 +348,21 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
 
     // 2. Add classes from studentApi.getClasses()
     dailyClasses.forEach(c => {
-      const isDuplicate = rawList.some(r =>
-        (r.title && c.title && r.title.toLowerCase() === c.title.toLowerCase())
+      const existing = rawList.find(r =>
+        (r.title && c.title && r.title.toLowerCase() === c.title.toLowerCase()) ||
+        (r.classId === c.id)
       )
-      if (!isDuplicate) {
+      if (existing) {
+        if (c.notes) existing.description = c.notes
+        else if (c.description && !existing.description) existing.description = c.description
+      } else {
         rawList.push({
           id: `class-${c.id}`,
           classId: c.id,
           title: c.title,
-          description: c.notes,
+          description: c.notes || c.description || null,
           meetLink: c.meetLink,
-          platform: 'ZOOM',
+          platform: c.platform || null,
           batchName: c.batchName,
           courseTitle: c.courseTitle,
           startTime: c.date,
@@ -359,18 +374,21 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
 
     // 3. Add upcomingClasses from dashboard data if any not present
     upcomingClasses.forEach(u => {
-      const isDuplicate = rawList.some(r =>
+      const existing = rawList.find(r =>
         (r.title && u.title && r.title.toLowerCase() === u.title.toLowerCase()) ||
         (r.classId === u.classId)
       )
-      if (!isDuplicate) {
+      if (existing) {
+        if (u.notes) existing.description = u.notes
+        else if (u.description && !existing.description) existing.description = u.description
+      } else {
         rawList.push({
           id: `dash-${u.classId}`,
           classId: u.classId,
           title: u.title,
-          description: null,
+          description: u.notes || u.description || null,
           meetLink: u.meetLink,
-          platform: 'ZOOM',
+          platform: u.platform || null,
           batchName: u.batchName,
           courseTitle: u.courseTitle,
           startTime: u.date,
@@ -782,6 +800,39 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
                             </>
                           )}
                         </div>
+
+                        {/* Class Notes & Attachments */}
+                        {Boolean(cls.description) && (() => {
+                          const { notesText, attachments } = parseClassNotesAndAttachments(cls.description)
+                          if (!notesText && attachments.length === 0) return null
+                          return (
+                            <div className="mt-2 pt-2 border-t border-purple-100/60 dark:border-purple-900/30 text-xs">
+                              {notesText && (
+                                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed flex items-start gap-1.5 mb-1.5 font-normal">
+                                  <FileText size={13} className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                                  <span>{notesText}</span>
+                                </p>
+                              )}
+                              {attachments.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  {attachments.map((att, idx) => (
+                                    <a
+                                      key={idx}
+                                      href={att.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] font-semibold border border-purple-200/80 dark:border-purple-800/60 transition-colors shadow-2xs"
+                                    >
+                                      <Paperclip size={11} className="text-purple-600 dark:text-purple-400" />
+                                      <span className="truncate max-w-[160px]">{att.name || 'Attachment'}</span>
+                                      <ExternalLink size={9} className="opacity-70" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
 
                       {/* Action Button */}
