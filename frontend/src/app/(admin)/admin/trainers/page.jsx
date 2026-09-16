@@ -45,7 +45,7 @@ function genPassword() {
   const pick = (pool) => pool[Math.floor(Math.random() * pool.length)]
 
   const required = [pick(upper), pick(lower), pick(digits), pick(special)]
-  const rest = Array.from({ length: 6 }, () => pick(all))
+  const rest = Array.from({ length: 8 }, () => pick(all))
   const combined = [...required, ...rest]
 
   for (let i = combined.length - 1; i > 0; i--) {
@@ -329,11 +329,16 @@ export default function TrainersPage() {
 
   // Toggle Active Status
   async function handleToggleStatus(trainer) {
+    const nextStatus = !trainer.active
+    setTrainers(prev => prev.map(t => t.id === trainer.id ? { ...t, active: nextStatus } : t))
     try {
-      await adminApi.toggleTrainerStatus(trainer.id)
-      toast.success(`Trainer ${trainer.active ? 'deactivated' : 'activated'} successfully`)
+      const res = await adminApi.toggleTrainerStatus(trainer.id)
+      const serverActive = res.data?.data?.active !== undefined ? res.data.data.active : nextStatus
+      setTrainers(prev => prev.map(t => t.id === trainer.id ? { ...t, active: serverActive } : t))
+      toast.success(`Trainer ${trainer.name} status updated to ${serverActive ? 'Active' : 'Inactive'}`)
       fetchTrainers()
     } catch (err) {
+      setTrainers(prev => prev.map(t => t.id === trainer.id ? { ...t, active: trainer.active } : t))
       toast.error(err.response?.data?.message || 'Failed to update trainer status')
     }
   }
@@ -377,43 +382,6 @@ export default function TrainersPage() {
         </button>
       </div>
 
-      {/* Stats Counter */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="glass-card p-5 border-l-4 border-l-purple-600 dark:border-purple-900/30 dark:border-l-purple-500 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Trainers</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalElements}</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 flex items-center justify-center font-bold">
-            <UserCheck size={24} />
-          </div>
-        </div>
-
-        <div className="glass-card p-5 border-l-4 border-l-green-500 dark:border-purple-900/30 dark:border-l-green-500 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Active Trainers</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {totalActive}
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center">
-            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-          </div>
-        </div>
-
-        <div className="glass-card p-5 border-l-4 border-l-slate-400 dark:border-purple-900/30 dark:border-l-slate-500 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Inactive</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {totalInactive}
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-gray-800 text-slate-500 dark:text-slate-400 flex items-center justify-center font-semibold text-xs">
-            Off
-          </div>
-        </div>
-      </div>
-
       {/* Search & Filter Toolbar */}
       <div className="glass-card p-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-purple-100 dark:border-purple-900/30">
         <div className="relative w-full md:w-80">
@@ -432,12 +400,27 @@ export default function TrainersPage() {
             value={statusFilter}
             onChange={(val) => { setStatusFilter(val); setPage(1) }}
             options={[
-              { value: 'active', label: 'Active Only' },
-              { value: 'inactive', label: 'Inactive Only' },
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
             ]}
             placeholder="All Statuses"
             compact
           />
+
+          {(search || statusFilter) && (
+            <button
+              onClick={() => {
+                setSearchInput('')
+                setSearch('')
+                setStatusFilter('')
+                setPage(1)
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-gray-800 transition-colors"
+            >
+              <X size={14} />
+              Clear Filters
+            </button>
+          )}
 
           <button
             onClick={fetchTrainers}
@@ -467,30 +450,36 @@ export default function TrainersPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[500px] text-left text-sm">
+            <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="bg-purple-50/60 dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
                 <tr>
-                  <th className="py-3.5 px-6">Trainer</th>
+                  <th className="py-3.5 px-4 text-center w-16">S.No.</th>
+                  <th className="py-3.5 px-6">Trainer Name</th>
+                  <th className="py-3.5 px-4">Email</th>
                   <th className="py-3.5 px-4">Contact</th>
-                  <th className="py-3.5 px-4">Department & Designation</th>
+                  <th className="py-3.5 px-4">Department</th>
+                  <th className="py-3.5 px-4">Designation / Role</th>
                   <th className="py-3.5 px-4">Assigned Batches</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-gray-800/60">
-                {trainers.map(trainer => (
+                {trainers.map((trainer, index) => (
                   <tr key={trainer.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors">
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-4 text-center font-semibold text-slate-500 dark:text-slate-400 text-xs">
+                      {(page - 1) * pageSize + index + 1}
+                    </td>
+                    <td className="py-4 px-6 font-medium">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0">
                           {trainer.name[0]?.toUpperCase()}
                         </div>
-                        <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{trainer.name}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-400 font-mono">{trainer.email}</p>
-                        </div>
+                        <span className="font-bold text-slate-900 dark:text-white">{trainer.name}</span>
                       </div>
+                    </td>
+                    <td className="py-4 px-4 text-xs font-mono text-slate-600 dark:text-slate-300">
+                      {trainer.email}
                     </td>
 
                     <td className="py-4 px-4">
@@ -500,22 +489,23 @@ export default function TrainersPage() {
                           {trainer.phone}
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 dark:text-slate-500 italic">No phone</span>
+                        <span className="text-xs text-slate-400 dark:text-slate-500 italic">No contact number</span>
                       )}
                     </td>
 
-                    <td className="py-4 px-4">
-                      {trainer.designation || trainer.department ? (
-                        <div>
-                          {trainer.designation && (
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{trainer.designation}</p>
-                          )}
-                          {trainer.department && (
-                            <p className="text-[11px] text-slate-400 dark:text-slate-400">{trainer.department}</p>
-                          )}
-                        </div>
+                    <td className="py-4 px-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {trainer.department ? (
+                        <span>{trainer.department}</span>
                       ) : (
-                        <span className="text-xs text-slate-400 dark:text-slate-500 italic">—</span>
+                        <span className="text-slate-400 dark:text-slate-500 italic">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-4 px-4 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {trainer.designation ? (
+                        <span>{trainer.designation}</span>
+                      ) : (
+                        <span className="font-normal text-slate-400 dark:text-slate-500 italic">—</span>
                       )}
                     </td>
 
@@ -663,33 +653,37 @@ export default function TrainersPage() {
           setFormSubmitted(false)
         }}
         title="Add New Trainer"
-        subtitle="Create a trainer account with course and batch assignments"
+        subtitle="Create a new trainer profile to grant system access and assign them to specific courses and batches for class management."
         isDirty={isFormDirty}
+        width="w-full sm:w-[580px] lg:w-[640px]"
       >
-        <form onSubmit={handleCreateTrainer} noValidate className="space-y-4">
-          <div>
-            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Full Name *</label>
-            <input
-              type="text"
-              value={form.name}
-              onKeyDown={filterNameKey}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              onBlur={() => setTouched(t => ({ ...t, name: true }))}
-              placeholder="Enter full name"
-              className={clsx(
-                'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
-                (touched.name || formSubmitted) && createErrors.name && 'border-red-500'
-              )}
-            />
-            {(touched.name || formSubmitted) && createErrors.name && (
-              <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.name}</p>
-            )}
+        <form onSubmit={handleCreateTrainer} noValidate className="space-y-3.5">
+          <div className="bg-purple-50/70 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50 rounded-xl p-3 text-xs text-purple-900 dark:text-purple-200">
+            <span className="font-semibold">Trainer Account Purpose:</span> Registering a trainer provides portal access credentials. Assigning a course and batch enables the trainer to manage class schedules and track student attendance.
           </div>
 
-          <div>
-            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Email Address *</label>
-            <div className="relative">
-              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">Full Name *</label>
+              <input
+                type="text"
+                value={form.name}
+                onKeyDown={filterNameKey}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                onBlur={() => setTouched(t => ({ ...t, name: true }))}
+                placeholder="Enter full name"
+                className={clsx(
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  (touched.name || formSubmitted) && createErrors.name && 'border-red-500'
+                )}
+              />
+              {(touched.name || formSubmitted) && createErrors.name && (
+                <p className="text-[11px] text-red-500 mt-0.5 font-medium">{createErrors.name}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">Email Address *</label>
               <input
                 type="email"
                 value={form.email}
@@ -697,33 +691,32 @@ export default function TrainersPage() {
                 onBlur={() => setTouched(t => ({ ...t, email: true }))}
                 placeholder="Enter email address"
                 className={clsx(
-                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-9 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
                   (touched.email || formSubmitted) && createErrors.email && 'border-red-500'
                 )}
               />
+              {(touched.email || formSubmitted) && createErrors.email && (
+                <p className="text-[11px] text-red-500 mt-0.5 font-medium">{createErrors.email}</p>
+              )}
             </div>
-            {(touched.email || formSubmitted) && createErrors.email && (
-              <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.email}</p>
-            )}
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm mb-0">Initial Password *</label>
-              <button
-                type="button"
-                onClick={() => {
-                  const p = genPassword()
-                  setForm({ ...form, password: p })
-                  setTouched(t => ({ ...t, password: true }))
-                }}
-                className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-semibold"
-              >
-                Generate Random
-              </button>
-            </div>
-            <div className="relative">
-              <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-0">Initial Password *</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = genPassword()
+                    setForm({ ...form, password: p })
+                    setTouched(t => ({ ...t, password: true }))
+                  }}
+                  className="text-[11px] text-purple-600 dark:text-purple-400 hover:underline font-semibold"
+                >
+                  Generate Random
+                </button>
+              </div>
               <input
                 type="text"
                 value={form.password}
@@ -731,20 +724,18 @@ export default function TrainersPage() {
                 onBlur={() => setTouched(t => ({ ...t, password: true }))}
                 placeholder="Enter password"
                 className={clsx(
-                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-9 pr-4 py-2.5 text-sm font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
                   (touched.password || formSubmitted) && createErrors.password && 'border-red-500'
                 )}
               />
+              {form.password && <PasswordStrengthMeter password={form.password} />}
+              {(touched.password || formSubmitted) && createErrors.password && (
+                <p className="text-[11px] text-red-500 mt-0.5 font-medium">{createErrors.password}</p>
+              )}
             </div>
-            {form.password && <PasswordStrengthMeter password={form.password} />}
-            {(touched.password || formSubmitted) && createErrors.password && (
-              <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.password}</p>
-            )}
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Phone Number</label>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">Phone Number</label>
               <input
                 type="tel"
                 inputMode="numeric"
@@ -755,41 +746,43 @@ export default function TrainersPage() {
                 onBlur={() => setTouched(t => ({ ...t, phone: true }))}
                 placeholder="Enter phone number"
                 className={clsx(
-                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
+                  'w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all',
                   (touched.phone || formSubmitted) && createErrors.phone && 'border-red-500'
                 )}
               />
               {(touched.phone || formSubmitted) && createErrors.phone && (
-                <p className="text-xs text-red-500 mt-1 font-medium">{createErrors.phone}</p>
+                <p className="text-[11px] text-red-500 mt-0.5 font-medium">{createErrors.phone}</p>
               )}
             </div>
-            <div>
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Designation</label>
-              <input
-                type="text"
-                value={form.designation}
-                onChange={e => setForm({ ...form, designation: e.target.value })}
-                placeholder="Enter designation"
-                className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">Department</label>
-            <input
-              type="text"
-              value={form.department}
-              onChange={e => setForm({ ...form, department: e.target.value })}
-              placeholder="Enter department"
-              className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">Department</label>
+              <input
+                type="text"
+                value={form.department}
+                onChange={e => setForm({ ...form, department: e.target.value })}
+                placeholder="Enter department"
+                className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              />
+            </div>
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">Designation / Role</label>
+              <input
+                type="text"
+                value={form.designation}
+                onChange={e => setForm({ ...form, designation: e.target.value })}
+                placeholder="Enter designation / role"
+                className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">
+                Course <span className="text-[11px] text-slate-400 font-normal">(Optional)</span>
               </label>
               <SearchableSelect
                 options={courseOptions}
@@ -802,8 +795,8 @@ export default function TrainersPage() {
             </div>
 
             <div>
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">
+                Batch <span className="text-[11px] text-slate-400 font-normal">(Optional)</span>
               </label>
               <SearchableSelect
                 options={batchOptions}
@@ -817,18 +810,18 @@ export default function TrainersPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-gray-800">
             <button
               type="button"
               onClick={() => setShowAddModal(false)}
-              className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || !isCreateValid}
-              className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
+              className="px-5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
             >
               {submitting ? 'Creating...' : 'Create Trainer'}
             </button>
@@ -843,7 +836,7 @@ export default function TrainersPage() {
         title="Edit Trainer Profile"
         subtitle="Update trainer details and assignments"
         isDirty={isEditDirty}
-        width="w-full sm:w-[500px]"
+        width="w-full sm:w-[580px] lg:w-[640px]"
       >
         <form onSubmit={handleUpdateTrainer} noValidate className="p-4 sm:p-6 space-y-4">
           <div>
