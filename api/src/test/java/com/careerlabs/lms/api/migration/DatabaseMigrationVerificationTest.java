@@ -95,7 +95,7 @@ public class DatabaseMigrationVerificationTest {
                 result.targetSchemaVersion :
                 (flyway.info().current() != null && flyway.info().current().getVersion() != null ?
                         flyway.info().current().getVersion().getVersion() : null);
-        assertEquals("16", currentVersion, "Target schema version must be 16");
+        assertEquals("17", currentVersion, "Target schema version must be 17");
 
         // 4. Existing rows were preserved; unrecognized durations flagged as NULL; valid durations kept
         try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
@@ -335,8 +335,8 @@ public class DatabaseMigrationVerificationTest {
         System.out.println("Target schema version: " + result.targetSchemaVersion);
 
         assertTrue(result.success, "Fresh database migration must succeed");
-        assertEquals("16", result.targetSchemaVersion, "Fresh database target schema version must be 16");
-        assertEquals(18, result.migrationsExecuted, "Must execute all 18 migrations (V0 through V16 incl. V5.1)");
+        assertEquals("17", result.targetSchemaVersion, "Fresh database target schema version must be 17");
+        assertEquals(19, result.migrationsExecuted, "Must execute all 19 migrations (V0 through V17 incl. V5.1)");
 
         try (Connection conn = DriverManager.getConnection(freshDbUrl, DB_USER, DB_PASS)) {
             verifyFinalSchema(conn);
@@ -386,7 +386,7 @@ public class DatabaseMigrationVerificationTest {
 
             MigrateResult latestResult = flywayToLatest.migrate();
             assertTrue(latestResult.success, "Migration from V" + v + " to latest must succeed");
-            assertEquals("16", latestResult.targetSchemaVersion, "Final schema version must be 16");
+            assertEquals("17", latestResult.targetSchemaVersion, "Final schema version must be 17");
 
             try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
                 verifyFinalSchema(conn);
@@ -669,7 +669,7 @@ public class DatabaseMigrationVerificationTest {
 
         MigrateResult result = flywayToLatest.migrate();
         assertTrue(result.success, "Migration from NOT NULL duration DB to latest must succeed (no restart loop)");
-        assertEquals("16", result.targetSchemaVersion, "Target schema version must be 16");
+        assertEquals("17", result.targetSchemaVersion, "Target schema version must be 17");
 
         // 6. Verify data normalization and final schema
         try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
@@ -745,7 +745,7 @@ public class DatabaseMigrationVerificationTest {
                 .load();
         MigrateResult freshResult = flywayFresh.migrate();
         assertTrue(freshResult.success, "Fresh DB migration must succeed");
-        assertEquals("16", freshResult.targetSchemaVersion, "Fresh DB must reach schema version 16");
+        assertEquals("17", freshResult.targetSchemaVersion, "Fresh DB must reach schema version 17");
 
         // Existing/NOT NULL database (as in production)
         recreateDatabase(notNullDbName);
@@ -774,7 +774,7 @@ public class DatabaseMigrationVerificationTest {
                 .load();
         MigrateResult notNullResult = flywayNotNull.migrate();
         assertTrue(notNullResult.success, "NOT NULL DB migration must succeed");
-        assertEquals("16", notNullResult.targetSchemaVersion, "NOT NULL DB must reach schema version 16");
+        assertEquals("17", notNullResult.targetSchemaVersion, "NOT NULL DB must reach schema version 17");
 
         // Compare duration column nullability + CHECK constraint across both databases
         String freshState;
