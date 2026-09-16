@@ -338,12 +338,11 @@ export default function CourseManagePage({ params }) {
                       : [
                           { value: 'ARCHIVED', label: 'ARCHIVED' },
                           { value: 'PUBLISHED', label: 'PUBLISHED' },
-                          { value: 'DRAFT', label: 'DRAFT' },
                         ]
                 }
               />
             {course?.status === 'ARCHIVED' && (
-              <p className="text-xs text-gray-500 mt-1">ARCHIVED can be published again or moved back to DRAFT.</p>
+              <p className="text-xs text-gray-500 mt-1">ARCHIVED can be published again (ARCHIVED → PUBLISHED).</p>
             )}
             {course?.status === 'PUBLISHED' && (
               <p className="text-xs text-gray-500 mt-1">PUBLISHED can only be archived. Content edits preserve published status.</p>
@@ -628,13 +627,15 @@ function StatusBadge({ status, onChange, disabled, title }) {
         value={status || 'PUBLISHED'}
         disabled={disabled}
         onChange={onChange}
+        clearable={false}
+        compact
+        className={`!py-0.5 !px-2.5 !text-[11px] font-bold rounded-full border shadow-xs ${selectStyle}`}
         options={[
           { value: 'PUBLISHED', label: 'PUBLISHED' },
           { value: 'DRAFT', label: 'DRAFT' },
           { value: 'ARCHIVED', label: 'ARCHIVED' },
         ]}
       />
-      <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
     </div>
   )
 }
@@ -670,6 +671,9 @@ function CourseStatusBadge({ status, onChange, disabled }) {
         value={status || 'PUBLISHED'}
         disabled={disabled}
         onChange={onChange}
+        clearable={false}
+        compact
+        className={`!py-1 !px-3 !text-xs font-semibold rounded-full border shadow-xs ${colorClass}`}
         options={
           isDraft
             ? [
@@ -680,7 +684,6 @@ function CourseStatusBadge({ status, onChange, disabled }) {
               ? [
                   { value: 'ARCHIVED', label: 'ARCHIVED' },
                   { value: 'PUBLISHED', label: 'PUBLISH' },
-                  { value: 'DRAFT', label: 'DRAFT' },
                 ]
               : [
                   { value: 'PUBLISHED', label: 'PUBLISHED' },
@@ -688,7 +691,6 @@ function CourseStatusBadge({ status, onChange, disabled }) {
                 ]
         }
       />
-      <ChevronDown size={10} className="pointer-events-none absolute right-1 text-current opacity-70" />
     </div>
   )
 }
@@ -698,6 +700,7 @@ function StatusSelect({ value, onChange, small }) {
     <CustomSelect
       value={value || 'PUBLISHED'}
       onChange={onChange}
+      clearable={false}
       options={[
         { value: 'DRAFT', label: 'Draft' },
         { value: 'PUBLISHED', label: 'Published' },

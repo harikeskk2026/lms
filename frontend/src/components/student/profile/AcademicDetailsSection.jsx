@@ -123,6 +123,28 @@ export default function AcademicDetailsSection({ onSaved }) {
       toast.error('No changes to save')
       return
     }
+    if (form.tenthPercentage !== '' && (Number(form.tenthPercentage) < 0 || Number(form.tenthPercentage) > 100)) {
+      toast.error('10th percentage must be between 0 and 100')
+      return
+    }
+    if (form.twelfthPercentage !== '' && (Number(form.twelfthPercentage) < 0 || Number(form.twelfthPercentage) > 100)) {
+      toast.error('12th percentage must be between 0 and 100')
+      return
+    }
+    if (form.diplomaPercentage !== '' && (Number(form.diplomaPercentage) < 0 || Number(form.diplomaPercentage) > 100)) {
+      toast.error('Diploma percentage must be between 0 and 100')
+      return
+    }
+    const ugMax = form.ugScoreType === 'CGPA' ? 10 : 100
+    if (form.ugScore !== '' && (Number(form.ugScore) < 0 || Number(form.ugScore) > ugMax)) {
+      toast.error(`UG Score must be between 0 and ${ugMax} for ${form.ugScoreType}`)
+      return
+    }
+    const pgMax = form.pgScoreType === 'CGPA' ? 10 : 100
+    if (form.pgScore !== '' && (Number(form.pgScore) < 0 || Number(form.pgScore) > pgMax)) {
+      toast.error(`PG Score must be between 0 and ${pgMax} for ${form.pgScoreType}`)
+      return
+    }
     setSaving(true)
     try {
       await academicDetailsService.updateMine({

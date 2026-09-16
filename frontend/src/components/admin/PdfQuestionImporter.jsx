@@ -54,6 +54,18 @@ const ANSWER_RE = /^(?:Answer|Correct(?:\s*Answer)?)\s*[:\-]\s*(.+)$/i
 const EXPLAIN_RE = /^Explanation\s*[:\-]\s*(.+)$/i
 const VALID_TYPES = ['MCQ', 'MULTIPLE_CORRECT', 'TRUE_FALSE', 'CODE_OUTPUT', 'DEBUGGING', 'SCENARIO', 'SQL', 'INTERVIEW']
 
+// Validates that a string is a valid positive integer (no decimals, no exponent, no leading +, no leading zeros)
+function isValidIntegerString(s) {
+  if (s == null) return false
+  const t = String(s).trim()
+  if (t.length === 0) return false
+  // Reject exponent notation, leading +, leading -, decimal points
+  if (t.match(/[eE]/) || t.startsWith('+') || t.startsWith('-') || t.includes('.')) {
+    return false
+  }
+  return /^[1-9]\d*$/.test(t)
+}
+
 // Reconstructs readable lines from pdf.js's flat, position-only text items by
 // grouping items that share a Y coordinate (same visual line) and ordering
 // them left-to-right. Works well for single-column, text-based PDFs; complex
@@ -131,7 +143,12 @@ function parseQuestionsFromLines(lines) {
       return
     }
     if ((m = line.match(POINTS_RE))) {
-      current.points = Number(m[1].trim()) || 1
+      const raw = m[1].trim()
+      if (!isValidIntegerString(raw)) {
+        current.points = 1 // default to 1 for invalid
+      } else {
+        current.points = Number(raw) || 1
+      }
       return
     }
     if ((m = line.match(TOPIC_RE))) {

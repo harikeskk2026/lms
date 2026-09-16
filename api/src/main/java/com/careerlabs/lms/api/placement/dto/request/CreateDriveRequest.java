@@ -2,6 +2,9 @@ package com.careerlabs.lms.api.placement.dto.request;
 
 import com.careerlabs.lms.api.placement.entity.DriveType;
 import com.careerlabs.lms.api.placement.validation.DriveValidationMessages;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -38,12 +41,19 @@ public class CreateDriveRequest {
 
     private String applyLink;
 
+    @DecimalMin(value = "0", message = DriveValidationMessages.MIN_CGPA_INVALID)
+    @DecimalMax(value = "10", message = DriveValidationMessages.MIN_CGPA_INVALID)
     private Double minCgpa;
 
+    @DecimalMin(value = "0", message = DriveValidationMessages.MIN_PERCENTAGE_INVALID)
+    @DecimalMax(value = "100", message = DriveValidationMessages.MIN_PERCENTAGE_INVALID)
     private Double minPercentage;
 
+    @Min(value = 0, message = DriveValidationMessages.MAX_BACKLOGS_INVALID)
     private Integer maxBacklogs;
 
+    @DecimalMin(value = "0", message = DriveValidationMessages.MIN_ATTENDANCE_INVALID)
+    @DecimalMax(value = "100", message = DriveValidationMessages.MIN_ATTENDANCE_INVALID)
     private Double minAttendancePct;
 
     private List<Long> eligibleBatchIds = List.of();

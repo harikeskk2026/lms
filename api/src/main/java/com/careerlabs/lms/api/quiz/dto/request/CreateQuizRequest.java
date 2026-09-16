@@ -28,6 +28,7 @@ public class CreateQuizRequest {
 
     @NotNull(message = QuizValidationMessages.DURATION_REQUIRED)
     @Min(value = 1, message = QuizValidationMessages.DURATION_MIN)
+    @Max(value = 1440, message = QuizValidationMessages.DURATION_MAX)
     private Integer duration;
 
     @NotNull(message = QuizValidationMessages.PASSING_SCORE_REQUIRED)
@@ -37,6 +38,7 @@ public class CreateQuizRequest {
 
     @NotNull(message = QuizValidationMessages.MAX_ATTEMPTS_REQUIRED)
     @Min(value = 1, message = QuizValidationMessages.MAX_ATTEMPTS_MIN)
+    @Max(value = 100, message = QuizValidationMessages.MAX_ATTEMPTS_MAX)
     private Integer maxAttempts = 1;
 
     private Long courseId;

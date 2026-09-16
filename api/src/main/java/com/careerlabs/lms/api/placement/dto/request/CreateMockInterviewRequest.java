@@ -3,6 +3,8 @@ package com.careerlabs.lms.api.placement.dto.request;
 import com.careerlabs.lms.api.placement.entity.MockInterviewMode;
 import com.careerlabs.lms.api.placement.entity.MockInterviewSelection;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
@@ -18,6 +20,8 @@ public class CreateMockInterviewRequest {
 
     private String scheduledAt;
 
+    @Min(1)
+    @Max(600)
     private Integer durationMinutes;
 
     private String interviewerName;
@@ -34,6 +38,7 @@ public class CreateMockInterviewRequest {
 
     private List<Long> courseIds;
 
+    @Min(1)
     private Integer randomCount;
 
     private String syllabus;

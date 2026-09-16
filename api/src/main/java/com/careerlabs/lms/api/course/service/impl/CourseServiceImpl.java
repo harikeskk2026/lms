@@ -97,11 +97,17 @@ public class CourseServiceImpl implements CourseService {
         if (request.getStatus() == CourseStatus.ARCHIVED) {
             throw new BadRequestException("Courses cannot be created directly as ARCHIVED. Archive is available after the course is created.");
         }
+        if (request.getStatus() == CourseStatus.PUBLISHED) {
+            throw new BadRequestException("Courses must be created as DRAFT before publishing.");
+        }
         if (courseRepository.existsByTitleIgnoreCase(request.getTitle().trim())) {
             throw new BadRequestException("A course with this title already exists: " + request.getTitle().trim());
         }
         Course course = new Course();
         applyRequest(course, request, true);
+        if (course.getStatus() == null) {
+            course.setStatus(CourseStatus.DRAFT);
+        }
         if (course.getCourseCode() == null || course.getCourseCode().isBlank()) {
             course.setCourseCode(courseCodeGenerator.generateUnique(request.getTitle()));
         } else {
@@ -153,11 +159,10 @@ public class CourseServiceImpl implements CourseService {
         }
         boolean allowed = (current == CourseStatus.DRAFT && requested == CourseStatus.PUBLISHED)
                 || (current == CourseStatus.PUBLISHED && requested == CourseStatus.ARCHIVED)
-                || (current == CourseStatus.ARCHIVED && requested == CourseStatus.PUBLISHED)
-                || (current == CourseStatus.ARCHIVED && requested == CourseStatus.DRAFT);
+                || (current == CourseStatus.ARCHIVED && requested == CourseStatus.PUBLISHED);
         if (!allowed) {
             throw new BadRequestException(
-                    String.format("Invalid status transition from %s to %s. Allowed transitions are DRAFT -> PUBLISHED, PUBLISHED -> ARCHIVED, and ARCHIVED -> PUBLISHED or DRAFT. DRAFT cannot be skipped directly to ARCHIVED.", current, requested));
+                    String.format("Invalid status transition from %s to %s. Allowed transitions are DRAFT -> PUBLISHED, PUBLISHED -> ARCHIVED, and ARCHIVED -> PUBLISHED. A course cannot be moved back to DRAFT once published or archived.", current, requested));
         }
     }
 

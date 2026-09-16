@@ -5,7 +5,9 @@ import com.careerlabs.lms.api.academic.dto.response.AcademicDetailsResponse;
 import com.careerlabs.lms.api.academic.entity.AcademicDetails;
 import com.careerlabs.lms.api.academic.repository.AcademicDetailsRepository;
 import com.careerlabs.lms.api.academic.service.AcademicDetailsService;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.student.entity.AcademicScoreType;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import org.springframework.stereotype.Service;
@@ -33,9 +35,23 @@ public class AcademicDetailsServiceImpl implements AcademicDetailsService {
         return AcademicDetailsResponse.from(studentId, details);
     }
 
+    private void validateScoreRange(Double score, AcademicScoreType scoreType, String fieldName) {
+        if (score == null) return;
+        if (scoreType == null) {
+            throw new BadRequestException(fieldName + " type must be specified when score is provided");
+        }
+        double max = scoreType == AcademicScoreType.CGPA ? 10.0 : 100.0;
+        if (score < 0 || score > max) {
+            throw new BadRequestException(fieldName + " must be between 0 and " + max + " for " + scoreType);
+        }
+    }
+
     @Override
     @Transactional
     public AcademicDetailsResponse save(Long studentId, AcademicDetailsRequest request) {
+        validateScoreRange(request.getUgScore(), request.getUgScoreType(), "UG Score");
+        validateScoreRange(request.getPgScore(), request.getPgScoreType(), "PG Score");
+
         AcademicDetails details = academicDetailsRepository.findByStudentId(studentId)
                 .orElseGet(() -> {
                     Student student = studentRepository.findById(studentId)

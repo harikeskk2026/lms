@@ -107,6 +107,9 @@ public class SyllabusServiceImpl implements SyllabusService {
     @Override
     @Transactional
     public SyllabusModuleResponse createModule(Long courseId, SyllabusModuleRequest request) {
+        findCourseOrThrow(courseId);
+        validateModuleDuration(request.getDurationValue(), request.getDurationUnit());
+
         Course course = findCourseOrThrow(courseId);
 
         SyllabusModule module = new SyllabusModule();
@@ -119,6 +122,18 @@ public class SyllabusServiceImpl implements SyllabusService {
         module.setOrderIndex(moduleRepository.countByCourseId(courseId));
 
         return SyllabusModuleResponse.from(moduleRepository.save(module), List.of());
+    }
+
+    private void validateModuleDuration(Integer value, DurationUnit unit) {
+        if (value != null && value <= 0) {
+            throw new BadRequestException("Module duration must be greater than 0");
+        }
+        if (value != null && unit == null) {
+            throw new BadRequestException("Duration unit is required when duration value is provided");
+        }
+        if (value == null && unit != null) {
+            throw new BadRequestException("Duration value is required when duration unit is provided");
+        }
     }
 
     private double getModuleDurationInHours(SyllabusModule module) {
@@ -153,6 +168,7 @@ public class SyllabusServiceImpl implements SyllabusService {
     @Transactional
     public SyllabusModuleResponse updateModule(Long id, SyllabusModuleRequest request) {
         SyllabusModule module = findModuleOrThrow(id);
+        validateModuleDuration(request.getDurationValue(), request.getDurationUnit());
         if (request.getDurationValue() != null && request.getDurationValue() > 0) {
             double newModuleHours = calculateModuleHours(request.getDurationValue(), request.getDurationUnit());
             double existingTopicsHours = topicRepository.findAllByModuleIdOrderByOrderIndexAsc(id).stream()

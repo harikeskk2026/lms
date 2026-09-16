@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.session.dto.request;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.session.entity.SessionType;
 import com.careerlabs.lms.api.session.validation.SessionValidationMessages;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -25,6 +26,7 @@ public class SessionRequest {
 
     private LocalTime endTime;
 
+    @Min(1)
     private Integer durationMinutes;
 
     private SessionType type = SessionType.LIVE;

@@ -33,8 +33,11 @@ export const questionSchema = z.object({
   codeSnippet: z.string().optional().or(z.literal('')),
   correctAnswerText: z.string().optional().or(z.literal('')),
   referenceAnswer: z.string().optional().or(z.literal('')),
-  answerLanguage: z.string().optional().or(z.literal('')),
-  points: z.coerce.number().min(1, 'Points must be at least 1'),
+  points: z.union([z.string(), z.number()])
+    .refine(v => /^[1-9]\d*$/.test(String(v).trim()), {
+      message: 'Points must be a positive integer (at least 1)',
+    })
+    .transform(v => parseInt(String(v).trim(), 10)),
   options: z.array(z.object({
     optionText: z.string().min(1, 'Option text is required'),
     correct: z.boolean(),

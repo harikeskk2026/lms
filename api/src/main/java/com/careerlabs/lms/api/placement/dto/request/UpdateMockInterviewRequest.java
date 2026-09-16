@@ -3,6 +3,8 @@ package com.careerlabs.lms.api.placement.dto.request;
 import com.careerlabs.lms.api.placement.entity.MockInterviewMode;
 import com.careerlabs.lms.api.placement.entity.MockInterviewStatus;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -12,7 +14,7 @@ import java.util.List;
 public record UpdateMockInterviewRequest(
     MockInterviewMode mode,
     String scheduledAt,
-    Integer durationMinutes,
+    @Min(1) @Max(600) Integer durationMinutes,
     String interviewerName,
     String meetLink,
     String location,

@@ -141,13 +141,17 @@ public class SyllabusImportServiceImpl implements SyllabusImportService {
             // Module duration
             String mDurStr = r.getModuleDuration() != null ? r.getModuleDuration().trim() : "";
             if (!mDurStr.isEmpty()) {
-                try {
-                    int v = Integer.parseInt(mDurStr);
-                    if (v <= 0) {
-                        errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Module Duration", "Module duration must be a positive integer"));
+                if (!isValidIntegerString(mDurStr)) {
+                    errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Module Duration", "Module duration must be a valid positive integer without decimals, signs, or exponents"));
+                } else {
+                    try {
+                        int v = Integer.parseInt(mDurStr);
+                        if (v <= 0) {
+                            errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Module Duration", "Module duration must be a positive integer"));
+                        }
+                    } catch (NumberFormatException e) {
+                        errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Module Duration", "Module duration must be a valid integer"));
                     }
-                } catch (NumberFormatException e) {
-                    errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Module Duration", "Module duration must be a valid integer"));
                 }
             }
 
@@ -172,13 +176,17 @@ public class SyllabusImportServiceImpl implements SyllabusImportService {
             // Topic duration
             String tDurStr = r.getTopicDuration() != null ? r.getTopicDuration().trim() : "";
             if (!tDurStr.isEmpty()) {
-                try {
-                    int v = Integer.parseInt(tDurStr);
-                    if (v <= 0) {
-                        errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Topic Duration", "Topic duration must be a positive integer"));
+                if (!isValidIntegerString(tDurStr)) {
+                    errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Topic Duration", "Topic duration must be a valid positive integer without decimals, signs, or exponents"));
+                } else {
+                    try {
+                        int v = Integer.parseInt(tDurStr);
+                        if (v <= 0) {
+                            errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Topic Duration", "Topic duration must be a positive integer"));
+                        }
+                    } catch (NumberFormatException e) {
+                        errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Topic Duration", "Topic duration must be a valid integer"));
                     }
-                } catch (NumberFormatException e) {
-                    errors.add(new SyllabusImportError(r.getRowNumber(), r.getModule(), r.getTopic(), "Topic Duration", "Topic duration must be a valid integer"));
                 }
             }
 
@@ -375,24 +383,35 @@ public class SyllabusImportServiceImpl implements SyllabusImportService {
         return t.isEmpty() ? null : t;
     }
 
+    private static boolean isValidIntegerString(String s) {
+        if (s == null) return false;
+        String t = s.trim();
+        if (t.isEmpty()) return false;
+        // Reject exponent notation, leading +, leading -, decimal points
+        if (t.matches(".*[eE].*") || t.startsWith("+") || t.startsWith("-") || t.contains(".")) {
+            return false;
+        }
+        return t.matches("^[1-9]\\d*$");
+    }
+
     private Integer parseModuleDuration(String s) {
-        if (s == null || s.trim().isEmpty()) return null;
+        if (!isValidIntegerString(s)) throw new NumberFormatException("Not a valid integer");
         return Integer.parseInt(s.trim());
     }
 
     private Integer parseModuleDurationQuiet(String s) {
-        if (s == null || s.trim().isEmpty()) return null;
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
+        if (!isValidIntegerString(s)) return null;
+        return Integer.parseInt(s.trim());
     }
 
     private Integer parseTopicDuration(String s) {
-        if (s == null || s.trim().isEmpty()) return null;
+        if (!isValidIntegerString(s)) throw new NumberFormatException("Not a valid integer");
         return Integer.parseInt(s.trim());
     }
 
     private Integer parseTopicDurationQuiet(String s) {
-        if (s == null || s.trim().isEmpty()) return null;
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
+        if (!isValidIntegerString(s)) return null;
+        return Integer.parseInt(s.trim());
     }
 
     private DurationUnit parseDurationUnit(String s) {

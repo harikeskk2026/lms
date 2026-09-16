@@ -2479,7 +2479,7 @@ export default function PlacementPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Duration (min)</label>
-              <input type="number" min={5} value={roundForm.durationMinutes} onChange={e => setRoundForm(f => ({ ...f, durationMinutes: e.target.value }))}
+              <input type="number" min={1} max={600} value={roundForm.durationMinutes} onChange={e => setRoundForm(f => ({ ...f, durationMinutes: e.target.value }))}
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           </div>

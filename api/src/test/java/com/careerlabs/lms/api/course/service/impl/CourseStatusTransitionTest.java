@@ -147,13 +147,12 @@ class CourseStatusTransitionTest {
     }
 
     @Test
-    @DisplayName("ARCHIVED -> DRAFT via PATCH = ALLOW (Unarchive)")
-    void patch_archived_to_draft_allow() {
+    @DisplayName("ARCHIVED -> DRAFT via PATCH = REJECT")
+    void patch_archived_to_draft_reject() {
         Course c = courseWithStatus(CourseStatus.ARCHIVED);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
-        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
-        var resp = courseService.updateStatus(1L, CourseStatus.DRAFT);
-        assertEquals(CourseStatus.DRAFT, resp.status());
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> courseService.updateStatus(1L, CourseStatus.DRAFT));
+        assertTrue(ex.getMessage().contains("Invalid status transition"));
     }
 
     @Test
@@ -167,13 +166,12 @@ class CourseStatusTransitionTest {
     }
 
     @Test
-    @DisplayName("ARCHIVED -> DRAFT via PUT = ALLOW (Unarchive)")
-    void put_archived_to_draft_allow() {
+    @DisplayName("ARCHIVED -> DRAFT via PUT = REJECT")
+    void put_archived_to_draft_reject() {
         Course c = courseWithStatus(CourseStatus.ARCHIVED);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(c));
-        when(courseRepository.save(any(Course.class))).thenAnswer(i -> i.getArgument(0));
-        var resp = courseService.update(1L, requestWithStatus(CourseStatus.DRAFT));
-        assertEquals(CourseStatus.DRAFT, resp.status());
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> courseService.update(1L, requestWithStatus(CourseStatus.DRAFT)));
+        assertTrue(ex.getMessage().contains("Invalid status transition"));
     }
 
     @Test
@@ -214,6 +212,14 @@ class CourseStatusTransitionTest {
     void create_archived_reject() {
         CourseRequest r = requestWithStatus(CourseStatus.ARCHIVED);
         assertThrows(BadRequestException.class, () -> courseService.create(r));
+    }
+
+    @Test
+    @DisplayName("Creating course directly as PUBLISHED is rejected")
+    void create_published_reject() {
+        CourseRequest r = requestWithStatus(CourseStatus.PUBLISHED);
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> courseService.create(r));
+        assertTrue(ex.getMessage().contains("Courses must be created as DRAFT before publishing"));
     }
 
     @Test

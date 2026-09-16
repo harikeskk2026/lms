@@ -364,8 +364,27 @@ export default function CourseCatalogPage() {
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
             <div className="flex gap-2">
-              <input {...register('durationValue', { required: 'Required' })} type="number" min="1" placeholder="Enter duration"
+              <input
+                {...register('durationValue', {
+                  required: 'Duration is required',
+                  setValueAs: v => v === '' ? '' : String(v).replace(/[^0-9]/g, ''),
+                  validate: v => {
+                    if (!v || v === '') return 'Duration is required'
+                    const n = parseInt(v, 10)
+                    if (isNaN(n) || n <= 0) return 'Duration must be a positive number'
+                    return true
+                  }
+                })}
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Enter duration"
+                onKeyDown={e => {
+                  if (['e', 'E', '-', '+', '.'].includes(e.key)) e.preventDefault()
+                }}
                 className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+
+
               <CustomSelect
                 value={watch('durationUnit')}
                 onChange={(val) => setValue('durationUnit', val, { shouldValidate: true })}
@@ -389,6 +408,7 @@ export default function CourseCatalogPage() {
             <CustomSelect
               value={watch('level')}
               onChange={(val) => setValue('level', val, { shouldValidate: true })}
+              clearable={false}
               options={[
                 { value: 'BEGINNER', label: 'BEGINNER' },
                 { value: 'INTERMEDIATE', label: 'INTERMEDIATE' },
@@ -403,16 +423,25 @@ export default function CourseCatalogPage() {
             <CustomSelect
               value={watch('status')}
               onChange={(val) => setValue('status', val, { shouldValidate: true })}
+              clearable={false}
               options={
                 editingId
-                  ? [
-                      { value: 'DRAFT', label: 'DRAFT' },
-                      { value: 'PUBLISHED', label: 'PUBLISHED' },
-                      { value: 'ARCHIVED', label: 'ARCHIVED' },
-                    ]
+                  ? editingCourseStatus === 'DRAFT'
+                    ? [
+                        { value: 'DRAFT', label: 'DRAFT' },
+                        { value: 'PUBLISHED', label: 'PUBLISHED' },
+                      ]
+                    : editingCourseStatus === 'ARCHIVED'
+                      ? [
+                          { value: 'ARCHIVED', label: 'ARCHIVED' },
+                          { value: 'PUBLISHED', label: 'PUBLISHED' },
+                        ]
+                      : [
+                          { value: 'PUBLISHED', label: 'PUBLISHED' },
+                          { value: 'ARCHIVED', label: 'ARCHIVED' },
+                        ]
                   : [
                       { value: 'DRAFT', label: 'DRAFT' },
-                      { value: 'PUBLISHED', label: 'PUBLISHED' },
                     ]
               }
             />

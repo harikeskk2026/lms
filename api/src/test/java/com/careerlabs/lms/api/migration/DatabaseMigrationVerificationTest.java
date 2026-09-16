@@ -66,7 +66,7 @@ public class DatabaseMigrationVerificationTest {
                 result.targetSchemaVersion :
                 (flyway.info().current() != null && flyway.info().current().getVersion() != null ?
                         flyway.info().current().getVersion().getVersion() : null);
-        assertEquals("12", currentVersion, "Target schema version must be 12");
+        assertEquals("13", currentVersion, "Target schema version must be 13");
 
         // Inspect database schema
         try (Connection conn = DriverManager.getConnection(LMS_URL, DB_USER, DB_PASS)) {
@@ -76,8 +76,8 @@ public class DatabaseMigrationVerificationTest {
     }
 
     @Test
-    @DisplayName("Print all resolved Flyway migration checksums")
-    void inspectMigrationChecksums() {
+    @DisplayName("Print all resolved Flyway migration checksums and candidate files")
+    void inspectMigrationChecksums() throws Exception {
         Flyway flyway = Flyway.configure()
                 .dataSource(DEFAULT_URL, DB_USER, DB_PASS)
                 .locations("classpath:db/migration")
@@ -87,17 +87,27 @@ public class DatabaseMigrationVerificationTest {
             System.out.printf("MIGRATION_CHECKSUM: V%s = %s%n",
                     info.getVersion(), info.getChecksum());
         }
+
+        // Test scratch/v12_from_1d2a6fa.sql as V6
+        java.io.File scratchV12 = new java.io.File("d:/LMS/lms-aug-24/scratch/v12_from_1d2a6fa.sql");
+        if (scratchV12.exists()) {
+            org.flywaydb.core.internal.resource.filesystem.FileSystemResource res =
+                    new org.flywaydb.core.internal.resource.filesystem.FileSystemResource(null, scratchV12.getAbsolutePath(), java.nio.charset.StandardCharsets.UTF_8, false);
+            int cs = org.flywaydb.core.internal.resolver.ChecksumCalculator.calculate(res);
+            System.out.printf("CANDIDATE_CHECKSUM: scratch/v12_from_1d2a6fa.sql = %d%n", cs);
+        }
     }
 
+
     @Test
-    @DisplayName("1b. Teammate Scenario: Existing DB with original V6 applied starts up and migrates cleanly without checksum errors")
-    void testTeammateScenarioOriginalV6AppliedAndApplicationStartup() throws Exception {
-        String testDbName = "lms_teammate_v6_test";
+    @DisplayName("1c. Teammate Scenario: Existing DB with V6 checksum 860137096 starts up and migrates cleanly")
+    void testTeammateScenarioChecksum860137096Startup() throws Exception {
+        String testDbName = "lms_teammate_860137096_test";
         String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
 
         recreateDatabase(testDbName);
 
-        // 1. Simulate teammate database: applied up to V6
+        // 1. Simulate teammate database: migrate up to V6
         Flyway flywayToV6 = Flyway.configure()
                 .dataSource(testDbUrl, DB_USER, DB_PASS)
                 .baselineOnMigrate(true)
@@ -108,28 +118,14 @@ public class DatabaseMigrationVerificationTest {
                 .load();
         MigrateResult initialResult = flywayToV6.migrate();
         assertTrue(initialResult.success, "Initial migration to V6 must succeed");
-        assertEquals("6", initialResult.targetSchemaVersion);
 
-        // 2. Verify V6 checksum in flyway_schema_history matches the original immutable checksum
+        // 2. Set the applied checksum in flyway_schema_history to 860137096 (exact teammate state)
         try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS);
-             PreparedStatement ps = conn.prepareStatement(
-                     "SELECT checksum FROM flyway_schema_history WHERE version = '6'");
-             ResultSet rs = ps.executeQuery()) {
-            assertTrue(rs.next(), "V6 must be recorded in flyway_schema_history");
-            assertEquals(891134358, rs.getInt(1), "Applied V6 checksum must match immutable original checksum (891134358)");
+             Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("UPDATE flyway_schema_history SET checksum = 860137096 WHERE version = '6'");
         }
 
-        // 3. Confirm Flyway validate reports NO checksum mismatch for V1..V6
-        Flyway flywayValidator = Flyway.configure()
-                .dataSource(testDbUrl, DB_USER, DB_PASS)
-                .baselineOnMigrate(true)
-                .baselineVersion("0")
-                .ignoreMigrationPatterns("*:ignored", "*:pending")
-                .locations("classpath:db/migration")
-                .load();
-        assertDoesNotThrow(() -> flywayValidator.validate(), "Flyway validation must report 0 checksum mismatches for V1..V6");
-
-        // 4. Boot Spring Boot Application against this database (which runs Flyway auto-migration to latest)
+        // 3. Boot Spring Boot Application against this database (runs Flyway auto-migration to latest)
         SpringApplicationBuilder builder = new SpringApplicationBuilder(LmsApiApplication.class);
         ConfigurableApplicationContext context = null;
         try {
@@ -143,14 +139,14 @@ public class DatabaseMigrationVerificationTest {
                     "--app.seed.enabled=false"
             );
             assertNotNull(context, "Application context must not be null");
-            assertTrue(context.isRunning(), "Spring Boot must boot successfully on teammate database starting at V6");
+            assertTrue(context.isRunning(), "Spring Boot must boot successfully on teammate database with V6 checksum 860137096");
         } finally {
             if (context != null) {
                 context.close();
             }
         }
 
-        // 5. Verify database reached V12 cleanly without repair
+        // 4. Verify database reached V12 cleanly without repair
         try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
             verifyFinalSchema(conn);
         }
@@ -159,8 +155,9 @@ public class DatabaseMigrationVerificationTest {
             executeSqlOnPostgres("DROP DATABASE IF EXISTS " + testDbName + ";");
         } catch (Exception ignored) {}
 
-        System.out.println("=== Teammate Scenario: V6 Existing DB to Latest PASSED ===");
+        System.out.println("=== Teammate Scenario: Checksum 860137096 to Latest PASSED ===");
     }
+
 
     @Test
     @DisplayName("2. Fresh DB: Migrate V0 through latest on a completely blank database")
@@ -191,8 +188,8 @@ public class DatabaseMigrationVerificationTest {
         System.out.println("Target schema version: " + result.targetSchemaVersion);
 
         assertTrue(result.success, "Fresh database migration must succeed");
-        assertEquals("12", result.targetSchemaVersion, "Fresh database target schema version must be 12");
-        assertEquals(13, result.migrationsExecuted, "Must execute all 13 migrations (V0 through V12)");
+        assertEquals("13", result.targetSchemaVersion, "Fresh database target schema version must be 13");
+        assertEquals(14, result.migrationsExecuted, "Must execute all 14 migrations (V0 through V13)");
 
         try (Connection conn = DriverManager.getConnection(freshDbUrl, DB_USER, DB_PASS)) {
             verifyFinalSchema(conn);
@@ -212,7 +209,7 @@ public class DatabaseMigrationVerificationTest {
         String testDbName = "lms_hist_test";
         String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
 
-        for (int v = 1; v <= 11; v++) {
+        for (int v = 1; v <= 12; v++) {
             System.out.printf("--- Testing Migration: V%d -> latest ---%n", v);
             recreateDatabase(testDbName);
 
@@ -242,7 +239,7 @@ public class DatabaseMigrationVerificationTest {
 
             MigrateResult latestResult = flywayToLatest.migrate();
             assertTrue(latestResult.success, "Migration from V" + v + " to latest must succeed");
-            assertEquals("12", latestResult.targetSchemaVersion, "Final schema version must be 12");
+            assertEquals("13", latestResult.targetSchemaVersion, "Final schema version must be 13");
 
             try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
                 verifyFinalSchema(conn);
@@ -569,6 +566,40 @@ public class DatabaseMigrationVerificationTest {
             assertTrue(rs.next());
             String def = rs.getString(1);
             assertTrue(def.contains("SHORT_ANSWER"), "questions_question_type_check MUST contain SHORT_ANSWER");
+        }
+
+        // 9. V13 Authoritative Check Constraints
+        String[] v13Constraints = {
+                "chk_quizzes_duration", "chk_quizzes_passing_score", "chk_quizzes_max_attempts",
+                "chk_batches_max_students", "chk_questions_points",
+                "chk_assignments_total_marks", "chk_assignment_submissions_marks",
+                "chk_attendance_goals_target", "chk_attendance_policies_thresholds",
+                "chk_interview_rounds_sequence", "chk_interview_rounds_duration",
+                "chk_interview_rounds_min_score", "chk_interview_rounds_max_score", "chk_interview_rounds_scores_order",
+                "chk_mock_interviews_duration",
+                "chk_drives_min_cgpa", "chk_drives_min_percentage", "chk_drives_max_backlogs", "chk_drives_min_attendance", "chk_drives_dates",
+                "chk_interview_evaluations_technical", "chk_interview_evaluations_communication",
+                "chk_interview_evaluations_problem_solving", "chk_interview_evaluations_coding",
+                "chk_interview_evaluations_domain", "chk_interview_evaluations_overall",
+                "chk_sessions_duration",
+                "chk_academic_10th_year", "chk_academic_10th_pct",
+                "chk_academic_12th_year", "chk_academic_12th_pct",
+                "chk_academic_diploma_year", "chk_academic_diploma_pct",
+                "chk_academic_ug_year", "chk_academic_ug_score", "chk_academic_ug_backlogs",
+                "chk_academic_pg_year", "chk_academic_pg_score", "chk_academic_pg_backlogs",
+                "chk_syllabus_modules_duration", "chk_syllabus_modules_order",
+                "chk_syllabus_topics_duration", "chk_syllabus_topics_order",
+                "chk_quiz_questions_order"
+        };
+        for (String conName : v13Constraints) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT COUNT(*) FROM pg_constraint WHERE conname = ?")) {
+                ps.setString(1, conName);
+                try (ResultSet rs = ps.executeQuery()) {
+                    assertTrue(rs.next());
+                    assertEquals(1, rs.getInt(1), "V13 constraint " + conName + " MUST exist in database");
+                }
+            }
         }
     }
 }

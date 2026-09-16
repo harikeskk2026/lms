@@ -569,21 +569,21 @@ export default function BatchesPage() {
                 <input
                   type="number"
                   min="1"
-                  max="100"
+                  max="500"
                   value={form.maxStudents}
                   onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))}
-                  placeholder="Enter max students (1-100)"
+                  placeholder="Enter max students (1-500)"
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
                 />
-                {form.maxStudents && (Number(form.maxStudents) < 1 || Number(form.maxStudents) > 100) && (
-                  <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 100</p>
+                {form.maxStudents && (Number(form.maxStudents) < 1 || Number(form.maxStudents) > 500) && (
+                  <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 500</p>
                 )}
               </div>
             </div>
 
             {(() => {
               const isTimeValid = (!startTime && !endTime) || (Boolean(startTime) && Boolean(endTime) && startTime < endTime)
-              const isMaxStudentsValid = !form.maxStudents || (Number(form.maxStudents) >= 1 && Number(form.maxStudents) <= 100)
+              const isMaxStudentsValid = !form.maxStudents || (Number(form.maxStudents) >= 1 && Number(form.maxStudents) <= 500)
               const isBatchFormValid = Boolean(
                 form.name?.trim() &&
                 form.courseId &&

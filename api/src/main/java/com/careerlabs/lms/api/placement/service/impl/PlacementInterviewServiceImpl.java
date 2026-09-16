@@ -82,6 +82,11 @@ public class PlacementInterviewServiceImpl implements PlacementInterviewService 
             throw new ConflictException("A round with sequence " + request.sequence() + " already exists for this drive");
         }
 
+        if (request.minimumScore() != null && request.maxScore() != null
+                && request.minimumScore() > request.maxScore()) {
+            throw new BadRequestException("Minimum score cannot be greater than maximum score");
+        }
+
         InterviewRound round = new InterviewRound();
         round.setDrive(drive);
         round.setName(request.name());
