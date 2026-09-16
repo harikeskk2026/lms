@@ -8,6 +8,8 @@ import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.entity.Student;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +27,8 @@ import java.util.stream.Collectors;
 /** Resolves {{placeholder}} tokens in announcement title/body text. Pure string substitution, no AI involved. */
 @Component
 public class AnnouncementPlaceholderResolver {
+
+    private static final Logger log = LoggerFactory.getLogger(AnnouncementPlaceholderResolver.class);
 
     private static final Pattern TOKEN = Pattern.compile("\\{\\{\\s*([a-zA-Z0-9_]+)\\s*\\}\\}");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy");
@@ -73,38 +77,56 @@ public class AnnouncementPlaceholderResolver {
     /** Builds the auto-fillable variables for a specific student, used to personalize their announcement feed. */
     public Map<String, String> variablesFor(Student student) {
         Map<String, String> vars = new HashMap<>();
-        List<com.careerlabs.lms.api.batch.entity.Batch> activeBatches = (enrollmentRepository != null && student.getId() != null)
-                ? enrollmentRepository.findActiveBatchesByStudentId(student.getId())
-                : List.of();
-        String batchNames = activeBatches.stream().map(com.careerlabs.lms.api.batch.entity.Batch::getName).collect(Collectors.joining(", "));
-        vars.put("batchName", batchNames);
+        if (student == null) {
+            return vars;
+        }
 
-        Set<String> courses = new LinkedHashSet<>();
-        if (enrollmentRepository != null && student.getId() != null) {
-            List<String> enrolled = enrollmentRepository.findActiveCourseTitlesByStudentId(student.getId());
-            if (enrolled == null || enrolled.isEmpty()) {
-                enrolled = enrollmentRepository.findAllCourseTitlesByStudentId(student.getId());
-            }
-            if (enrolled != null) {
-                for (String t : enrolled) {
-                    if (t != null && !t.isBlank()) {
-                        courses.add(t.trim());
+        try {
+            String studentName = (student.getUser() != null && student.getUser().getName() != null && !student.getUser().getName().isBlank())
+                    ? student.getUser().getName().trim()
+                    : "Student";
+            vars.put("studentName", studentName);
+
+            List<com.careerlabs.lms.api.batch.entity.Batch> activeBatches = (enrollmentRepository != null && student.getId() != null)
+                    ? enrollmentRepository.findActiveBatchesByStudentId(student.getId())
+                    : List.of();
+            String batchNames = activeBatches.stream().map(com.careerlabs.lms.api.batch.entity.Batch::getName).collect(Collectors.joining(", "));
+            vars.put("batchName", batchNames);
+
+            Set<String> courses = new LinkedHashSet<>();
+            if (enrollmentRepository != null && student.getId() != null) {
+                List<String> enrolled = enrollmentRepository.findActiveCourseTitlesByStudentId(student.getId());
+                if (enrolled == null || enrolled.isEmpty()) {
+                    enrolled = enrollmentRepository.findAllCourseTitlesByStudentId(student.getId());
+                }
+                if (enrolled != null) {
+                    for (String t : enrolled) {
+                        if (t != null && !t.isBlank()) {
+                            courses.add(t.trim());
+                        }
                     }
                 }
             }
-        }
-        if (student.getCourse() != null && student.getCourse().getTitle() != null && !student.getCourse().getTitle().isBlank()) {
-            courses.add(student.getCourse().getTitle().trim());
-        }
-        vars.put("courseName", String.join(", ", courses));
-        vars.put("date", LocalDate.now().format(DATE_FORMAT));
+            if (student.getCourse() != null && student.getCourse().getTitle() != null && !student.getCourse().getTitle().isBlank()) {
+                courses.add(student.getCourse().getTitle().trim());
+            }
+            vars.put("courseName", String.join(", ", courses));
+            vars.put("date", LocalDate.now().format(DATE_FORMAT));
 
-        long total = attendanceRepository.countByStudentId(student.getId());
-        if (total > 0) {
-            long present = attendanceRepository.countByStudentIdAndStatus(student.getId(), AttendStatus.PRESENT);
-            vars.put("attendancePercentage", String.valueOf(Math.round(present * 100.0 / total)));
-        } else {
-            vars.put("attendancePercentage", "N/A");
+            long total = student.getId() != null ? attendanceRepository.countByStudentId(student.getId()) : 0;
+            if (total > 0) {
+                long present = attendanceRepository.countByStudentIdAndStatus(student.getId(), AttendStatus.PRESENT);
+                vars.put("attendancePercentage", String.valueOf(Math.round(present * 100.0 / total)));
+            } else {
+                vars.put("attendancePercentage", "N/A");
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve placeholder variables for student {}: {}", student.getId(), e.getMessage(), e);
+            vars.putIfAbsent("studentName", "Student");
+            vars.putIfAbsent("batchName", "");
+            vars.putIfAbsent("courseName", "");
+            vars.putIfAbsent("date", LocalDate.now().format(DATE_FORMAT));
+            vars.putIfAbsent("attendancePercentage", "N/A");
         }
         return vars;
     }

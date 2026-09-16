@@ -68,4 +68,14 @@ public class AnnouncementCommentServiceImpl implements AnnouncementCommentServic
 
         return AnnouncementCommentResponse.from(commentRepository.save(comment));
     }
+
+    @Override
+    @Transactional
+    public void delete(Long commentId) {
+        if (!commentRepository.existsById(commentId)) {
+            throw new ResourceNotFoundException("Comment not found: " + commentId);
+        }
+        commentRepository.clearParentCommentIn(List.of(commentId));
+        commentRepository.deleteById(commentId);
+    }
 }

@@ -88,6 +88,12 @@ public class Announcement {
     @Column(name = "action_url")
     private String actionUrl;
 
+    @Column(name = "attachment_url")
+    private String attachmentUrl;
+
+    @Column(name = "attachment_name")
+    private String attachmentName;
+
 
     /** Additional targeting filters, combined (AND) with batch and each other. All optional. */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -262,6 +268,22 @@ public class Announcement {
 
     public void setActionUrl(String actionUrl) {
         this.actionUrl = actionUrl;
+    }
+
+    public String getAttachmentUrl() {
+        return attachmentUrl;
+    }
+
+    public void setAttachmentUrl(String attachmentUrl) {
+        this.attachmentUrl = attachmentUrl;
+    }
+
+    public String getAttachmentName() {
+        return attachmentName;
+    }
+
+    public void setAttachmentName(String attachmentName) {
+        this.attachmentName = attachmentName;
     }
 
 

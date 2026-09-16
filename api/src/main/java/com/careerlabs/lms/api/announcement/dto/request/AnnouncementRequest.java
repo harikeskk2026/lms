@@ -51,5 +51,7 @@ public record AnnouncementRequest(
         /** Null defaults to NONE. */
         AudienceRuleType audienceRuleType,
         Double audienceRuleValue,
-        Long audienceRuleReferenceId
+        Long audienceRuleReferenceId,
+        String attachmentUrl,
+        String attachmentName
 ) {}

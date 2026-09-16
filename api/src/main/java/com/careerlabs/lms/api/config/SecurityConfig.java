@@ -197,9 +197,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/sessions/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.PUT, "/api/sessions/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.DELETE, "/api/sessions/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
-                        // Announcement endpoints: creation/management is restricted to ADMIN/SUPERADMIN only,
+                        // Announcement endpoints: accessible to ADMIN, SUPERADMIN, and TRAINER (with method-level security for mutations),
                         // and student-facing announcement endpoints are restricted to the STUDENT role.
-                        .requestMatchers("/api/admin/announcements/**", "/api/admin/announcement-templates/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers("/api/admin/announcements/**", "/api/admin/announcement-templates/**").hasAnyRole("ADMIN", "SUPERADMIN", "TRAINER")
                         .requestMatchers("/api/student/announcements/**").hasRole("STUDENT")
                         // Admin batch endpoints that (un)enroll students are ADMIN/SUPERADMIN only;
                         // trainers stay read-only on batch membership.
