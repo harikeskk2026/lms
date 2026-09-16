@@ -34,7 +34,7 @@ export function PerformanceTrendChart({ trend }) {
   )
 }
 
-export function AttendanceBreakdownChart({ data }) {
+export function AttendanceBreakdownChart({ data, showLegend = false }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
@@ -42,21 +42,66 @@ export function AttendanceBreakdownChart({ data }) {
     return <div className="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />
   }
 
+  if (!showLegend) {
+    return (
+      <div className="w-full h-44 flex items-center justify-center min-w-0">
+        <ResponsiveContainer width="100%" height={170}>
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={50}
+              outerRadius={75}
+              paddingAngle={3}
+              dataKey="value"
+              isAnimationActive={false}
+            >
+              {data?.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(v, n) => [v, n]}
+              contentStyle={{ borderRadius: '12px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-4 min-w-0">
-      <ResponsiveContainer width="100%" height={160} minWidth={0}>
-        <PieChart>
-          <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
-            {data?.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-          </Pie>
-          <Tooltip formatter={(v, n) => [v, n]} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="flex-1 space-y-2 min-w-0">
+    <div className="flex flex-col sm:flex-row items-center gap-4 min-w-0 w-full overflow-hidden">
+      <div className="w-full sm:w-1/2 h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={45}
+              outerRadius={65}
+              paddingAngle={3}
+              dataKey="value"
+              isAnimationActive={false}
+            >
+              {data?.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(v, n) => [v, n]}
+              contentStyle={{ borderRadius: '12px', fontSize: '12px' }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="w-full sm:w-1/2 space-y-2 min-w-0">
         {data?.map(d => (
           <div key={d.name} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: d.color }} />
-            <span className="text-xs text-gray-600 dark:text-gray-300 flex-1">{d.name}</span>
+            <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">{d.name}</span>
             <span className="text-xs font-bold text-gray-800 dark:text-white">{d.value}</span>
           </div>
         ))}

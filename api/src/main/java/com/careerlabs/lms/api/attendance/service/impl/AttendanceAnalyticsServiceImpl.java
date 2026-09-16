@@ -103,17 +103,19 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 List<Attendance> studentAttendance = byStudent.getOrDefault(student.getId(), List.of());
                 int total = studentAttendance.size();
 
-                // Students with NO records contribute 0% to the average
-                int present = total > 0
-                        ? (int) studentAttendance.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count()
-                        : 0;
-                double pct = total > 0 ? (present * 100.0) / total : 0.0;
+                // Students with NO attendance records yet are NOT classified — skip risk/below75
+                if (total == 0) {
+                    continue;
+                }
+
+                int present = (int) studentAttendance.stream()
+                        .filter(a -> a.getStatus() == AttendStatus.PRESENT)
+                        .count();
+                double pct = (present * 100.0) / total;
 
                 totalStudentPctSum += pct;
-                if (total > 0) {
-                    totalPresentCount += present;
-                    totalMarkedCount += total;
-                }
+                totalPresentCount += present;
+                totalMarkedCount += total;
 
                 if (pct < policy.getHealthyThreshold()) {
                     below75Count++;
@@ -124,12 +126,13 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             }
         }
 
-        // Use the same count as the dashboard so both views show the same number
+        // Healthy = batch-enrolled students who have records and are above threshold
         int totalStudents = (int) studentRepository.count();
 
-        // Average = sum of each student's pct / active-batch students (includes 0% for unmarked)
-        int averageAttendance = totalBatchStudents > 0
-                ? (int) Math.round(totalStudentPctSum / totalBatchStudents)
+        // Average = sum of each tracked student's pct / students who have records
+        int studentsWithRecords = totalBatchStudents; // used for display; tracking is done per-student above
+        int averageAttendance = totalMarkedCount > 0
+                ? (int) Math.round((totalPresentCount * 100.0) / totalMarkedCount)
                 : 0;
 
         int todaysClasses = getTodayClasses(LocalDate.now()).size();

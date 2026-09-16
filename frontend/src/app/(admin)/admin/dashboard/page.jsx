@@ -1,7 +1,6 @@
 'use client'
 import { useAuth } from '@/context/AuthContext'
-import SuperAdminDashboard from '@/components/admin/dashboard/SuperAdminDashboard'
-import AdminDashboardView from '@/components/admin/dashboard/AdminDashboardView'
+import UnifiedAdminDashboard from '@/components/admin/dashboard/UnifiedAdminDashboard'
 import TrainerDashboardView from '@/components/admin/dashboard/TrainerDashboardView'
 import { SkeletonStat } from '@/components/student/SkeletonCard'
 
@@ -19,14 +18,10 @@ export default function DashboardPage() {
     )
   }
 
-  if (user.role === 'SUPERADMIN') {
-    return <SuperAdminDashboard />
-  }
-
   if (user.role === 'TRAINER') {
     return <TrainerDashboardView />
   }
 
-  // Default to ADMIN view for ADMIN or other administrative roles
-  return <AdminDashboardView />
+  // ADMIN and SUPERADMIN both use the same unified dashboard
+  return <UnifiedAdminDashboard />
 }

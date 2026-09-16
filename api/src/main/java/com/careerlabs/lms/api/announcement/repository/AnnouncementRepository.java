@@ -13,6 +13,8 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     List<Announcement> findAllByOrderByPinnedDescCreatedAtDesc();
 
     List<Announcement> findByStatus(AnnouncementStatus status);
+ 
+    long countByStatus(AnnouncementStatus status);
 
     /** Due-for-publish scan for the scheduler. */
     List<Announcement> findByStatusAndScheduledAtLessThanEqual(AnnouncementStatus status, Instant now);

@@ -23,6 +23,8 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     List<Course> findAllByOrderByCreatedAtDesc();
 
     List<Course> findByStatusOrderByCreatedAtDesc(CourseStatus status);
+ 
+    long countByStatus(CourseStatus status);
 
     @Query("SELECT DISTINCT b.course FROM Batch b WHERE b.trainerId = :trainerId AND b.course IS NOT NULL AND (b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.PUBLISHED OR b.course.status = com.careerlabs.lms.api.course.entity.CourseStatus.ARCHIVED)")
     List<Course> findCoursesByTrainerId(@Param("trainerId") Long trainerId);

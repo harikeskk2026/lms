@@ -228,8 +228,8 @@ export default function TrainerDashboardView() {
                  <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100 mb-3 break-words">{b.batchName}</h4>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Attendance</span>
-                    <span className={`font-bold ${b.attendancePct >= 75 ? 'text-green-600' : b.attendancePct >= 60 ? 'text-amber-600' : 'text-red-500'}`}>{b.attendancePct}%</span>
+                    <span className="text-gray-500 dark:text-gray-400">Attendance</span>
+                    <span className={`font-bold ${b.attendancePct >= 75 ? 'text-green-600 dark:text-green-400' : b.attendancePct >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500 dark:text-red-400'}`}>{b.attendancePct}%</span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
                     <div
@@ -240,8 +240,8 @@ export default function TrainerDashboardView() {
                   {b.progressPct > 0 && (
                     <>
                       <div className="flex justify-between text-xs mt-1">
-                        <span className="text-gray-500">Progress</span>
-                        <span className="font-bold text-purple-600">{b.progressPct}%</span>
+                        <span className="text-gray-500 dark:text-gray-400">Progress</span>
+                        <span className="font-bold text-purple-600 dark:text-purple-400">{b.progressPct}%</span>
                       </div>
                       <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
                         <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${b.progressPct}%` }} />

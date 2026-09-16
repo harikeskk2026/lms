@@ -11,4 +11,6 @@ public interface QuizRepository extends JpaRepository<Quiz, Long> {
     List<Quiz> findAllByOrderByCreatedAtDesc();
 
     List<Quiz> findAllByStatusOrderByCreatedAtDesc(QuizStatus status);
+ 
+    long countByStatus(QuizStatus status);
 }

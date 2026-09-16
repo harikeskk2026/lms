@@ -338,7 +338,7 @@ export default function AssignmentDetailPage() {
               <h1 className="font-display text-xl font-extrabold text-gray-900 dark:text-white">{assignment.title}</h1>
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[assignment.status]}`}>{assignment.status}</span>
             </div>
-            <p className="text-sm text-gray-500">{assignment.course?.title ?? '—'} · {assignment.batch?.name ?? '—'}</p>
+            <p className="text-sm text-gray-500">{assignment.course?.title || '—'} · {assignment.batch?.name || '—'}</p>
           </div>
           <div className="flex gap-2">
             {assignment.status === 'DRAFT' && (
@@ -377,8 +377,8 @@ export default function AssignmentDetailPage() {
         <div className="lg:col-span-2 glass-card p-6 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { icon: BookOpen, label: 'Course', value: assignment.course?.title ?? '—' },
-              { icon: Users, label: 'Batch', value: assignment.batch?.name ?? '—' },
+              { icon: BookOpen, label: 'Course', value: assignment.course?.title || '—' },
+              { icon: Users, label: 'Batch', value: assignment.batch?.name || '—' },
               { icon: Calendar, label: 'End Date', value: formatAssignmentDueDate(assignment.dueDate, assignment.closeTime, assignment.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy') },
               { icon: Award, label: 'Total Marks', value: assignment.totalMarks },
             ].map(({ icon: Icon, label, value }) => (

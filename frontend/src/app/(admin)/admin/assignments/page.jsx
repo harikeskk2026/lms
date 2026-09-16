@@ -166,8 +166,8 @@ export default function AssignmentsPage() {
     setForm({
       title: assignment.title,
       description: assignment.description,
-      courseId: assignment.course?.id ? String(assignment.course.id) : '',
-      batchId: assignment.batch?.id ? String(assignment.batch.id) : '',
+      courseId: assignment.course?.id != null ? String(assignment.course.id) : '',
+      batchId: assignment.batch?.id != null ? String(assignment.batch.id) : '',
       startDate: assignment.startDate || '',
       publishTime: assignment.publishTime ? assignment.publishTime.substring(0, 5) : '',
       dueDate: assignment.dueDate,
@@ -644,8 +644,8 @@ export default function AssignmentsPage() {
                           {a.title}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course?.title ?? '—'}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch?.name ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.course?.title || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.batch?.name || '—'}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{formatAssignmentDueDate(a.dueDate, a.closeTime, a.closeTime ? 'dd MMM yyyy, h:mm a' : 'dd MMM yyyy')}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.totalMarks}</td>
                       <td className="px-4 py-3">

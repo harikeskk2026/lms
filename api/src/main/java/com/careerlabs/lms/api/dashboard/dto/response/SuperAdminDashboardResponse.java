@@ -7,6 +7,9 @@ public record SuperAdminDashboardResponse(
         Overview overview,
         Performance performance,
         Attendance attendance,
+        AdminDashboardResponse.Assignments assignments,
+        AdminDashboardResponse.Quizzes quizzes,
+        AdminDashboardResponse.Drafts drafts,
         Placement placement,
         List<AdminDashboardResponse.UpcomingSession> upcomingSessions,
         List<AdminDashboardResponse.ActivityItem> recentActivity

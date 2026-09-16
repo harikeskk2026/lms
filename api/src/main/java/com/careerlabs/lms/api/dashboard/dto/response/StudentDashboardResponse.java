@@ -93,7 +93,13 @@ public record StudentDashboardResponse(
             String batchName,
             String title,
             LocalDateTime date,
-            String meetLink
+            String meetLink,
+            String status,
+            LocalDateTime scheduledEnd,
+            String courseTitle
     ) {
+        public UpcomingClass(Long classId, String batchName, String title, LocalDateTime date, String meetLink) {
+            this(classId, batchName, title, date, meetLink, "UPCOMING", null, null);
+        }
     }
 }

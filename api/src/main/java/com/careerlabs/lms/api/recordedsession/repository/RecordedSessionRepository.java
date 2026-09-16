@@ -13,4 +13,6 @@ public interface RecordedSessionRepository extends JpaRepository<RecordedSession
     List<RecordedSession> findByCourseIdAndStatusOrderByCreatedAtDesc(Long courseId, RecordedSessionStatus status);
 
     List<RecordedSession> findByStatusOrderByCreatedAtDesc(RecordedSessionStatus status);
+ 
+    long countByStatus(RecordedSessionStatus status);
 }

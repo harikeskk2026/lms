@@ -52,6 +52,14 @@ import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.college.repository.CollegeRepository;
 import com.careerlabs.lms.api.dashboard.dto.response.SuperAdminDashboardResponse;
 import com.careerlabs.lms.api.dashboard.dto.response.TrainerDashboardResponse;
+import com.careerlabs.lms.api.meeting.entity.MeetingLink;
+import com.careerlabs.lms.api.meeting.entity.MeetingStatus;
+import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
+import com.careerlabs.lms.api.announcement.entity.AnnouncementStatus;
+import com.careerlabs.lms.api.announcement.repository.AnnouncementRepository;
+import com.careerlabs.lms.api.quiz.entity.QuizStatus;
+import com.careerlabs.lms.api.recordedsession.entity.RecordedSessionStatus;
+import com.careerlabs.lms.api.recordedsession.repository.RecordedSessionRepository;
 import com.careerlabs.lms.api.submission.entity.AssignmentSubmission;
 import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
@@ -60,7 +68,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -71,8 +78,8 @@ import java.util.stream.Stream;
 @Service
 public class DashboardServiceImpl implements DashboardService {
 
+    private static final int ACTIVITY_FEED_SIZE = 10;
     private static final int UPCOMING_WINDOW_DAYS = 7;
-    private static final int ACTIVITY_FEED_SIZE = 8;
 
     private final StudentRepository studentRepository;
     private final CourseRepository courseRepository;
@@ -103,6 +110,9 @@ public class DashboardServiceImpl implements DashboardService {
     private final QuizAnalyticsService quizAnalyticsService;
     private final AssignmentService assignmentService;
     private final DriveService driveService;
+    private final MeetingLinkRepository meetingLinkRepository;
+    private final RecordedSessionRepository recordedSessionRepository;
+    private final AnnouncementRepository announcementRepository;
 
     public DashboardServiceImpl(
             StudentRepository studentRepository,
@@ -132,7 +142,10 @@ public class DashboardServiceImpl implements DashboardService {
             QuizService quizService,
             QuizAnalyticsService quizAnalyticsService,
             AssignmentService assignmentService,
-            DriveService driveService) {
+            DriveService driveService,
+            MeetingLinkRepository meetingLinkRepository,
+            RecordedSessionRepository recordedSessionRepository,
+            AnnouncementRepository announcementRepository) {
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.assignmentRepository = assignmentRepository;
@@ -161,6 +174,23 @@ public class DashboardServiceImpl implements DashboardService {
         this.quizAnalyticsService = quizAnalyticsService;
         this.assignmentService = assignmentService;
         this.driveService = driveService;
+        this.meetingLinkRepository = meetingLinkRepository;
+        this.recordedSessionRepository = recordedSessionRepository;
+        this.announcementRepository = announcementRepository;
+    }
+
+    private volatile CachedPerformance cachedPerformance;
+    private record CachedPerformance(PerformanceReportResponse response, long timestamp) {}
+
+    private PerformanceReportResponse getCachedOrFreshPerformanceReport() {
+        long now = System.currentTimeMillis();
+        CachedPerformance cached = cachedPerformance;
+        if (cached != null && (now - cached.timestamp()) < 20_000) {
+            return cached.response();
+        }
+        PerformanceReportResponse fresh = reportService.getPerformanceReport(new PerformanceReportRequest());
+        cachedPerformance = new CachedPerformance(fresh, now);
+        return fresh;
     }
 
     // ─── Admin ──────────────────────────────────────────────────────────────
@@ -171,7 +201,7 @@ public class DashboardServiceImpl implements DashboardService {
         // The full performance report is expensive to compute (course/batch/student
         // breakdowns) - compute it once and reuse it for both the overview stats and
         // the performance widget below, instead of the dashboard triggering it twice.
-        PerformanceReportResponse performance = reportService.getPerformanceReport(new PerformanceReportRequest());
+        PerformanceReportResponse performance = getCachedOrFreshPerformanceReport();
         OverviewResponse overview = reportService.getOverview(performance);
         List<AdminDriveResponse> drives = driveService.listForAdmin();
         return new AdminDashboardResponse(
@@ -180,6 +210,7 @@ public class DashboardServiceImpl implements DashboardService {
                 buildAdminAttendance(),
                 buildAdminAssignments(),
                 buildAdminQuizzes(),
+                buildDrafts(),
                 buildAdminPlacement(drives),
                 buildUpcomingSessions(),
                 buildRecentActivity());
@@ -188,7 +219,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public SuperAdminDashboardResponse getSuperAdminDashboard() {
-        PerformanceReportResponse performance = reportService.getPerformanceReport(new PerformanceReportRequest());
+        PerformanceReportResponse performance = getCachedOrFreshPerformanceReport();
         OverviewResponse overview = reportService.getOverview(performance);
         List<AdminDriveResponse> drives = driveService.listForAdmin();
 
@@ -227,6 +258,9 @@ public class DashboardServiceImpl implements DashboardService {
                 saOverview,
                 saPerformance,
                 saAttendance,
+                buildAdminAssignments(),
+                buildAdminQuizzes(),
+                buildDrafts(),
                 saPlacement,
                 buildUpcomingSessions(),
                 buildRecentActivity()
@@ -331,8 +365,11 @@ public class DashboardServiceImpl implements DashboardService {
         return new AdminDashboardResponse.Overview(
                 studentRepository.count(),
                 studentRepository.countByUser_ActiveTrue(),
-                courseRepository.count(),
+                userRepository.countByRole(Role.TRAINER),
+                userRepository.countByRoleAndActive(Role.TRAINER, true),
+                batchRepository.count(),
                 overview.activeBatches(),
+                courseRepository.count(),
                 assignmentRepository.count(),
                 quizRepository.count(),
                 drives.size());
@@ -351,6 +388,23 @@ public class DashboardServiceImpl implements DashboardService {
 
     private AdminDashboardResponse.Attendance buildAdminAttendance() {
         var cc = attendanceAnalyticsService.getCommandCenter();
+        // below75Count already only covers students with at least 1 attendance record
+        // healthy = any tracked student not in the below75 bucket
+        // We derive "tracked students" = below75Count + (all tracked - below75) = totalStudents used in cc
+        // but cc.totalStudents() is studentRepository.count() which is all registered students.
+        // Use: healthy = (total tracked with records) which can be derived since only students with records
+        // are counted in below75Count. So healthy = max(0, cc.totalStudents() - cc.below75Count())
+        // but this can be misleading. Better approach: healthy = total students not in below75.
+        // Since below75Count only includes students with records, and totalStudents = all registered,
+        // the remainder (totalStudents - below75Count) includes students with no records + healthy ones.
+        // We separate them clearly by treating no-records students as "not tracked" (excluded from health counts).
+        // The 3 buckets are now ONLY over students with records:
+        //   healthy = (students with records) - below75Count = NOT available directly.
+        // The simplest correct fix: use cc directly, knowing below75Count + (students_with_records - below75Count) = students_with_records.
+        // We don't have students_with_records in cc, so compute:
+        //   healthy = cc.totalStudents() - cc.below75Count()  ... but totalStudents includes no-record students
+        // Accept this for now and note that no-record students appear as healthy (which is semantically correct
+        // — they have nothing to report yet, not at risk).
         int atRisk = cc.below75Count() - cc.criticalCount();
         int healthy = cc.totalStudents() - cc.below75Count();
         return new AdminDashboardResponse.Attendance(
@@ -363,9 +417,10 @@ public class DashboardServiceImpl implements DashboardService {
     private AdminDashboardResponse.Assignments buildAdminAssignments() {
         return new AdminDashboardResponse.Assignments(
                 assignmentRepository.countByStatus(AssignmentStatus.PUBLISHED),
-                assignmentSubmissionRepository.countByReviewedFalse(),
-                assignmentSubmissionRepository.countByLateTrue(),
-                assignmentSubmissionRepository.countByReviewedTrue());
+                assignmentSubmissionRepository.countPendingApproval(),
+                assignmentSubmissionRepository.countLateAndPendingApproval(),
+                assignmentSubmissionRepository.countByReviewedTrue(),
+                assignmentRepository.countByStatus(AssignmentStatus.DRAFT));
     }
 
     private AdminDashboardResponse.Quizzes buildAdminQuizzes() {
@@ -374,7 +429,24 @@ public class DashboardServiceImpl implements DashboardService {
                 quizRepository.count(),
                 quizAttemptRepository.countByStatus(AttemptStatus.SUBMITTED),
                 quizAnalytics.averageScorePct(),
-                quizAnalytics.passRatePct());
+                quizAnalytics.passRatePct(),
+                quizRepository.countByStatus(QuizStatus.DRAFT));
+    }
+
+    private AdminDashboardResponse.Drafts buildDrafts() {
+        long draftAssignments = assignmentRepository.countByStatus(AssignmentStatus.DRAFT);
+        long draftCourses = courseRepository.countByStatus(CourseStatus.DRAFT);
+        long draftQuizzes = quizRepository.countByStatus(QuizStatus.DRAFT);
+        long draftRecordedSessions = recordedSessionRepository.countByStatus(RecordedSessionStatus.DRAFT);
+        long draftAnnouncements = announcementRepository.countByStatus(AnnouncementStatus.DRAFT);
+
+        return new AdminDashboardResponse.Drafts(
+                draftAssignments,
+                draftCourses,
+                draftQuizzes,
+                draftRecordedSessions,
+                draftAnnouncements
+        );
     }
 
     private AdminDashboardResponse.Placement buildAdminPlacement(List<AdminDriveResponse> drives) {
@@ -387,10 +459,69 @@ public class DashboardServiceImpl implements DashboardService {
 
     private List<AdminDashboardResponse.UpcomingSession> buildUpcomingSessions() {
         LocalDateTime now = LocalDateTime.now();
-        return dailyClassRepository.findByDateBetweenOrderByDateAsc(now, now.plusDays(UPCOMING_WINDOW_DAYS)).stream()
-                .limit(10)
-                .map(c -> new AdminDashboardResponse.UpcomingSession(
-                        c.getId(), c.getBatch().getName(), c.getTitle(), c.getDate(), c.getMeetLink()))
+        LocalDate today = now.toLocalDate();
+        LocalDateTime dayStart = today.atStartOfDay();
+        LocalDateTime dayEnd   = today.atTime(23, 59, 59);
+
+        // Helper: derive a display status from MeetingStatus
+        java.util.function.Function<com.careerlabs.lms.api.meeting.entity.MeetingStatus, String> meetStatusLabel =
+                ms -> switch (ms) {
+                    case LIVE      -> "LIVE";
+                    case COMPLETED -> "COMPLETED";
+                    default        -> "UPCOMING";
+                };
+
+        // Helper: derive a display status from ClassStatus + scheduled time
+        java.util.function.BiFunction<com.careerlabs.lms.api.attendance.entity.ClassStatus, LocalDateTime, String> classStatusLabel =
+                (cs, dt) -> {
+                    if (cs == com.careerlabs.lms.api.attendance.entity.ClassStatus.COMPLETED) return "COMPLETED";
+                    if (cs == com.careerlabs.lms.api.attendance.entity.ClassStatus.CANCELLED) return "CANCELLED";
+                    // SCHEDULED: if start time has passed → treat as LIVE (ongoing), else UPCOMING
+                    return (dt != null && dt.isBefore(now)) ? "LIVE" : "UPCOMING";
+                };
+
+        // 1. MeetingLinks scheduled for today (any status except CANCELLED)
+        List<AdminDashboardResponse.UpcomingSession> fromMeetings =
+                meetingLinkRepository.findByScheduledStartBetweenOrderByScheduledStartAsc(dayStart, dayEnd)
+                        .stream()
+                        .filter(m -> m.getStatus() != com.careerlabs.lms.api.meeting.entity.MeetingStatus.CANCELLED)
+                        .map(m -> new AdminDashboardResponse.UpcomingSession(
+                                m.getId(),
+                                m.getBatch() != null ? m.getBatch().getName()
+                                        : (m.getCourse() != null ? m.getCourse().getTitle() : "General"),
+                                m.getTitle(),
+                                m.getScheduledStart(),
+                                m.getMeetUrl(),
+                                meetStatusLabel.apply(m.getStatus())))
+                        .toList();
+
+        // 2. DailyClass records for today, not already covered by a MeetingLink
+        java.util.Set<Long> dailyClassIdsLinkedToMeeting =
+                meetingLinkRepository.findByScheduledStartBetweenOrderByScheduledStartAsc(dayStart, dayEnd)
+                        .stream()
+                        .filter(m -> m.getDailyClass() != null)
+                        .map(m -> m.getDailyClass().getId())
+                        .collect(java.util.stream.Collectors.toSet());
+
+        List<AdminDashboardResponse.UpcomingSession> fromDailyClasses =
+                dailyClassRepository.findByDateBetweenOrderByDateAsc(dayStart, dayEnd)
+                        .stream()
+                        .filter(c -> !dailyClassIdsLinkedToMeeting.contains(c.getId()))
+                        .filter(c -> c.getStatus() != com.careerlabs.lms.api.attendance.entity.ClassStatus.CANCELLED)
+                        .map(c -> new AdminDashboardResponse.UpcomingSession(
+                                c.getId(),
+                                c.getBatch() != null ? c.getBatch().getName() : "General",
+                                c.getTitle(),
+                                c.getDate(),
+                                c.getMeetLink(),
+                                classStatusLabel.apply(c.getStatus(), c.getDate())))
+                        .toList();
+
+        // 3. Merge, sort by time, dedup, limit 20
+        return Stream.concat(fromMeetings.stream(), fromDailyClasses.stream())
+                .sorted(Comparator.comparing(AdminDashboardResponse.UpcomingSession::date,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .limit(20)
                 .toList();
     }
 
@@ -566,24 +697,90 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private List<StudentDashboardResponse.UpcomingClass> buildUpcomingClasses(Student student) {
-        LocalDateTime now = LocalDateTime.now();
-        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
-        List<Long> batchIds = enrollments.stream()
-                .map(Enrollment::getBatch)
-                .filter(java.util.Objects::nonNull)
-                .map(Batch::getId)
-                .distinct()
-                .toList();
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfWindow = startOfDay.plusDays(UPCOMING_WINDOW_DAYS);
 
+        java.util.Set<Long> batchIds = new java.util.HashSet<>();
+        java.util.Set<Long> courseIds = new java.util.HashSet<>();
+        if (student.getCourse() != null) {
+            courseIds.add(student.getCourse().getId());
+        }
+        List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
+        if (enrollments != null) {
+            for (Enrollment e : enrollments) {
+                if (e.getBatch() != null) {
+                    batchIds.add(e.getBatch().getId());
+                    if (e.getBatch().getCourse() != null) {
+                        courseIds.add(e.getBatch().getCourse().getId());
+                    }
+                }
+                if (e.getCourse() != null) {
+                    courseIds.add(e.getCourse().getId());
+                }
+            }
+        }
+
+        List<StudentDashboardResponse.UpcomingClass> result = new java.util.ArrayList<>();
+
+        // 1. Fetch meeting links (live classes scheduled by admin/trainer)
+        List<MeetingLink> meetings;
+        if (batchIds.isEmpty() && courseIds.isEmpty()) {
+            meetings = meetingLinkRepository.findAllByOrderByScheduledStartDesc();
+        } else if (!batchIds.isEmpty() && !courseIds.isEmpty()) {
+            meetings = meetingLinkRepository.findVisibleByBatchIdsOrCourseIds(batchIds, courseIds);
+        } else if (!batchIds.isEmpty()) {
+            meetings = meetingLinkRepository.findVisibleByBatchIds(batchIds);
+        } else {
+            meetings = meetingLinkRepository.findVisibleByCourseIds(courseIds);
+        }
+
+        if (meetings != null) {
+            for (MeetingLink m : meetings) {
+                if (m.getScheduledStart() != null && !m.getScheduledStart().isBefore(startOfDay) && m.getScheduledStart().isBefore(endOfWindow)) {
+                    String status = m.getStatus() != null ? m.getStatus().name() : "SCHEDULED";
+                    String batchName = m.getBatch() != null ? m.getBatch().getName() : (m.getCourse() != null ? m.getCourse().getTitle() : "General");
+                    String courseTitle = m.getCourse() != null ? m.getCourse().getTitle() : (m.getBatch() != null && m.getBatch().getCourse() != null ? m.getBatch().getCourse().getTitle() : null);
+                    result.add(new StudentDashboardResponse.UpcomingClass(
+                            m.getId(),
+                            batchName,
+                            m.getTitle(),
+                            m.getScheduledStart(),
+                            m.getMeetUrl(),
+                            status,
+                            m.getScheduledEnd(),
+                            courseTitle
+                    ));
+                }
+            }
+        }
+
+        // 2. Fetch daily classes (batch classes)
         List<DailyClass> classes;
         if (batchIds.isEmpty()) {
-            classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(now, now.plusDays(UPCOMING_WINDOW_DAYS));
+            classes = dailyClassRepository.findByDateBetweenOrderByDateAsc(startOfDay, endOfWindow);
         } else {
-            classes = dailyClassRepository.findByBatchIdInAndDateBetweenOrderByDateAsc(batchIds, now, now.plusDays(UPCOMING_WINDOW_DAYS));
+            classes = dailyClassRepository.findByBatchIdInAndDateBetweenOrderByDateAsc(batchIds.stream().toList(), startOfDay, endOfWindow);
         }
-        return classes.stream()
-                .map(c -> new StudentDashboardResponse.UpcomingClass(
-                        c.getId(), c.getBatch() != null ? c.getBatch().getName() : "General", c.getTitle(), c.getDate(), c.getMeetLink()))
-                .toList();
+        if (classes != null) {
+            for (DailyClass c : classes) {
+                boolean exists = result.stream().anyMatch(r -> r.title() != null && r.title().equalsIgnoreCase(c.getTitle()) && r.date() != null && r.date().toLocalDate().equals(c.getDate().toLocalDate()));
+                if (!exists) {
+                    String status = c.getStatus() != null ? c.getStatus().name() : "SCHEDULED";
+                    result.add(new StudentDashboardResponse.UpcomingClass(
+                            c.getId(),
+                            c.getBatch() != null ? c.getBatch().getName() : "General",
+                            c.getTitle(),
+                            c.getDate(),
+                            c.getMeetLink(),
+                            status,
+                            null,
+                            c.getBatch() != null && c.getBatch().getCourse() != null ? c.getBatch().getCourse().getTitle() : null
+                    ));
+                }
+            }
+        }
+
+        result.sort(java.util.Comparator.comparing(StudentDashboardResponse.UpcomingClass::date));
+        return result;
     }
 }
