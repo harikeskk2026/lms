@@ -11,6 +11,12 @@ const studentService = {
 
   update: (id, student) => apiCall({ method: 'PUT', url: `/students/${id}`, data: student }),
 
+  updatePlacementStatus: (id, placementStatus) => apiCall({
+    method: 'PATCH',
+    url: `/students/${id}/placement-status`,
+    data: { placementStatus },
+  }),
+
   toggleStatus: (id) => apiCall({ method: 'PATCH', url: `/students/${id}/status` }),
 
   remove: (id) => apiCall({ method: 'DELETE', url: `/students/${id}` }),

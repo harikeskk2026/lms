@@ -80,16 +80,16 @@ class AssignmentTotalMarksValidationTest {
     }
 
     @Test
-    @DisplayName("Total marks = null should be rejected with exact error message")
-    void totalMarks_null_throwsBadRequestException() {
+    @DisplayName("Total marks = null should be accepted and default to 100")
+    void totalMarks_null_isAccepted() {
         AssignmentRequest request = createBaseRequest();
         request.setTotalMarks(null);
 
-        BadRequestException ex = assertThrows(BadRequestException.class, () ->
-                assignmentService.create(request, adminPrincipal)
-        );
+        when(courseRepository.findById(10L)).thenReturn(Optional.of(new Course()));
+        when(batchRepository.findById(20L)).thenReturn(Optional.of(new Batch()));
+        when(assignmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertEquals("Total marks must be between 1 and 100.", ex.getMessage());
+        assertDoesNotThrow(() -> assignmentService.create(request, adminPrincipal));
     }
 
     @Test

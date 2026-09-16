@@ -85,12 +85,20 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
     @Override
     @Transactional(readOnly = true)
     public SubmissionListResponse listByAssignment(Long assignmentId) {
-        return listByAssignment(assignmentId, null);
+        return listByAssignment(assignmentId, null, null, null, null, null, null);
     }
 
     @Override
     @Transactional(readOnly = true)
     public SubmissionListResponse listByAssignment(Long assignmentId, JwtUserPrincipal principal) {
+        return listByAssignment(assignmentId, null, null, null, null, null, principal);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SubmissionListResponse listByAssignment(Long assignmentId, String search, SubmissionStatus status,
+                                                   String evaluation, LocalDate dateFrom, LocalDate dateTo,
+                                                   JwtUserPrincipal principal) {
         Assignment assignment = findAssignmentOrThrow(assignmentId);
         requireAssignmentBatchOwnership(assignment, principal);
 
@@ -101,7 +109,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
                 .filter(s -> s.getStudent() != null && s.getStudent().getId() != null)
                 .collect(Collectors.toMap(s -> s.getStudent().getId(), Function.identity(), (existing, replacing) -> existing));
 
-        List<SubmissionRowResponse> rows = new ArrayList<>(students.stream()
+        List<SubmissionRowResponse> allRows = new ArrayList<>(students.stream()
                 .map(student -> {
                     AssignmentSubmission submission = byStudentId.get(student.getId());
                     return submission != null ? toRow(submission) : pendingRow(student);
@@ -112,18 +120,56 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         Set<Long> enrolledStudentIds = students.stream().map(Student::getId).collect(Collectors.toSet());
         byStudentId.values().stream()
                 .filter(sub -> sub.getStudent() != null && !enrolledStudentIds.contains(sub.getStudent().getId()))
-                .forEach(sub -> rows.add(toRow(sub)));
+                .forEach(sub -> allRows.add(toRow(sub)));
 
-        rows.sort(Comparator.comparing(
+        allRows.sort(Comparator.comparing(
                 r -> (r.studentName() != null ? r.studentName() : ""),
                 String.CASE_INSENSITIVE_ORDER));
 
-        int submitted = (int) rows.stream().filter(r -> r.status() == SubmissionStatus.SUBMITTED).count();
-        int late = (int) rows.stream().filter(r -> r.status() == SubmissionStatus.LATE).count();
-        int total = rows.size();
-        int pending = (int) rows.stream().filter(r -> r.status() == SubmissionStatus.PENDING || r.status() == SubmissionStatus.PENDING_APPROVAL).count();
+        int submitted = (int) allRows.stream().filter(r -> r.status() == SubmissionStatus.SUBMITTED).count();
+        int late = (int) allRows.stream().filter(r -> r.status() == SubmissionStatus.LATE).count();
+        int total = allRows.size();
+        int pending = (int) allRows.stream().filter(r -> r.status() == SubmissionStatus.PENDING || r.status() == SubmissionStatus.PENDING_APPROVAL).count();
 
-        return new SubmissionListResponse(rows, new SubmissionSummaryResponse(total, submitted, pending, late));
+        // Apply backend filters
+        String cleanSearch = search != null ? search.trim().toLowerCase() : null;
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+
+        List<SubmissionRowResponse> filteredRows = allRows.stream().filter(row -> {
+            if (cleanSearch != null && !cleanSearch.isEmpty()) {
+                boolean matchName = row.studentName() != null && row.studentName().toLowerCase().contains(cleanSearch);
+                boolean matchEmail = row.studentEmail() != null && row.studentEmail().toLowerCase().contains(cleanSearch);
+                boolean matchId = row.studentId() != null && String.valueOf(row.studentId()).contains(cleanSearch);
+                if (!matchName && !matchEmail && !matchId) {
+                    return false;
+                }
+            }
+            if (status != null && row.status() != status) {
+                return false;
+            }
+            if ("EVALUATED".equalsIgnoreCase(evaluation)) {
+                boolean isEval = row.reviewed() || row.marks() != null;
+                if (!isEval) return false;
+            } else if ("PENDING".equalsIgnoreCase(evaluation)) {
+                boolean isPendingEval = row.submissionId() != null &&
+                        (row.status() == SubmissionStatus.SUBMITTED || row.status() == SubmissionStatus.LATE || row.status() == SubmissionStatus.PENDING_APPROVAL) &&
+                        !row.reviewed() && row.marks() == null;
+                if (!isPendingEval) return false;
+            }
+            if (dateFrom != null) {
+                if (row.submittedAt() == null) return false;
+                LocalDate subDate = row.submittedAt().atZone(zone).toLocalDate();
+                if (subDate.isBefore(dateFrom)) return false;
+            }
+            if (dateTo != null) {
+                if (row.submittedAt() == null) return false;
+                LocalDate subDate = row.submittedAt().atZone(zone).toLocalDate();
+                if (subDate.isAfter(dateTo)) return false;
+            }
+            return true;
+        }).toList();
+
+        return new SubmissionListResponse(filteredRows, new SubmissionSummaryResponse(total, submitted, pending, late));
     }
 
     private static final Set<String> ALLOWED_SUBMISSION_EXTENSIONS = Set.of(
