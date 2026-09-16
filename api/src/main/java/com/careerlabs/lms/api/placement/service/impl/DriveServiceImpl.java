@@ -17,6 +17,7 @@ import com.careerlabs.lms.api.placement.repository.DriveApplicationStatusHistory
 import com.careerlabs.lms.api.placement.repository.DriveRepository;
 import com.careerlabs.lms.api.placement.service.DriveService;
 import com.careerlabs.lms.api.placement.service.PlacementEligibilityGuard;
+import com.careerlabs.lms.api.placement.validation.DriveValidationMessages;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import org.springframework.stereotype.Service;
@@ -131,20 +132,41 @@ public class DriveServiceImpl implements DriveService {
                 .toList();
     }
 
+    /**
+     * Apply deadline must be on or before the drive date - it is intentionally NOT
+     * compared to today independently of the drive date, so an existing drive whose
+     * date has since arrived (or an admin editing history) can still carry a deadline
+     * that is now in the past, as long as it never came after its own drive date.
+     */
     private void validateDriveDates(LocalDate driveDate, LocalDate applyDeadline, boolean creating) {
         if (driveDate == null && applyDeadline == null) {
             return;
         }
-        if (driveDate != null && applyDeadline != null && !applyDeadline.isBefore(driveDate)) {
-            throw new BadRequestException("Apply deadline must be before the drive date");
+        if (driveDate != null && applyDeadline != null && applyDeadline.isAfter(driveDate)) {
+            throw new BadRequestException(DriveValidationMessages.APPLY_DEADLINE_AFTER_DRIVE_DATE);
         }
-        if (creating) {
-            LocalDate today = LocalDate.now();
-            if (driveDate != null && driveDate.isBefore(today)) {
-                throw new BadRequestException("Drive date cannot be in the past");
-            }
-            if (applyDeadline != null && applyDeadline.isBefore(today)) {
-                throw new BadRequestException("Apply deadline cannot be in the past");
+        if (creating && driveDate != null && driveDate.isBefore(LocalDate.now())) {
+            throw new BadRequestException("Drive date cannot be in the past");
+        }
+    }
+
+    /**
+     * Defense-in-depth: a client could otherwise submit eligibleBatchIds that don't
+     * belong to any of the submitted eligibleCourseIds. Skipped when no course is
+     * selected (batch-only restriction, independent of course, remains supported) or
+     * when no specific batch is selected (empty batches = "all batches under the
+     * selected course(s)", unchanged - see PlacementEligibilityGuard).
+     */
+    private void validateEligibleBatchesBelongToCourses(List<Long> eligibleCourseIds, Set<Batch> eligibleBatches) {
+        if (eligibleCourseIds == null || eligibleCourseIds.isEmpty() || eligibleBatches.isEmpty()) {
+            return;
+        }
+        Set<Long> courseIdSet = new LinkedHashSet<>(eligibleCourseIds);
+        for (Batch batch : eligibleBatches) {
+            Long batchCourseId = batch.getCourse() != null ? batch.getCourse().getId() : null;
+            if (batchCourseId == null || !courseIdSet.contains(batchCourseId)) {
+                throw new BadRequestException(DriveValidationMessages.ELIGIBLE_BATCH_COURSE_MISMATCH
+                        + ": '" + batch.getName() + "'");
             }
         }
     }
@@ -165,7 +187,9 @@ public class DriveServiceImpl implements DriveService {
         drive.setMinPercentage(request.getMinPercentage());
         drive.setMaxBacklogs(request.getMaxBacklogs());
         drive.setMinAttendancePct(request.getMinAttendancePct());
-        drive.setEligibleBatches(resolveBatches(request.getEligibleBatchIds()));
+        Set<Batch> batches = resolveBatches(request.getEligibleBatchIds());
+        validateEligibleBatchesBelongToCourses(request.getEligibleCourseIds(), batches);
+        drive.setEligibleBatches(batches);
         drive.setEligibleCourses(resolveCourses(request.getEligibleCourseIds()));
     }
 
@@ -185,7 +209,9 @@ public class DriveServiceImpl implements DriveService {
         drive.setMinPercentage(request.getMinPercentage());
         drive.setMaxBacklogs(request.getMaxBacklogs());
         drive.setMinAttendancePct(request.getMinAttendancePct());
-        drive.setEligibleBatches(resolveBatches(request.getEligibleBatchIds()));
+        Set<Batch> batches = resolveBatches(request.getEligibleBatchIds());
+        validateEligibleBatchesBelongToCourses(request.getEligibleCourseIds(), batches);
+        drive.setEligibleBatches(batches);
         drive.setEligibleCourses(resolveCourses(request.getEligibleCourseIds()));
     }
 

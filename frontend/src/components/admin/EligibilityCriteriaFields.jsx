@@ -20,6 +20,30 @@ export default function EligibilityCriteriaFields({ value, onChange, errors = {}
   const activeScore = scoreType === 'CGPA' ? (value.minCgpa ?? '') : (value.minPercentage ?? '')
   const scoreError = errors.minCgpa || errors.minPercentage
 
+  const selectedCourseIds = (value.eligibleCourseIds || []).map(String)
+  // Once course(s) are selected, only batches belonging to one of them are eligible.
+  // With no course selected, batches stay unfiltered - a batch-only restriction,
+  // independent of course, remains supported (existing behavior, unchanged).
+  const filteredBatches = selectedCourseIds.length === 0
+    ? batches
+    : batches.filter(b => selectedCourseIds.includes(String(b.course?.id)))
+  const selectedCourseKey = selectedCourseIds.slice().sort().join(',')
+
+  // Keep the batch selection consistent with the course selection: drop any
+  // previously-chosen batch that no longer belongs to one of the currently
+  // selected courses, instead of silently persisting a stale, mismatched pick.
+  useEffect(() => {
+    if (selectedCourseIds.length === 0 || batches.length === 0) return
+    const allowedBatchIds = new Set(filteredBatches.map(b => String(b.id)))
+    const currentBatchIds = value.eligibleBatchIds || []
+    const nextBatchIds = currentBatchIds.filter(id => allowedBatchIds.has(String(id)))
+    if (nextBatchIds.length !== currentBatchIds.length) {
+      onChange({ eligibleBatchIds: nextBatchIds })
+    }
+    // Re-run only when the course selection or the loaded batch list actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCourseKey, batches.length])
+
   const handleScoreChange = (e) => {
     const num = e.target.value === '' ? null : Number(e.target.value)
     if (scoreType === 'CGPA') {
@@ -77,16 +101,6 @@ export default function EligibilityCriteriaFields({ value, onChange, errors = {}
       </div>
       <div className="grid grid-cols-1 gap-3">
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Eligible Batches</label>
-          <MultiSelect
-            value={value.eligibleBatchIds || []}
-            onChange={next => onChange({ eligibleBatchIds: next })}
-            options={batches.map(b => ({ value: b.id, label: b.name }))}
-            placeholder={batches.length === 0 ? 'None available' : 'All batches (no restriction)'}
-            emptyLabel="No batches available"
-          />
-        </div>
-        <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Eligible Courses</label>
           <MultiSelect
             value={value.eligibleCourseIds || []}
@@ -95,6 +109,23 @@ export default function EligibilityCriteriaFields({ value, onChange, errors = {}
             placeholder={courses.length === 0 ? 'None available' : 'All courses (no restriction)'}
             emptyLabel="No courses available"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Eligible Batches</label>
+          <MultiSelect
+            value={value.eligibleBatchIds || []}
+            onChange={next => onChange({ eligibleBatchIds: next })}
+            options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
+            placeholder={
+              filteredBatches.length === 0
+                ? (selectedCourseIds.length > 0 ? 'No batches for the selected course(s)' : 'None available')
+                : 'All batches (no restriction)'
+            }
+            emptyLabel="No batches available"
+          />
+          {selectedCourseIds.length > 0 && (
+            <p className="text-[11px] text-gray-400 mt-1">Showing only batches from the selected course(s).</p>
+          )}
         </div>
       </div>
     </div>

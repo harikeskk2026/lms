@@ -22,6 +22,42 @@ const EMPTY_DRIVE_FORM = {
   eligibleBatchIds: [], eligibleCourseIds: [],
 }
 
+// 'YYYY-MM-DD' in the local timezone, matching <input type="date"> values - avoids
+// the UTC-vs-local day drift toISOString() would introduce for timezones ahead of UTC.
+const toDateInputValue = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+// Single source of truth for Drive form validity - used both to gate the submit
+// button live on every render and to produce the same errors on submit, so a field
+// fixed by the user is reflected immediately rather than leaving a stale error.
+const getDriveFormErrors = (form, isOpenToAll, isEditing) => {
+  const errors = {}
+  if (!form.companyName?.trim()) errors.companyName = 'Company name is required'
+  if (!form.role?.trim()) errors.role = 'Role is required'
+  if (!form.description?.trim()) errors.description = 'Description is required'
+  if (!form.driveType) errors.driveType = 'Drive type is required'
+  if (!form.driveDate) errors.driveDate = 'Drive date is required'
+  if (!form.applyDeadline) errors.applyDeadline = 'Apply deadline is required'
+
+  // Apply deadline must be on or before the drive date - NOT compared to "today"
+  // independently of the drive date (a deadline may legitimately be in the past
+  // once its drive date has arrived, or when editing historical drives).
+  if (form.driveDate && form.applyDeadline && form.applyDeadline > form.driveDate) {
+    errors.applyDeadline = 'Apply deadline must be on or before the drive date'
+    errors.driveDate = errors.driveDate || 'Apply deadline must be on or before the drive date'
+  }
+  if (!isEditing && form.driveDate && form.driveDate < toDateInputValue(new Date())) {
+    errors.driveDate = errors.driveDate || 'Drive date cannot be in the past'
+  }
+
+  if (!isOpenToAll && !form.minCgpa && !form.minPercentage) {
+    const msg = 'Enter a minimum CGPA or Percentage'
+    errors.minCgpa = msg
+    errors.minPercentage = msg
+  }
+  return errors
+}
+
 const TABS = ['Students', 'Mock Interviews', 'Interview Questions', 'Aptitude Tips', 'Resources', 'Preparation', 'Company Drives', 'Interviews', 'Offers']
 const APPLICATION_OFFERABLE = ['SELECTED', 'OFFERED']
 const INTERVIEW_CANDIDATE_STATUSES = ['SHORTLISTED', 'RESUME_SHARED', 'SELECTED']
@@ -101,6 +137,10 @@ export default function PlacementPage() {
   const [prepQuestionsText, setPrepQuestionsText] = useState('')
   const [driveErrors, setDriveErrors] = useState({})
   const [driveGeneral, setDriveGeneral] = useState(false)
+  const driveFormErrors = useMemo(
+    () => getDriveFormErrors(driveForm, driveGeneral, !!editingDrive),
+    [driveForm, driveGeneral, editingDrive]
+  )
   const [savingQuestions, setSavingQuestions] = useState(false)
 
   // Students tab filters/paging
@@ -536,25 +576,7 @@ export default function PlacementPage() {
 
   const handleCreateDrive = async (e) => {
     e.preventDefault(); setSaving(true); setDriveErrors({})
-    const fieldErrors = {}
-    const driveDate = driveForm.driveDate ? new Date(driveForm.driveDate + 'T00:00:00') : null
-    const deadline = driveForm.applyDeadline ? new Date(driveForm.applyDeadline + 'T00:00:00') : null
-    const todayStart = new Date(new Date().toDateString())
-    if (driveDate && deadline && deadline >= driveDate) {
-      fieldErrors.applyDeadline = 'Apply deadline must be before the drive date'
-      fieldErrors.driveDate = 'Apply deadline must be before the drive date'
-    }
-    if (driveDate && driveDate < todayStart) {
-      fieldErrors.driveDate = fieldErrors.driveDate || 'Drive date cannot be in the past'
-    }
-    if (deadline && deadline < todayStart) {
-      fieldErrors.applyDeadline = fieldErrors.applyDeadline || 'Apply deadline cannot be in the past'
-    }
-    if (!driveGeneral && !driveForm.minCgpa && !driveForm.minPercentage) {
-      const msg = 'Enter a minimum CGPA or Percentage'
-      fieldErrors.minCgpa = msg
-      fieldErrors.minPercentage = msg
-    }
+    const fieldErrors = getDriveFormErrors(driveForm, driveGeneral, !!editingDrive)
     if (Object.keys(fieldErrors).length > 0) {
       setDriveErrors(fieldErrors)
       toast.error(Object.values(fieldErrors)[0])
@@ -566,6 +588,12 @@ export default function PlacementPage() {
         ...driveForm,
         requirements: driveForm.requirements.split(',').map(s => s.trim()).filter(Boolean),
         skills: driveForm.skills.split(',').map(s => s.trim()).filter(Boolean),
+        // Open to All means no eligibility restriction of any kind - never submit
+        // stale score/backlog/batch/course criteria left over from a prior
+        // Restricted configuration.
+        minCgpa: driveGeneral ? null : driveForm.minCgpa,
+        minPercentage: driveGeneral ? null : driveForm.minPercentage,
+        maxBacklogs: driveGeneral ? null : driveForm.maxBacklogs,
         eligibleBatchIds: driveGeneral ? [] : (driveForm.eligibleBatchIds || []),
         eligibleCourseIds: driveGeneral ? [] : (driveForm.eligibleCourseIds || []),
         minAttendancePct: editingDrive ? editingDrive.minAttendancePct : undefined,
@@ -601,7 +629,14 @@ export default function PlacementPage() {
 
   const handleEditDrive = (d) => {
     setEditingDrive(d)
-    setDriveGeneral(!(d.eligibleBatches?.length || d.eligibleCourses?.length))
+    // "Restricted" means ANY eligibility criterion is set - not just batches/courses,
+    // so a drive restricted only by CGPA/percentage/backlogs still opens as Restricted
+    // (showing those values) instead of being mislabeled Open to All.
+    const hasRestriction = Boolean(
+      d.eligibleBatches?.length || d.eligibleCourses?.length ||
+      d.minCgpa != null || d.minPercentage != null || d.maxBacklogs != null
+    )
+    setDriveGeneral(!hasRestriction)
     setDriveForm({
       companyName: d.companyName || '',
       role: d.role || '',
@@ -2175,17 +2210,19 @@ export default function PlacementPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Date *</label>
               <input type="date" value={driveForm.driveDate} onChange={e => {
                 const newDate = e.target.value
-                setDriveForm(f => ({ ...f, driveDate: newDate, applyDeadline: (newDate && f.applyDeadline && f.applyDeadline >= newDate) ? '' : f.applyDeadline }))
+                // Apply deadline may equal the (new) drive date - only clear it if it would
+                // now be strictly AFTER the drive date.
+                setDriveForm(f => ({ ...f, driveDate: newDate, applyDeadline: (newDate && f.applyDeadline && f.applyDeadline > newDate) ? '' : f.applyDeadline }))
               }} required
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${driveErrors.driveDate ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
-              {driveErrors.driveDate && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.driveDate}</p>}
+                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${(driveFormErrors.driveDate || driveErrors.driveDate) ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
+              {(driveFormErrors.driveDate || driveErrors.driveDate) && <p className="text-[11px] text-red-500 font-medium mt-1">{driveFormErrors.driveDate || driveErrors.driveDate}</p>}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Apply Deadline *</label>
               <input type="date" value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
-                max={driveForm.driveDate ? (() => { const d = new Date(driveForm.driveDate + 'T00:00:00'); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })() : undefined}
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${driveErrors.applyDeadline ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
-              {driveErrors.applyDeadline && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.applyDeadline}</p>}
+                max={driveForm.driveDate || undefined}
+                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${(driveFormErrors.applyDeadline || driveErrors.applyDeadline) ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
+              {(driveFormErrors.applyDeadline || driveErrors.applyDeadline) && <p className="text-[11px] text-red-500 font-medium mt-1">{driveFormErrors.applyDeadline || driveErrors.applyDeadline}</p>}
             </div>
           </div>
           <div>
@@ -2224,7 +2261,23 @@ export default function PlacementPage() {
                 <span className={`text-xs font-semibold ${driveGeneral ? 'text-emerald-600' : 'text-gray-500'}`}>
                   {driveGeneral ? 'Open to all students' : 'Restricted'}
                 </span>
-                <button type="button" onClick={() => setDriveGeneral(g => !g)} role="switch" aria-checked={driveGeneral}
+                <button type="button" onClick={() => setDriveGeneral(g => {
+                  const next = !g
+                  if (next) {
+                    // Switching to Open to All: clear every eligibility-restriction value so
+                    // nothing stale is left in state (and therefore nothing stale gets
+                    // submitted or silently enforced against students).
+                    setDriveForm(f => ({
+                      ...f, minCgpa: null, minPercentage: null, maxBacklogs: null,
+                      eligibleBatchIds: [], eligibleCourseIds: [],
+                    }))
+                    setDriveErrors(errs => {
+                      const { minCgpa, minPercentage, maxBacklogs, eligibleBatchIds, eligibleCourseIds, ...rest } = errs
+                      return rest
+                    })
+                  }
+                  return next
+                })} role="switch" aria-checked={driveGeneral}
                   className={`w-10 h-[22px] rounded-full transition-colors relative ${driveGeneral ? 'bg-green-500' : 'bg-gray-300'}`}>
                   <span className={`absolute top-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-all ${driveGeneral ? 'left-[20px]' : 'left-0.5'}`} />
                 </button>
@@ -2236,27 +2289,17 @@ export default function PlacementPage() {
               </p>
             ) : (
               <>
-                <EligibilityCriteriaFields value={driveForm} errors={driveErrors} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
+                <EligibilityCriteriaFields value={driveForm} errors={{ ...driveErrors, ...driveFormErrors }} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
                 {driveErrors.eligibleBatchIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleBatchIds}</p>}
                 {driveErrors.eligibleCourseIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleCourseIds}</p>}
               </>
             )}
           </div>
           {(() => {
-            const isDriveDeadlineValid = Boolean(
-              driveForm.driveDate &&
-              driveForm.applyDeadline &&
-              driveForm.applyDeadline < driveForm.driveDate
-            )
-            const hasNoDriveErrors = Object.values(driveErrors).filter(Boolean).length === 0
-            const isDriveFormValid = Boolean(
-              driveForm.companyName?.trim() &&
-              driveForm.role?.trim() &&
-              driveForm.description?.trim() &&
-              driveForm.driveType &&
-              isDriveDeadlineValid &&
-              hasNoDriveErrors
-            )
+            // driveFormErrors is recomputed live from the current form on every render
+            // (see the useMemo above), so fixing a field re-enables the button
+            // immediately - no stale error state, no need to resubmit or reopen the panel.
+            const isDriveFormValid = Object.keys(driveFormErrors).length === 0
             return (
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setDrivePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
