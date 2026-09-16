@@ -10,4 +10,6 @@ public interface AnnouncementCommentService {
     List<AnnouncementCommentResponse> list(Long announcementId);
 
     AnnouncementCommentResponse add(Long announcementId, AnnouncementCommentRequest request, Long userId);
+
+    void delete(Long commentId);
 }

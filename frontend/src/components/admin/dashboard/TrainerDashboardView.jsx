@@ -147,8 +147,8 @@ export default function TrainerDashboardView() {
       </div>
 
       {/* Today's Schedule */}
-      <div className="glass-card p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+      <div className="glass-card p-6 flex flex-col" style={{ height: '380px' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Clock size={18} className="text-purple-600 dark:text-purple-400" />
               <h3 className="font-display font-bold text-gray-800 dark:text-white">Today&apos;s Live Schedule</h3>
@@ -161,13 +161,13 @@ export default function TrainerDashboardView() {
         {loading ? (
           <div className="space-y-3">{[...Array(2)].map((_, i) => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
         ) : (stats?.todaySchedule || []).length === 0 ? (
-          <div className="p-5 sm:p-8 text-center bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
+          <div className="flex-1 flex flex-col items-center justify-center text-center bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
             <Clock size={28} className="text-purple-300 dark:text-purple-700 mx-auto mb-2" />
             <p className="text-sm font-semibold text-purple-800 dark:text-purple-200">No sessions scheduled for today</p>
             <p className="text-xs text-purple-500/80 dark:text-purple-400 mt-1">Check back later or review your batch schedule in Courses.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto flex-1" style={{ maxHeight: '280px' }}>
             {stats.todaySchedule.map(s => (
               <div key={s.sessionOrClassId} className="flex items-center justify-between p-4 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/30 dark:bg-purple-950/10 hover:border-purple-200 dark:hover:border-purple-800/60 transition-colors">
                 <div className="flex items-center gap-4">
@@ -257,8 +257,8 @@ export default function TrainerDashboardView() {
 
       {/* Pending Evaluations & Quick Actions */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <div className="glass-card p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div className="glass-card p-6 flex flex-col" style={{ height: '380px' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 flex-shrink-0">
             <div className="flex items-center gap-2">
               <PenLine size={17} className="text-purple-600 dark:text-purple-400" />
               <h3 className="font-display font-bold text-gray-800 dark:text-white">Pending Assignments to Grade</h3>
@@ -271,13 +271,13 @@ export default function TrainerDashboardView() {
           {loading ? (
             <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
           ) : (stats?.pendingGrading || []).length === 0 ? (
-            <div className="text-center py-5 sm:py-8 bg-green-50/60 dark:bg-green-950/10 rounded-2xl border border-green-100 dark:border-green-900/20">
+            <div className="flex-1 flex flex-col items-center justify-center text-center bg-green-50/60 dark:bg-green-950/10 rounded-2xl border border-green-100 dark:border-green-900/20">
               <CheckCircle2 size={26} className="text-green-500 mx-auto mb-2" />
               <p className="text-sm font-semibold text-green-700 dark:text-green-400">All submissions evaluated!</p>
               <p className="text-xs text-green-600/60 dark:text-green-500/50 mt-0.5">No pending items.</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto flex-1" style={{ maxHeight: '280px' }}>
               {stats.pendingGrading.map(item => (
                 <div key={item.submissionId} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors">
                   <div className="min-w-0 mr-3">
@@ -297,7 +297,7 @@ export default function TrainerDashboardView() {
           )}
         </div>
 
-        <div className="glass-card p-6">
+        <div className="glass-card p-6 flex flex-col" style={{ height: '380px' }}>
           <div className="flex items-center gap-2 mb-4">
             <Target size={17} className="text-purple-600 dark:text-purple-400" />
             <h3 className="font-display font-bold text-gray-800 dark:text-white">Trainer Quick Actions</h3>

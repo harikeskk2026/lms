@@ -513,10 +513,10 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
         {/* Left: Learning Progress (lg:col-span-7) */}
-        <div className="lg:col-span-7 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col justify-between">
-          <div>
+        <div className="lg:col-span-7 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col" style={{ height: '380px' }}>
+          <div className="flex-1 flex flex-col min-h-0">
             {/* Header with Filter */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                   <BarChart3 size={18} />
@@ -551,9 +551,9 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
               </div>
             </div>
 
-            {/* Vertical Bar Chart matching reference */}
+            {/* Vertical Bar Chart */}
             {chartData.length === 0 ? (
-              <div className="h-60 flex flex-col items-center justify-center text-center p-4">
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                 <BarChart3 size={36} className="text-gray-300 dark:text-gray-600 mb-2" />
                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   {progressView === 'courses' ? 'No course progress recorded yet' : 'No quiz topic data recorded yet'}
@@ -565,19 +565,11 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
                 </p>
               </div>
             ) : (
-              <div className="relative h-64 pt-4 pb-2">
-                {/* Horizontal Grid Lines */}
-                <div className="absolute inset-x-8 inset-y-4 flex flex-col justify-between pointer-events-none opacity-40 dark:opacity-20">
-                  <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
-                  <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
-                  <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
-                  <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
-                  <div className="border-b border-gray-300 dark:border-gray-600 w-full" />
-                </div>
-
-                {/* Y-Axis Labels + Chart Container */}
-                <div className="flex h-full">
-                  <div className="w-8 flex flex-col justify-between text-[11px] font-semibold text-gray-400 dark:text-gray-500 pb-7 select-none">
+              <div className="flex-1 flex flex-col min-h-0 relative">
+                {/* Y-Axis Labels + Scrollable Chart */}
+                <div className="flex flex-1 min-h-0">
+                  {/* Y-Axis labels - fixed, does not scroll */}
+                  <div className="w-8 flex-shrink-0 flex flex-col justify-between text-[11px] font-semibold text-gray-400 dark:text-gray-500 pb-9 pt-2 select-none">
                     <span>100%</span>
                     <span>75%</span>
                     <span>50%</span>
@@ -585,32 +577,47 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
                     <span>0%</span>
                   </div>
 
-                  {/* Bars Flex Row */}
-                  <div className="flex-1 flex items-end justify-around px-2 sm:px-4 pb-7">
-                    {chartData.map((item, idx) => (
-                      <div key={idx} className="flex flex-col items-center group relative h-full justify-end">
-                        {/* Tooltip on hover */}
-                        <div className="absolute -top-7 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none bg-gray-900 text-white text-[10px] font-bold py-0.5 px-2 rounded shadow-md whitespace-nowrap z-20">
-                          {item.name}: {item.pct}%
+                  {/* Horizontal grid lines overlay (positioned behind bars) */}
+                  <div className="flex-1 relative overflow-x-auto overflow-y-hidden pb-9">
+                    <div className="absolute inset-x-0 top-0 bottom-9 flex flex-col justify-between pointer-events-none opacity-40 dark:opacity-20 z-0">
+                      <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
+                      <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
+                      <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
+                      <div className="border-b border-dashed border-gray-300 dark:border-gray-600 w-full" />
+                      <div className="border-b border-gray-300 dark:border-gray-600 w-full" />
+                    </div>
+
+                    {/* Bars — each bar has a min-width so they won't get squished */}
+                    <div
+                      className="h-full flex items-end gap-1 px-2 relative z-10"
+                      style={{ minWidth: `${Math.max(chartData.length * 52, 100)}px` }}
+                    >
+                      {chartData.map((item, idx) => (
+                        <div key={idx} className="flex flex-col items-center group relative flex-1" style={{ minWidth: '44px', height: 'calc(100% - 0px)' }}>
+                          {/* Tooltip on hover */}
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none bg-gray-900 text-white text-[10px] font-bold py-0.5 px-2 rounded shadow-md whitespace-nowrap z-20">
+                            {item.name}: {item.pct}%
+                          </div>
+
+                          {/* Bar */}
+                          <div className="w-full flex items-end justify-center" style={{ height: '100%' }}>
+                            <div
+                              className="w-7 sm:w-9 bg-gradient-to-t from-purple-500 to-violet-400 dark:from-purple-600 dark:to-violet-500 hover:from-purple-600 hover:to-violet-400 rounded-t-xl transition-all duration-300 cursor-pointer shadow-sm"
+                              style={{ height: `${Math.max(item.pct, 4)}%` }}
+                            />
+                          </div>
+
+                          {/* X-Axis Label — truncated to prevent overlap */}
+                          <span
+                            title={item.name}
+                            className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-12 text-center text-[10px] font-medium text-gray-600 dark:text-gray-400 select-none group-hover:text-purple-600 transition-colors"
+                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {item.name.length > 8 ? item.name.slice(0, 7) + '…' : item.name}
+                          </span>
                         </div>
-
-                        {/* Bar */}
-                        <div
-                          className="w-8 sm:w-11 bg-gradient-to-t from-purple-500 to-violet-400 dark:from-purple-600 dark:to-violet-500 hover:from-purple-600 hover:to-violet-400 rounded-t-xl transition-all duration-300 cursor-pointer shadow-sm"
-                          style={{
-                            height: `${Math.max(item.pct, 4)}%`
-                          }}
-                        />
-
-                        {/* X-Axis Label */}
-                        <span
-                          title={item.name}
-                          className="absolute -bottom-6 w-16 sm:w-20 text-center text-[11px] font-medium text-gray-600 dark:text-gray-400 truncate select-none group-hover:text-purple-600 transition-colors"
-                        >
-                          {item.name}
-                        </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -618,10 +625,10 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
           </div>
 
           {/* Dynamic Bottom Row depending on View */}
-          <div className="pt-4 border-t border-gray-50 dark:border-gray-700/40 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+          <div className="pt-3 mt-3 border-t border-gray-50 dark:border-gray-700/40 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
             <span>
               {progressView === 'courses'
-                ? 'Course progress automatically updates as you learn'
+                ? 'Course progress updates as you learn'
                 : 'Topic accuracy based on completed quizzes'}
             </span>
             {progressView === 'courses' ? (
@@ -643,7 +650,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
         </div>
 
         {/* Right: Today Classes (lg:col-span-5) */}
-        <div className="lg:col-span-5 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col" style={{ height: '380px' }}>
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
@@ -671,7 +678,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
 
             {/* Classes List for Today */}
             {todayClasses.length === 0 ? (
-              <div className="py-12 text-center">
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
                 <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-400 flex items-center justify-center mx-auto mb-2">
                   <Calendar size={22} />
                 </div>
@@ -679,7 +686,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
                 <p className="text-xs text-gray-400 mt-0.5">You have no live classes scheduled for today.</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+              <div className="space-y-3 flex-1 overflow-y-auto pr-1" style={{ maxHeight: '260px' }}>
                 {todayClasses.map((cls) => {
                   const isOngoing = cls.displayStatus === 'ONGOING'
                   const isCompleted = cls.displayStatus === 'COMPLETED'
@@ -814,7 +821,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
             )}
           </div>
 
-          <div className="pt-4 border-t border-gray-50 dark:border-gray-700/40 text-right">
+          <div className="pt-3 mt-auto border-t border-gray-50 dark:border-gray-700/40 text-right flex-shrink-0">
             <Link
               href="/student/meeting-links"
               className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline"
@@ -830,7 +837,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
         {/* Left: Recent Activity (lg:col-span-7) */}
-        <div className="lg:col-span-7 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col" style={{ height: '340px' }}>
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
@@ -848,7 +855,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
 
             {/* Activity Stream */}
             {recentActivities.length === 0 ? (
-              <div className="py-12 text-center">
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
                 <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-400 flex items-center justify-center mx-auto mb-2">
                   <Clock size={22} />
                 </div>
@@ -856,7 +863,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
                 <p className="text-xs text-gray-400 mt-0.5">Submit an assignment or complete a quiz to see your timeline.</p>
               </div>
             ) : (
-              <div className="space-y-3.5">
+              <div className="space-y-3.5 overflow-y-auto" style={{ maxHeight: '220px' }}>
                 {recentActivities.map((act) => {
                   const Icon = act.icon
                   return (
@@ -890,7 +897,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
         </div>
 
         {/* Right: Quick Actions (lg:col-span-5) */}
-        <div className="lg:col-span-5 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm flex flex-col" style={{ height: '340px' }}>
           <div>
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
@@ -983,7 +990,7 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
       </div>
 
       {/* ─── ROW 4: LATEST ANNOUNCEMENTS (FULL WIDTH) ────────────────────── */}
-      <div className="bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm">
+      <div className="bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 sm:p-6 shadow-sm" style={{ minHeight: '180px', maxHeight: '320px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
@@ -999,13 +1006,13 @@ const computeClassStatus = (backendStatus, startDate, endDate) => {
         </div>
 
         {announcements.length === 0 ? (
-          <div className="py-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
             <Megaphone size={30} className="text-gray-300 dark:text-gray-600 mx-auto mb-2" />
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No Announcements</p>
             <p className="text-xs text-gray-400 mt-0.5">There are no notices published for your courses or batches right now.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto flex-1" style={{ maxHeight: '220px' }}>
             {announcements.slice(0, 3).map((ann, idx) => {
               const dateVal = ann.publishedAt || ann.createdAt
               return (

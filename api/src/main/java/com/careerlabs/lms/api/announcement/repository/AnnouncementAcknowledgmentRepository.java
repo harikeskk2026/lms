@@ -12,6 +12,9 @@ public interface AnnouncementAcknowledgmentRepository extends JpaRepository<Anno
 
     boolean existsByAnnouncementIdAndStudentId(Long announcementId, Long studentId);
 
+    @Query("SELECT a.announcement.id FROM AnnouncementAcknowledgment a WHERE a.student.id = :studentId")
+    java.util.List<Long> findAnnouncementIdsByStudentId(@Param("studentId") Long studentId);
+
     Optional<AnnouncementAcknowledgment> findByAnnouncementIdAndStudentId(Long announcementId, Long studentId);
 
     long countByAnnouncementId(Long announcementId);

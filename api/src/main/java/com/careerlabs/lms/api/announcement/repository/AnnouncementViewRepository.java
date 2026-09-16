@@ -10,6 +10,9 @@ public interface AnnouncementViewRepository extends JpaRepository<AnnouncementVi
 
     boolean existsByAnnouncementIdAndStudentId(Long announcementId, Long studentId);
 
+    @Query("SELECT v.announcement.id FROM AnnouncementView v WHERE v.student.id = :studentId")
+    java.util.List<Long> findAnnouncementIdsByStudentId(@Param("studentId") Long studentId);
+
     long countByAnnouncementId(Long announcementId);
 
     void deleteAllByStudentId(Long studentId);
