@@ -6,7 +6,7 @@ import {
   UserPlus, FileText, Calendar, ExternalLink, ChevronRight,
   AlertTriangle, ClipboardList, CheckCircle2, Zap,
   ArrowRight, RefreshCw, Activity, TrendingUp, LayoutDashboard,
-  FileEdit, HelpCircle, Video, Bell
+  FileEdit, HelpCircle, Video, Bell, Building2, MapPin, Package
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { adminApi } from '@/lib/api'
@@ -132,6 +132,23 @@ export default function UnifiedAdminDashboard() {
   const [loading, setLoading]       = useState(!dashCache)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError]           = useState(null)
+  const [upcomingDrives, setUpcomingDrives] = useState([])
+
+  const loadDrives = useCallback(() => {
+    adminApi.getDrives({ status: 'ACTIVE', size: 5 })
+      .then(r => {
+        const list = r.data?.data?.content || r.data?.content || r.data?.data || r.data || []
+        const arr = Array.isArray(list) ? list : []
+        // Sort by driveDate ascending, take next 5 upcoming
+        const now = new Date()
+        const upcoming = arr
+          .filter(d => d.driveDate ? new Date(d.driveDate) >= now : true)
+          .sort((a, b) => new Date(a.driveDate || 0) - new Date(b.driveDate || 0))
+          .slice(0, 5)
+        setUpcomingDrives(upcoming.length > 0 ? upcoming : arr.slice(0, 5))
+      })
+      .catch(() => {})
+  }, [])
 
   const load = useCallback((silent, manual) => {
     if (!silent && !dashCache) setLoading(true); else setRefreshing(true)
@@ -153,9 +170,10 @@ export default function UnifiedAdminDashboard() {
 
   useEffect(() => {
     load(!!dashCache, false)
+    loadDrives()
     const id = setInterval(() => load(true, false), REFRESH)
     return () => clearInterval(id)
-  }, [load])
+  }, [load, loadDrives])
 
   const ov = stats?.overview    || {}
   const at = stats?.attendance  || {}
@@ -223,17 +241,17 @@ export default function UnifiedAdminDashboard() {
 
       {/* Pending Actions + Attendance Health */}
       <div className="grid lg:grid-cols-2 gap-5">
-        <Card className="p-5">
+        <Card className="p-5 flex flex-col" style={{ height: '380px' }}>
           <SecTitle>Pending Actions</SecTitle>
           {loading ? (
             <div className="space-y-2">{[0,1,2,3].map(i => <div key={i} className="h-12 bg-gray-50 rounded-xl animate-pulse" />)}</div>
           ) : !hasPend ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
               <CheckCircle2 size={32} className="text-green-400" />
               <p className="text-sm text-gray-400 font-medium">All caught up! No pending actions.</p>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-1 overflow-y-auto flex-1" style={{ maxHeight: '300px' }}>
               <PRow icon={ClipboardList} iconCls="text-red-600"    bgCls="bg-red-50"    label="Assignments awaiting approval"       count={as.pendingSubmissions} href="/admin/assignments" router={router} />
               <PRow icon={AlertTriangle} iconCls="text-amber-600"  bgCls="bg-amber-50"  label="Late submissions awaiting approval"  count={as.lateSubmissions}    href="/admin/assignments" router={router} />
               <PRow icon={FileEdit}      iconCls="text-purple-600" bgCls="bg-purple-50" label="Draft assignments"                   count={dr.assignments}        href="/admin/assignments" router={router} />
@@ -247,11 +265,11 @@ export default function UnifiedAdminDashboard() {
           )}
         </Card>
 
-        <Card className="p-5 overflow-hidden">
+        <Card className="p-5 overflow-hidden flex flex-col" style={{ height: '380px' }}>
           <SecTitle>Attendance Health</SecTitle>
           {loading ? (<div className="h-48 bg-gray-50 rounded-xl animate-pulse" />)
            : pie.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
               <Activity size={32} className="text-gray-200" />
               <p className="text-sm text-gray-400">No attendance data yet</p>
             </div>
@@ -284,17 +302,17 @@ export default function UnifiedAdminDashboard() {
 
       {/* Today's Sessions + Placement Overview */}
       <div className="grid lg:grid-cols-2 gap-5">
-        <Card className="p-5">
+        <Card className="p-5 flex flex-col" style={{ height: '380px' }}>
           <SecTitle action={<button onClick={() => router.push('/admin/meeting-links')} className="flex items-center gap-1 text-xs text-purple-600 font-semibold hover:underline">View All <ArrowRight size={13} /></button>}>Today&apos;s Sessions</SecTitle>
           {loading ? (
             <div className="space-y-3">{[0,1,2,3].map(i => <div key={i} className="h-14 bg-gray-50 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
           ) : !(stats?.upcomingSessions?.length) ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
               <Calendar size={32} className="text-gray-300 dark:text-gray-600" />
               <p className="text-sm text-gray-400">No classes scheduled for today</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto flex-1" style={{ maxHeight: '300px' }}>
               {stats.upcomingSessions.map(s => {
                 const d = s.date ? new Date(s.date) : null
                 const st = s.status || 'UPCOMING'
@@ -331,28 +349,92 @@ export default function UnifiedAdminDashboard() {
           )}
         </Card>
 
-        <Card className="p-5">
-          <SecTitle action={<button onClick={() => router.push('/admin/placement')} className="flex items-center gap-1 text-xs text-purple-600 font-semibold hover:underline">View Placement <ArrowRight size={13} /></button>}>Placement Overview</SecTitle>
+        <Card className="p-5 flex flex-col" style={{ height: '380px' }}>
+          <SecTitle action={<button onClick={() => router.push('/admin/placement')} className="flex items-center gap-1 text-xs text-purple-600 font-semibold hover:underline">View All <ArrowRight size={13} /></button>}>Upcoming Placement Drives</SecTitle>
           {loading ? (
             <div className="space-y-3">{[0,1,2].map(i => <div key={i} className="h-12 bg-gray-50 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
-          ) : !pl.activeDrives ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+          ) : upcomingDrives.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
               <Briefcase size={32} className="text-gray-300 dark:text-gray-600" />
-              <p className="text-sm text-gray-400">No active placement drives</p>
+              <p className="text-sm text-gray-400 font-medium">No upcoming placement drives</p>
+              <button
+                onClick={() => router.push('/admin/placement')}
+                className="mt-2 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline"
+              >
+                Go to Placement →
+              </button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {[
-                { label: 'Active Drives',       val: pl.activeDrives,       c: 'bg-purple-50 dark:bg-purple-950/30 border-purple-100 dark:border-purple-900/40 text-purple-700 dark:text-purple-300', dot: 'bg-purple-500' },
-                { label: 'Available Drives',    val: pl.availableDrives,    c: 'bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900/40 text-blue-700 dark:text-blue-300',       dot: 'bg-blue-500' },
-                { label: 'Interested Students', val: pl.interestedStudents, c: 'bg-green-50 dark:bg-emerald-950/30 border-green-100 dark:border-emerald-900/40 text-green-700 dark:text-emerald-300',    dot: 'bg-green-500' },
-              ].map(row => (
-                <div key={row.label} className={['flex items-center justify-between p-3.5 rounded-xl border', row.c].join(' ')}>
-                  <div className="flex items-center gap-2.5">
-                    <div className={['w-2 h-2 rounded-full', row.dot].join(' ')} />
-                    <span className="text-sm font-medium">{row.label}</span>
+            <div className="space-y-2 overflow-y-auto flex-1" style={{ maxHeight: '300px' }}>
+              {upcomingDrives.map((d, i) => {
+                const driveDate = d.driveDate ? new Date(d.driveDate) : null
+                const deadline = d.applyDeadline ? new Date(d.applyDeadline) : null
+                const isToday = driveDate && driveDate.toDateString() === new Date().toDateString()
+                const isSoon = driveDate && !isToday && (driveDate - new Date()) < 3 * 24 * 60 * 60 * 1000
+                return (
+                  <div
+                    key={d.id || i}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-purple-100/60 dark:border-purple-900/30 bg-purple-50/30 dark:bg-purple-950/10 transition-all"
+                  >
+                    {/* Company Initial Badge */}
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <span className="text-white font-extrabold text-sm leading-none">
+                        {(d.companyName || 'C').charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Drive Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <p className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">
+                          {d.companyName || 'Company'}
+                        </p>
+                        {isToday && (
+                          <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">Today</span>
+                        )}
+                        {isSoon && !isToday && (
+                          <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">Soon</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {d.role || 'Role not specified'}
+                        {d.packageOffered && <span className="ml-1 font-semibold text-purple-600 dark:text-purple-400">· {d.packageOffered} LPA</span>}
+                      </p>
+                    </div>
+
+                    {/* Date Badge */}
+                    <div className="flex-shrink-0 text-right">
+                      {driveDate ? (
+                        <>
+                          <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{format(driveDate, 'dd MMM')}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500">{format(driveDate, 'yyyy')}</p>
+                        </>
+                      ) : deadline ? (
+                        <>
+                          <p className="text-[10px] text-gray-400">Deadline</p>
+                          <p className="text-xs font-bold text-red-500 dark:text-red-400">{format(deadline, 'dd MMM')}</p>
+                        </>
+                      ) : (
+                        <ChevronRight size={14} className="text-gray-300 dark:text-gray-600" />
+                      )}
+                    </div>
                   </div>
-                  <span className="text-lg font-extrabold leading-none">{(row.val || 0).toLocaleString()}</span>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Summary stats footer */}
+          {!loading && (
+            <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700/40 grid grid-cols-3 gap-2 flex-shrink-0">
+              {[
+                { label: 'Active', val: pl.activeDrives || 0, c: 'text-purple-700 dark:text-purple-300' },
+                { label: 'Available', val: pl.availableDrives || 0, c: 'text-blue-700 dark:text-blue-300' },
+                { label: 'Interested', val: pl.interestedStudents || 0, c: 'text-green-700 dark:text-green-300' },
+              ].map(row => (
+                <div key={row.label} className="text-center">
+                  <p className={`text-base font-extrabold leading-none ${row.c}`}>{(row.val).toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{row.label}</p>
                 </div>
               ))}
             </div>
@@ -362,7 +444,7 @@ export default function UnifiedAdminDashboard() {
 
       {/* Recent Activity + Quick Actions */}
       <div className="grid lg:grid-cols-2 gap-5">
-        <Card className="p-5">
+        <Card className="p-5 flex flex-col" style={{ height: '340px' }}>
           <SecTitle>
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse inline-block" />
@@ -372,12 +454,12 @@ export default function UnifiedAdminDashboard() {
           {loading ? (
             <div className="space-y-3">{[0,1,2,3,4].map(i => <div key={i} className="h-12 bg-gray-50 dark:bg-gray-800 rounded-xl animate-pulse" />)}</div>
           ) : !(stats?.recentActivity?.length) ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
               <Zap size={32} className="text-gray-300 dark:text-gray-600" />
               <p className="text-sm text-gray-400">No recent activity</p>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-1 overflow-y-auto flex-1" style={{ maxHeight: '260px' }}>
               {stats.recentActivity.slice(0, 5).map((item, i) => {
                 const cfg = ACT_ICONS[item.type] || ACT_ICONS.NEW_STUDENT
                 const Ic = cfg.icon
@@ -395,7 +477,7 @@ export default function UnifiedAdminDashboard() {
           )}
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-5 flex flex-col" style={{ height: '340px' }}>
           <SecTitle>Quick Actions</SecTitle>
           <div className="grid grid-cols-2 gap-3">
             {QA.map(a => {
