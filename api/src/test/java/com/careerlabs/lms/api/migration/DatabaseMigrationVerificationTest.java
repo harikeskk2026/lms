@@ -8,11 +8,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import java.io.File;
+import java.net.URL;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,6 +28,49 @@ public class DatabaseMigrationVerificationTest {
     private static final String DB_PASS = "prabhu@15";
     private static final String DEFAULT_URL = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/postgres";
     private static final String LMS_URL = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/lms";
+
+    // Computed from the actual migration files on the classpath so these tests never
+    // go stale when a new migration (VN) is added - see DatabaseMigrationVerificationTest
+    // failures on 2026-09-16 where hardcoded "16"/"17" expectations broke twice in one
+    // session as V17 and V18 were added.
+    private static final String LATEST_VERSION;
+    private static final int MIGRATION_COUNT;
+
+    static {
+        Pattern versionPattern = Pattern.compile("^V(\\d+(?:_\\d+)*)__.*\\.sql$");
+        try {
+            URL migrationDirUrl = DatabaseMigrationVerificationTest.class.getClassLoader().getResource("db/migration");
+            File migrationDir = new File(migrationDirUrl.toURI());
+            File[] files = migrationDir.listFiles((dir, name) -> versionPattern.matcher(name).matches());
+            MIGRATION_COUNT = files.length;
+            int[] latestParts = null;
+            String latest = null;
+            for (File f : files) {
+                Matcher m = versionPattern.matcher(f.getName());
+                m.matches();
+                String[] segments = m.group(1).split("_");
+                int[] parts = new int[segments.length];
+                for (int i = 0; i < segments.length; i++) parts[i] = Integer.parseInt(segments[i]);
+                if (latestParts == null || compareVersionParts(parts, latestParts) > 0) {
+                    latestParts = parts;
+                    latest = String.join(".", segments);
+                }
+            }
+            LATEST_VERSION = latest;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to resolve latest migration version from classpath", e);
+        }
+    }
+
+    private static int compareVersionParts(int[] a, int[] b) {
+        int len = Math.max(a.length, b.length);
+        for (int i = 0; i < len; i++) {
+            int av = i < a.length ? a[i] : 0;
+            int bv = i < b.length ? b[i] : 0;
+            if (av != bv) return Integer.compare(av, bv);
+        }
+        return 0;
+    }
 
     private void executeSqlOnPostgres(String sql) throws Exception {
         try (Connection conn = DriverManager.getConnection(DEFAULT_URL, DB_USER, DB_PASS);
@@ -95,7 +142,7 @@ public class DatabaseMigrationVerificationTest {
                 result.targetSchemaVersion :
                 (flyway.info().current() != null && flyway.info().current().getVersion() != null ?
                         flyway.info().current().getVersion().getVersion() : null);
-        assertEquals("17", currentVersion, "Target schema version must be 17");
+        assertEquals(LATEST_VERSION, currentVersion, "Target schema version must be " + LATEST_VERSION);
 
         // 4. Existing rows were preserved; unrecognized durations flagged as NULL; valid durations kept
         try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
@@ -335,8 +382,8 @@ public class DatabaseMigrationVerificationTest {
         System.out.println("Target schema version: " + result.targetSchemaVersion);
 
         assertTrue(result.success, "Fresh database migration must succeed");
-        assertEquals("17", result.targetSchemaVersion, "Fresh database target schema version must be 17");
-        assertEquals(19, result.migrationsExecuted, "Must execute all 19 migrations (V0 through V17 incl. V5.1)");
+        assertEquals(LATEST_VERSION, result.targetSchemaVersion, "Fresh database target schema version must be " + LATEST_VERSION);
+        assertEquals(MIGRATION_COUNT, result.migrationsExecuted, "Must execute all " + MIGRATION_COUNT + " migrations (V0 through V" + LATEST_VERSION + " incl. V5.1)");
 
         try (Connection conn = DriverManager.getConnection(freshDbUrl, DB_USER, DB_PASS)) {
             verifyFinalSchema(conn);
@@ -386,7 +433,7 @@ public class DatabaseMigrationVerificationTest {
 
             MigrateResult latestResult = flywayToLatest.migrate();
             assertTrue(latestResult.success, "Migration from V" + v + " to latest must succeed");
-            assertEquals("17", latestResult.targetSchemaVersion, "Final schema version must be 17");
+            assertEquals(LATEST_VERSION, latestResult.targetSchemaVersion, "Final schema version must be " + LATEST_VERSION);
 
             try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
                 verifyFinalSchema(conn);
@@ -669,7 +716,7 @@ public class DatabaseMigrationVerificationTest {
 
         MigrateResult result = flywayToLatest.migrate();
         assertTrue(result.success, "Migration from NOT NULL duration DB to latest must succeed (no restart loop)");
-        assertEquals("17", result.targetSchemaVersion, "Target schema version must be 17");
+        assertEquals(LATEST_VERSION, result.targetSchemaVersion, "Target schema version must be " + LATEST_VERSION);
 
         // 6. Verify data normalization and final schema
         try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
@@ -745,7 +792,7 @@ public class DatabaseMigrationVerificationTest {
                 .load();
         MigrateResult freshResult = flywayFresh.migrate();
         assertTrue(freshResult.success, "Fresh DB migration must succeed");
-        assertEquals("17", freshResult.targetSchemaVersion, "Fresh DB must reach schema version 17");
+        assertEquals(LATEST_VERSION, freshResult.targetSchemaVersion, "Fresh DB must reach schema version " + LATEST_VERSION);
 
         // Existing/NOT NULL database (as in production)
         recreateDatabase(notNullDbName);
@@ -774,7 +821,7 @@ public class DatabaseMigrationVerificationTest {
                 .load();
         MigrateResult notNullResult = flywayNotNull.migrate();
         assertTrue(notNullResult.success, "NOT NULL DB migration must succeed");
-        assertEquals("17", notNullResult.targetSchemaVersion, "NOT NULL DB must reach schema version 17");
+        assertEquals(LATEST_VERSION, notNullResult.targetSchemaVersion, "NOT NULL DB must reach schema version " + LATEST_VERSION);
 
         // Compare duration column nullability + CHECK constraint across both databases
         String freshState;
