@@ -59,12 +59,14 @@ public class FlywayConfig {
     // 891134358: Original canonical repository checksum (937fc4e)
     // 860137096: Teammate database applied checksum
     // 42575461: Alternate local resolved checksum
+    // 686650991: Teammate database applied checksum (careerlabs_lms, reported 2026-09-16)
     // The on-disk V6 is unchanged. V5.1 and V15 ensure courses.duration is nullable so
     // every database (fresh or existing) converges to the same final schema.
     public static final Set<Integer> SUPPORTED_V6_CHECKSUMS = Set.of(
             891134358,
             860137096,
-            42575461
+            42575461,
+            686650991
     );
 
     // Applied V13 checksum in flyway_schema_history for databases migrated with the

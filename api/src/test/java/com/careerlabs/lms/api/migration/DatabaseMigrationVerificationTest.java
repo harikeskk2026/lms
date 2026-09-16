@@ -352,6 +352,87 @@ public class DatabaseMigrationVerificationTest {
         System.out.println("=== Teammate Scenario: Partial V13 variant (checksum -322843820) to Latest PASSED ===");
     }
 
+    @Test
+    @DisplayName("1e. Teammate Scenario: V6 legacy checksum 686650991 (careerlabs_lms) starts up and converges via V15")
+    void testTeammateV6ChecksumVariantStartup() throws Exception {
+        String testDbName = "lms_teammate_v6variant_test";
+        String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
+
+        recreateDatabase(testDbName);
+
+        // 1. Simulate the teammate database: migrate cleanly up to V5 (before V6 runs)
+        Flyway flywayToV5 = Flyway.configure()
+                .dataSource(testDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("5")
+                .locations("classpath:db/migration")
+                .load();
+        MigrateResult v5Result = flywayToV5.migrate();
+        assertTrue(v5Result.success, "Initial migration to V5 must succeed");
+
+        // 2. Apply the real, committed V6 SQL (its logic doesn't depend on the exact checksum)
+        //    but record it in flyway_schema_history under the reported legacy checksum 686650991,
+        //    reproducing the exact "Applied to database : 686650991 / Resolved locally : 891134358"
+        //    failure a teammate hit on their careerlabs_lms database.
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS);
+             Statement stmt = conn.createStatement()) {
+
+            try (var in = getClass().getResourceAsStream("/db/migration/V6__standardize_course_duration.sql")) {
+                assertNotNull(in, "V6 migration script must be readable from the classpath");
+                String v6Sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                stmt.execute(v6Sql);
+            }
+
+            stmt.executeUpdate("INSERT INTO flyway_schema_history " +
+                    "(installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success) " +
+                    "VALUES (7, '6', 'standardize course duration', 'SQL', " +
+                    "'V6__standardize_course_duration.sql', 686650991, 'postgres', NOW(), 0, TRUE)");
+        }
+
+        // 3. Boot Spring Boot Application against this database. Pre-fix this failed with
+        //    'checksum mismatch for migration version 6'. With the fix, FlywayConfig recognizes
+        //    this legacy V6 checksum and V5.1/V15 converge the schema regardless.
+        SpringApplicationBuilder builder = new SpringApplicationBuilder(LmsApiApplication.class);
+        ConfigurableApplicationContext context = null;
+        try {
+            context = builder.run(
+                    "--server.port=0",
+                    "--spring.datasource.url=" + testDbUrl,
+                    "--spring.datasource.username=" + DB_USER,
+                    "--spring.datasource.password=" + DB_PASS,
+                    "--spring.flyway.enabled=true",
+                    "--spring.jpa.hibernate.ddl-auto=none",
+                    "--app.seed.enabled=false"
+            );
+            assertNotNull(context, "Application context must not be null");
+            assertTrue(context.isRunning(), "Spring Boot must boot on the V6 legacy-checksum variant database");
+        } finally {
+            if (context != null) {
+                context.close();
+            }
+        }
+
+        // 4. Verify database reached the latest version and the final schema converged
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
+            verifyFinalSchema(conn);
+
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT version FROM flyway_schema_history WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1")) {
+                assertTrue(rs.next(), "flyway_schema_history must have at least one successful row");
+                assertEquals(LATEST_VERSION, rs.getString(1), "Database must converge to the latest version");
+            }
+        }
+
+        try {
+            executeSqlOnPostgres("DROP DATABASE IF EXISTS " + testDbName + ";");
+        } catch (Exception ignored) {}
+
+        System.out.println("=== Teammate Scenario: V6 legacy checksum 686650991 to Latest PASSED ===");
+    }
+
 
     @Test
     @DisplayName("2. Fresh DB: Migrate V0 through latest on a completely blank database")
