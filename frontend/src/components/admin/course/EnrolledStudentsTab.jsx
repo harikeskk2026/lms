@@ -358,7 +358,6 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
           options={[{ value: '', label: 'All Batches' }, ...batches.map(b => ({ value: b.id, label: b.name }))]}
           placeholder="All Batches"
           compact
-          clearable
         />
 
         <CustomSelect
@@ -715,7 +714,6 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                   onChange={setSelectedBatchId}
                   options={[{ value: '', label: 'No Batch (Assign later)' }, ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.mode || 'HYBRID'}) · Max ${b.maxStudents || 30} seats` }))]}
                   placeholder="No Batch (Assign later)"
-                  clearable
                 />
                 {selectedBatchObj && (
                   <p className="text-[11px] text-gray-500 mt-1">

@@ -699,7 +699,6 @@ export default function StudentsPage() {
                   { value: 'PLACED', label: 'Placed' },
                   { value: 'NOT_SEEKING', label: 'Not Seeking' },
                 ]}
-                clearable={false}
               />
             </div>
           )}

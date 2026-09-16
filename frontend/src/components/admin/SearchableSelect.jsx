@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { ChevronDown, Plus, Search, X } from 'lucide-react'
+import { ChevronDown, Plus, Search } from 'lucide-react'
 
 export default function SearchableSelect({
   options = [],
@@ -73,11 +73,6 @@ export default function SearchableSelect({
     setQuery('')
   }
 
-  const handleClear = (e) => {
-    e.stopPropagation()
-    onChange('')
-  }
-
   const trimmedQuery = query.trim()
   const hasExactMatch = filtered.some(o => o.label.toLowerCase() === trimmedQuery.toLowerCase())
   const showCreateRow = creatable && trimmedQuery.length > 0 && !hasExactMatch && !loading
@@ -143,13 +138,6 @@ export default function SearchableSelect({
           {loading ? 'Loading...' : selected ? selected.label : placeholder}
         </span>
         <span className="flex items-center gap-1 flex-shrink-0">
-          {selected && !disabled && (
-            <X
-              size={14}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
-              onClick={handleClear}
-            />
-          )}
           <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>

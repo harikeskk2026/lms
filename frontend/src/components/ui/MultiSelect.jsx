@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Search, Check, X } from 'lucide-react'
+import { ChevronDown, Search, Check } from 'lucide-react'
 
 /**
  * Multi-select dropdown (checkbox style) used to pick several students,
@@ -217,13 +217,6 @@ export default function MultiSelect({
           {value.length ? summary : placeholder}
         </span>
         <span className="flex items-center gap-1 flex-shrink-0">
-          {value.length > 0 && !disabled && (
-            <X
-              size={14}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); onChange([]) }}
-            />
-          )}
           <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>

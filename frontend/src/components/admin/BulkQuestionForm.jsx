@@ -323,7 +323,6 @@ export default function BulkQuestionForm({ topics = [], courses = [], onSaved, o
                         onChange={(val) => updateQuestion(qIndex, 'topicId', val)}
                         options={topics.map(t => ({ value: t.id, label: t.name }))}
                         placeholder="No topic"
-                        clearable
                       />
                     </div>
                     <div>

@@ -726,7 +726,6 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
                   value={form.category}
                   onChange={(val) => setForm(f => ({ ...f, category: val }))}
                   options={CATEGORIES.map(c => ({ value: c, label: c.charAt(0) + c.slice(1).toLowerCase() }))}
-                  clearable={false}
                 />
             </div>
 

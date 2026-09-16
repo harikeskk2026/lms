@@ -531,7 +531,6 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
                         options={batchesForCourse.map((b) => ({ value: b.id, label: `${b.name} (Max ${b.maxStudents})` }))}
                         placeholder="No Batch / Direct Course Enrollment"
                         disabled={!selectedCourseId}
-                        clearable
                       />
                       <p className="text-[11px] text-gray-500 mt-1">
                         Filtered strictly to batches of the selected course.

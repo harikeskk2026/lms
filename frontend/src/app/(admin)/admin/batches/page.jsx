@@ -453,7 +453,6 @@ export default function BatchesPage() {
                   label: `${c.title}${c.duration ? ` — ${c.duration}` : ''}`
                 }))}
                 placeholder="Select course"
-                clearable={false}
               />
               {selectedCourse && (
                 <p className="text-xs text-gray-500 mt-1">
@@ -561,7 +560,6 @@ export default function BatchesPage() {
                     { value: 'OFFLINE', label: 'OFFLINE' },
                     { value: 'HYBRID', label: 'HYBRID' },
                   ]}
-                  clearable={false}
                 />
               </div>
               <div>

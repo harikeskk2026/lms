@@ -203,7 +203,6 @@ export default function QuestionForm({
                 onChange={(val) => setValue('topicId', val)}
                 options={topics.map(t => ({ value: t.id, label: t.name }))}
                 placeholder="No topic"
-                clearable
               />
             )}
           </div>

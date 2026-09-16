@@ -575,7 +575,6 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
                     onChange={(val) => setBulkStatus(val)}
                     options={Object.keys(STATUS_CONFIG).map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ') }))}
                     compact
-                    clearable={false}
                   />
                   <button onClick={applyBulkStatus}
                     className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors">

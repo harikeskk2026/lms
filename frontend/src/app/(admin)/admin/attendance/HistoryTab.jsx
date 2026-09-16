@@ -509,7 +509,6 @@ export default function HistoryTab({ refreshKey = 0 }) {
               }}
               options={[10, 20, 50, 100].map(s => ({ value: s, label: s }))}
               compact
-              clearable={false}
             />
           </div>
         </div>

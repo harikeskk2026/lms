@@ -627,7 +627,6 @@ function StatusBadge({ status, onChange, disabled, title }) {
         value={status || 'PUBLISHED'}
         disabled={disabled}
         onChange={onChange}
-        clearable={false}
         compact
         className={`!py-0.5 !px-2.5 !text-[11px] font-bold rounded-full border shadow-xs ${selectStyle}`}
         options={[
@@ -671,7 +670,6 @@ function CourseStatusBadge({ status, onChange, disabled }) {
         value={status || 'PUBLISHED'}
         disabled={disabled}
         onChange={onChange}
-        clearable={false}
         compact
         className={`!py-1 !px-3 !text-xs font-semibold rounded-full border shadow-xs ${colorClass}`}
         options={
@@ -700,7 +698,6 @@ function StatusSelect({ value, onChange, small }) {
     <CustomSelect
       value={value || 'PUBLISHED'}
       onChange={onChange}
-      clearable={false}
       options={[
         { value: 'DRAFT', label: 'Draft' },
         { value: 'PUBLISHED', label: 'Published' },

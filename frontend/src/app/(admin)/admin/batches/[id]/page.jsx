@@ -690,7 +690,6 @@ export default function BatchDetailPage() {
                     label: `${c.title} — ${c.duration}`
                   }))}
                   placeholder="Select course"
-                  clearable={false}
                 />
                 {selectedForEdit && (
                   <p className="text-xs text-gray-500 mt-1">Course duration: <span className="font-semibold text-purple-600">{selectedForEdit.duration}</span></p>
@@ -751,7 +750,6 @@ export default function BatchDetailPage() {
                       { value: 'OFFLINE', label: 'OFFLINE' },
                       { value: 'HYBRID', label: 'HYBRID' },
                     ]}
-                    clearable={false}
                   />
                 </div>
                 <div>

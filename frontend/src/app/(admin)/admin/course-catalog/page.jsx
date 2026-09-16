@@ -408,7 +408,6 @@ export default function CourseCatalogPage() {
             <CustomSelect
               value={watch('level')}
               onChange={(val) => setValue('level', val, { shouldValidate: true })}
-              clearable={false}
               options={[
                 { value: 'BEGINNER', label: 'BEGINNER' },
                 { value: 'INTERMEDIATE', label: 'INTERMEDIATE' },
@@ -423,7 +422,6 @@ export default function CourseCatalogPage() {
             <CustomSelect
               value={watch('status')}
               onChange={(val) => setValue('status', val, { shouldValidate: true })}
-              clearable={false}
               options={
                 editingId
                   ? editingCourseStatus === 'DRAFT'

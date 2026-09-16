@@ -223,15 +223,15 @@ export default function QuestionBankPanel({ onChange }) {
           />
         </div>
         <CustomSelect value={filters.topicId} onChange={val => { setFilters(f => ({ ...f, topicId: val })); setCurrentPage(1); }}
-          options={[{ value: '', label: 'All Topics' }, ...topics.map(t => ({ value: t.id, label: t.name }))]} placeholder="All Topics" compact clearable />
+          options={[{ value: '', label: 'All Topics' }, ...topics.map(t => ({ value: t.id, label: t.name }))]} placeholder="All Topics" compact />
         <CustomSelect value={filters.courseId} onChange={val => { setFilters(f => ({ ...f, courseId: val })); setCurrentPage(1); }}
-          options={[{ value: '', label: 'All Courses' }, ...courses.map(c => ({ value: c.id, label: c.title || c.name }))]} placeholder="All Courses" compact clearable />
+          options={[{ value: '', label: 'All Courses' }, ...courses.map(c => ({ value: c.id, label: c.title || c.name }))]} placeholder="All Courses" compact />
         <CustomSelect value={filters.difficulty} onChange={val => { setFilters(f => ({ ...f, difficulty: val })); setCurrentPage(1); }}
-          options={[{ value: '', label: 'All Difficulties' }, ...QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))]} placeholder="All Difficulties" compact clearable />
+          options={[{ value: '', label: 'All Difficulties' }, ...QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))]} placeholder="All Difficulties" compact />
         <CustomSelect value={filters.questionType} onChange={val => { setFilters(f => ({ ...f, questionType: val })); setCurrentPage(1); }}
-          options={[{ value: '', label: 'All Types' }, ...QUESTION_TYPES.map(t => ({ value: t, label: t === 'MULTIPLE_CORRECT' ? 'MULTIPLE_CORRECT (Multi-Select)' : t }))]} placeholder="All Types" compact clearable />
+          options={[{ value: '', label: 'All Types' }, ...QUESTION_TYPES.map(t => ({ value: t, label: t === 'MULTIPLE_CORRECT' ? 'MULTIPLE_CORRECT (Multi-Select)' : t }))]} placeholder="All Types" compact />
         <CustomSelect value={filters.active} onChange={val => { setFilters(f => ({ ...f, active: val })); setCurrentPage(1); }}
-          options={[{ value: '', label: 'All Statuses' }, { value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }]} placeholder="All Statuses" compact clearable />
+          options={[{ value: '', label: 'All Statuses' }, { value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }]} placeholder="All Statuses" compact />
       </div>
 
       {/* Floating Bulk Actions Bar */}
