@@ -1,5 +1,5 @@
 'use client'
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Calendar, Clock, X } from 'lucide-react'
 
 function parseIso(val) {
@@ -43,8 +43,18 @@ export default function DateTimePicker({
   disabled = false,
   hasError = false,
   className = '',
+  // When true, picking a date does NOT auto-fill a default time (e.g. 10:00) -
+  // the time stays empty until the admin explicitly picks one. Off by default
+  // so every existing caller keeps its current behavior unchanged.
+  requireExplicitTime = false,
 }) {
-  const { hasValue, date, hour, minute } = useMemo(() => parseIso(value), [value])
+  const parsed = useMemo(() => parseIso(value), [value])
+  const [pendingDate, setPendingDate] = useState('')
+
+  const hasValue = parsed.hasValue || Boolean(pendingDate)
+  const date = parsed.hasValue ? parsed.date : pendingDate
+  const hour = parsed.hasValue ? parsed.hour : ''
+  const minute = parsed.hasValue ? parsed.minute : ''
 
   const todayStr = useMemo(() => getTodayString(), [])
   const effectiveMinDate = minDate || (disablePast ? todayStr : undefined)
@@ -52,7 +62,14 @@ export default function DateTimePicker({
   const handleDateChange = (e) => {
     const newDate = e.target.value
     if (!newDate) {
+      setPendingDate('')
       onChange?.('')
+      return
+    }
+    if (requireExplicitTime && !(hour && minute)) {
+      // Hold the date locally until a time is explicitly chosen, instead of
+      // silently combining it with a fabricated default time.
+      setPendingDate(newDate)
       return
     }
     const h = hour || '10'
@@ -66,11 +83,13 @@ export default function DateTimePicker({
     const [newH, newM] = val.split(':')
     const curDate = date || (effectiveMinDate || todayStr)
     onChange?.(toIso(curDate, newH, newM))
+    if (pendingDate) setPendingDate('')
   }
 
   const handleClear = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    setPendingDate('')
     onChange?.('')
   }
 

@@ -1,11 +1,14 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Brain, Lightbulb, Code, MessageSquare, ChevronLeft, ChevronRight,
   CheckCircle, AlertCircle, Loader2, Clock, Target, Zap, Flame, Trophy,
-  Bookmark, BookmarkCheck, List, FileText,
+  Bookmark, BookmarkCheck, List, FileText, Info,
 } from 'lucide-react'
 import quizService from '@/services/quizService'
+import { getApiBaseUrl } from '@/lib/api'
+import tokenStorage from '@/utilities/tokenStorage'
 import toast from 'react-hot-toast'
 
 // ─── Type Icons ───────────────────────────────────────────────────────────────
@@ -150,65 +153,145 @@ function HeroBanner() {
   )
 }
 
-// ─── Left Info Panel (intro only) ──────────────────────────────────────────
+// ─── Quiz Details (intro only) — two-column layout: quiz info + Start
+// Challenge on the left, Rules and Quiz Information as separate cards on the
+// right ────────────────────────────────────────────────────────────────────
+const EFFECTIVE_STATUS_LABELS = { LIVE: 'Live', SCHEDULED: 'Scheduled', COMPLETED: 'Closed', ARCHIVED: 'Archived' }
+
 function InfoPanel({ quiz, starting, onStart }) {
   const maxXp = (quiz.totalQuestions || 0) * 10 + 50
+  const attemptsExhausted = quiz.attemptsUsed >= quiz.maxAttempts
+  const rules = [
+    'Navigate between questions freely',
+    'Answers save automatically as you go',
+    'Auto-submits when timer reaches zero',
+    `Pass mark: ${quiz.passingScore}%`,
+    quiz.maxAttempts > 1 ? `Up to ${quiz.maxAttempts} attempts allowed (${quiz.attemptsUsed || 0} used)` : 'Single attempt only',
+  ]
+  const statTiles = [
+    { icon: FileText, value: quiz.totalQuestions, label: 'Questions', bg: 'bg-purple-100', color: 'text-purple-600' },
+    { icon: Clock, value: `${quiz.duration}m`, label: 'Duration', bg: 'bg-blue-100', color: 'text-blue-600' },
+    { icon: Target, value: `${quiz.passingScore}%`, label: 'Pass Mark', bg: 'bg-green-100', color: 'text-green-600' },
+    { icon: Zap, value: `+${maxXp}`, label: 'Max XP', bg: 'bg-amber-100', color: 'text-amber-600' },
+  ]
+  const formatDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : null
+
   return (
-    <div className="hidden md:flex md:flex-col w-[320px] shrink-0 border-r border-purple-100 bg-white/60 overflow-y-auto p-5 space-y-5">
-      <HeroBanner />
+    <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start">
+      {/* LEFT: quiz details + Start Challenge */}
+      <div className="bg-white/80 border border-purple-100 rounded-3xl shadow-xl shadow-purple-500/10 p-5 sm:p-6 space-y-5">
+        <HeroBanner />
 
-      <div>
-        <p className="text-purple-600 text-xs font-bold uppercase tracking-wider">{TYPE_LABELS[quiz.type] || quiz.type}</p>
-        <h2 className="text-gray-800 text-lg font-display font-bold mt-0.5">{quiz.title}</h2>
-        {quiz.description && <p className="text-gray-500 text-sm mt-1.5">{quiz.description}</p>}
-      </div>
+        <div>
+          <p className="text-purple-600 text-xs font-bold uppercase tracking-wider">{TYPE_LABELS[quiz.type] || quiz.type}</p>
+          <h2 className="text-gray-800 text-lg font-display font-bold mt-0.5">{quiz.title}</h2>
+        </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        {[
-          { icon: FileText, value: quiz.totalQuestions, label: 'Questions', bg: 'bg-purple-100', color: 'text-purple-600' },
-          { icon: Clock, value: `${quiz.duration}m`, label: 'Duration', bg: 'bg-blue-100', color: 'text-blue-600' },
-          { icon: Target, value: `${quiz.passingScore}%`, label: 'To Pass', bg: 'bg-green-100', color: 'text-green-600' },
-          { icon: Zap, value: `+${maxXp}`, label: 'Max XP', bg: 'bg-amber-100', color: 'text-amber-600' },
-        ].map(s => (
-          <div key={s.label} className="flex items-center gap-2.5 bg-white border border-purple-100 rounded-xl p-2.5 shadow-sm">
-            <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center shrink-0`}>
-              <s.icon size={15} className={s.color} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-gray-800 font-bold text-sm leading-tight break-words">{s.value}</p>
-              <p className="text-gray-400 text-[10px] leading-tight">{s.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div>
-        <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2">Rules</p>
-        <div className="space-y-1.5">
-          {[
-            'Navigate between questions freely',
-            'Answers save automatically as you go',
-            'Auto-submits when timer reaches zero',
-            `Pass mark: ${quiz.passingScore}%`,
-            quiz.maxAttempts > 1 ? `Up to ${quiz.maxAttempts} attempts allowed (${quiz.attemptsUsed || 0} used)` : 'Single attempt only',
-          ].map((rule, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-              <p className="text-xs text-gray-500">{rule}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {statTiles.map(s => (
+            <div key={s.label} className="flex items-center gap-2.5 bg-white border border-purple-100 rounded-xl p-2.5 shadow-sm">
+              <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center shrink-0`}>
+                <s.icon size={15} className={s.color} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-gray-800 font-bold text-sm leading-tight break-words">{s.value}</p>
+                <p className="text-gray-400 text-[10px] leading-tight">{s.label}</p>
+              </div>
             </div>
           ))}
         </div>
+
+        {quiz.description && (
+          <div>
+            <p className="text-sm font-bold text-gray-800 mb-1">About This Quiz</p>
+            <p className="text-gray-500 text-sm leading-relaxed">{quiz.description}</p>
+          </div>
+        )}
+
+        {(quiz.createdAt || quiz.updatedAt) && (
+          <div className="flex items-center gap-8 pt-3 border-t border-purple-50">
+            {quiz.createdAt && (
+              <div>
+                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Created On</p>
+                <p className="text-xs text-gray-600 font-semibold mt-0.5">{formatDate(quiz.createdAt)}</p>
+              </div>
+            )}
+            {quiz.updatedAt && (
+              <div>
+                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Last Updated</p>
+                <p className="text-xs text-gray-600 font-semibold mt-0.5">{formatDate(quiz.updatedAt)}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {attemptsExhausted ? (
+          <button
+            disabled
+            className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-400 font-bold cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            Max Attempts Reached
+          </button>
+        ) : (
+          <button
+            onClick={onStart}
+            disabled={starting}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold hover:from-purple-700 hover:to-violet-700 active:scale-[0.98] transition-all shadow-xl shadow-purple-500/20 disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {starting ? 'Starting…' : <>Start {quiz.type === 'MCQ' && quiz.maxAttempts === 1 ? 'Challenge' : 'Quiz'} <ChevronRight size={18} /></>}
+          </button>
+        )}
       </div>
 
-      <div className="flex-1" />
+      {/* RIGHT: Rules + Quiz Information cards */}
+      <div className="space-y-5">
+        <div className="bg-white/80 border border-purple-100 rounded-3xl shadow-sm p-5 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+              <FileText size={15} className="text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">Rules</p>
+              <p className="text-[11px] text-gray-400">Please read the following rules before starting the quiz.</p>
+            </div>
+          </div>
+          <div className="space-y-1.5 pl-1">
+            {rules.map((rule, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+                <p className="text-xs text-gray-500">{rule}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
-      <button
-        onClick={onStart}
-        disabled={starting}
-        className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold hover:from-purple-700 hover:to-violet-700 active:scale-[0.98] transition-all shadow-xl shadow-purple-500/20 disabled:opacity-60 flex items-center justify-center gap-2"
-      >
-        {starting ? 'Starting…' : <>Start {quiz.type === 'MCQ' && quiz.maxAttempts === 1 ? 'Challenge' : 'Quiz'} <ChevronRight size={18} /></>}
-      </button>
+        <div className="bg-white/80 border border-purple-100 rounded-3xl shadow-sm p-5 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+              <Info size={15} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">Quiz Information</p>
+              <p className="text-[11px] text-gray-400">Key details about this quiz.</p>
+            </div>
+          </div>
+          <div className="space-y-2 text-xs">
+            {[
+              ['Quiz Type', TYPE_LABELS[quiz.type] || quiz.type],
+              ['Total Questions', quiz.totalQuestions],
+              ['Duration', `${quiz.duration} minutes`],
+              ['Pass Mark', `${quiz.passingScore}%`],
+              ['Maximum XP', `+${maxXp}`],
+              ['Status', EFFECTIVE_STATUS_LABELS[quiz.effectiveStatus] || 'Live'],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-3">
+                <span className="text-gray-400 shrink-0">{label}</span>
+                <span className="text-gray-700 font-semibold text-right">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -259,6 +342,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
   const [animDir, setAnimDir] = useState('right')
   const [reviewOpen, setReviewOpen] = useState({})
   const [interviewResult, setInterviewResult] = useState(null)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   const questions = attempt?.questions || []
   const totalQ = questions.length
@@ -304,6 +388,47 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
       setStarting(false)
     }
   }
+
+  // The attempt is consumed the moment it's started and can never be resumed -
+  // so leaving mid-quiz (for any reason) must close it out as abandoned rather
+  // than just walking away and leaving it silently IN_PROGRESS forever.
+  const exitQuiz = () => {
+    if (attempt && phase === 'playing') {
+      setShowExitConfirm(true)
+      return
+    }
+    onClose?.()
+  }
+
+  const confirmExit = () => {
+    setShowExitConfirm(false)
+    quizService.abandonAttempt(attempt.attemptId).catch(() => {})
+    // Refreshes the quiz list's attemptsUsed/max-attempts-reached state right
+    // away, so re-opening this same quiz can't land back on a stale intro
+    // screen that still thinks a fresh attempt is available.
+    onComplete?.()
+    onClose?.()
+  }
+
+  // Covers the case the explicit exit button can't: closing the tab/browser
+  // outright. A normal axios call can be torn down mid-flight when the page
+  // unloads, so this uses a raw keepalive fetch instead, which is specifically
+  // designed to survive that.
+  useEffect(() => {
+    if (phase !== 'playing' || !attempt) return
+    const handleUnload = () => {
+      try {
+        const token = tokenStorage.getToken()
+        fetch(`${getApiBaseUrl()}/student/quiz-attempts/${attempt.attemptId}/abandon`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          keepalive: true,
+        })
+      } catch { /* best effort */ }
+    }
+    window.addEventListener('pagehide', handleUnload)
+    return () => window.removeEventListener('pagehide', handleUnload)
+  }, [phase, attempt])
 
   const handleSubmit = useCallback(async () => {
     if (submitting || !attempt) return
@@ -376,11 +501,15 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
   }
 
   // ── PHASE: SUBMITTING ─────────────────────────────────────────────────────────
-  if (phase === 'submitting') return (
+  // Rendered via a portal straight onto <body> — not just fixed/z-50 — so this
+  // full-screen takeover can never be partially covered by the dashboard's own
+  // header/sidebar, regardless of any stacking-context quirk in that ancestor tree.
+  if (phase === 'submitting') return createPortal(
     <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 flex flex-col items-center justify-center gap-4">
       <Loader2 size={40} className="text-purple-500 animate-spin" />
       <p className="text-gray-500 font-medium">Evaluating your answers…</p>
-    </div>
+    </div>,
+    document.body
   )
 
   // ── PHASE: RESULTS ────────────────────────────────────────────────────────────
@@ -390,7 +519,7 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
     const mins = Math.floor((result.timeTaken || 0) / 60)
     const secs = (result.timeTaken || 0) % 60
 
-    return (
+    return createPortal(
       <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 overflow-y-auto">
         <Confetti />
         <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 animate-fadeInUp">
@@ -526,7 +655,8 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
             ← Back to Quizzes
           </button>
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
@@ -537,12 +667,13 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
   const isMulti = q && MULTI_SELECT_TYPES.includes(q.questionType)
   const progressPct = totalQ ? Math.round(((current + 1) / totalQ) * 100) : 0
 
-  return (
+  return createPortal(
+    <>
     <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 flex flex-col">
       {/* TOP BAR */}
       <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-purple-100 bg-white/70 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 hover:bg-purple-100 transition-colors shrink-0">
+          <button onClick={exitQuiz} className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 hover:bg-purple-100 transition-colors shrink-0">
             <ChevronLeft size={18} />
           </button>
           <div className="min-w-0">
@@ -581,20 +712,9 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        {phase === 'intro' && <InfoPanel quiz={quiz} starting={starting} onStart={startQuiz} />}
-
-        {/* RIGHT SIDE */}
         {phase === 'intro' ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 text-center md:hidden">
-            {/* Mobile fallback where the info panel is hidden */}
-            <p className="text-gray-500 text-sm max-w-xs">{quiz.description}</p>
-            <button
-              onClick={startQuiz}
-              disabled={starting}
-              className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold disabled:opacity-60"
-            >
-              {starting ? 'Starting…' : 'Start Quiz →'}
-            </button>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+            <InfoPanel quiz={quiz} starting={starting} onStart={startQuiz} />
           </div>
         ) : (
           <>
@@ -749,5 +869,38 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
         )}
       </div>
     </div>
+    {showExitConfirm && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+        <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center border border-purple-100">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center">
+            <AlertCircle size={24} />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="font-display font-bold text-lg text-gray-900">Exit this quiz?</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Exiting now will end this attempt and count it as used — you will not be able to resume it.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowExitConfirm(false)}
+              className="w-1/2 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold text-xs hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmExit}
+              className="w-1/2 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-semibold text-xs shadow-md shadow-red-500/20 transition-all"
+            >
+              Exit Quiz
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>,
+    document.body
   )
 }

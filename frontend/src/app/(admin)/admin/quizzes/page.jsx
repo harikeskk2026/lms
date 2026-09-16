@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3, Users, Send, X, ClipboardList, CheckCircle, AlertCircle, FileText } from 'lucide-react'
+import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3, Users, Send, X, ClipboardList, CheckCircle, AlertCircle, FileText, Pencil, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
@@ -31,11 +31,11 @@ const DIFFICULTY_STYLES = {
 }
 
 const EMPTY_FORM = {
-  title: '', description: '', type: 'MCQ', difficulty: 'MEDIUM',
-  duration: 30, passingScore: 50, maxAttempts: 1,
+  title: '', description: '', type: '', difficulty: '',
+  duration: '', passingScore: '', maxAttempts: '',
   courseId: '', batchId: '',
   randomQuestions: false, randomOptions: false, showExplanation: true,
-  negativeMarking: false, resultVisibility: 'IMMEDIATE',
+  negativeMarking: false, resultVisibility: '',
   scheduledStart: '', scheduledEnd: '',
 }
 
@@ -104,6 +104,10 @@ export default function QuizzesPage() {
   const [attemptReview, setAttemptReview] = useState(null)
   const [loadingReview, setLoadingReview] = useState(false)
   const [reviewOpenIndex, setReviewOpenIndex] = useState({})
+  const [editingQuizId, setEditingQuizId] = useState(null)
+  const [originalQuestionIds, setOriginalQuestionIds] = useState([])
+  const [originalStatus, setOriginalStatus] = useState('DRAFT')
+  const [loadingEditQuiz, setLoadingEditQuiz] = useState(false)
 
   const loadBankQuestions = () => {
     quizService.listQuestions({ active: true }).then(r => setBankQuestions(r.data || [])).catch(() => {})
@@ -294,6 +298,7 @@ export default function QuizzesPage() {
 
   const isSettingsValid = Boolean(
     form.title?.trim() && form.title.trim().length >= 3 &&
+    form.type && form.difficulty && form.resultVisibility &&
     form.duration !== '' && !isNaN(Number(form.duration)) && Number(form.duration) >= 1 && Number(form.duration) <= 1440 &&
     form.passingScore !== '' && !isNaN(Number(form.passingScore)) && Number(form.passingScore) >= 0 && Number(form.passingScore) <= 100 &&
     form.maxAttempts !== '' && !isNaN(Number(form.maxAttempts)) && Number(form.maxAttempts) >= 1 && Number(form.maxAttempts) <= 100 &&
@@ -303,8 +308,9 @@ export default function QuizzesPage() {
   const isDraftValid = isSettingsValid && selectedQuestionIds.length > 0
   const isPublishValid = isDraftValid && isAssignmentValid
   const isQuizFormDirty = Boolean(
-    form.title || form.description || (form.duration !== '30' && form.duration !== '') || (form.passingScore !== '50' && form.passingScore !== '') ||
-    (form.maxAttempts !== '1' && form.maxAttempts !== '') || form.courseId || form.batchId || selectedQuestionIds.length > 0
+    form.title || form.description || form.type || form.difficulty || form.resultVisibility ||
+    form.duration || form.passingScore || form.maxAttempts ||
+    form.courseId || form.batchId || selectedQuestionIds.length > 0
   )
 
   const validateSettings = () => {
@@ -313,6 +319,18 @@ export default function QuizzesPage() {
       errs.title = 'Title is required'
     } else if (form.title.trim().length < 3) {
       errs.title = 'Title must be at least 3 characters'
+    }
+
+    if (!form.type) {
+      errs.type = 'Quiz type is required'
+    }
+
+    if (!form.difficulty) {
+      errs.difficulty = 'Difficulty is required'
+    }
+
+    if (!form.resultVisibility) {
+      errs.resultVisibility = 'Result visibility is required'
     }
 
     const durationNum = Number(form.duration)
@@ -345,6 +363,9 @@ export default function QuizzesPage() {
   }
 
   const openCreate = () => {
+    setEditingQuizId(null)
+    setOriginalQuestionIds([])
+    setOriginalStatus('DRAFT')
     setForm(EMPTY_FORM)
     setFormErrors({})
     setTouched({})
@@ -361,6 +382,53 @@ export default function QuizzesPage() {
     setStep(0)
     setQuestionsView('list')
     setPanelOpen(true)
+  }
+
+  const openEdit = async (quiz) => {
+    setLoadingEditQuiz(true)
+    try {
+      const res = await quizService.getQuiz(quiz.id)
+      const full = res.data
+      const qIds = (full.questions || []).map(qn => qn.id)
+      const marks = {}
+      ;(full.questions || []).forEach(qn => { marks[qn.id] = qn.points ?? 1 })
+
+      setForm({
+        title: full.title || '', description: full.description || '',
+        type: full.type || '', difficulty: full.difficulty || '',
+        duration: full.duration != null ? String(full.duration) : '',
+        passingScore: full.passingScore != null ? String(full.passingScore) : '',
+        maxAttempts: full.maxAttempts != null ? String(full.maxAttempts) : '',
+        courseId: full.courseId != null ? String(full.courseId) : '',
+        batchId: full.batchId != null ? String(full.batchId) : '',
+        randomQuestions: !!full.randomQuestions, randomOptions: !!full.randomOptions,
+        showExplanation: !!full.showExplanation, negativeMarking: !!full.negativeMarking,
+        resultVisibility: full.resultVisibility || '',
+        scheduledStart: full.scheduledStart || '', scheduledEnd: full.scheduledEnd || '',
+      })
+      setSelectedQuestionIds(qIds)
+      setQuestionMarks(marks)
+      setOriginalQuestionIds(qIds)
+      setOriginalStatus(full.status || 'DRAFT')
+      setEditingQuizId(full.id)
+      setFormErrors({})
+      setTouched({})
+      setSelectedBatchIds([])
+      setSelectedCourseIds([])
+      setPickerTopicFilter('')
+      setPickerCourseFilter('')
+      setPickerDifficultyFilter('')
+      setPickerTypeFilter('')
+      setQuestionSearch('')
+      setPickerPage(1)
+      setStep(0)
+      setQuestionsView('list')
+      setPanelOpen(true)
+    } catch (err) {
+      toast.error(err.message || 'Failed to load quiz for editing')
+    } finally {
+      setLoadingEditQuiz(false)
+    }
   }
 
   const missingPublishRequirements = () => {
@@ -401,28 +469,58 @@ export default function QuizzesPage() {
         scheduledStart: form.scheduledStart || null,
         scheduledEnd: form.scheduledEnd || null,
       }
-      const quiz = await quizService.createQuiz(payload)
-      const quizId = quiz.data.id
-      await quizService.attachQuestions(quizId, selectedQuestionIds)
-      await quizService.reorderQuestions(quizId, selectedQuestionIds.map(id => ({
-        questionId: id,
-        marks: questionMarks[id] ?? null,
-      })))
-      if (form.batchId) {
-        await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: [Number(form.batchId)] })
-      } else if (selectedBatchIds.length) {
-        await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: selectedBatchIds })
+      let quizId
+
+      if (editingQuizId) {
+        quizId = editingQuizId
+        await quizService.updateQuiz(quizId, {
+          ...payload,
+          status: publish ? 'PUBLISHED' : originalStatus,
+        })
+
+        const removedIds = originalQuestionIds.filter(id => !selectedQuestionIds.includes(id))
+        const addedIds = selectedQuestionIds.filter(id => !originalQuestionIds.includes(id))
+        for (const id of removedIds) {
+          await quizService.detachQuestion(quizId, id)
+        }
+        if (addedIds.length) {
+          await quizService.attachQuestions(quizId, addedIds)
+        }
+        await quizService.reorderQuestions(quizId, selectedQuestionIds.map(id => ({
+          questionId: id,
+          marks: questionMarks[id] ?? null,
+        })))
+        // Batch/course assignment is managed separately via the "Assign" panel
+        // (Users icon on each row) — intentionally not re-triggered here to
+        // avoid creating duplicate assignment records.
+      } else {
+        const quiz = await quizService.createQuiz(payload)
+        quizId = quiz.data.id
+        await quizService.attachQuestions(quizId, selectedQuestionIds)
+        await quizService.reorderQuestions(quizId, selectedQuestionIds.map(id => ({
+          questionId: id,
+          marks: questionMarks[id] ?? null,
+        })))
+        if (form.batchId) {
+          await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: [Number(form.batchId)] })
+        } else if (selectedBatchIds.length) {
+          await quizService.assignQuiz(quizId, { targetType: 'BATCH', targetIds: selectedBatchIds })
+        }
+        if (form.courseId) {
+          await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: [Number(form.courseId)] })
+        } else if (selectedCourseIds.length) {
+          await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: selectedCourseIds })
+        }
+        if (publish) {
+          await quizService.updateQuiz(quizId, { ...payload, status: 'PUBLISHED' })
+        }
       }
-      if (form.courseId) {
-        await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: [Number(form.courseId)] })
-      } else if (selectedCourseIds.length) {
-        await quizService.assignQuiz(quizId, { targetType: 'COURSE', targetIds: selectedCourseIds })
-      }
-      if (publish) {
-        await quizService.updateQuiz(quizId, { ...payload, status: 'PUBLISHED' })
-      }
-      toast.success(publish ? 'Quiz published!' : 'Quiz saved as draft')
+
+      toast.success(editingQuizId ? 'Quiz updated' : (publish ? 'Quiz published!' : 'Quiz saved as draft'))
       setPanelOpen(false); setStep(0)
+      setEditingQuizId(null)
+      setOriginalQuestionIds([])
+      setOriginalStatus('DRAFT')
       setForm(EMPTY_FORM)
       setSelectedQuestionIds([])
       setQuestionMarks({})
@@ -740,6 +838,9 @@ export default function QuizzesPage() {
                                 <button onClick={() => handleViewQuiz(q)} className="w-7 h-7 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 flex items-center justify-center transition-colors" title="View Quiz Details">
                                   <Eye size={13} />
                                 </button>
+                                <button onClick={() => openEdit(q)} disabled={loadingEditQuiz} className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 flex items-center justify-center transition-colors disabled:opacity-50" title="Edit Quiz">
+                                  {loadingEditQuiz ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />}
+                                </button>
                                 <button onClick={() => openAssign(q)} className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-300 flex items-center justify-center transition-colors" title="Assign">
                                   <Users size={13} />
                                 </button>
@@ -829,7 +930,7 @@ export default function QuizzesPage() {
       )}
 
       {/* Create Quiz Panel */}
-      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title="Create Quiz" width="w-[680px]" variant="modal">
+      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title={editingQuizId ? 'Edit Quiz' : 'Create Quiz'} width="w-[680px]" variant="modal">
         {/* Steps */}
         <div className="flex mb-5 gap-1.5">
           {STEP_LABELS.map((l, i) => (
@@ -866,14 +967,19 @@ export default function QuizzesPage() {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
+                placeholder="Enter quiz description"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Quiz Type</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Quiz Type *</label>
                 <CustomSelect
                   value={form.type}
-                  onChange={(val) => setForm(f => ({ ...f, type: val }))}
+                  onChange={(val) => {
+                    setForm(f => ({ ...f, type: val }))
+                    if (formErrors.type) setFormErrors(prev => ({ ...prev, type: undefined }))
+                  }}
+                  placeholder="Select quiz type"
                   options={[
                     { value: 'MCQ', label: 'MCQ' },
                     { value: 'APTITUDE', label: 'Aptitude' },
@@ -882,18 +988,24 @@ export default function QuizzesPage() {
                     { value: 'ADAPTIVE', label: 'Adaptive' },
                   ]}
                 />
+                {formErrors.type && <p className="text-xs text-red-500 mt-1">{formErrors.type}</p>}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty *</label>
                 <CustomSelect
                   value={form.difficulty}
-                  onChange={(val) => setForm(f => ({ ...f, difficulty: val }))}
+                  onChange={(val) => {
+                    setForm(f => ({ ...f, difficulty: val }))
+                    if (formErrors.difficulty) setFormErrors(prev => ({ ...prev, difficulty: undefined }))
+                  }}
+                  placeholder="Select difficulty"
                   options={[
                     { value: 'EASY', label: 'Easy' },
                     { value: 'MEDIUM', label: 'Medium' },
                     { value: 'HARD', label: 'Hard' },
                   ]}
                 />
+                {formErrors.difficulty && <p className="text-xs text-red-500 mt-1">{formErrors.difficulty}</p>}
               </div>
             </div>
 
@@ -1030,16 +1142,21 @@ export default function QuizzesPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility *</label>
               <CustomSelect
                 value={form.resultVisibility}
-                onChange={(val) => setForm(f => ({ ...f, resultVisibility: val }))}
+                onChange={(val) => {
+                  setForm(f => ({ ...f, resultVisibility: val }))
+                  if (formErrors.resultVisibility) setFormErrors(prev => ({ ...prev, resultVisibility: undefined }))
+                }}
+                placeholder="Select result visibility"
                 options={[
                   { value: 'IMMEDIATE', label: 'Show result immediately' },
                   { value: 'AFTER_CLOSE', label: 'Show result after quiz closes' },
                   { value: 'MANUAL', label: 'Release result manually' },
                 ]}
               />
+              {formErrors.resultVisibility && <p className="text-xs text-red-500 mt-1">{formErrors.resultVisibility}</p>}
             </div>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -1070,7 +1187,36 @@ export default function QuizzesPage() {
         )}
 
         {/* Step 1: Questions (from the Question Bank) */}
-        {step === 1 && questionsView === 'list' && (() => {
+        {step === 1 && questionsView === 'list' && editingQuizId && (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
+              <span className="mt-0.5 shrink-0">ℹ️</span>
+              <span>Questions cannot be changed while editing a quiz. To change which questions are included, create a new quiz.</span>
+            </div>
+            <p className="text-sm font-semibold text-gray-700">{selectedQuestionIds.length} question{selectedQuestionIds.length === 1 ? '' : 's'}</p>
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {selectedQuestionIds.map((id, idx) => {
+                const q = bankQuestions.find(bq => bq.id === id)
+                const pts = questionMarks[id] ?? q?.points ?? 1
+                return (
+                  <div key={id} className="p-3 border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                        {idx + 1}
+                      </span>
+                      <p className="text-xs font-semibold text-gray-800 dark:text-white break-words">{q?.questionText || `Question #${id}`}</p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
+                      {pts} pt{pts > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {step === 1 && questionsView === 'list' && !editingQuizId && (() => {
           const totalPickerPages = Math.ceil(filteredBankQuestions.length / pickerPageSize) || 1
           const validPickerPage = Math.min(pickerPage, totalPickerPages)
           const pickerStartIndex = (validPickerPage - 1) * pickerPageSize
@@ -1392,7 +1538,7 @@ export default function QuizzesPage() {
                 disabled={saving || !isDraftValid}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {saving ? 'Saving...' : 'Save Draft'}
+                {saving ? 'Saving...' : (editingQuizId ? 'Save Changes' : 'Save Draft')}
               </button>
               <button
                 type="button"
@@ -1400,7 +1546,7 @@ export default function QuizzesPage() {
                 disabled={saving || !isPublishValid}
                 className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {saving ? 'Publishing...' : 'Publish Quiz'}
+                {saving ? 'Publishing...' : (editingQuizId ? 'Save & Publish' : 'Publish Quiz')}
               </button>
             </div>
           </div>
@@ -1437,6 +1583,53 @@ export default function QuizzesPage() {
                 <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-lg font-semibold border border-blue-100 dark:border-blue-800">
                   🔄 Max Attempts: {viewingQuiz.maxAttempts}
                 </span>
+              </div>
+            </div>
+
+            <div className="glass-card p-5 space-y-3">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-white">Settings</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <div>
+                  <p className="text-gray-400 dark:text-gray-500">Course</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-semibold">{viewingQuiz.courseName || 'All courses'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 dark:text-gray-500">Batch</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-semibold">{viewingQuiz.batchName || 'All batches'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 dark:text-gray-500">Result Visibility</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-semibold">
+                    {{ IMMEDIATE: 'Immediately', AFTER_CLOSE: 'After quiz closes', MANUAL: 'Manual release' }[viewingQuiz.resultVisibility] || viewingQuiz.resultVisibility || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400 dark:text-gray-500">Results Released</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-semibold">{viewingQuiz.resultsReleased ? 'Yes' : 'No'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 dark:text-gray-500">Start Date/Time</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-semibold">{viewingQuiz.scheduledStart ? new Date(viewingQuiz.scheduledStart).toLocaleString() : 'Not scheduled'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 dark:text-gray-500">End Date/Time</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-semibold">{viewingQuiz.scheduledEnd ? new Date(viewingQuiz.scheduledEnd).toLocaleString() : 'Not scheduled'}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[
+                  { flag: viewingQuiz.randomQuestions, label: 'Randomize questions' },
+                  { flag: viewingQuiz.randomOptions, label: 'Randomize options' },
+                  { flag: viewingQuiz.showExplanation, label: 'Show explanations' },
+                  { flag: viewingQuiz.negativeMarking, label: 'Negative marking' },
+                ].filter(s => s.flag).map(s => (
+                  <span key={s.label} className="text-[10px] font-bold px-2 py-1 rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border border-purple-100 dark:border-purple-800">
+                    ✓ {s.label}
+                  </span>
+                ))}
+                {![viewingQuiz.randomQuestions, viewingQuiz.randomOptions, viewingQuiz.showExplanation, viewingQuiz.negativeMarking].some(Boolean) && (
+                  <span className="text-[10px] text-gray-400">No optional settings enabled</span>
+                )}
               </div>
             </div>
 

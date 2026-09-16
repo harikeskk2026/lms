@@ -11,11 +11,11 @@ import { PDF_QUESTION_TYPES } from '@/validations/questionValidation'
 const STEP_LABELS = ['Quiz Details', 'Upload PDF', 'Review Questions']
 
 const EMPTY_QUIZ_FORM = {
-  title: '', description: '', type: 'MCQ', difficulty: 'MEDIUM',
-  duration: 30, passingScore: 50, maxAttempts: 1,
+  title: '', description: '', type: 'MCQ', difficulty: '',
+  duration: '', passingScore: '', maxAttempts: '',
   courseId: '', batchId: '',
   randomQuestions: false, randomOptions: false, showExplanation: true,
-  negativeMarking: false, resultVisibility: 'IMMEDIATE',
+  negativeMarking: false, resultVisibility: '',
   scheduledStart: '', scheduledEnd: '',
 }
 
@@ -172,6 +172,12 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
       errs.title = 'Title is required'
     } else if (form.title.trim().length < 3) {
       errs.title = 'Title must be at least 3 characters'
+    }
+    if (!form.difficulty) {
+      errs.difficulty = 'Difficulty is required'
+    }
+    if (!form.resultVisibility) {
+      errs.resultVisibility = 'Result visibility is required'
     }
     const durationNum = Number(form.duration)
     if (form.duration === '' || isNaN(durationNum) || durationNum < 1) {
@@ -346,7 +352,7 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
     }
     const missingCourse = drafts.some(d => !d.savedId && !d.courseId && !form.courseId)
     if (missingCourse) {
-      toast.error('Every question needs a Course — pick one in Quiz Details, or edit the question directly.')
+      toast.error('Every question needs a Course — go back to Quiz Details and pick one.')
       return
     }
     if (publish && !form.batchId && !form.courseId) {
@@ -434,28 +440,33 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
+              placeholder="Enter quiz description"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty *</label>
               <CustomSelect
                 value={form.difficulty}
-                onChange={(val) => setForm(f => ({ ...f, difficulty: val }))}
+                onChange={(val) => { setForm(f => ({ ...f, difficulty: val })); if (formErrors.difficulty) setFormErrors(prev => ({ ...prev, difficulty: undefined })) }}
+                placeholder="Select difficulty"
                 options={[{ value: 'EASY', label: 'Easy' }, { value: 'MEDIUM', label: 'Medium' }, { value: 'HARD', label: 'Hard' }]}
               />
+              {formErrors.difficulty && <p className="text-xs text-red-500 mt-1">{formErrors.difficulty}</p>}
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility *</label>
               <CustomSelect
                 value={form.resultVisibility}
-                onChange={(val) => setForm(f => ({ ...f, resultVisibility: val }))}
+                onChange={(val) => { setForm(f => ({ ...f, resultVisibility: val })); if (formErrors.resultVisibility) setFormErrors(prev => ({ ...prev, resultVisibility: undefined })) }}
+                placeholder="Select result visibility"
                 options={[
                   { value: 'IMMEDIATE', label: 'Show result immediately' },
                   { value: 'AFTER_CLOSE', label: 'Show result after quiz closes' },
                   { value: 'MANUAL', label: 'Release result manually' },
                 ]}
               />
+              {formErrors.resultVisibility && <p className="text-xs text-red-500 mt-1">{formErrors.resultVisibility}</p>}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -486,22 +497,48 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Duration (min) *</label>
-              <input type="text" inputMode="numeric" value={form.duration}
-                onChange={e => { const val = e.target.value.replace(/\D/g, ''); setForm(f => ({ ...f, duration: val })); if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined })) }}
-                className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${formErrors.duration ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Duration *</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <input type="text" inputMode="numeric" placeholder="Hrs"
+                    value={form.duration === '' ? '' : String(Math.floor(Number(form.duration) / 60))}
+                    onChange={e => {
+                      const h = e.target.value.replace(/\D/g, '')
+                      const mins = form.duration === '' ? 0 : Number(form.duration) % 60
+                      const totalMin = (h === '' ? 0 : Number(h)) * 60 + mins
+                      setForm(f => ({ ...f, duration: (h === '' && mins === 0) ? '' : String(totalMin) }))
+                      if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined }))
+                    }}
+                    className={`w-full rounded-xl border bg-gray-50 px-3 py-2.5 text-sm text-center outline-none focus:ring-2 ${formErrors.duration ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
+                  <p className="text-[10px] text-gray-400 mt-0.5 text-center">hrs</p>
+                </div>
+                <div className="flex-1">
+                  <input type="text" inputMode="numeric" placeholder="Mins"
+                    value={form.duration === '' ? '' : String(Number(form.duration) % 60)}
+                    onChange={e => {
+                      let m = e.target.value.replace(/\D/g, '')
+                      if (m !== '' && Number(m) > 59) m = '59'
+                      const hrs = form.duration === '' ? 0 : Math.floor(Number(form.duration) / 60)
+                      const totalMin = hrs * 60 + (m === '' ? 0 : Number(m))
+                      setForm(f => ({ ...f, duration: (hrs === 0 && m === '') ? '' : String(totalMin) }))
+                      if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined }))
+                    }}
+                    className={`w-full rounded-xl border bg-gray-50 px-3 py-2.5 text-sm text-center outline-none focus:ring-2 ${formErrors.duration ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
+                  <p className="text-[10px] text-gray-400 mt-0.5 text-center">mins</p>
+                </div>
+              </div>
               {formErrors.duration && <p className="text-xs text-red-500 mt-1">{formErrors.duration}</p>}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Passing Score (%) *</label>
-              <input type="text" inputMode="numeric" value={form.passingScore}
+              <input type="text" inputMode="numeric" placeholder="Enter passing %" value={form.passingScore}
                 onChange={e => { let val = e.target.value.replace(/\D/g, ''); if (val !== '' && Number(val) > 100) val = '100'; setForm(f => ({ ...f, passingScore: val })); if (formErrors.passingScore) setFormErrors(prev => ({ ...prev, passingScore: undefined })) }}
                 className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${formErrors.passingScore ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
               {formErrors.passingScore && <p className="text-xs text-red-500 mt-1">{formErrors.passingScore}</p>}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Max Attempts *</label>
-              <input type="text" inputMode="numeric" value={form.maxAttempts}
+              <input type="text" inputMode="numeric" placeholder="Enter max attempts" value={form.maxAttempts}
                 onChange={e => { const val = e.target.value.replace(/\D/g, ''); setForm(f => ({ ...f, maxAttempts: val })); if (formErrors.maxAttempts) setFormErrors(prev => ({ ...prev, maxAttempts: undefined })) }}
                 className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:ring-2 ${formErrors.maxAttempts ? 'border-red-500 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-500'}`} />
               {formErrors.maxAttempts && <p className="text-xs text-red-500 mt-1">{formErrors.maxAttempts}</p>}
@@ -510,11 +547,11 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date/Time</label>
-              <DateTimePicker value={form.scheduledStart} onChange={val => setForm(f => ({ ...f, scheduledStart: val }))} />
+              <DateTimePicker value={form.scheduledStart} onChange={val => setForm(f => ({ ...f, scheduledStart: val }))} requireExplicitTime />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">End Date/Time</label>
-              <DateTimePicker value={form.scheduledEnd} onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))} />
+              <DateTimePicker value={form.scheduledEnd} onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))} requireExplicitTime />
               {formErrors.scheduledEnd && <p className="text-xs text-red-500 mt-1">{formErrors.scheduledEnd}</p>}
             </div>
           </div>
@@ -628,6 +665,8 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
                       courses={courses}
                       showTopic={false}
                       showCodeSnippet={false}
+                      showCourse={false}
+                      showDifficulty={false}
                       typeOptions={PDF_QUESTION_TYPES}
                       defaultValues={draftToFormValues({ ...draft, courseId: draft.courseId || form.courseId })}
                       editingId={draft.savedId || undefined}

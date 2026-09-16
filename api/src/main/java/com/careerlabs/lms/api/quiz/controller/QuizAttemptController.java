@@ -69,6 +69,19 @@ public class QuizAttemptController {
         return ResponseEntity.ok(ApiResponse.of("Quiz submitted", response));
     }
 
+    /**
+     * Called when the student exits/closes the quiz before submitting - either an
+     * explicit exit click, or a keepalive fetch fired from a pagehide/beforeunload
+     * listener when the tab closes. Idempotent (see {@link QuizAttemptService#abandon}),
+     * so it's safe even if it races with a real submit.
+     */
+    @PostMapping("/{id}/abandon")
+    public ResponseEntity<ApiResponse<Void>> abandon(@PathVariable Long id,
+                                                       @AuthenticationPrincipal JwtUserPrincipal principal) {
+        quizAttemptService.abandon(id, principal.id());
+        return ResponseEntity.ok(ApiResponse.of("Attempt closed", null));
+    }
+
     @GetMapping("/{id}/interview-simulation")
     public ResponseEntity<ApiResponse<InterviewSimulationResponse>> getInterviewSimulation(
             @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {

@@ -46,7 +46,7 @@ const TYPE_DISPLAY_NAMES = {
 // topic) can be created without losing whatever the caller was already doing.
 export default function QuestionForm({
   topics = [], courses = [], onTopicsChange, defaultValues, editingId, onSaved, onCancel,
-  showTopic = true, showCodeSnippet = true, typeOptions = QUESTION_TYPES,
+  showTopic = true, showCodeSnippet = true, showCourse = true, showDifficulty = true, typeOptions = QUESTION_TYPES,
 }) {
   const [saving, setSaving] = useState(false)
   const [newTopicOpen, setNewTopicOpen] = useState(false)
@@ -159,7 +159,7 @@ export default function QuestionForm({
         {errors.questionText && <span className="text-xs text-red-500 mt-1 block">{errors.questionText.message}</span>}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className={showDifficulty ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Type *</label>
           <CustomSelect
@@ -168,17 +168,20 @@ export default function QuestionForm({
             options={typeOptions.map(t => ({ value: t, label: TYPE_DISPLAY_NAMES[t] || t }))}
           />
         </div>
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty *</label>
-          <CustomSelect
-            value={watch('difficulty')}
-            onChange={(val) => setValue('difficulty', val)}
-            options={QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))}
-          />
-        </div>
+        {showDifficulty && (
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty *</label>
+            <CustomSelect
+              value={watch('difficulty')}
+              onChange={(val) => setValue('difficulty', val)}
+              options={QUESTION_DIFFICULTIES.map(d => ({ value: d, label: d }))}
+            />
+          </div>
+        )}
       </div>
 
-      <div className={showTopic ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
+      {(showTopic || showCourse) && (
+      <div className={showTopic && showCourse ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
         {showTopic && (
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -207,17 +210,20 @@ export default function QuestionForm({
             )}
           </div>
         )}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
-          <CustomSelect
-            value={watch('courseId')}
-            onChange={(val) => setValue('courseId', val)}
-            options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
-            placeholder="Select Course"
-          />
-          {errors.courseId && <span className="text-xs text-red-500 mt-1 block">{errors.courseId.message}</span>}
-        </div>
+        {showCourse && (
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Course *</label>
+            <CustomSelect
+              value={watch('courseId')}
+              onChange={(val) => setValue('courseId', val)}
+              options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+              placeholder="Select Course"
+            />
+            {errors.courseId && <span className="text-xs text-red-500 mt-1 block">{errors.courseId.message}</span>}
+          </div>
+        )}
       </div>
+      )}
 
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">Points *</label>

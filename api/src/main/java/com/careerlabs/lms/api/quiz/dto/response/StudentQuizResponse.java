@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 /**
@@ -24,7 +25,9 @@ public record StudentQuizResponse(
         int attemptsUsed,
         LocalDateTime scheduledStart,
         LocalDateTime scheduledEnd,
-        QuizEffectiveStatus effectiveStatus
+        QuizEffectiveStatus effectiveStatus,
+        Instant createdAt,
+        Instant updatedAt
 ) {
 
     public static StudentQuizResponse from(Quiz quiz, int totalQuestions, int attemptsUsed) {
@@ -45,6 +48,8 @@ public record StudentQuizResponse(
                 attemptsUsed,
                 quiz.getScheduledStart(),
                 quiz.getScheduledEnd(),
-                effectiveStatus);
+                effectiveStatus,
+                quiz.getCreatedAt(),
+                quiz.getUpdatedAt());
     }
 }

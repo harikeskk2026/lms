@@ -71,6 +71,7 @@ const quizService = {
   saveAnswer: (attemptId, answer) =>
     apiCall({ method: 'POST', url: `/student/quiz-attempts/${attemptId}/answers`, data: answer }),
   submitAttempt: (attemptId) => apiCall({ method: 'POST', url: `/student/quiz-attempts/${attemptId}/submit` }),
+  abandonAttempt: (attemptId) => apiCall({ method: 'POST', url: `/student/quiz-attempts/${attemptId}/abandon` }),
   listMyAttempts: () => apiCall({ method: 'GET', url: '/student/quiz-attempts' }),
   getAttempt: (id) => apiCall({ method: 'GET', url: `/student/quiz-attempts/${id}` }),
 

@@ -430,8 +430,9 @@ public class QuizServiceImpl implements QuizService {
 
     private StudentQuizResponse toStudentResponse(Quiz quiz, Long studentId) {
         int totalQuestions = (int) quizQuestionRepository.countByQuizId(quiz.getId());
-        int attemptsUsed = (int) quizAttemptRepository
-                .countByQuizIdAndStudentIdAndStatus(quiz.getId(), studentId, AttemptStatus.SUBMITTED);
+        // Every attempt ever started (IN_PROGRESS/SUBMITTED/INCOMPLETE) consumes a
+        // slot immediately - matches the maxAttempts gate in QuizAttemptServiceImpl.
+        int attemptsUsed = (int) quizAttemptRepository.countByQuizIdAndStudentId(quiz.getId(), studentId);
         return StudentQuizResponse.from(quiz, totalQuestions, attemptsUsed, quizAvailabilityService.effectiveStatus(quiz));
     }
 }

@@ -94,10 +94,16 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
             throw new ForbiddenException("You are not assigned to this quiz");
         }
 
-        QuizAttempt attempt = quizAttemptRepository
+        // Attempts are never resumed: a quiz attempt is consumed the moment it's
+        // started, so any attempt still IN_PROGRESS here means the student left
+        // without submitting (or the duration ran out) and is now starting fresh.
+        // Abandon it first (safe no-op if it turns out there's no room left for a
+        // new attempt - see createAttempt's maxAttempts check just below).
+        quizAttemptRepository
                 .findByQuizIdAndStudentIdAndStatus(quizId, studentId, AttemptStatus.IN_PROGRESS)
-                .map(existing -> expireIfStale(existing, quiz))
-                .orElseGet(() -> createAttempt(quiz, studentId));
+                .ifPresent(this::markIncomplete);
+
+        QuizAttempt attempt = createAttempt(quiz, studentId);
 
         List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attempt.getId());
         List<StudentQuestionResponse> questions = questionAttempts.stream()
@@ -107,31 +113,29 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         return StartAttemptResponse.from(attempt, questions);
     }
 
-    private QuizAttempt expireIfStale(QuizAttempt attempt, Quiz quiz) {
-        if (quiz.getDuration() != null && quiz.getDuration() > 0) {
-            Instant expiryTime = attempt.getStartedAt().plusSeconds(quiz.getDuration() * 60L);
-            if (Instant.now().isAfter(expiryTime)) {
-                List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attempt.getId());
-                attempt.setStatus(AttemptStatus.SUBMITTED);
-                attempt.setCompletedAt(expiryTime);
-                attempt.setTimeTaken(quiz.getDuration() * 60);
-                attempt.setScore(0);
-                attempt.setAccuracy(0.0);
-                attempt.setCorrectCount(0);
-                attempt.setSkippedCount(questionAttempts.size());
-                attempt.setWrongCount(0);
-                attempt.setPassed(false);
-                quizAttemptRepository.save(attempt);
-                return null;
-            }
-        }
-        return attempt;
+    /** Abandons an IN_PROGRESS attempt: it was already consumed at start time, so
+     *  this just records that it was never finished, with unanswered questions
+     *  counted as skipped/0 - matching how a timed-out submit already scores them. */
+    private void markIncomplete(QuizAttempt attempt) {
+        List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attempt.getId());
+        Instant now = Instant.now();
+        attempt.setStatus(AttemptStatus.INCOMPLETE);
+        attempt.setCompletedAt(now);
+        attempt.setTimeTaken((int) Duration.between(attempt.getStartedAt(), now).getSeconds());
+        attempt.setScore(0);
+        attempt.setAccuracy(0.0);
+        attempt.setCorrectCount(0);
+        attempt.setSkippedCount(questionAttempts.size());
+        attempt.setWrongCount(0);
+        attempt.setPassed(false);
+        quizAttemptRepository.save(attempt);
     }
 
     private QuizAttempt createAttempt(Quiz quiz, Long studentId) {
-        long submittedCount = quizAttemptRepository
-                .countByQuizIdAndStudentIdAndStatus(quiz.getId(), studentId, AttemptStatus.SUBMITTED);
-        if (submittedCount >= quiz.getMaxAttempts()) {
+        // Every attempt ever started (IN_PROGRESS/SUBMITTED/INCOMPLETE) consumes a
+        // slot immediately - not just submitted ones.
+        long usedCount = quizAttemptRepository.countByQuizIdAndStudentId(quiz.getId(), studentId);
+        if (usedCount >= quiz.getMaxAttempts()) {
             throw new ConflictException("Maximum attempts reached for this quiz");
         }
 
@@ -156,7 +160,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         QuizAttempt attempt = new QuizAttempt();
         attempt.setQuiz(quiz);
         attempt.setStudentId(studentId);
-        attempt.setAttemptNumber((int) submittedCount + 1);
+        attempt.setAttemptNumber((int) usedCount + 1);
         attempt.setStartedAt(Instant.now());
         attempt.setTotalScore(totalScore);
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
@@ -295,6 +299,16 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         return quizAttemptRepository.findByStudentIdOrderByStartedAtDesc(studentId).stream()
                 .map(QuizAttemptResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void abandon(Long attemptId, Long studentId) {
+        QuizAttempt attempt = findAttemptOwnedBy(attemptId, studentId);
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            return; // already SUBMITTED or INCOMPLETE - nothing to do
+        }
+        markIncomplete(attempt);
     }
 
     /** FREE_TEXT questions are blank when their text is empty; OPTIONS questions when no option was picked. */

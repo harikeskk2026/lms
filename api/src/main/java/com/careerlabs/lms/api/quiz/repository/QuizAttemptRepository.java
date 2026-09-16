@@ -18,6 +18,11 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
 
     long countByQuizIdAndStudentIdAndStatus(Long quizId, Long studentId, AttemptStatus status);
 
+    /** Every attempt ever started for this quiz by this student, regardless of
+     *  status - IN_PROGRESS/SUBMITTED/INCOMPLETE all consume a maxAttempts slot
+     *  the moment they're created. */
+    long countByQuizIdAndStudentId(Long quizId, Long studentId);
+
     long countByStudentIdAndStatus(Long studentId, AttemptStatus status);
 
     boolean existsByQuizId(Long quizId);
