@@ -196,22 +196,40 @@ public class AttendanceServiceImpl implements AttendanceService {
                         m.setDailyClass(dc);
                         meetingLinkRepository.save(m);
                     }
-                } else if (m.getCourse() != null && batchId != null) {
-                    Batch b = batchRepository.findById(batchId).orElse(null);
-                    if (b != null && b.getCourse() != null && b.getCourse().getId().equals(m.getCourse().getId())) {
-                        LocalDateTime start = m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now();
-                        List<DailyClass> existing = dailyClassRepository.findByBatchIdOrderByDateDesc(batchId);
-                        boolean alreadyExists = existing.stream().anyMatch(dc ->
-                                (dc.getTitle() != null && dc.getTitle().equalsIgnoreCase(m.getTitle())) &&
-                                (dc.getDate() != null && dc.getDate().toLocalDate().equals(start.toLocalDate())));
-                        if (!alreadyExists) {
-                            DailyClass dc = new DailyClass();
-                            dc.setBatch(b);
-                            dc.setDate(start);
-                            dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
-                            dc.setMeetLink(m.getMeetUrl());
-                            dc.setStatus(ClassStatus.SCHEDULED);
-                            dailyClassRepository.save(dc);
+                } else {
+                    List<Batch> targetBatches;
+                    if (batchId != null) {
+                        Batch b = batchRepository.findById(batchId).orElse(null);
+                        targetBatches = b != null ? List.of(b) : List.of();
+                    } else if (m.getCourse() != null) {
+                        targetBatches = batchRepository.findByCourseId(m.getCourse().getId());
+                    } else {
+                        targetBatches = batchRepository.findAll();
+                    }
+
+                    if (targetBatches != null) {
+                        for (Batch b : targetBatches) {
+                            if (m.getCourse() != null && b.getCourse() != null && !b.getCourse().getId().equals(m.getCourse().getId())) {
+                                continue;
+                            }
+                            LocalDateTime start = m.getScheduledStart() != null ? m.getScheduledStart() : LocalDateTime.now();
+                            List<DailyClass> existing = dailyClassRepository.findByBatchIdOrderByDateDesc(b.getId());
+                            boolean alreadyExists = existing.stream().anyMatch(dc ->
+                                    (dc.getTitle() != null && dc.getTitle().equalsIgnoreCase(m.getTitle())) &&
+                                    (dc.getDate() != null && dc.getDate().toLocalDate().equals(start.toLocalDate())));
+                            if (!alreadyExists) {
+                                DailyClass dc = new DailyClass();
+                                dc.setBatch(b);
+                                dc.setDate(start);
+                                dc.setTitle(m.getTitle() != null && !m.getTitle().isBlank() ? m.getTitle() : "Scheduled Class");
+                                dc.setMeetLink(m.getMeetUrl());
+                                dc.setStatus(ClassStatus.SCHEDULED);
+                                dc = dailyClassRepository.save(dc);
+                                if (m.getDailyClass() == null) {
+                                    m.setDailyClass(dc);
+                                    meetingLinkRepository.save(m);
+                                }
+                            }
                         }
                     }
                 }
@@ -331,31 +349,58 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @Transactional(readOnly = true)
     public List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId, JwtUserPrincipal principal) {
+        return getAttendanceSheet(classId, null, principal);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId, String search, JwtUserPrincipal principal) {
         DailyClass dailyClass = dailyClassRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("DailyClass not found with id: " + classId));
 
-        batchAuthGuard.requireEntityBatchOwnership(principal,
-                dailyClass.getBatch() != null ? dailyClass.getBatch().getId() : null);
+        Batch classBatch = dailyClass.getBatch();
+        Long batchId = classBatch != null ? classBatch.getId() : null;
 
-        Long batchId = dailyClass.getBatch().getId();
-        List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batchId);
+        batchAuthGuard.requireEntityBatchOwnership(principal, batchId);
+
+        List<Student> students;
+        if (batchId != null) {
+            students = enrollmentRepository.findActiveStudentsByBatchId(batchId);
+        } else {
+            students = studentRepository.findByUser_ActiveTrue();
+            if (students.isEmpty()) {
+                students = studentRepository.findAll();
+            }
+        }
+
+        if (search != null && !search.trim().isEmpty()) {
+            String q = search.trim().toLowerCase();
+            students = students.stream()
+                    .filter(s -> (s.getUser() != null && s.getUser().getName() != null && s.getUser().getName().toLowerCase().contains(q))
+                              || (s.getUser() != null && s.getUser().getEmail() != null && s.getUser().getEmail().toLowerCase().contains(q))
+                              || (s.getEnrollmentNo() != null && s.getEnrollmentNo().toLowerCase().contains(q)))
+                    .toList();
+        }
+
         List<Attendance> attendances = attendanceRepository.findByDailyClassId(classId);
 
         Map<Long, Attendance> attendanceMap = attendances.stream()
                 .collect(Collectors.toMap(a -> a.getStudent().getId(), a -> a, (existing, replacement) -> replacement));
 
-        return students.stream().map(student -> {
-            Attendance existing = attendanceMap.get(student.getId());
-            return new AttendanceSheetItemResponse(
-                    student.getId(),
-                    student.getUser().getId(),
-                    student.getUser().getName(),
-                    student.getUser().getEmail(),
-                    student.getEnrollmentNo(),
-                    existing != null ? existing.getStatus() : AttendStatus.ABSENT,
-                    existing != null ? existing.getRemarks() : null
-            );
-        }).toList();
+        return students.stream()
+                .filter(student -> student.getUser() != null)
+                .map(student -> {
+                    Attendance existing = attendanceMap.get(student.getId());
+                    return new AttendanceSheetItemResponse(
+                            student.getId(),
+                            student.getUser().getId(),
+                            student.getUser().getName(),
+                            student.getUser().getEmail(),
+                            student.getEnrollmentNo(),
+                            existing != null ? existing.getStatus() : AttendStatus.ABSENT,
+                            existing != null ? existing.getRemarks() : null
+                    );
+                }).toList();
     }
 
     @Override
@@ -484,6 +529,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         batchAuthGuard.requireEntityBatchOwnership(principal,
                 currentClass.getBatch() != null ? currentClass.getBatch().getId() : null);
 
+        if (currentClass.getBatch() == null) {
+            throw new ResourceNotFoundException("No previous completed class found for this batch");
+        }
+
         DailyClass previous = dailyClassRepository.findFirstByBatchIdAndStatusAndDateLessThanOrderByDateDesc(
                         currentClass.getBatch().getId(), ClassStatus.COMPLETED, currentClass.getDate())
                 .orElseThrow(() -> new ResourceNotFoundException("No previous completed class found for this batch"));
@@ -568,7 +617,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                             a.getDailyClass().getRecordingUrl(),
                             null,
                             correctionPending,
-                            reqStatus
+                            reqStatus,
+                            a.getDailyClass().getNotes()
                     );
                 })
                 .toList();
@@ -592,7 +642,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         null, c.getId(), c.getTitle(),
                         c.getBatch() != null ? c.getBatch().getTrainerId() : null,
                         c.getDate(), c.getStatus(), null, null,
-                        c.getMeetLink(), c.getRecordingUrl(), null))
+                        c.getMeetLink(), c.getRecordingUrl(), null, false, null, c.getNotes()))
                 .toList();
 
         // Scheduled Class (Zoom) sessions visible to the student that day, which never
@@ -628,7 +678,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         for (Batch batch : batches) {
             List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             List<DailyClass> classes = dailyClassRepository.findByBatchIdAndStatusOrderByDateDesc(batch.getId(), ClassStatus.COMPLETED);
-            List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
+            
+            Set<Long> completedClassIds = classes.stream().map(DailyClass::getId).collect(Collectors.toSet());
+            List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId()).stream()
+                    .filter(a -> a.getDailyClass() != null && completedClassIds.contains(a.getDailyClass().getId()))
+                    .toList();
 
             int totalStudents = students.size();
             int totalClasses = classes.size();
@@ -636,6 +690,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             int totalPresent = 0, totalAbsent = 0, totalLate = 0;
 
             Map<Long, List<Attendance>> byStudent = attendances.stream()
+                    .filter(a -> a != null && a.getStudent() != null && a.getStudent().getId() != null)
                     .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
 
             int lowAttCount = 0;
@@ -650,22 +705,27 @@ public class AttendanceServiceImpl implements AttendanceService {
                 totalAbsent += ab;
                 totalLate += lt;
 
-                int studentTotal = sAtt.size();
-                // Students with NO records count as 0% attendance
-                int pct = studentTotal > 0 ? (int) Math.round((p * 100.0) / studentTotal) : 0;
-                totalPctSum += pct;
-                if (pct < 75) {
-                    lowAttCount++;
+                int attended = p + lt;
+                int pct = 0;
+                if (totalClasses > 0) {
+                    pct = (int) Math.round((attended * 100.0) / totalClasses);
+                    pct = Math.min(100, pct);
+                    if (pct < 75) {
+                        lowAttCount++;
+                    }
                 }
+                totalPctSum += pct;
             }
 
-            // Average across ALL enrolled students (0% for those with no records)
-            int avgAttendance = totalStudents > 0 ? totalPctSum / totalStudents : 0;
+            int avgAttendance = 0;
+            if (totalClasses > 0 && totalStudents > 0) {
+                avgAttendance = (int) Math.round((double) totalPctSum / totalStudents);
+            }
 
             list.add(new AttendanceOverviewItemResponse(
                     batch.getId(),
                     batch.getName(),
-                    batch.getCourse().getTitle(),
+                    batch.getCourse() != null ? batch.getCourse().getTitle() : "",
                     totalStudents,
                     totalClasses,
                     avgAttendance,
@@ -717,6 +777,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         List<Attendance> allAttendances = allClassIdSet.isEmpty() ? List.of() : attendanceRepository.findByDailyClassIdIn(new ArrayList<>(allClassIdSet));
         Map<Long, List<Attendance>> attByClass = allAttendances.stream()
+                .filter(a -> a != null && a.getDailyClass() != null && a.getDailyClass().getId() != null)
                 .collect(Collectors.groupingBy(a -> a.getDailyClass().getId()));
 
         DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -949,6 +1010,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
             List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batch.getId());
             Map<Long, List<Attendance>> byStudent = attendances.stream()
+                    .filter(a -> a != null && a.getStudent() != null && a.getStudent().getId() != null)
                     .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
 
             for (Student student : students) {
@@ -1003,13 +1065,21 @@ public class AttendanceServiceImpl implements AttendanceService {
         int totalAll = attendances.size();
         int overallPct = totalAll > 0 ? (int) Math.round((totalPresent * 100.0) / totalAll) : 0;
 
+        LocalDateTime now = LocalDateTime.now();
         int streak = 0;
         for (Attendance a : attendances) {
-            if (a.getStatus() == AttendStatus.PRESENT) streak++;
-            else break;
+            if (a.getDailyClass() != null && a.getDailyClass().getDate() != null && a.getDailyClass().getDate().isAfter(now)) {
+                continue;
+            }
+            if (a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE) {
+                streak++;
+            } else if (a.getStatus() == AttendStatus.ABSENT) {
+                break;
+            }
         }
 
         Map<Long, List<Attendance>> byBatch = attendances.stream()
+                .filter(a -> a != null && a.getDailyClass() != null && a.getDailyClass().getBatch() != null && a.getDailyClass().getBatch().getId() != null)
                 .collect(Collectors.groupingBy(a -> a.getDailyClass().getBatch().getId()));
 
         List<AttendanceHistoryResponse.BatchAttendanceHistoryDto> batchHistories = new ArrayList<>();
@@ -1095,12 +1165,15 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         List<Attendance> attendances = attendanceRepository.findByDailyClassBatchId(batchId);
 
-        Map<String, Attendance> attMap = attendances.stream()
-                .collect(Collectors.toMap(
-                        a -> a.getStudent().getId() + "_" + a.getDailyClass().getId(),
-                        a -> a,
-                        (existing, replacement) -> existing
-                ));
+        Map<String, Attendance> attMap = new HashMap<>();
+        if (attendances != null) {
+            for (Attendance a : attendances) {
+                if (a != null && a.getStudent() != null && a.getStudent().getId() != null &&
+                    a.getDailyClass() != null && a.getDailyClass().getId() != null) {
+                    attMap.putIfAbsent(a.getStudent().getId() + "_" + a.getDailyClass().getId(), a);
+                }
+            }
+        }
 
         List<BatchAttendanceMatrixResponse.ClassSummaryDto> classSummaries = new ArrayList<>();
         for (DailyClass cls : classes) {
@@ -1114,7 +1187,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 }
             }
             int total = students.size();
-            int pct = total > 0 ? (int) Math.round((p * 100.0) / total) : 0;
+            int pct = total > 0 ? (int) Math.round(((p + l) * 100.0) / total) : 0;
             classSummaries.add(new BatchAttendanceMatrixResponse.ClassSummaryDto(
                     cls.getId(), cls.getDate(), cls.getTitle(), cls.getStatus(),
                     p, a, l, total - (p + a + l), pct
@@ -1124,21 +1197,21 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<BatchAttendanceMatrixResponse.StudentMatrixRowDto> matrix = new ArrayList<>();
         for (Student s : students) {
             Map<String, String> recs = new HashMap<>();
-            int present = 0, total = 0;
+            int attended = 0;
+            int total = classes.size();
             for (DailyClass cls : classes) {
                 Attendance att = attMap.get(s.getId() + "_" + cls.getId());
                 if (att != null) {
                     recs.put(String.valueOf(cls.getId()), att.getStatus().name());
-                    total++;
-                    if (att.getStatus() == AttendStatus.PRESENT) present++;
+                    if (att.getStatus() == AttendStatus.PRESENT || att.getStatus() == AttendStatus.LATE) attended++;
                 } else {
                     recs.put(String.valueOf(cls.getId()), null);
                 }
             }
-            int pct = total > 0 ? (int) Math.round((present * 100.0) / total) : 0;
+            int pct = total > 0 ? (int) Math.round((attended * 100.0) / total) : 0;
             matrix.add(new BatchAttendanceMatrixResponse.StudentMatrixRowDto(
                     s.getId(), s.getUser().getName(), s.getUser().getEmail(), s.getEnrollmentNo(),
-                    present, total, pct, recs
+                    attended, total, pct, recs
             ));
         }
 
@@ -1149,8 +1222,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<AttendanceAlertResponse> getAttendanceAlerts(Boolean resolved, Long batchId) {
+        return getAttendanceAlerts(resolved, batchId, null);
+    }
+
+    @Override
+    @Transactional
+    public List<AttendanceAlertResponse> getAttendanceAlerts(Boolean resolved, Long batchId, String search) {
         boolean isRes = resolved != null && resolved;
         if (!isRes) {
             try {
@@ -1163,7 +1242,19 @@ public class AttendanceServiceImpl implements AttendanceService {
                 attendanceAlertRepository.findByBatchIdAndIsResolvedOrderByCurrentPctAsc(batchId, isRes) :
                 attendanceAlertRepository.findByIsResolvedOrderByCurrentPctAsc(isRes);
 
-        return alerts.stream().map(this::toAttendanceAlertResponse).toList();
+        List<AttendanceAlertResponse> result = alerts.stream().map(this::toAttendanceAlertResponse).toList();
+        if (search != null && !search.isBlank()) {
+            String q = search.toLowerCase().trim();
+            result = result.stream().filter(a -> {
+                String name = a.studentName() != null ? a.studentName().toLowerCase() : "";
+                String email = a.studentEmail() != null ? a.studentEmail().toLowerCase() : "";
+                String batch = a.batchName() != null ? a.batchName().toLowerCase() : "";
+                String course = a.courseTitle() != null ? a.courseTitle().toLowerCase() : "";
+                String phone = a.phone() != null ? a.phone().toLowerCase() : "";
+                return name.contains(q) || email.contains(q) || batch.contains(q) || course.contains(q) || phone.contains(q);
+            }).toList();
+        }
+        return result;
     }
 
     @Override
@@ -1250,11 +1341,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Calculate overall metrics
         int overallPresent = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
         int overallAbsent = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
-        int overallLate = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
-        int overallExcused = (int) validAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LEAVE || a.getStatus() == AttendStatus.EXCUSED).count();
+        int overallLate = 0;
+        int overallExcused = 0;
         int overallTotal = validAttendances.size();
-        int overallEffectiveTotal = overallPresent + overallAbsent + overallLate;
-        int overallPercentage = overallEffectiveTotal > 0 ? (int) Math.round(((overallPresent + overallLate) * 100.0) / overallEffectiveTotal) : 0;
+        int overallEffectiveTotal = overallPresent + overallAbsent;
+        int overallPercentage = overallEffectiveTotal > 0 ? (int) Math.round((overallPresent * 100.0) / overallEffectiveTotal) : 0;
 
         // Month-filtered metrics if month parameter provided (e.g. "2026-09")
         List<Attendance> monthAttendances = validAttendances;
@@ -1266,23 +1357,27 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         int present = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
         int absent = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.ABSENT).count();
-        int late = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LATE).count();
-        int excused = (int) monthAttendances.stream().filter(a -> a.getStatus() == AttendStatus.LEAVE || a.getStatus() == AttendStatus.EXCUSED).count();
+        int late = 0;
+        int excused = 0;
         int total = monthAttendances.size();
 
-        int effectiveTotal = present + absent + late;
-        int percentage = effectiveTotal > 0 ? (int) Math.round(((present + late) * 100.0) / effectiveTotal) : 0;
+        int effectiveTotal = present + absent;
+        int percentage = effectiveTotal > 0 ? (int) Math.round((present * 100.0) / effectiveTotal) : 0;
 
         int neededFor75 = 0;
         if (overallPercentage < 75 && overallEffectiveTotal > 0) {
-            double raw = (0.75 * overallEffectiveTotal - (overallPresent + overallLate)) / 0.25;
+            double raw = (0.75 * overallEffectiveTotal - overallPresent) / 0.25;
             neededFor75 = Math.max(0, (int) Math.ceil(raw));
         }
 
-        // Calculate consecutive attendance streak descending from most recent class
+        // Calculate consecutive attendance streak descending from most recent past/present class
+        LocalDateTime now = LocalDateTime.now();
         int streak = 0;
         for (Attendance a : validAttendances) {
-            if (a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE) {
+            if (a.getDailyClass() != null && a.getDailyClass().getDate() != null && a.getDailyClass().getDate().isAfter(now)) {
+                continue;
+            }
+            if (a.getStatus() == AttendStatus.PRESENT) {
                 streak++;
             } else if (a.getStatus() == AttendStatus.ABSENT) {
                 break;
@@ -1293,15 +1388,15 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<Attendance> recent = validAttendances.size() > trendWindow
                 ? validAttendances.subList(0, trendWindow)
                 : validAttendances;
-        int recentPresent = (int) recent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
-        int recentCountable = (int) recent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
+        int recentPresent = (int) recent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        int recentCountable = (int) recent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT).count();
         int currentPercentage = recentCountable > 0 ? (int) Math.round((recentPresent * 100.0) / recentCountable) : overallPercentage;
 
         List<Attendance> priorToRecent = validAttendances.size() > trendWindow
                 ? validAttendances.subList(trendWindow, Math.min(trendWindow * 2, validAttendances.size()))
                 : List.of();
-        int priorPresent = (int) priorToRecent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
-        int priorCountable = (int) priorToRecent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
+        int priorPresent = (int) priorToRecent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        int priorCountable = (int) priorToRecent.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT).count();
         int previousPercentage = priorCountable > 0 ? (int) Math.round((priorPresent * 100.0) / priorCountable) : currentPercentage;
 
         int improvement = currentPercentage - previousPercentage;
@@ -1648,14 +1743,19 @@ public class AttendanceServiceImpl implements AttendanceService {
         int ab = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.ABSENT).count();
         int lt = (int) attendances.stream().filter(att -> att.getStatus() == AttendStatus.LATE).count();
 
+        Long batchId = cls.getBatch() != null ? cls.getBatch().getId() : null;
+        String batchName = cls.getBatch() != null ? cls.getBatch().getName() : "All Batches";
+        String courseTitle = (cls.getBatch() != null && cls.getBatch().getCourse() != null)
+                ? cls.getBatch().getCourse().getTitle() : null;
+
         int totalStudents = cls.getBatch() != null ?
                 (int) enrollmentRepository.countByBatchIdAndActiveTrue(cls.getBatch().getId()) : 0;
 
         return new DailyClassResponse(
                 cls.getId(),
-                cls.getBatch().getId(),
-                cls.getBatch().getName(),
-                cls.getBatch().getCourse().getTitle(),
+                batchId,
+                batchName,
+                courseTitle,
                 cls.getDate(),
                 cls.getTitle(),
                 cls.getNotes(),

@@ -58,7 +58,7 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long>, J
 
     List<Enrollment> findByStudentIdInAndActiveTrue(List<Long> studentIds);
 
-    @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.batch.id = :batchId AND e.active = true")
+    @Query("SELECT DISTINCT s FROM Enrollment e JOIN e.student s LEFT JOIN FETCH s.user WHERE e.batch.id = :batchId AND e.active = true")
     List<Student> findActiveStudentsByBatchId(@Param("batchId") Long batchId);
 
     @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.batch.id IN :batchIds AND e.active = true")

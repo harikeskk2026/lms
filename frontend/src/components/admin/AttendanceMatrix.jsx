@@ -4,11 +4,9 @@ import { format } from 'date-fns'
 const STATUS_CELL = {
   PRESENT: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
   ABSENT:  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  LATE:    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  LEAVE:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
 }
 
-const STATUS_LABEL = { PRESENT: 'P', ABSENT: 'A', LATE: 'L', LEAVE: 'Lv' }
+const STATUS_LABEL = { PRESENT: 'P', ABSENT: 'A' }
 
 
 function PctChip({ pct }) {

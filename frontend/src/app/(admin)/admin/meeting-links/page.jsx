@@ -16,31 +16,8 @@ import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import SlidePanel from '@/components/admin/SlidePanel'
 import CustomSelect from '@/components/ui/CustomSelect'
 
-// Platform badge helper: detects meeting provider from URL or explicitly saved platform, returns null if not recognized
-const getPlatformBadge = (meetUrl, platform) => {
-  const url = (meetUrl || '').toLowerCase().trim()
-  const plat = (platform || '').toUpperCase().trim()
-
-  if (plat === 'ZOOM' || url.includes('zoom.us') || url.includes('zoomgov.com')) {
-    return { name: 'Zoom', className: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' }
-  }
-  if (plat === 'GOOGLE_MEET' || plat === 'MEET' || url.includes('meet.google.com')) {
-    return { name: 'Google Meet', className: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' }
-  }
-  if (plat === 'TEAMS' || url.includes('teams.microsoft.com') || url.includes('teams.live.com')) {
-    return { name: 'MS Teams', className: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' }
-  }
-  if (plat === 'WEBEX' || url.includes('webex.com')) {
-    return { name: 'Webex', className: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800' }
-  }
-  if (plat === 'YOUTUBE' || url.includes('youtube.com') || url.includes('youtu.be')) {
-    return { name: 'YouTube Live', className: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' }
-  }
-  if (plat && plat !== 'CUSTOM' && plat !== 'OTHER') {
-    return { name: plat, className: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' }
-  }
-  return null
-}
+// Platform badge helper: returns null to omit showing platform badges completely
+const getPlatformBadge = () => null
 
 const STATUSES = ['SCHEDULED', 'LIVE', 'COMPLETED', 'CANCELLED']
 
@@ -291,16 +268,33 @@ export default function AdminMeetingLinksPage() {
         if (match) list.push(match)
         else list.push({ id: `b-tr-${trainerId || '0'}`, name: trainerName, fullName: trainerName, email: '' })
       }
-      if (list.length > 0) return list
+
+      for (const t of trainers) {
+        if (!list.some(item => String(item.id) === String(t.id))) {
+          if (Array.isArray(t.batches) && t.batches.some(b => String(b.id) === String(form.batchId))) {
+            list.push(t)
+          }
+        }
+      }
+      return list
     }
+
     if (form.courseId) {
+      const selectedCourse = courses.find(c => String(c.id) === String(form.courseId))
+      const courseTitle = selectedCourse?.title || selectedCourse?.name
       const courseBatches = batches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
       const trainerIds = new Set(courseBatches.map(b => b.trainerId || b.trainer?.id).filter(Boolean).map(String))
       const trainerNames = new Set(courseBatches.map(b => b.trainer?.name || b.trainerName || b.trainer?.fullName).filter(Boolean))
 
-      const matched = trainers.filter(t => trainerIds.has(String(t.id)) || trainerNames.has(t.name || t.fullName))
-      if (matched.length > 0) return matched
+      const matched = trainers.filter(t => {
+        if (trainerIds.has(String(t.id)) || trainerNames.has(t.name || t.fullName)) return true
+        if (Array.isArray(t.batches) && t.batches.some(b => courseBatches.some(cb => String(cb.id) === String(b.id)))) return true
+        if (courseTitle && Array.isArray(t.batches) && t.batches.some(b => b.courseTitle && b.courseTitle.toLowerCase() === courseTitle.toLowerCase())) return true
+        return false
+      })
+      return matched
     }
+
     return []
   })()
 
@@ -487,7 +481,7 @@ export default function AdminMeetingLinksPage() {
             Scheduled Class
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Pick a course and batch, paste your meeting link (Google Meet, Zoom, MS Teams, etc.), and publish it for the class.
+            Pick a course and batch, paste your meeting link, and publish it for the class.
           </p>
         </div>
         <button
@@ -636,6 +630,7 @@ export default function AdminMeetingLinksPage() {
                   {(() => {
                     const badge = getPlatformBadge(m.meetUrl, m.platform)
                     if (!badge) return null
+                    if (getDisplayStatus(m) === 'COMPLETED' && badge.name === 'Zoom') return null
                     return (
                       <span className={`font-bold px-2 py-0.5 rounded-md border ${badge.className}`}>
                         {badge.name}
@@ -811,6 +806,7 @@ export default function AdminMeetingLinksPage() {
               </label>
               <CustomSelect
                 value={form.courseId}
+                hasError={Boolean(errors.courseId)}
                 onChange={(val) => {
                   setForm(f => {
                     const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(val))
@@ -840,6 +836,7 @@ export default function AdminMeetingLinksPage() {
               </label>
               <CustomSelect
                 value={form.batchId}
+                hasError={Boolean(errors.batchId)}
                 onChange={(val) => {
                   if (val) {
                     const selectedBatch = batches.find(b => String(b.id) === String(val))
@@ -876,7 +873,7 @@ export default function AdminMeetingLinksPage() {
             </label>
             <input
               type="text"
-              placeholder="https://zoom.us/j/123456789"
+              placeholder="e.g. https://meet.google.com/abc-defg-hij"
               value={form.meetUrl}
               onChange={e => {
                 setForm(f => ({ ...f, meetUrl: e.target.value }))
@@ -906,34 +903,25 @@ export default function AdminMeetingLinksPage() {
 
             {availableTrainersForForm.length > 0 ? (
               <CustomSelect
-                value={availableTrainersForForm.some(t => (t.name || t.fullName) === form.hostName) ? form.hostName : ''}
-                onChange={(val) => {
-                  if (val) {
-                    setForm(f => ({ ...f, hostName: val }))
-                  }
-                }}
+                value={form.hostName}
+                onChange={(val) => setForm(f => ({ ...f, hostName: val || '' }))}
                 options={availableTrainersForForm.map(t => ({
                   value: t.name || t.fullName,
                   label: `${t.name || t.fullName}${t.email ? ` (${t.email})` : ''}`
                 }))}
-                placeholder={form.batchId ? '-- Assigned Trainer --' : '-- Select Course Trainer --'}
+                placeholder={form.batchId ? '-- Select Trainer --' : '-- Select Course Trainer --'}
                 searchable={availableTrainersForForm.length >= 10}
+                clearable
               />
             ) : (
-              <p className="text-[11px] text-gray-400 italic mb-1.5">
-                {form.batchId || form.courseId
-                  ? 'No registered trainer assigned to this selection. Enter custom host name below:'
-                  : 'Select a Course and Batch to see assigned trainers, or enter custom host name below:'}
-              </p>
+              <input
+                type="text"
+                placeholder={!form.courseId && !form.batchId ? "Select Course & Target Batch first" : "Enter host / instructor name"}
+                value={form.hostName}
+                onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              />
             )}
-
-            <input
-              type="text"
-              placeholder="Enter host / instructor name"
-              value={form.hostName}
-              onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            />
           </div>
 
           <div className="space-y-3">

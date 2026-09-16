@@ -625,12 +625,12 @@ export default function BatchDetailPage() {
                     <p className="text-xs text-gray-400">{s.email}</p>
                   </div>
                   <div className="flex gap-1">
-                    {['PRESENT', 'ABSENT', 'LATE', 'LEAVE'].map(st => (
+                    {['PRESENT', 'ABSENT'].map(st => (
                       <button key={st} onClick={() => setAttStatuses(prev => ({ ...prev, [s.studentId]: st }))}
-                        title={st === 'LEAVE' ? 'Leave' : st[0] + st.slice(1).toLowerCase()}
-                        aria-label={st === 'LEAVE' ? 'Leave' : st[0] + st.slice(1).toLowerCase()}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${attStatuses[s.studentId] === st ? (st === 'PRESENT' ? 'bg-green-500 text-white' : st === 'ABSENT' ? 'bg-yellow-400 text-white' : st === 'LATE' ? 'bg-blue-400 text-white' : 'bg-teal-400 text-white') : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                        {st === 'LEAVE' ? 'Lv' : st[0]}
+                        title={st[0] + st.slice(1).toLowerCase()}
+                        aria-label={st[0] + st.slice(1).toLowerCase()}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${attStatuses[s.studentId] === st ? (st === 'PRESENT' ? 'bg-green-500 text-white' : 'bg-red-500 text-white') : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                        {st[0]}
                       </button>
                     ))}
                   </div>

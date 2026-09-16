@@ -61,7 +61,7 @@ export const adminApi = {
   deleteClass: (id) => api.delete(`/admin/classes/${id}`),
 
   // Attendance
-  getAttendanceSheet: (classId) => api.get(`/admin/attendance/${classId}`),
+  getAttendanceSheet: (classId, search) => api.get(`/admin/attendance/${classId}`, { params: search ? { search } : {} }),
   markAttendance: (classId, records) => api.post(`/admin/attendance/${classId}`, { records }),
   // Attendance system
   getAttendanceOverview: () => api.get('/admin/attendance'),
@@ -234,6 +234,7 @@ export const studentApi = {
   getAttendanceHealth: () => api.get('/student/attendance/health'),
   getAttendanceGoal: () => api.get('/student/attendance/goal'),
   setAttendanceGoal: (targetPercentage) => api.post('/student/attendance/goal', { targetPercentage }),
+  clearAttendanceGoal: () => api.delete('/student/attendance/goal'),
   getCalendarDay: (date) => api.get('/student/attendance/calendar/day', { params: { date } }),
   getMyCorrections: () => api.get('/student/attendance/corrections'),
   requestCorrection: (data) => api.post('/student/attendance/corrections', data),

@@ -61,20 +61,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
         log.error("Data integrity violation on {}", request.getRequestURI(), ex);
         String rootMsg = ex.getRootCause() != null ? ex.getRootCause().getMessage() : ex.getMessage();
-        String lower = rootMsg != null ? rootMsg.toLowerCase() : (ex.getMessage() != null ? ex.getMessage().toLowerCase() : "");
+        String fullMsg = (rootMsg != null ? rootMsg : "") + " " + (ex.getMessage() != null ? ex.getMessage() : "");
+        String lower = fullMsg.toLowerCase();
         String userMessage;
         if (lower.contains("assignment_submissions")) {
             userMessage = "Cannot delete this assignment because students have already submitted work for it. You can close the assignment instead.";
         } else if (lower.contains("foreign key") || lower.contains("violates foreign key constraint") || lower.contains("still referenced")) {
             userMessage = "This record is referenced by other data and cannot be modified or deleted.";
-        } else if (lower.contains("duplicate key") || lower.contains("unique constraint") || lower.contains("unique")) {
-            userMessage = "A record with that value already exists. Please choose a different value and try again.";
-        } else if (lower.contains("not null") || lower.contains("null value in column")) {
-            userMessage = "A required field is missing. Please fill in all required fields and try again.";
-        } else if (lower.contains("value too long") || lower.contains("character varying")) {
-            userMessage = "One of your inputs exceeds the maximum allowed length. Please shorten your text.";
+        } else if (lower.contains("duplicate key") || lower.contains("unique constraint") || lower.contains("unique") || lower.contains("duplicate")) {
+            userMessage = "A scheduled class or record with that title, meeting link, or time already exists.";
+        } else if (lower.contains("not null") || lower.contains("null value") || lower.contains("violates not-null")) {
+            userMessage = "A required field (such as title, batch, or date) is missing.";
+        } else if (lower.contains("value too long") || lower.contains("character varying") || lower.contains("string data, right truncation")) {
+            userMessage = "One of your inputs (such as title or meeting URL) exceeds the 255 character limit.";
         } else {
-            userMessage = "Unable to complete request due to data constraints.";
+            userMessage = rootMsg != null && !rootMsg.isBlank() ? rootMsg : "Unable to complete request due to data constraints.";
         }
         return buildResponse(HttpStatus.CONFLICT, userMessage, request.getRequestURI(), null);
     }

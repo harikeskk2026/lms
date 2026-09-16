@@ -25,6 +25,7 @@ export default function CustomSelect({
   compact = false,
   className = '',
   align = 'start',
+  error = false,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -131,9 +132,13 @@ export default function CustomSelect({
     }
   }
 
+  const borderCls = error
+    ? 'border-red-500 ring-1 ring-red-500'
+    : 'border-gray-200 dark:border-gray-700'
+
   const triggerCls = compact
-    ? 'rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs'
-    : 'rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-200 text-sm'
+    ? `rounded-xl border ${borderCls} bg-white dark:bg-gray-800 text-xs`
+    : `rounded-xl border ${borderCls} bg-gray-50 dark:bg-gray-800 dark:text-gray-200 text-sm`
 
   const menu = open && !disabled && menuAnchor ? createPortal(
     <div

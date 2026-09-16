@@ -7,31 +7,8 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { studentApi } from '@/lib/api'
 
-// Platform badge helper: detects meeting provider from URL or explicitly saved platform, returns null if not recognized
-const getPlatformBadge = (meetUrl, platform) => {
-  const url = (meetUrl || '').toLowerCase().trim()
-  const plat = (platform || '').toUpperCase().trim()
-
-  if (plat === 'ZOOM' || url.includes('zoom.us') || url.includes('zoomgov.com')) {
-    return { name: 'Zoom', className: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' }
-  }
-  if (plat === 'GOOGLE_MEET' || plat === 'MEET' || url.includes('meet.google.com')) {
-    return { name: 'Google Meet', className: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' }
-  }
-  if (plat === 'TEAMS' || url.includes('teams.microsoft.com') || url.includes('teams.live.com')) {
-    return { name: 'MS Teams', className: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' }
-  }
-  if (plat === 'WEBEX' || url.includes('webex.com')) {
-    return { name: 'Webex', className: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800' }
-  }
-  if (plat === 'YOUTUBE' || url.includes('youtube.com') || url.includes('youtu.be')) {
-    return { name: 'YouTube Live', className: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' }
-  }
-  if (plat && plat !== 'CUSTOM' && plat !== 'OTHER') {
-    return { name: plat, className: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' }
-  }
-  return null
-}
+// Platform badge helper: returns null to omit showing platform badges completely
+const getPlatformBadge = () => null
 
 // Get the current local date-time as an ISO string "YYYY-MM-DDTHH:MM:SS"
 const getLocalISONow = () => {
@@ -473,6 +450,7 @@ export default function StudentMeetingLinksPage() {
                     {(() => {
                       const badge = getPlatformBadge(m.meetUrl, m.platform)
                       if (!badge) return null
+                      if (badge.name === 'Zoom') return null
                       return (
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${badge.className}`}>
                           {badge.name}

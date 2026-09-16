@@ -569,7 +569,7 @@ export default function ReportsPage() {
   }, [attReport, attSearch])
   const attTotalPages = Math.max(1, Math.ceil(attFiltered.length / attPageSize))
   const attPaginated = attFiltered.slice((attPage - 1) * attPageSize, attPage * attPageSize)
-  const ATTENDANCE_STATUS_COLOR = { PRESENT: '#10b981', ABSENT: '#ef4444', LATE: '#f59e0b', EXCUSED: '#9ca3af' }
+  const ATTENDANCE_STATUS_COLOR = { PRESENT: '#10b981', ABSENT: '#ef4444' }
   const attendanceDistributionData = useMemo(() => (attData?.attendanceDistribution || [])
     .map(d => ({ name: d.status, value: d.count, fill: ATTENDANCE_STATUS_COLOR[d.status] || '#9ca3af' })), [attData])
 
