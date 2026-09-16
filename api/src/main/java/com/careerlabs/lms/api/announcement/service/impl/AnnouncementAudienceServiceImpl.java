@@ -11,6 +11,8 @@ import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.submission.repository.AssignmentSubmissionRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,8 @@ import java.util.List;
 
 @Service
 public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceService {
+
+    private static final Logger log = LoggerFactory.getLogger(AnnouncementAudienceServiceImpl.class);
 
     private final StudentRepository studentRepository;
     private final AttendanceRepository attendanceRepository;
@@ -85,6 +89,10 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
             }
             return matchesRule(announcement, student);
         } catch (Exception e) {
+            log.warn("Failed audience eligibility check for announcement {} and student {}: {}",
+                    announcement != null ? announcement.getId() : null,
+                    student != null ? student.getId() : null,
+                    e.getMessage(), e);
             // Fail closed: an audience-resolution failure must deny access, never grant it.
             return false;
         }
@@ -101,6 +109,10 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                     .map(student -> isEligible(announcement, student))
                     .orElse(false);
         } catch (Exception e) {
+            log.warn("Failed audience user eligibility check for announcement {} and userId {}: {}",
+                    announcement != null ? announcement.getId() : null,
+                    userId,
+                    e.getMessage(), e);
             // Fail closed: an audience-resolution failure must deny access, never grant it.
             return false;
         }
@@ -119,7 +131,16 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (a.getBatch() != null) {
-                predicates.add(cb.equal(root.get("batch").get("id"), a.getBatch().getId()));
+                Long targetBatchId = a.getBatch().getId();
+                Predicate directBatch = cb.equal(root.get("batch").get("id"), targetBatchId);
+                Predicate batchPredicate = directBatch;
+                if (enrollmentRepository != null) {
+                    List<Long> enrolledStudentIds = enrollmentRepository.findActiveStudentIdsByBatchId(targetBatchId);
+                    if (enrolledStudentIds != null && !enrolledStudentIds.isEmpty()) {
+                        batchPredicate = cb.or(directBatch, root.get("id").in(enrolledStudentIds));
+                    }
+                }
+                predicates.add(batchPredicate);
             }
             if (a.getCollege() != null) {
                 predicates.add(cb.equal(root.get("college").get("id"), a.getCollege().getId()));
