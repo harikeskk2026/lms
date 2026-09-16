@@ -34,6 +34,8 @@ public interface AttendanceService {
 
     List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId, JwtUserPrincipal principal);
 
+    List<AttendanceSheetItemResponse> getAttendanceSheet(Long classId, String search, JwtUserPrincipal principal);
+
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records);
 
     List<AttendanceSheetItemResponse> markAttendance(Long classId, List<AttendanceRecordRequest> records, boolean submit, JwtUserPrincipal principal);
@@ -59,6 +61,8 @@ public interface AttendanceService {
     BatchAttendanceMatrixResponse getBatchAttendanceDetail(Long batchId, String month);
 
     List<AttendanceAlertResponse> getAttendanceAlerts(Boolean resolved, Long batchId);
+
+    List<AttendanceAlertResponse> getAttendanceAlerts(Boolean resolved, Long batchId, String search);
 
     Map<String, Object> generateAttendanceAlerts(Double threshold);
 

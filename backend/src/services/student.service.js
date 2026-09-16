@@ -107,9 +107,8 @@ async function getDashboardService(userId) {
   for (const r of attendanceSummary) attMap[r.status] = r._count.status
   const present = attMap['PRESENT'] || 0
   const absent  = attMap['ABSENT'] || 0
-  const late    = attMap['LATE'] || 0
-  const total   = present + absent + late
-  const attPct  = total > 0 ? Math.round((present + late * 0.5) / total * 100 * 10) / 10 : 0
+  const total   = present + absent
+  const attPct  = total > 0 ? Math.round((present / total) * 100 * 10) / 10 : 0
 
   // Process assignments
   let pendingAssignments = 0, overdueAssignments = 0
@@ -420,10 +419,8 @@ async function getAttendanceSummaryService(userId) {
   for (const r of grouped) map[r.status] = r._count.status
   const present = map['PRESENT'] || 0
   const absent  = map['ABSENT'] || 0
-  const late    = map['LATE'] || 0
-  const excused = map['EXCUSED'] || 0
-  const total   = present + absent + late + excused
-  const pct     = total > 0 ? Math.round((present + late * 0.5) / total * 100 * 10) / 10 : 0
+  const total   = present + absent
+  const pct     = total > 0 ? Math.round((present / total) * 100 * 10) / 10 : 0
 
   // Streak calculation (consecutive present days)
   const recent = await prisma.attendance.findMany({
@@ -433,12 +430,14 @@ async function getAttendanceSummaryService(userId) {
     include: { class: { select: { date: true } } }
   })
   let streak = 0
+  const now = new Date()
   for (const r of recent) {
+    if (r.class?.date && new Date(r.class.date) > now) continue
     if (r.status === 'PRESENT') streak++
-    else break
+    else if (r.status === 'ABSENT') break
   }
 
-  return { present, absent, late, excused, total, percentage: pct, streak }
+  return { present, absent, late: 0, excused: 0, total, percentage: pct, streak }
 }
 
 // ─── getStudentAttendanceTrend ────────────────────────────────────────────────

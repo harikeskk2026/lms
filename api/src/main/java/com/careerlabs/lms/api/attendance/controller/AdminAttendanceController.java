@@ -153,8 +153,9 @@ public class AdminAttendanceController {
     @GetMapping("/attendance/alerts")
     public ResponseEntity<ApiResponse<List<AttendanceAlertResponse>>> getAttendanceAlerts(
             @RequestParam(required = false) Boolean resolved,
-            @RequestParam(required = false) Long batchId) {
-        List<AttendanceAlertResponse> response = attendanceService.getAttendanceAlerts(resolved, batchId);
+            @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) String search) {
+        List<AttendanceAlertResponse> response = attendanceService.getAttendanceAlerts(resolved, batchId, search);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
@@ -176,8 +177,9 @@ public class AdminAttendanceController {
     @GetMapping("/attendance/{classId}")
     public ResponseEntity<ApiResponse<List<AttendanceSheetItemResponse>>> getAttendanceSheet(
             @PathVariable Long classId,
+            @RequestParam(required = false) String search,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
-        List<AttendanceSheetItemResponse> response = attendanceService.getAttendanceSheet(classId, principal);
+        List<AttendanceSheetItemResponse> response = attendanceService.getAttendanceSheet(classId, search, principal);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, Eye, User, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock, BookOpen, Layers, CheckCircle2, ArrowRight, Activity, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -8,12 +8,14 @@ import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import CustomSelect from '@/components/ui/CustomSelect'
 
+const getBatchCourseId = (b) => {
+  if (!b) return null
+  return b.courseId || b.course_id || b.course?.id || (typeof b.course === 'number' || typeof b.course === 'string' ? b.course : null)
+}
+
 const STATUS_BADGE = {
   PRESENT: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/40',
   ABSENT:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800/40',
-  LATE:    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/40',
-  LEAVE:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40',
-  EXCUSED: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40',
 }
 
 const ROLE_BADGE = {
@@ -331,6 +333,7 @@ export default function HistoryTab({ refreshKey = 0 }) {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState(emptyFilters)
+  const [searchInput, setSearchInput] = useState(emptyFilters.search)
   const [batches, setBatches] = useState([])
   const [courses, setCourses] = useState([])
   const [detailStudentId, setDetailStudentId] = useState(null)
@@ -339,6 +342,41 @@ export default function HistoryTab({ refreshKey = 0 }) {
     adminApi.getBatches({ isActive: 'true' }).then(r => setBatches(r.data.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
   }, [refreshKey])
+
+  // Debounce search input to avoid triggering API calls on every keystroke
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setFilters(prev => {
+        if (prev.search === searchInput) return prev
+        setPage(1)
+        return { ...prev, search: searchInput }
+      })
+    }, 400)
+    return () => clearTimeout(handler)
+  }, [searchInput])
+
+  // Sync local searchInput if filters.search is reset externally (e.g. Clear Filters)
+  useEffect(() => {
+    setSearchInput(filters.search)
+  }, [filters.search])
+
+  // Inter-dependent filtering between Batches and Courses
+  const availableBatches = useMemo(() => {
+    if (!filters.courseId) return batches
+    return batches.filter(b => {
+      const cId = getBatchCourseId(b)
+      return cId && String(cId) === String(filters.courseId)
+    })
+  }, [batches, filters.courseId])
+
+  const availableCourses = useMemo(() => {
+    if (!filters.batchId) return courses
+    const selectedBatch = batches.find(b => String(b.id) === String(filters.batchId))
+    const bCourseId = getBatchCourseId(selectedBatch)
+    if (!bCourseId) return courses
+    const filtered = courses.filter(c => String(c.id) === String(bCourseId))
+    return filtered.length > 0 ? filtered : courses
+  }, [courses, batches, filters.batchId])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -374,6 +412,35 @@ export default function HistoryTab({ refreshKey = 0 }) {
       setPage(1)
       return
     }
+
+    if (key === 'batchId') {
+      const selectedBatch = batches.find(b => String(b.id) === String(value))
+      const bCourseId = getBatchCourseId(selectedBatch)
+      setFilters(prev => ({
+        ...prev,
+        batchId: value,
+        courseId: bCourseId ? String(bCourseId) : (value ? prev.courseId : '')
+      }))
+      setPage(1)
+      return
+    }
+
+    if (key === 'courseId') {
+      setFilters(prev => {
+        let nextBatchId = prev.batchId
+        if (value && prev.batchId) {
+          const selectedBatch = batches.find(b => String(b.id) === String(prev.batchId))
+          const bCourseId = getBatchCourseId(selectedBatch)
+          if (bCourseId && String(bCourseId) !== String(value)) {
+            nextBatchId = ''
+          }
+        }
+        return { ...prev, courseId: value, batchId: nextBatchId }
+      })
+      setPage(1)
+      return
+    }
+
     setFilters(prev => ({ ...prev, [key]: value }))
     setPage(1)
   }
@@ -397,9 +464,9 @@ export default function HistoryTab({ refreshKey = 0 }) {
             <CustomSelect
               value={filters.batchId}
               onChange={(val) => updateFilter('batchId', val)}
-              options={batches.map(b => ({ value: b.id, label: b.name }))}
+              options={availableBatches.map(b => ({ value: b.id, label: b.name }))}
               placeholder="All Batches"
-              searchable={batches.length >= 10}
+              searchable={availableBatches.length >= 10}
               compact
             />
           </div>
@@ -408,9 +475,9 @@ export default function HistoryTab({ refreshKey = 0 }) {
             <CustomSelect
               value={filters.courseId}
               onChange={(val) => updateFilter('courseId', val)}
-              options={courses.map(c => ({ value: c.id, label: c.title }))}
+              options={availableCourses.map(c => ({ value: c.id, label: c.title }))}
               placeholder="All Courses"
-              searchable={courses.length >= 10}
+              searchable={availableCourses.length >= 10}
               compact
             />
           </div>
@@ -428,14 +495,20 @@ export default function HistoryTab({ refreshKey = 0 }) {
             <label className="block text-xs text-gray-500 mb-1">Search Student</label>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={filters.search} onChange={e => updateFilter('search', e.target.value)}
+              <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
                 placeholder="Name, email, or enrollment no..."
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-9 pr-8 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              {searchInput && (
+                <button type="button" onClick={() => { setSearchInput(''); setFilters(prev => ({ ...prev, search: '' })); setPage(1) }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
         </div>
-        {(filters.from || filters.to || filters.batchId || filters.courseId || filters.status || filters.search) && (
-          <button onClick={() => { setFilters(emptyFilters); setPage(1) }}
+        {(filters.from || filters.to || filters.batchId || filters.courseId || filters.status || searchInput) && (
+          <button onClick={() => { setSearchInput(''); setFilters(emptyFilters); setPage(1) }}
             className="mt-3 text-xs font-semibold text-purple-600 hover:text-purple-800">
             Clear filters
           </button>

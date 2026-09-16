@@ -2,7 +2,17 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { format } from 'date-fns'
-import { X, Video, PlayCircle } from 'lucide-react'
+import { X, Video, PlayCircle, FileText, Paperclip, ExternalLink } from 'lucide-react'
+
+function parseClassNotesAndAttachments(description) {
+  if (!description || typeof description !== 'string') return { notesText: '', attachments: [] }
+  const attachments = []
+  const notesText = description.replace(/\[Attachment:\s*([^\]]+)\]\(([^)]+)\)/g, (match, name, url) => {
+    attachments.push({ name: name.trim(), url: url.trim() })
+    return ''
+  }).trim()
+  return { notesText, attachments }
+}
 
 export default function AttendanceDayModal({ date, records = [], loading, onClose, onRequestCorrection }) {
   const [mounted, setMounted] = useState(false)
@@ -37,7 +47,7 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
         ) : (
           <div className="space-y-3">
             {records.map(r => (
-              <div key={r.attendanceId || r.classId || r.meetingLinkId} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 space-y-1.5">
+              <div key={r.attendanceId || r.classId || r.meetingLinkId} className="rounded-xl border border-purple-100 dark:border-purple-900/30 p-4 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-gray-800 dark:text-white">{r.classTitle}</p>
                   {r.meetingLinkId && !r.classId && (
@@ -71,6 +81,40 @@ export default function AttendanceDayModal({ date, records = [], loading, onClos
                     <span className="text-[10px] text-gray-400">Marked {format(new Date(r.markedAt), 'h:mm a')}</span>
                   )}
                 </div>
+
+                {/* Class Notes & Attachments */}
+                {Boolean(r.notes) && (() => {
+                  const { notesText, attachments } = parseClassNotesAndAttachments(r.notes)
+                  if (!notesText && attachments.length === 0) return null
+                  return (
+                    <div className="p-2.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-800/40 text-xs space-y-1.5">
+                      {notesText && (
+                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed flex items-start gap-1.5 font-normal">
+                          <FileText size={13} className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                          <span>{notesText}</span>
+                        </p>
+                      )}
+                      {attachments.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          {attachments.map((att, idx) => (
+                            <a
+                              key={idx}
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] font-semibold border border-purple-200 dark:border-purple-800 transition-colors shadow-2xs"
+                            >
+                              <Paperclip size={11} className="text-purple-600 dark:text-purple-400" />
+                              <span className="truncate max-w-[160px]">{att.name || 'Attachment'}</span>
+                              <ExternalLink size={9} className="opacity-70" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
                 <div className="flex gap-3 pt-1">
                   {r.meetLink && (
                     <a href={r.meetLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-purple-600 hover:underline">

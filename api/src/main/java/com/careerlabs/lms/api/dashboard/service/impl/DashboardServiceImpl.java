@@ -748,7 +748,8 @@ public class DashboardServiceImpl implements DashboardService {
                             m.getMeetUrl(),
                             status,
                             m.getScheduledEnd(),
-                            courseTitle
+                            courseTitle,
+                            m.getDescription()
                     ));
                 }
             }
@@ -774,7 +775,8 @@ public class DashboardServiceImpl implements DashboardService {
                             c.getMeetLink(),
                             status,
                             null,
-                            c.getBatch() != null && c.getBatch().getCourse() != null ? c.getBatch().getCourse().getTitle() : null
+                            c.getBatch() != null && c.getBatch().getCourse() != null ? c.getBatch().getCourse().getTitle() : null,
+                            c.getNotes()
                     ));
                 }
             }

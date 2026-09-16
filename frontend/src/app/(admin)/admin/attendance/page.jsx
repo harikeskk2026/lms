@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -11,6 +11,7 @@ import {
   Video, MapPin, Clock, User, Eye, ArrowRight, ExternalLink, Sparkles, CheckCircle2, Laptop,
   Search, LayoutGrid, ListFilter, Trash2
 } from 'lucide-react'
+import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import assignmentService from '@/services/assignmentService'
@@ -35,8 +36,6 @@ import {
 const STATUS_CONFIG = {
   PRESENT: { label: 'P',  color: 'bg-green-500 text-white',  hover: 'hover:bg-green-100 hover:text-green-700' },
   ABSENT:  { label: 'A',  color: 'bg-red-500 text-white',    hover: 'hover:bg-red-100 hover:text-red-700' },
-  LATE:    { label: 'L',  color: 'bg-yellow-400 text-white', hover: 'hover:bg-yellow-100 hover:text-yellow-800' },
-  LEAVE:   { label: 'Lv', color: 'bg-blue-500 text-white',   hover: 'hover:bg-blue-100 hover:text-blue-700' },
 }
 
 
@@ -140,10 +139,30 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
   const [uploading, setUploading]         = useState(false)
   const [copying, setCopying]             = useState(false)
   const [viewingAttachment, setViewingAttachment] = useState(null)
-  const [history, setHistory]             = useState([])
   const [studentSearch, setStudentSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedIds, setSelectedIds]     = useState([])
   const [bulkStatus, setBulkStatus]       = useState('PRESENT')
+  const [history, setHistory]             = useState([])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(studentSearch), 400)
+    return () => clearTimeout(timer)
+  }, [studentSearch])
+
+  useEffect(() => {
+    if (!selectedClass || !sheet) return
+    let isCancelled = false
+    adminApi.getAttendanceSheet(selectedClass, debouncedSearch)
+      .then(res => {
+        if (isCancelled) return
+        const rawSheet = res.data?.data
+        const studentList = Array.isArray(rawSheet) ? rawSheet : (rawSheet?.students || [])
+        setSheet(prev => prev ? { ...prev, students: studentList } : prev)
+      })
+      .catch(err => console.error('Failed to search students via API:', err))
+    return () => { isCancelled = true }
+  }, [debouncedSearch, selectedClass])
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -195,6 +214,12 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
         adminApi.getAttendanceSheet(classId),
         targetBatchId ? adminApi.getBatchAttDetail(targetBatchId) : Promise.reject(),
       ])
+      if (sheetRes.status === 'rejected') {
+        const errorMsg = sheetRes.reason?.response?.data?.message || sheetRes.reason?.response?.data?.error || sheetRes.reason?.message || 'Failed to load attendance sheet'
+        toast.error(errorMsg)
+        setLoading(false)
+        return
+      }
       const rawSheet = sheetRes.status === 'fulfilled' ? sheetRes.value.data?.data : null
       const detailData = detailRes.status === 'fulfilled' ? detailRes.value.data?.data : null
 
@@ -232,10 +257,10 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
       setHistory([])
       const rawNotes = selectedClassObj?.notes || rawSheet?.class?.notes || ''
       const parsedAttachments = []
-      const cleanNotes = rawNotes.replace(/\[Attachment:\s*([^\]]+)\]\(([^)]+)\)/g, (match, name, url) => {
+      const cleanNotes = typeof rawNotes === 'string' ? rawNotes.replace(/\[Attachment:\s*([^\]]+)\]\(([^)]+)\)/g, (match, name, url) => {
         parsedAttachments.push({ name: name.trim(), url: url.trim() })
         return ''
-      }).trim()
+      }).trim() : ''
       setClassNotes(cleanNotes)
       setAttachments(parsedAttachments)
     } catch (err) {
@@ -415,11 +440,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
     setSelectedIds([])
   }
 
-  const filteredStudents = (sheet?.students || []).filter(s => {
-    const q = studentSearch.trim().toLowerCase()
-    if (!q) return true
-    return s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.enrollmentNo?.toLowerCase().includes(q)
-  })
+  const filteredStudents = sheet?.students || []
 
   const copyPrevious = async () => {
     setCopying(true)
@@ -458,8 +479,6 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
             <CheckCircle className="text-green-500" size={20} />
             <p className="font-semibold text-green-800 dark:text-green-300 text-sm">
               Attendance saved — {saveResult.PRESENT} present, {saveResult.ABSENT} absent
-              {saveResult.LATE > 0 ? `, ${saveResult.LATE} late` : ''}
-              {saveResult.LEAVE > 0 ? `, ${saveResult.LEAVE} on leave` : ''}
             </p>
           </div>
         </GlassCard>
@@ -742,10 +761,6 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
                 <span className="text-green-600 font-semibold">{counts.PRESENT || 0} present</span>
                 {' · '}
                 <span className="text-red-500 font-semibold">{counts.ABSENT || 0} absent</span>
-                {' · '}
-                <span className="text-yellow-600 font-semibold">{counts.LATE || 0} late</span>
-                {' · '}
-                <span className="text-blue-500 font-semibold">{counts.LEAVE || 0} leave</span>
               </p>
 
               <div className="flex items-center gap-2">
@@ -846,7 +861,10 @@ function BatchOverviewTab({ refreshKey = 0 }) {
 
   // Summary stats
   const totalBatches   = overview?.length || 0
-  const avgAttendance  = overview?.length ? Math.round(overview.reduce((s, b) => s + b.avgAttendance, 0) / overview.length) : 0
+  const activeBatchesWithClasses = overview?.filter(b => b.totalClasses > 0 && b.totalStudents > 0) || []
+  const avgAttendance  = activeBatchesWithClasses.length
+    ? Math.round(activeBatchesWithClasses.reduce((s, b) => s + b.avgAttendance, 0) / activeBatchesWithClasses.length)
+    : (overview?.length ? Math.round(overview.reduce((s, b) => s + b.avgAttendance, 0) / overview.length) : 0)
   const lowStudents    = overview?.reduce((s, b) => s + b.lowAttendanceCount, 0) || 0
 
   // Drilldown view
@@ -1110,35 +1128,73 @@ function AnalyticsTab({ refreshKey = 0 }) {
 
   useEffect(() => { load() }, [load, refreshKey])
 
-  // Day-of-week analysis
-  const dayOfWeekStats = {}
-  if (data?.dailyTrend) {
-    for (const d of data.dailyTrend) {
-      if (!d.total || d.total === 0) continue
-      const dow = new Date(d.date).getDay()
-      if (!dayOfWeekStats[dow]) dayOfWeekStats[dow] = { total: 0, count: 0 }
-      dayOfWeekStats[dow].total += d.pct
-      dayOfWeekStats[dow].count++
-    }
-  }
+  // Working Day (Mon - Fri) Pattern Analysis
+  const workingDayPattern = useMemo(() => {
+    const DAYS = [
+      { dow: 1, name: 'Monday', short: 'Mon' },
+      { dow: 2, name: 'Tuesday', short: 'Tue' },
+      { dow: 3, name: 'Wednesday', short: 'Wed' },
+      { dow: 4, name: 'Thursday', short: 'Thu' },
+      { dow: 5, name: 'Friday', short: 'Fri' },
+    ]
 
-  // Most absent day
-  let mostAbsentDay = null
-  if (data?.dailyTrend?.length) {
-    const dowAvgs = {}
+    if (!data?.dailyTrend || data.dailyTrend.length === 0) {
+      return { days: DAYS.map(d => ({ ...d, avgPct: 0, classesCount: 0, totalAttended: 0, totalAll: 0 })), overallAvg: 0, bestDay: null, worstDay: null }
+    }
+
+    const dayMap = {
+      1: { present: 0, total: 0, classDays: 0 },
+      2: { present: 0, total: 0, classDays: 0 },
+      3: { present: 0, total: 0, classDays: 0 },
+      4: { present: 0, total: 0, classDays: 0 },
+      5: { present: 0, total: 0, classDays: 0 }
+    }
+
     for (const d of data.dailyTrend) {
-      if (!d.total || d.total === 0) continue
-      const dow = new Date(d.date).getDay()
-      if (!dowAvgs[dow]) dowAvgs[dow] = { total: 0, count: 0 }
-      dowAvgs[dow].total += d.pct; dowAvgs[dow].count++
+      if (!d.date) continue
+      let dateObj
+      try { dateObj = new Date(d.date.includes('T') ? d.date : d.date + 'T00:00:00') } catch { continue }
+      const dow = dateObj.getDay()
+      if (dow >= 1 && dow <= 5 && dayMap[dow]) {
+        const pres = (d.present || 0) + (d.late || 0)
+        const tot = d.total || (pres + (d.absent || 0))
+        if (tot > 0) {
+          dayMap[dow].present += pres
+          dayMap[dow].total += tot
+          dayMap[dow].classDays++
+        }
+      }
     }
-    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    const sorted = Object.entries(dowAvgs).sort(([, a], [, b]) => (a.total / a.count) - (b.total / b.count))
-    if (sorted.length) {
-      const [dow, stat] = sorted[0]
-      mostAbsentDay = `${DAYS[dow]} (avg ${Math.round(stat.total / stat.count)}%)`
-    }
-  }
+
+    let grandPresent = 0
+    let grandTotal = 0
+
+    const computedDays = DAYS.map(d => {
+      const stats = dayMap[d.dow]
+      const avgPct = stats.total > 0 ? Math.round((stats.present * 100) / stats.total) : 0
+      grandPresent += stats.present
+      grandTotal += stats.total
+      return {
+        ...d,
+        avgPct,
+        classesCount: stats.classDays,
+        totalAttended: stats.present,
+        totalAll: stats.total
+      }
+    })
+
+    const activeDays = computedDays.filter(d => d.totalAll > 0)
+    const sorted = [...activeDays].sort((a, b) => b.avgPct - a.avgPct)
+    const bestDay = sorted.length > 0 ? sorted[0] : null
+    const worstDay = sorted.length > 0 ? sorted[sorted.length - 1] : null
+    const overallAvg = grandTotal > 0 ? Math.round((grandPresent * 100) / grandTotal) : (data?.overallPct || 0)
+
+    return { days: computedDays, overallAvg, bestDay, worstDay }
+  }, [data])
+
+  const mostAbsentDay = workingDayPattern.worstDay
+    ? `${workingDayPattern.worstDay.name} (avg ${workingDayPattern.worstDay.avgPct}%)`
+    : null
 
   const totalClassesTracked = data?.dailyTrend?.filter(d => (d.total > 0 || d.classTitle))?.length || 0
 
@@ -1239,6 +1295,75 @@ function AnalyticsTab({ refreshKey = 0 }) {
                   </p>
                 </div>
               </div>
+            </div>
+          </GlassCard>
+
+          {/* Working Day Attendance Pattern (Mon – Fri) */}
+          <GlassCard className="p-5 sm:p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                  <Calendar size={18} className="text-purple-600 dark:text-purple-400" />
+                  Working Day Attendance Pattern (Mon – Fri)
+                </h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  Average attendance rate and student participation across official working days
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800/40">
+                <span>Working Day Avg:</span>
+                <span className="font-extrabold text-sm">{workingDayPattern.overallAvg}%</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              {workingDayPattern.days.map((d) => {
+                const isBest = workingDayPattern.bestDay?.dow === d.dow && d.totalAll > 0
+                const isWorst = workingDayPattern.worstDay?.dow === d.dow && d.totalAll > 0 && workingDayPattern.bestDay?.dow !== d.dow
+                const barColor = d.avgPct >= 75 ? 'bg-emerald-500' : d.avgPct >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+
+                return (
+                  <div
+                    key={d.dow}
+                    className={clsx(
+                      'p-3.5 rounded-2xl border transition-all flex flex-col justify-between space-y-3',
+                      isBest
+                        ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 shadow-sm'
+                        : isWorst
+                        ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60'
+                        : 'bg-gray-50/50 dark:bg-gray-800/40 border-gray-100 dark:border-gray-800'
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{d.name}</span>
+                      {isBest && <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded-md">Highest</span>}
+                      {isWorst && <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/60 px-1.5 py-0.5 rounded-md">Lowest</span>}
+                    </div>
+
+                    <div>
+                      <div className="flex items-baseline justify-between mb-1">
+                        <span className="text-2xl font-black text-gray-900 dark:text-white leading-none">
+                          {d.totalAll > 0 ? `${d.avgPct}%` : '—'}
+                        </span>
+                        <span className="text-[10px] font-medium text-gray-400">
+                          {d.classesCount} class{d.classesCount === 1 ? '' : 'es'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden mt-1.5">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                          style={{ width: `${Math.min(100, Math.max(0, d.avgPct))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200/40 dark:border-gray-700/40 flex justify-between">
+                      <span>Attended:</span>
+                      <span className="font-bold text-gray-700 dark:text-gray-300">{d.totalAttended} / {d.totalAll}</span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </GlassCard>
 
@@ -1401,17 +1526,28 @@ function AlertsTab({ onAlertsChanged, refreshKey = 0 }) {
   const [showResolved, setShowResolved] = useState(false)
   const [generating, setGenerating]     = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [riskFilter, setRiskFilter]     = useState('ALL') // 'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM'
 
-  const load = useCallback(async (resolved = false) => {
+  // Debounce search input for API calls
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+    }, 400)
+    return () => clearTimeout(handler)
+  }, [searchQuery])
+
+  const load = useCallback(async (resolved = false, search = '') => {
     setLoading(true)
     try {
-      const r = await adminApi.getAttendanceAlerts({ resolved: resolved ? 'true' : 'false' })
+      const params = { resolved: resolved ? 'true' : 'false' }
+      if (search && search.trim()) params.search = search.trim()
+      const r = await adminApi.getAttendanceAlerts(params)
       setAlerts(r.data.data || [])
     } catch { toast.error('Failed to load alerts') } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load(showResolved) }, [load, showResolved, refreshKey])
+  useEffect(() => { load(showResolved, debouncedSearch) }, [load, showResolved, debouncedSearch, refreshKey])
 
   const generate = async () => {
     const numThreshold = Number(threshold)
@@ -1423,7 +1559,7 @@ function AlertsTab({ onAlertsChanged, refreshKey = 0 }) {
     try {
       const r = await adminApi.generateAlerts({ threshold: numThreshold })
       toast.success(`Generated ${r.data?.data?.generated ?? 0} new alerts (checked ${r.data?.data?.checked ?? 0} students)`)
-      await load(showResolved)
+      await load(showResolved, debouncedSearch)
       onAlertsChanged?.()
     } catch { toast.error('Failed to generate alerts') } finally { setGenerating(false) }
   }
@@ -1465,19 +1601,10 @@ function AlertsTab({ onAlertsChanged, refreshKey = 0 }) {
     }
   }
 
-  // Filter alerts by search query and risk filter
+  // Filter alerts by risk filter
   const filteredAlerts = alerts.filter(alert => {
-    const name = alert.studentName || alert.student?.user?.name || alert.student?.name || ''
-    const email = alert.studentEmail || alert.student?.user?.email || alert.student?.email || ''
-    const batch = alert.batchName || alert.batch?.name || ''
-    const course = alert.courseTitle || alert.batch?.course?.title || ''
-    const q = searchQuery.toLowerCase().trim()
-
-    const matchesSearch = !q || name.toLowerCase().includes(q) || email.toLowerCase().includes(q) || batch.toLowerCase().includes(q) || course.toLowerCase().includes(q)
     const risk = getRiskInfo(alert.currentPct ?? 0).key
-    const matchesRisk = riskFilter === 'ALL' || risk === riskFilter
-
-    return matchesSearch && matchesRisk
+    return riskFilter === 'ALL' || risk === riskFilter
   })
 
   // Quick stats
@@ -2272,7 +2399,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted, refreshK
                       </a>
                     )}
 
-                    {c.classId && !info.isOngoing && (
+                    {c.classId && !info.isOngoing && !info.isCompleted && (
                       <button
                         onClick={() => setDeletingClass(c)}
                         className="p-2 rounded-xl border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-700 transition-colors"
@@ -2722,25 +2849,107 @@ export default function AttendancePage() {
 
   const exportCSV = async () => {
     try {
-      const r = await adminApi.exportCSV({ type: 'attendance' })
-      const rawData = r.data?.data || r.data || []
-      const rows = Array.isArray(rawData) ? rawData : []
-      if (!rows.length) return toast.error('No data to export')
-      
+      let rows = []
+      let filename = `attendance-${activeTab}-${new Date().toISOString().split('T')[0]}.csv`
+
+      if (activeTab === 'today') {
+        const res = await adminApi.getTodayClasses()
+        const data = res.data?.data || res.data || []
+        const list = Array.isArray(data) ? data : (data.classes || data.todayClasses || [])
+        rows = list.map(c => ({
+          'Class Title': c.title || c.classTitle || 'Class Session',
+          'Batch Name': c.batchName || c.batch?.name || 'General',
+          'Scheduled Time': c.scheduledStart || c.time || c.date || 'Today',
+          'Status': c.status || 'SCHEDULED',
+          'Meeting Link': c.meetUrl || c.meetLink || 'N/A'
+        }))
+      } else if (activeTab === 'overview') {
+        const res = await adminApi.getAttendanceOverview()
+        const data = res.data?.data || res.data || []
+        const list = Array.isArray(data) ? data : (data.batches || data.overview || [])
+        rows = list.map(b => ({
+          'Batch Name': b.batchName || b.name || 'N/A',
+          'Course Title': b.courseTitle || b.course?.title || 'N/A',
+          'Total Students': b.totalStudents || b.studentCount || 0,
+          'Total Classes': b.totalClasses || b.classCount || 0,
+          'Average Attendance Rate (%)': b.avgAttendancePct != null ? `${b.avgAttendancePct}%` : (b.attendanceRate != null ? `${b.attendanceRate}%` : '0%'),
+          'At Risk Students': b.atRiskCount || b.below75Count || 0
+        }))
+      } else if (activeTab === 'analytics') {
+        const res = await adminApi.getAttendanceAnalytics()
+        const data = res.data?.data || res.data || {}
+        const trend = data.dailyTrend || data.trend || (Array.isArray(data) ? data : [])
+        rows = trend.map(t => ({
+          'Date / Period': t.date || t.label || t.period || 'N/A',
+          'Present Count': t.present || t.presentCount || 0,
+          'Absent Count': t.absent || t.absentCount || 0,
+          'Late Count': t.late || t.lateCount || 0,
+          'Total Classes': t.total || t.totalCount || 0,
+          'Attendance Rate (%)': t.percentage != null ? `${t.percentage}%` : (t.rate != null ? `${t.rate}%` : '0%')
+        }))
+      } else if (activeTab === 'alerts') {
+        const res = await adminApi.getAttendanceAlerts()
+        const data = res.data?.data || res.data || []
+        const list = Array.isArray(data) ? data : (data.alerts || data.content || [])
+        rows = list.map(a => ({
+          'Student Name': a.studentName || a.student?.user?.name || 'N/A',
+          'Enrollment No': a.enrollmentNo || a.student?.enrollmentNo || 'N/A',
+          'Batch': a.batchName || a.batch?.name || 'N/A',
+          'Attendance Rate (%)': a.overallPercentage != null ? `${a.overallPercentage}%` : `${a.percentage || 0}%`,
+          'Risk Level': a.riskLevel || (a.overallPercentage < 60 ? 'CRITICAL' : 'AT_RISK'),
+          'Status': a.resolved ? 'Resolved' : 'Active Alert'
+        }))
+      } else if (activeTab === 'history') {
+        const res = await adminApi.getAttendanceHistory()
+        const data = res.data?.data || res.data || []
+        const list = Array.isArray(data) ? data : (data.content || data.history || [])
+        rows = list.map(h => ({
+          'Date': h.date || h.markedAt || 'N/A',
+          'Class Title': h.classTitle || h.title || 'N/A',
+          'Batch': h.batchName || 'N/A',
+          'Student Name': h.studentName || 'N/A',
+          'Enrollment No': h.enrollmentNo || 'N/A',
+          'Attendance Status': h.status || h.attendanceStatus || 'N/A',
+          'Marked By': h.markedByName || h.markedBy || 'System'
+        }))
+      } else if (activeTab === 'corrections') {
+        const res = await adminApi.getCorrections()
+        const data = res.data?.data || res.data || []
+        const list = Array.isArray(data) ? data : (data.content || data.corrections || [])
+        rows = list.map(c => ({
+          'Student Name': c.studentName || c.student?.user?.name || 'N/A',
+          'Class Title': c.classTitle || c.dailyClass?.title || 'N/A',
+          'Current Status': c.currentStatus || 'N/A',
+          'Requested Status': c.requestedStatus || 'PRESENT',
+          'Reason': c.reason || 'N/A',
+          'Comment': c.comment || 'N/A',
+          'Status': c.status || (c.approved ? 'APPROVED' : c.rejected ? 'REJECTED' : 'PENDING'),
+          'Submitted At': c.createdAt || c.submittedAt || 'N/A'
+        }))
+      } else {
+        const r = await adminApi.exportCSV({ type: 'attendance' })
+        const rawData = r.data?.data || r.data || []
+        rows = Array.isArray(rawData) ? rawData : []
+      }
+
+      if (!rows || !rows.length) {
+        return toast.error(`No data available to export for ${activeTab.toUpperCase()} view`)
+      }
+
       const headers = Object.keys(rows[0]).join(',')
-      const lines = rows.map(row => Object.values(row).map(v => `"${v ?? ''}"`).join(','))
+      const lines = rows.map(row => Object.values(row).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
       const csv = [headers, ...lines].join('\n')
-      
+
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `attendance-export-${new Date().toISOString().split('T')[0]}.csv`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast.success('Attendance CSV exported successfully!')
+      toast.success(`Exported ${activeTab.toUpperCase()} attendance data successfully!`)
     } catch (err) {
       console.error('Export CSV Error:', err)
       toast.error('Export failed: ' + (err?.response?.data?.message || err.message || 'Unknown error'))
@@ -2773,6 +2982,7 @@ export default function AttendancePage() {
               <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             <button onClick={exportCSV}
+              title={`Export ${activeTab.toUpperCase()} data as CSV`}
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-colors shadow-sm">
               <FileDown size={14} /> Export CSV
             </button>

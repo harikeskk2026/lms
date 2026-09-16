@@ -68,6 +68,15 @@ public class AttendanceGoalServiceImpl implements AttendanceGoalService {
         return buildResponse(student, targetPercentage);
     }
 
+    @Override
+    @Transactional
+    public AttendanceGoalResponse clearGoal(Long userId) {
+        Student student = resolveStudent(userId);
+        attendanceGoalRepository.findByStudentId(student.getId())
+                .ifPresent(attendanceGoalRepository::delete);
+        return buildResponse(student, null);
+    }
+
     private Student resolveStudent(Long userId) {
         return studentRepository.findByUserId(userId)
                 .orElseGet(() -> {
@@ -118,8 +127,8 @@ public class AttendanceGoalServiceImpl implements AttendanceGoalService {
                 .filter(a -> a.getDailyClass() != null)
                 .toList();
 
-        int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.LATE).count();
-        int total = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT || a.getStatus() == AttendStatus.LATE).count();
+        int present = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
+        int total = (int) attendances.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT || a.getStatus() == AttendStatus.ABSENT).count();
         int currentPercentage = total > 0 ? (int) Math.round((present * 100.0) / total) : 0;
 
         if (target == null) {

@@ -49,11 +49,17 @@ function AreaTrendTooltip({ active, payload }) {
           <span className="font-semibold text-white">{data.absent}</span>
         </div>
 
-        <div className="pt-1.5 border-t border-gray-700/50 flex items-center justify-between text-[11px]">
-          <span className="text-gray-400">Cumulative Rate:</span>
-          <span className={`font-bold ${meetsTarget ? 'text-emerald-300' : 'text-amber-300'}`}>
-            {data.cumPct}%
-          </span>
+        <div className="pt-1.5 border-t border-gray-700/50 space-y-1 text-[11px]">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-400">Daily Rate:</span>
+            <span className="font-bold text-white">{data.rate}%</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-400">Cumulative Rate:</span>
+            <span className={`font-bold ${meetsTarget ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {data.cumPct}%
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -67,10 +73,9 @@ export default function AttendanceTrendChart({ trend = [], calendar = [], summar
   // Derive metrics safely
   const present = summary?.present ?? (calendar.filter(c => c.status === 'PRESENT').length || 1)
   const absent  = summary?.absent  ?? (calendar.filter(c => c.status === 'ABSENT').length  || 3)
-  const late    = summary?.late    ?? (calendar.filter(c => c.status === 'LATE').length    || 0)
-  const total   = summary?.total   ?? summary?.overallTotal ?? (present + absent + late || 4)
-  const overallPct = summary?.overallPercentage ?? summary?.percentage ?? (total > 0 ? Math.round(((present + late) * 100) / total) : 25)
-  const neededFor75 = summary?.neededFor75 ?? (overallPct < 75 && total > 0 ? Math.max(0, Math.ceil((0.75 * total - (present + late)) / 0.25)) : 8)
+  const total   = summary?.total   ?? summary?.overallTotal ?? (present + absent || 4)
+  const overallPct = summary?.overallPercentage ?? summary?.percentage ?? (total > 0 ? Math.round((present * 100) / total) : 25)
+  const neededFor75 = summary?.neededFor75 ?? (overallPct < 75 && total > 0 ? Math.max(0, Math.ceil((0.75 * total - present) / 0.25)) : 8)
 
   // Donut chart slices
   const donutData = useMemo(() => {
@@ -78,11 +83,8 @@ export default function AttendanceTrendChart({ trend = [], calendar = [], summar
       { name: 'Attended (Present)', value: Math.max(present, 0), color: '#10b981' },
       { name: 'Missed (Absent)',   value: Math.max(absent, 0),  color: '#ef4444' }
     ]
-    if (late > 0) {
-      slices.push({ name: 'Late', value: late, color: '#f59e0b' })
-    }
     return slices.filter(s => s.value > 0)
-  }, [present, absent, late])
+  }, [present, absent])
 
   // Date-aggregated Area Trend Data (No repeated date labels, starting from first actual class)
   const areaData = useMemo(() => {
@@ -92,11 +94,10 @@ export default function AttendanceTrendChart({ trend = [], calendar = [], summar
       calendar.filter(c => c.date && c.status).forEach(c => {
         const dStr = c.date.slice(0, 10)
         if (!dateMap.has(dStr)) {
-          dateMap.set(dStr, { date: dStr, present: 0, absent: 0, late: 0, total: 0, classTitles: [] })
+          dateMap.set(dStr, { date: dStr, present: 0, absent: 0, total: 0, classTitles: [] })
         }
         const entry = dateMap.get(dStr)
         if (c.status === 'PRESENT') entry.present++
-        else if (c.status === 'LATE') entry.late++
         else entry.absent++
         entry.total++
         if (c.classTitle && !entry.classTitles.includes(c.classTitle)) {
@@ -416,11 +417,11 @@ export default function AttendanceTrendChart({ trend = [], calendar = [], summar
                   </div>
 
                   <span className={`text-xs px-2.5 py-0.5 rounded-full font-extrabold ${
-                    d.cumPct >= 75
+                    d.rate >= 75
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                       : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
                   }`}>
-                    {d.cumPct}% rate
+                    {d.rate}% rate
                   </span>
                 </div>
 

@@ -6,7 +6,7 @@ import CustomSelect from '@/components/ui/CustomSelect'
 import FormDrawer from '@/components/ui/FormDrawer'
 import clsx from 'clsx'
 
-const STATUS_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE']
+const STATUS_OPTIONS = ['PRESENT', 'ABSENT']
 
 export default function CorrectionRequestModal({ record, onClose, onSubmitted }) {
   const [requestedStatus, setRequestedStatus] = useState('PRESENT')
@@ -19,9 +19,10 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
 
   if (!record) return null
 
+  const isStatusValid = Boolean(requestedStatus && STATUS_OPTIONS.includes(requestedStatus))
   const isReasonValid = Boolean(reason.trim())
   const isUrlValid = !documentUrl.trim() || /^https?:\/\/.+/i.test(documentUrl.trim())
-  const isFormValid = isReasonValid && isUrlValid
+  const isFormValid = isStatusValid && isReasonValid && isUrlValid
   const isDirty = Boolean(reason || comment || documentUrl || requestedStatus !== 'PRESENT')
 
   const title = record.attendanceStatus === 'ABSENT'
@@ -33,7 +34,12 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
   const submit = async (e) => {
     e?.preventDefault()
     setSubmitted(true)
-    if (!isFormValid) return
+    setTouched({ requestedStatus: true, reason: true, documentUrl: true })
+
+    if (!isFormValid) {
+      toast.error('Please fill in all required fields correctly')
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -49,8 +55,8 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
       toast.success(requestedStatus === 'PRESENT' ? 'Present request sent to admin' : 'Correction request submitted')
       onSubmitted?.()
       onClose?.()
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Failed to submit request')
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to submit request')
     } finally {
       setSubmitting(false)
     }
@@ -85,9 +91,18 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
           </label>
           <CustomSelect
             value={requestedStatus}
-            onChange={setRequestedStatus}
+            onChange={(val) => {
+              setRequestedStatus(val)
+              setTouched(prev => ({ ...prev, requestedStatus: true }))
+            }}
             options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
+            clearable={false}
+            error={(touched.requestedStatus || submitted) && !isStatusValid}
+            placeholder="Select expected status..."
           />
+          {(touched.requestedStatus || submitted) && !isStatusValid && (
+            <p className="text-xs text-red-500 mt-1 font-medium">Expected status is required</p>
+          )}
         </div>
 
         <div>
@@ -102,7 +117,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
             placeholder="Enter reason for attendance correction"
             className={clsx(
               'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-purple-500 transition-all',
-              ((touched.reason || submitted) && !isReasonValid) && 'border-red-500'
+              ((touched.reason || submitted) && !isReasonValid) && 'border-red-500 ring-1 ring-red-500'
             )}
           />
           {(touched.reason || submitted) && !isReasonValid && (
@@ -135,7 +150,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
             placeholder="Enter supporting document link (optional, https://...)"
             className={clsx(
               'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-purple-500 transition-all',
-              ((touched.documentUrl || submitted) && !isUrlValid) && 'border-red-500'
+              ((touched.documentUrl || submitted) && !isUrlValid) && 'border-red-500 ring-1 ring-red-500'
             )}
           />
           {(touched.documentUrl || submitted) && !isUrlValid && (
@@ -153,7 +168,7 @@ export default function CorrectionRequestModal({ record, onClose, onSubmitted })
           </button>
           <button
             type="submit"
-            disabled={submitting || (submitted && !isFormValid)}
+            disabled={submitting}
             className="px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md transition-all disabled:opacity-50 min-w-[120px]"
           >
             {submitting ? 'Submitting...' : 'Submit Request'}
