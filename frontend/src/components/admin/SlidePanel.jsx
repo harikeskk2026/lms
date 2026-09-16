@@ -1,4 +1,6 @@
 'use client'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import FormDrawer from '@/components/ui/FormDrawer'
 
 export default function SlidePanel({ open, onClose, title, subtitle, children, width = 'w-full sm:w-[480px] lg:w-[540px]', variant = 'slide' }) {
