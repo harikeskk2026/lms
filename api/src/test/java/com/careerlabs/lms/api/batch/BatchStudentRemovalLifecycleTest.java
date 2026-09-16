@@ -298,25 +298,13 @@ class BatchStudentRemovalLifecycleTest {
     }
 
     @Test
-    @DisplayName("Admin enroll reactivation without batch sets batch=null")
+    @DisplayName("Admin enroll reactivation without batch -> Rejected (batch is mandatory)")
     void adminEnrollReactivation_noBatch_noResurrection() {
-        Enrollment inactiveEnrollment = new Enrollment();
-        setId(inactiveEnrollment, 1L);
-        inactiveEnrollment.setStudent(student);
-        inactiveEnrollment.setCourse(courseA);
-        inactiveEnrollment.setBatch(batch1); // Old batch reference
-        inactiveEnrollment.setActive(false);
-
-        when(courseRepository.findById(10L)).thenReturn(Optional.of(courseA));
-        when(studentRepository.findById(50L)).thenReturn(Optional.of(student));
-        when(enrollmentRepository.findByStudentIdAndCourseId(50L, 10L)).thenReturn(Optional.of(inactiveEnrollment));
-        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
-
         EnrollStudentRequest request = new EnrollStudentRequest(50L, null);
-        enrollmentService.enrollStudentByAdmin(10L, request);
-
-        assertTrue(inactiveEnrollment.isActive(), "Enrollment should be reactivated");
-        assertNull(inactiveEnrollment.getBatch(), "Batch should be null when reactivated without new batch");
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> enrollmentService.enrollStudentByAdmin(10L, request));
+        assertTrue(ex.getMessage().contains("Batch is required"));
+        verifyNoInteractions(studentRepository, courseRepository, batchRepository, enrollmentRepository);
     }
 
     @Test

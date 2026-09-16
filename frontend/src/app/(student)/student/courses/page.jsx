@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { BookOpen, Clock, Monitor, Users } from 'lucide-react'
-import { studentApi } from '@/lib/api'
+import { studentApi, resolveFileUrl } from '@/lib/api'
 import SkeletonCard from '@/components/student/SkeletonCard'
 
 const LEVEL_COLORS = {
@@ -18,6 +18,17 @@ const COURSE_GRADIENTS = [
   'from-fuchsia-600 via-purple-600 to-violet-700',
   'from-violet-600 via-purple-700 to-indigo-800',
 ]
+
+const formatDateSafe = (dateStr, fmtStr) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  try {
+    return format(d, fmtStr)
+  } catch {
+    return ''
+  }
+}
 
 export default function CoursesPage() {
   const [courses, setCourses] = useState(null)
@@ -58,51 +69,70 @@ export default function CoursesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {courses.map((c, idx) => (
-            <div key={c.courseId} className="glass-card overflow-hidden hover:scale-[1.01] transition-all duration-300 group">
+            <div key={c.id ?? c.courseId ?? idx} className="glass-card overflow-hidden hover:scale-[1.01] transition-all duration-300 group">
               {/* Header */}
-              <div className={`h-28 bg-gradient-to-br ${COURSE_GRADIENTS[idx % COURSE_GRADIENTS.length]} relative overflow-hidden p-5`}>
-                <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" />
-                <div className="absolute -right-2 bottom-2 w-12 h-12 rounded-full bg-white/10" />
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-2">
-                    <BookOpen size={18} className="text-white" />
+              {c.course?.thumbnail ? (
+                <div className="h-32 bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
+                  <img
+                    src={resolveFileUrl(c.course.thumbnail)}
+                    alt={c.course?.title || 'Course'}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                </div>
+              ) : (
+                <div className={`h-28 bg-gradient-to-br ${COURSE_GRADIENTS[idx % COURSE_GRADIENTS.length]} relative overflow-hidden p-5`}>
+                  <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" />
+                  <div className="absolute -right-2 bottom-2 w-12 h-12 rounded-full bg-white/10" />
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-2">
+                      <BookOpen size={18} className="text-white" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Body */}
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="font-display font-bold text-gray-800 dark:text-white leading-tight">{c.course.title}</h3>
-                  <span className={`chip text-[10px] px-2 py-0.5 flex-shrink-0 ${LEVEL_COLORS[c.course.level]}`}>
-                    {c.course.level}
-                  </span>
+                  <h3 className="font-display font-bold text-gray-800 dark:text-white leading-tight">{c.course?.title}</h3>
+                  {c.course?.level && (
+                    <span className={`chip text-[10px] px-2 py-0.5 flex-shrink-0 ${LEVEL_COLORS[c.course.level] || 'bg-gray-100 text-gray-700'}`}>{c.course.level}</span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 mb-3 text-xs text-gray-500">
-                  <span className="flex items-center gap-1"><Clock size={12} />{c.course.duration}</span>
-                  <span className="flex items-center gap-1"><Monitor size={12} />{c.batch.mode}</span>
-                  <span className="flex items-center gap-1"><Users size={12} />{c.batch.name}</span>
+                  {c.course?.duration && <span className="flex items-center gap-1"><Clock size={12} />{c.course.duration}</span>}
+                  {c.batch?.mode && <span className="flex items-center gap-1"><Monitor size={12} />{c.batch.mode}</span>}
+                  {c.batch?.name && <span className="flex items-center gap-1"><Users size={12} />{c.batch.name}</span>}
                 </div>
 
                 {/* Progress */}
-                <div className="mb-4">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500">{c.progress.completed}/{c.progress.total} Topics Completed</span>
-                    <span className="font-semibold text-brand-600">{c.progress.pct}%</span>
+                {c.progress && (
+                  <div className="mb-4">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-500">{c.progress.completed}/{c.progress.total} Topics Completed</span>
+                      <span className="font-semibold text-brand-600">{c.progress.pct}%</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-brand-600 to-violet-500 rounded-full transition-all"
+                        style={{ width: `${c.progress.pct}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-brand-600 to-violet-500 rounded-full transition-all"
-                      style={{ width: `${c.progress.pct}%` }}
-                    />
-                  </div>
-                </div>
+                )}
 
-                <div className="flex items-center justify-between text-xs text-gray-400 mb-4">
-                  <span>{format(new Date(c.batch.startDate), 'MMM d')} — {format(new Date(c.batch.endDate), 'MMM d, yyyy')}</span>
-                  <span>{c.batch.timing}</span>
-                </div>
+                {(c.batch?.startDate || c.batch?.endDate || c.batch?.timing) && (
+                  <div className="flex items-center justify-between text-xs text-gray-400 mb-4">
+                    <span>
+                      {formatDateSafe(c.batch?.startDate, 'MMM d')}
+                      {c.batch?.startDate && c.batch?.endDate ? ' — ' : ''}
+                      {formatDateSafe(c.batch?.endDate, 'MMM d, yyyy')}
+                    </span>
+                    {c.batch?.timing && <span>{c.batch.timing}</span>}
+                  </div>
+                )}
 
                 <Link
                   href={`/student/my-courses/${c.courseId}`}

@@ -212,6 +212,10 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Override
     @Transactional
     public CourseEnrolledStudentResponse enrollStudentByAdmin(Long courseId, EnrollStudentRequest request) {
+        if (request.batchId() == null) {
+            throw new BadRequestException("Batch is required for enrollment");
+        }
+
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
 
@@ -222,23 +226,20 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         Student student = studentRepository.findById(request.studentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with ID: " + request.studentId()));
 
-        Batch batch = null;
-        if (request.batchId() != null) {
-            batch = batchRepository.findByIdWithLock(request.batchId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.batchId()));
+        Batch batch = batchRepository.findByIdWithLock(request.batchId())
+                .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.batchId()));
 
-            if (!batch.getCourse().getId().equals(courseId)) {
-                throw new BadRequestException("Selected batch '" + batch.getName() + "' does not belong to course '" + course.getTitle() + "'");
-            }
+        if (!batch.getCourse().getId().equals(courseId)) {
+            throw new BadRequestException("Selected batch '" + batch.getName() + "' does not belong to course '" + course.getTitle() + "'");
+        }
 
-            if (!batch.isActive()) {
-                throw new BadRequestException("Batch '" + batch.getName() + "' is inactive");
-            }
+        if (!batch.isActive()) {
+            throw new BadRequestException("Batch '" + batch.getName() + "' is inactive");
+        }
 
-            long activeInBatch = enrollmentRepository.countByBatchIdAndActiveTrue(batch.getId());
-            if (activeInBatch >= batch.getMaxStudents()) {
-                throw new BadRequestException("Batch '" + batch.getName() + "' is at full capacity (" + batch.getMaxStudents() + " students max)");
-            }
+        long activeInBatch = enrollmentRepository.countByBatchIdAndActiveTrue(batch.getId());
+        if (activeInBatch >= batch.getMaxStudents()) {
+            throw new BadRequestException("Batch '" + batch.getName() + "' is at full capacity (" + batch.getMaxStudents() + " students max)");
         }
 
         // Check existing enrollment
@@ -250,19 +251,12 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             if (enrollment.isActive()) {
                 throw new ConflictException("Student '" + student.getUser().getName() + "' is already actively enrolled in this course");
             }
-            // Validate schedule conflict if a new batch is provided
-            if (batch != null) {
-                batchScheduleConflictValidator.validate(student, batch, courseId);
-            }
-            // Reactivate enrollment; batch is set only if a new one is provided, otherwise null
+            batchScheduleConflictValidator.validate(student, batch, courseId);
             enrollment.setActive(true);
             enrollment.setBatch(batch);
             enrollment.setEnrolledAt(Instant.now());
         } else {
-            // Validate schedule conflict for new enrollment
-            if (batch != null) {
-                batchScheduleConflictValidator.validate(student, batch);
-            }
+            batchScheduleConflictValidator.validate(student, batch);
             enrollment = new Enrollment();
             enrollment.setStudent(student);
             enrollment.setCourse(course);
@@ -288,6 +282,10 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     public BulkEnrollmentResponse bulkEnrollStudentsByAdmin(Long courseId, BulkEnrollStudentsRequest request) {
         if (request.studentIds() == null || request.studentIds().isEmpty()) {
             throw new BadRequestException("At least one student must be selected for enrollment");
+        }
+
+        if (request.batchId() == null) {
+            throw new BadRequestException("Batch is required for enrollment");
         }
 
         List<EnrollmentResultItem> results = new ArrayList<>();

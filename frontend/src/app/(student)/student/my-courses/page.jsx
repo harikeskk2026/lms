@@ -20,6 +20,17 @@ const COURSE_GRADIENTS = [
   'from-violet-600 via-purple-700 to-indigo-800',
 ]
 
+const formatEnrolledDate = (enrolledAt) => {
+  if (!enrolledAt) return null
+  const d = new Date(enrolledAt)
+  if (isNaN(d.getTime())) return null
+  try {
+    return format(d, 'MMM d, yyyy')
+  } catch {
+    return null
+  }
+}
+
 export default function MyCoursesPage() {
   const [enrollments, setEnrollments] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -60,12 +71,12 @@ export default function MyCoursesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {enrollments.map((e, idx) => (
-            <div key={e.id} className="glass-card overflow-hidden hover:scale-[1.01] transition-all duration-300 group">
-              {e.course.thumbnail ? (
+            <div key={e.id ?? e.courseId ?? e.course?.id ?? idx} className="glass-card overflow-hidden hover:scale-[1.01] transition-all duration-300 group">
+              {e.course?.thumbnail ? (
                 <div className="h-32 bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
                   <img
                     src={resolveFileUrl(e.course.thumbnail)}
-                    alt={e.course.title}
+                    alt={e.course.title || 'Course'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     onError={(e) => { e.currentTarget.style.display = 'none' }}
                   />
@@ -84,15 +95,19 @@ export default function MyCoursesPage() {
 
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="font-display font-bold text-gray-800 dark:text-white leading-tight">{e.course.title}</h3>
-                  <span className={`chip text-[10px] px-2 py-0.5 flex-shrink-0 ${LEVEL_COLORS[e.course.level]}`}>{e.course.level}</span>
+                  <h3 className="font-display font-bold text-gray-800 dark:text-white leading-tight">{e.course?.title}</h3>
+                  {e.course?.level && (
+                    <span className={`chip text-[10px] px-2 py-0.5 flex-shrink-0 ${LEVEL_COLORS[e.course.level] || 'bg-gray-100 text-gray-700'}`}>{e.course.level}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mb-4 text-xs text-gray-500">
-                  <span className="flex items-center gap-1"><Clock size={12} />{e.course.duration}</span>
-                  <span>Enrolled {format(new Date(e.enrolledAt), 'MMM d, yyyy')}</span>
+                  {e.course?.duration && <span className="flex items-center gap-1"><Clock size={12} />{e.course.duration}</span>}
+                  {formatEnrolledDate(e.enrolledAt) && (
+                    <span>Enrolled {formatEnrolledDate(e.enrolledAt)}</span>
+                  )}
                 </div>
 
-                <Link href={`/student/my-courses/${e.course.id}`} className="btn-primary w-full text-center text-sm py-2.5 block">
+                <Link href={`/student/my-courses/${e.course?.id || e.courseId}`} className="btn-primary w-full text-center text-sm py-2.5 block">
                   Continue Learning →
                 </Link>
               </div>

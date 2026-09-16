@@ -169,11 +169,16 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
       return
     }
 
+    if (!selectedBatchId) {
+      toast.error('Please select a batch for enrollment')
+      return
+    }
+
     setEnrolling(true)
     try {
       const payload = {
         studentIds: selectedStudentIds.map(Number),
-        batchId: selectedBatchId ? Number(selectedBatchId) : null,
+        batchId: Number(selectedBatchId),
       }
 
       const res = await courseService.bulkEnrollStudents(courseId, payload)
@@ -290,8 +295,11 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
     )
   })
 
+  // Only active batches are eligible to receive new enrollments
+  const activeBatches = batches.filter(b => (b.isActive ?? b.active) !== false)
+
   // Selected batch capacity info
-  const selectedBatchObj = batches.find(b => String(b.id) === String(selectedBatchId))
+  const selectedBatchObj = activeBatches.find(b => String(b.id) === String(selectedBatchId))
 
   return (
     <div className="glass-card p-3 sm:p-5 space-y-5">
@@ -586,6 +594,14 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         width="w-full sm:w-[540px]"
       >
         <form onSubmit={handleEnrollSubmit} className="p-4 sm:p-6 space-y-4">
+              {activeBatches.length === 0 && (
+                <div className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 p-3 text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed flex items-start gap-2">
+                  <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    No active batches are available for this course yet. Create an active batch for the course before enrolling students.
+                  </span>
+                </div>
+              )}
               {/* Selected Students Chips summary */}
               {selectedStudentIds.length > 0 && (
                 <div className="space-y-1.5 bg-purple-50/60 dark:bg-purple-950/30 p-3 rounded-2xl border border-purple-100 dark:border-purple-900/40">
@@ -630,7 +646,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                     Select Students *
                   </label>
-                  {!loadingCandidates && filteredCandidates.length > 0 && (
+                  {!loadingCandidates && filteredCandidates.length > 0 && activeBatches.length > 0 && (
                     <button
                       type="button"
                       onClick={() => handleSelectAllCandidates(filteredCandidates)}
@@ -652,8 +668,9 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                         type="text"
                         placeholder="Filter student by name, email, or enrollment ID..."
                         value={candidateSearch}
+                        disabled={activeBatches.length === 0}
                         onChange={e => setCandidateSearch(e.target.value)}
-                        className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
+                        className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -668,14 +685,15 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                           return (
                             <label
                               key={s.id}
-                              className={`flex items-center justify-between p-2.5 cursor-pointer hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition-colors ${
-                                isSelected ? 'bg-purple-50/80 dark:bg-purple-950/30' : ''
-                              }`}
+                              className={`flex items-center justify-between p-2.5 transition-colors ${
+                                activeBatches.length > 0 ? 'cursor-pointer hover:bg-purple-50/50 dark:hover:bg-purple-950/20' : 'opacity-60'
+                              } ${isSelected ? 'bg-purple-50/80 dark:bg-purple-950/30' : ''}`}
                             >
                               <div className="flex items-center gap-3">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
+                                  disabled={activeBatches.length === 0}
                                   onChange={() => toggleStudent(s.id)}
                                   className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 border-gray-300 dark:border-gray-700"
                                 />
@@ -707,13 +725,14 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
               {/* Batch Selector */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
-                  Assign Course Batch (Optional)
+                  Assign Course Batch *
                 </label>
                 <CustomSelect
                   value={selectedBatchId}
                   onChange={setSelectedBatchId}
-                  options={[{ value: '', label: 'No Batch (Assign later)' }, ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.mode || 'HYBRID'}) · Max ${b.maxStudents || 30} seats` }))]}
-                  placeholder="No Batch (Assign later)"
+                  disabled={activeBatches.length === 0}
+                  options={activeBatches.map(b => ({ value: b.id, label: `${b.name} (${b.mode || 'HYBRID'}) · Max ${b.maxStudents || 30} seats` }))}
+                  placeholder="Select a batch..."
                 />
                 {selectedBatchObj && (
                   <p className="text-[11px] text-gray-500 mt-1">
@@ -733,7 +752,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                 </button>
                 <button
                   type="submit"
-                  disabled={enrolling || selectedStudentIds.length === 0}
+                  disabled={enrolling || selectedStudentIds.length === 0 || !selectedBatchId || activeBatches.length === 0}
                   className="flex-1 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/20"
                 >
                   {enrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}

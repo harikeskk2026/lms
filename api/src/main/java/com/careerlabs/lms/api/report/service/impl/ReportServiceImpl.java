@@ -19,6 +19,7 @@ import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
 import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
 import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
+import com.careerlabs.lms.api.quiz.repository.QuizRepository;
 import com.careerlabs.lms.api.report.dto.request.AttendanceReportRequest;
 import com.careerlabs.lms.api.report.dto.request.PerformanceReportRequest;
 import com.careerlabs.lms.api.report.dto.request.PlacementReportRequest;
@@ -59,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -100,6 +102,7 @@ public class ReportServiceImpl implements ReportService {
     private final AssignmentRepository assignmentRepository;
     private final AssignmentSubmissionRepository submissionRepository;
     private final QuizAttemptRepository quizAttemptRepository;
+    private final QuizRepository quizRepository;
     private final AttendanceRepository attendanceRepository;
     private final DailyClassRepository dailyClassRepository;
     private final ReportValidator reportValidator;
@@ -111,6 +114,7 @@ public class ReportServiceImpl implements ReportService {
                               AssignmentRepository assignmentRepository,
                               AssignmentSubmissionRepository submissionRepository,
                               QuizAttemptRepository quizAttemptRepository,
+                              QuizRepository quizRepository,
                               AttendanceRepository attendanceRepository,
                               DailyClassRepository dailyClassRepository,
                               ReportValidator reportValidator) {
@@ -121,6 +125,7 @@ public class ReportServiceImpl implements ReportService {
         this.assignmentRepository = assignmentRepository;
         this.submissionRepository = submissionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
+        this.quizRepository = quizRepository;
         this.attendanceRepository = attendanceRepository;
         this.dailyClassRepository = dailyClassRepository;
         this.reportValidator = reportValidator;
@@ -314,11 +319,20 @@ public class ReportServiceImpl implements ReportService {
         reportValidator.validateBatchExists(batchId);
         reportValidator.validateCourseExists(courseId);
 
+        // When scoped to a batch, quiz scoring uses the batch's own quizzes plus the
+        // course-wide quizzes of the batch's course so no other batch/course activity leaks in.
+        Long quizCourseId = courseId;
+        if (batchId != null) {
+            quizCourseId = batchRepository.findById(batchId)
+                    .map(b -> b.getCourse() != null ? b.getCourse().getId() : null)
+                    .orElse(null);
+        }
+
         List<Student> students = filterStudents(batchId, courseId);
         List<Long> studentIds = students.stream().map(Student::getId).toList();
         Map<Long, List<AssignmentSubmission>> byStudent = submissionsByStudent(studentIds);
-        Map<Long, List<QuizAttempt>> quizByStudent = quizAttemptsByStudent(studentIds);
-        Map<Long, List<Attendance>> attendanceByStudent = attendanceByStudent(studentIds);
+        Map<Long, List<QuizAttempt>> quizByStudent = quizAttemptsByStudent(studentIds, batchId, quizCourseId);
+        Map<Long, List<Attendance>> attendanceByStudent = attendanceByStudent(studentIds, batchId);
 
         List<ReportStudentResponse> rows = students.stream()
                 .map(s -> toStudentRow(s, byStudent.getOrDefault(s.getId(), List.of()),
@@ -922,6 +936,48 @@ public class ReportServiceImpl implements ReportService {
         }
         return quizAttemptRepository.findByStudentIdInAndStatus(studentIds, AttemptStatus.SUBMITTED).stream()
                 .collect(Collectors.groupingBy(QuizAttempt::getStudentId));
+    }
+
+    /** Attendance restricted to the classes belonging to the given batch. */
+    private Map<Long, List<Attendance>> attendanceByStudent(List<Long> studentIds, Long batchId) {
+        if (studentIds.isEmpty()) {
+            return Map.of();
+        }
+        if (batchId == null) {
+            return attendanceByStudent(studentIds);
+        }
+        return attendanceRepository.findByStudentIdInAndDailyClassBatchId(studentIds, batchId).stream()
+                .collect(Collectors.groupingBy(a -> a.getStudent().getId()));
+    }
+
+    /** Quiz attempts restricted to quizzes belonging to the given batch and/or course. */
+    private Map<Long, List<QuizAttempt>> quizAttemptsByStudent(List<Long> studentIds, Long batchId, Long courseId) {
+        if (studentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> quizIds = quizIdsBelongingTo(batchId, courseId);
+        if (quizIds.isEmpty()) {
+            return Map.of();
+        }
+        return quizAttemptRepository.findByStudentIdInAndQuizIdInAndStatus(studentIds, quizIds, AttemptStatus.SUBMITTED).stream()
+                .collect(Collectors.groupingBy(QuizAttempt::getStudentId));
+    }
+
+    /**
+     * Quizzes belonging to the requested scope: the batch's own quizzes plus, for a batch,
+     * course-wide quizzes of the batch's course; for a course-only scope, all quizzes of the course.
+     */
+    private List<Long> quizIdsBelongingTo(Long batchId, Long courseId) {
+        Set<Long> ids = new LinkedHashSet<>();
+        if (batchId != null) {
+            ids.addAll(quizRepository.findIdsByBatchId(batchId));
+            if (courseId != null) {
+                ids.addAll(quizRepository.findCourseLevelIdsByCourseId(courseId));
+            }
+        } else if (courseId != null) {
+            ids.addAll(quizRepository.findIdsByCourseId(courseId));
+        }
+        return List.copyOf(ids);
     }
 
     private Double avgQuizAccuracy(List<QuizAttempt> attempts) {

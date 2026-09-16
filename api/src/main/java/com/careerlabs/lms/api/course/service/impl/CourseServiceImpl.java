@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.course.service.impl;
 
+import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
@@ -22,11 +23,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class CourseServiceImpl implements CourseService {
@@ -172,8 +175,32 @@ public class CourseServiceImpl implements CourseService {
     public void delete(Long id) {
         Course course = findOrThrow(id);
 
-        if (batchRepository.existsByCourseId(id)) {
-            throw new ConflictException("Course cannot be deleted while batches reference it");
+        List<Batch> referencingBatches = batchRepository.findByCourseId(id);
+        if (!referencingBatches.isEmpty()) {
+            LocalDate today = LocalDate.now();
+            List<Batch> activeBatches = referencingBatches.stream()
+                    .filter(b -> b.isActive() && (b.getEndDate() == null || !b.getEndDate().isBefore(today)))
+                    .toList();
+            List<Batch> historicalBatches = referencingBatches.stream()
+                    .filter(b -> !b.isActive() || (b.getEndDate() != null && b.getEndDate().isBefore(today)))
+                    .toList();
+
+            StringBuilder msg = new StringBuilder("Cannot delete course: ");
+            if (!activeBatches.isEmpty() && !historicalBatches.isEmpty()) {
+                msg.append(String.format("%d active/ongoing batch(es) (%s) and %d historical/inactive batch(es) (%s) still reference it. ",
+                        activeBatches.size(), formatBatchNames(activeBatches),
+                        historicalBatches.size(), formatBatchNames(historicalBatches)));
+                msg.append("Please reassign, conclude, or delete referencing batches before deleting this course.");
+            } else if (!activeBatches.isEmpty()) {
+                msg.append(String.format("%d active/ongoing batch(es) (%s) still reference it. ",
+                        activeBatches.size(), formatBatchNames(activeBatches)));
+                msg.append("Please reassign or conclude active batches before deleting this course.");
+            } else {
+                msg.append(String.format("%d historical/inactive batch(es) (%s) still reference it. ",
+                        historicalBatches.size(), formatBatchNames(historicalBatches)));
+                msg.append("Please remove historical/archived batch records before deleting this course.");
+            }
+            throw new ConflictException(msg.toString());
         }
 
         for (SyllabusModule module : moduleRepository.findAllByCourseIdOrderByOrderIndexAsc(id)) {
@@ -183,6 +210,14 @@ public class CourseServiceImpl implements CourseService {
         enrollmentRepository.deleteAllByCourseId(id);
 
         courseRepository.delete(course);
+    }
+
+    private String formatBatchNames(List<Batch> batches) {
+        if (batches.size() <= 3) {
+            return batches.stream().map(b -> "'" + b.getName() + "'").collect(Collectors.joining(", "));
+        }
+        String top3 = batches.stream().limit(3).map(b -> "'" + b.getName() + "'").collect(Collectors.joining(", "));
+        return top3 + " and " + (batches.size() - 3) + " more";
     }
 
     private Course findOrThrow(Long id) {

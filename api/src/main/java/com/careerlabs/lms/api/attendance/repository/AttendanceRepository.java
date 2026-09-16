@@ -21,6 +21,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long>, J
 
     List<Attendance> findByStudentIdIn(List<Long> studentIds);
 
+    List<Attendance> findByStudentIdInAndDailyClassBatchId(List<Long> studentIds, Long batchId);
+
     Optional<Attendance> findByStudentIdAndDailyClassId(Long studentId, Long classId);
 
     List<Attendance> findByDailyClassBatchId(Long batchId);

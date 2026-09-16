@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -13,6 +15,7 @@ import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
 import batchService from '@/services/batchService'
+import { courseSchema } from '@/validations/courseValidation'
 import EnrolledStudentsTab from '@/components/admin/course/EnrolledStudentsTab'
 import ImportSyllabusModal from '@/components/admin/course/ImportSyllabusModal'
 import SyllabusStatusModal from '@/components/admin/course/SyllabusStatusModal'
@@ -47,16 +50,28 @@ export default function CourseManagePage({ params }) {
   const [editingCourse, setEditingCourse] = useState(false)
   const [savingCourse, setSavingCourse] = useState(false)
   const [uploadingThumb, setUploadingThumb] = useState(false)
-  const [editForm, setEditForm] = useState({
-    title: '',
-    courseCode: '',
-    description: '',
-    durationValue: '',
-    durationUnit: 'months',
-    level: 'BEGINNER',
-    status: 'PUBLISHED',
-    thumbnail: '',
+  const {
+    register: registerCourse,
+    handleSubmit: handleSubmitCourse,
+    reset: resetCourseForm,
+    watch: watchCourse,
+    setValue: setCourseValue,
+    formState: { errors: courseErrors, isSubmitting: isSubmittingCourse, isDirty: isCourseDirty, isValid: isCourseFormValid },
+  } = useForm({
+    resolver: zodResolver(courseSchema),
+    mode: 'onChange',
+    defaultValues: {
+      title: '',
+      courseCode: '',
+      description: '',
+      durationValue: '',
+      durationUnit: 'months',
+      level: 'BEGINNER',
+      status: 'PUBLISHED',
+      thumbnail: '',
+    },
   })
+  const editThumbnailValue = watchCourse('thumbnail')
 
   useEffect(() => {
     setLoadingTrainers(true)
@@ -95,7 +110,7 @@ export default function CourseManagePage({ params }) {
         setCourse(r.data)
         if (r.data) {
           const parsed = parseDurationStr(r.data.duration)
-          setEditForm({
+          resetCourseForm({
             title: r.data.title || '',
             courseCode: r.data.courseCode || '',
             description: r.data.description || '',
@@ -109,14 +124,14 @@ export default function CourseManagePage({ params }) {
       })
       .catch(() => toast.error('Failed to load course'))
       .finally(() => setLoading(false))
-  }, [courseId])
+  }, [courseId, resetCourseForm])
 
   useEffect(() => { loadCourse() }, [loadCourse])
 
   const handleOpenEdit = () => {
     if (!course) return
     const parsed = parseDurationStr(course.duration)
-    setEditForm({
+    resetCourseForm({
       title: course.title || '',
       courseCode: course.courseCode || '',
       description: course.description || '',
@@ -129,23 +144,17 @@ export default function CourseManagePage({ params }) {
     setEditingCourse(true)
   }
 
-  const handleSaveCourse = async (e) => {
-    e.preventDefault()
-    if (savingCourse) return
-    if (!editForm.title?.trim() || !editForm.description?.trim() || !editForm.durationValue?.trim()) {
-      toast.error('Please fill required fields (Title, Description, Duration)', { id: 'save-course' })
-      return
-    }
+  const onSaveCourse = async (data) => {
     setSavingCourse(true)
     try {
       await courseService.update(course.id, {
-        title: editForm.title.trim(),
-        courseCode: editForm.courseCode?.trim() || null,
-        description: editForm.description.trim(),
-        duration: `${editForm.durationValue.trim()} ${editForm.durationUnit}`,
-        level: editForm.level,
-        status: editForm.status,
-        thumbnail: editForm.thumbnail?.trim() || null,
+        title: data.title.trim(),
+        courseCode: data.courseCode?.trim() || null,
+        description: data.description.trim(),
+        duration: `${data.durationValue.trim()} ${data.durationUnit}`,
+        level: data.level,
+        status: data.status,
+        thumbnail: data.thumbnail?.trim() || null,
       })
       toast.success('Course updated successfully', { id: 'save-course' })
       setEditingCourse(false)
@@ -233,23 +242,18 @@ export default function CourseManagePage({ params }) {
         open={editingCourse}
         onClose={() => setEditingCourse(false)}
         title="Edit Course"
-        isDirty={Boolean(course && (
-          editForm.title !== (course.title || '') ||
-          editForm.courseCode !== (course.courseCode || '') ||
-          editForm.description !== (course.description || '')
-        ))}
+        isDirty={isCourseDirty}
       >
-        <form onSubmit={handleSaveCourse} className="space-y-4">
+        <form onSubmit={handleSubmitCourse(onSaveCourse)} className="space-y-4" noValidate>
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
             <input
+              {...registerCourse('title')}
               type="text"
-              required
-              value={editForm.title}
-              onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
               placeholder="Enter course title"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
             />
+            {courseErrors.title && <span className="text-xs text-red-500 mt-1 block">{courseErrors.title.message}</span>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -258,25 +262,24 @@ export default function CourseManagePage({ params }) {
                 Course Code
               </label>
               <input
+                {...registerCourse('courseCode')}
                 type="text"
-                value={editForm.courseCode}
-                onChange={e => setEditForm(f => ({ ...f, courseCode: e.target.value }))}
                 placeholder="Enter course code"
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 uppercase"
               />
+              {courseErrors.courseCode && <span className="text-xs text-red-500 mt-1 block">{courseErrors.courseCode.message}</span>}
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
             <textarea
-              required
+              {...registerCourse('description')}
               rows={4}
-              value={editForm.description}
-              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
               placeholder="Enter course description"
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
             />
+            {courseErrors.description && <span className="text-xs text-red-500 mt-1 block">{courseErrors.description.message}</span>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -284,17 +287,28 @@ export default function CourseManagePage({ params }) {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Duration *</label>
               <div className="flex gap-2">
                 <input
+                  {...registerCourse('durationValue', {
+                    required: 'Duration is required',
+                    setValueAs: v => v === '' ? '' : String(v).replace(/[^0-9]/g, ''),
+                    validate: v => {
+                      if (!v || v === '') return 'Duration is required'
+                      const n = parseInt(v, 10)
+                      if (isNaN(n) || n <= 0) return 'Duration must be a positive number'
+                      return true
+                    }
+                  })}
                   type="number"
                   min="1"
-                  required
-                  value={editForm.durationValue}
-                  onChange={e => setEditForm(f => ({ ...f, durationValue: e.target.value }))}
+                  step="1"
                   placeholder="Enter duration"
+                  onKeyDown={e => {
+                    if (['e', 'E', '-', '+', '.'].includes(e.key)) e.preventDefault()
+                  }}
                   className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
                 />
                 <CustomSelect
-                  value={editForm.durationUnit}
-                  onChange={(val) => setEditForm(f => ({ ...f, durationUnit: val }))}
+                  value={watchCourse('durationUnit')}
+                  onChange={(val) => setCourseValue('durationUnit', val, { shouldValidate: true })}
                   options={[
                     { value: 'days', label: 'Days' },
                     { value: 'weeks', label: 'Weeks' },
@@ -303,27 +317,33 @@ export default function CourseManagePage({ params }) {
                   ]}
                 />
               </div>
+              {(courseErrors.durationValue || courseErrors.durationUnit) && (
+                <span className="text-xs text-red-500 mt-1 block">
+                  {courseErrors.durationValue?.message || courseErrors.durationUnit?.message || 'Duration is required'}
+                </span>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Level *</label>
               <CustomSelect
-                value={editForm.level}
-                onChange={(val) => setEditForm(f => ({ ...f, level: val }))}
+                value={watchCourse('level')}
+                onChange={(val) => setCourseValue('level', val, { shouldValidate: true })}
                 options={[
                   { value: 'BEGINNER', label: 'BEGINNER' },
                   { value: 'INTERMEDIATE', label: 'INTERMEDIATE' },
                   { value: 'ADVANCED', label: 'ADVANCED' },
                 ]}
               />
+              {courseErrors.level && <span className="text-xs text-red-500 mt-1 block">{courseErrors.level.message}</span>}
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status *</label>
               <CustomSelect
-                value={editForm.status}
-                onChange={(val) => setEditForm(f => ({ ...f, status: val }))}
+                value={watchCourse('status')}
+                onChange={(val) => setCourseValue('status', val, { shouldValidate: true })}
                 options={
                   course?.status === 'DRAFT'
                     ? [
@@ -341,6 +361,7 @@ export default function CourseManagePage({ params }) {
                         ]
                 }
               />
+            {courseErrors.status && <span className="text-xs text-red-500 mt-1 block">{courseErrors.status.message}</span>}
             {course?.status === 'ARCHIVED' && (
               <p className="text-xs text-gray-500 mt-1">ARCHIVED can be published again (ARCHIVED → PUBLISHED).</p>
             )}
@@ -371,7 +392,7 @@ export default function CourseManagePage({ params }) {
                       const res = await courseContentService.uploadMaterial(file, 'OTHER')
                       const url = res?.data?.url || res?.url || res?.data?.fileUrl || res?.fileUrl
                       if (url) {
-                        setEditForm(f => ({ ...f, thumbnail: url }))
+                        setCourseValue('thumbnail', url, { shouldValidate: true, shouldDirty: true })
                         toast.success('Thumbnail uploaded')
                       } else {
                         toast.error('Could not obtain uploaded image URL')
@@ -386,10 +407,10 @@ export default function CourseManagePage({ params }) {
                 />
               </label>
             </div>
-            {editForm.thumbnail && (
+            {editThumbnailValue && (
               <div className="mt-2 relative w-32 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
                 <img
-                  src={resolveFileUrl(editForm.thumbnail)}
+                  src={resolveFileUrl(editThumbnailValue)}
                   alt="Thumbnail preview"
                   className="w-full h-full object-cover"
                   onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -407,20 +428,15 @@ export default function CourseManagePage({ params }) {
               Cancel
             </button>
             {(() => {
-              const isEditCourseValid = Boolean(
-                editForm.title?.trim() &&
-                editForm.title.trim().length >= 3 &&
-                editForm.description?.trim() &&
-                editForm.durationValue &&
-                Number(editForm.durationValue) >= 1 &&
-                editForm.durationUnit &&
-                editForm.level &&
-                editForm.status
+              const isEditCourseValid = isCourseFormValid && Boolean(
+                watchCourse('title')?.trim() &&
+                watchCourse('description')?.trim() &&
+                watchCourse('durationValue')
               )
               return (
                 <button
                   type="submit"
-                  disabled={savingCourse || !isEditCourseValid}
+                  disabled={savingCourse || isSubmittingCourse || !isEditCourseValid}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {savingCourse ? 'Saving...' : 'Save Changes'}
@@ -1641,6 +1657,7 @@ function MaterialsTab({ courseId }) {
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ title: '', type: 'PDF', url: '', description: '', visibility: 'PUBLISHED' })
   const [editingId, setEditingId] = useState(null)
+  const [errors, setErrors] = useState({})
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [previewMaterial, setPreviewMaterial] = useState(null)
@@ -1669,12 +1686,14 @@ function MaterialsTab({ courseId }) {
   function resetForm() {
     setForm({ title: '', type: 'PDF', url: '', description: '', visibility: 'PUBLISHED' })
     setEditingId(null)
+    setErrors({})
   }
 
   function openEdit(m) {
     if (!canManageMaterials) return
     setEditingId(m.id)
     setForm({ title: m.title, type: m.type, url: m.url, description: m.description || '', visibility: m.visibility || 'PUBLISHED' })
+    setErrors({})
   }
 
   async function handleSubmit(e) {
@@ -1684,11 +1703,24 @@ function MaterialsTab({ courseId }) {
       return
     }
     if (!editingId && !ownerId) { toast.error('Select a target first'); return }
-    if (!form.title.trim()) { toast.error('Title is required'); return }
-    if (!form.url.trim()) { toast.error('File / URL is required'); return }
+
+    const newErrors = {}
+    if (!form.title?.trim()) {
+      newErrors.title = 'Title is required'
+    }
+    if (!form.url?.trim()) {
+      newErrors.url = 'File / URL is required'
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+    setErrors({})
+
     setSaving(true)
     try {
-      const payload = { title: form.title, type: form.type, url: form.url, description: form.description, visibility: form.visibility }
+      const payload = { title: form.title.trim(), type: form.type, url: form.url.trim(), description: form.description, visibility: form.visibility }
       if (editingId) {
         await courseContentService.updateMaterial(editingId, payload)
         toast.success('Material updated')
@@ -1724,6 +1756,11 @@ function MaterialsTab({ courseId }) {
     try {
       const res = await courseContentService.uploadMaterial(file, form.type)
       setForm(f => ({ ...f, url: res.data.url, title: f.title || res.data.originalName }))
+      setErrors(prev => ({
+        ...prev,
+        url: '',
+        ...(res.data?.originalName ? { title: '' } : {})
+      }))
       toast.success('File uploaded')
     } catch (err) { toast.error(err.message || 'Upload failed') } finally { setUploading(false); e.target.value = '' }
   }
@@ -1797,11 +1834,23 @@ function MaterialsTab({ courseId }) {
           {canManageMaterials && (
             <div className="glass-card p-4 space-y-3">
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{editingId ? 'Edit Material' : 'Add Material'}</p>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Title *"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
+              <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+                <div>
+                  <input
+                    value={form.title}
+                    onChange={e => {
+                      setForm(f => ({ ...f, title: e.target.value }))
+                      if (errors.title) setErrors(prev => ({ ...prev, title: '' }))
+                    }}
+                    placeholder="Title *"
+                    className={`w-full rounded-xl border ${
+                      errors.title ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                    } bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm outline-none focus:ring-2`}
+                  />
+                  {errors.title && <span className="text-xs text-red-500 mt-1 block">{errors.title}</span>}
+                </div>
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description (optional)" rows={2}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <CustomSelect
                     value={form.type}
@@ -1810,9 +1859,21 @@ function MaterialsTab({ courseId }) {
                   />
                   <StatusSelect value={form.visibility} onChange={v => setForm(f => ({ ...f, visibility: v }))} />
                 </div>
-                <input required value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="URL (or upload a file below) *"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-                <label className="flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                <div>
+                  <input
+                    value={form.url}
+                    onChange={e => {
+                      setForm(f => ({ ...f, url: e.target.value }))
+                      if (errors.url) setErrors(prev => ({ ...prev, url: '' }))
+                    }}
+                    placeholder="URL (or upload a file below) *"
+                    className={`w-full rounded-xl border ${
+                      errors.url ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                    } bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm outline-none focus:ring-2`}
+                  />
+                  {errors.url && <span className="text-xs text-red-500 mt-1 block">{errors.url}</span>}
+                </div>
+                <label className="flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
                   <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload file instead'}
                   <input
                     type="file"
@@ -1823,10 +1884,10 @@ function MaterialsTab({ courseId }) {
                   />
                 </label>
                 <div className="flex gap-2">
-                  {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>}
+                  {editingId && <button type="button" onClick={resetForm} className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">Cancel</button>}
                   <button
                     type="submit"
-                    disabled={saving || !form.title?.trim() || !form.url?.trim()}
+                    disabled={saving}
                     className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
                   >
                     {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Material'}

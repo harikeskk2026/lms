@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,6 +38,8 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     List<QuizAttempt> findAllSubmittedSince(@Param("since") Instant since);
 
     List<QuizAttempt> findByStudentIdInAndStatus(List<Long> studentIds, AttemptStatus status);
+
+    List<QuizAttempt> findByStudentIdInAndQuizIdInAndStatus(List<Long> studentIds, Collection<Long> quizIds, AttemptStatus status);
 
     List<QuizAttempt> findByStatus(AttemptStatus status);
 

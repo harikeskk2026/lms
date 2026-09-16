@@ -79,7 +79,7 @@ public class StudentCourseController {
             int totalTopics = moduleIds.isEmpty() ? 0 : topicRepository.findAllByModuleIdInOrderByOrderIndexAsc(moduleIds).size();
             int completedTopics = 0;
 
-            responses.add(StudentCourseResponse.of(batch, course, completedTopics, totalTopics));
+            responses.add(StudentCourseResponse.of(enrollment, batch, course, completedTopics, totalTopics));
         }
 
         return ResponseEntity.ok(ApiResponse.of(responses));

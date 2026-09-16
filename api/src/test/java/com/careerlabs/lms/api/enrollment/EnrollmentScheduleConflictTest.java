@@ -260,16 +260,14 @@ class EnrollmentScheduleConflictTest {
     }
 
     @Test
-    @DisplayName("Enrolling without batch should not trigger schedule check even with overlapping dates")
-    void enrollWithoutBatch_allow() {
-        // batch is null in request - no schedule validation invoked
-        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.empty());
-        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
-
+    @DisplayName("Enrolling without a batch -> Rejected (batch is mandatory)")
+    void enrollWithoutBatch_reject() {
+        // batch is null in request - must be rejected before any schedule validation is invoked
         EnrollStudentRequest req = new EnrollStudentRequest(1L, null);
-        assertDoesNotThrow(() -> enrollmentService.enrollStudentByAdmin(20L, req));
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> enrollmentService.enrollStudentByAdmin(20L, req));
+        assertTrue(ex.getMessage().contains("Batch is required"));
+        verifyNoInteractions(studentRepository, courseRepository, batchRepository, enrollmentRepository);
     }
 
     @Test
@@ -290,20 +288,14 @@ class EnrollmentScheduleConflictTest {
     }
 
     @Test
-    @DisplayName("Reactivation with inactive previous batch and no new batch -> Allow with batch=null")
-    void reactivation_inactivePreviousBatch_noNewBatch_allow() {
-        Batch inactiveBatch = makeBatch(100L, "Batch A", course1, LocalDate.of(2026,9,1), LocalDate.of(2026,9,30), "09:00 AM - 12:00 PM", false);
-        Enrollment inactiveEnrollment = makeEnrollment(1L, student, course1, inactiveBatch, false);
-
-        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
-        when(courseRepository.findById(20L)).thenReturn(Optional.of(course2));
-        when(enrollmentRepository.findByStudentIdAndCourseId(1L, 20L)).thenReturn(Optional.of(inactiveEnrollment));
-        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(i -> i.getArgument(0));
-
+    @DisplayName("Reactivation without a new batch -> Rejected (batch is mandatory)")
+    void reactivation_withoutNewBatch_reject() {
+        // reactivation must also provide a batch - null batch is rejected before any reactivation logic
         EnrollStudentRequest req = new EnrollStudentRequest(1L, null);
-        assertDoesNotThrow(() -> enrollmentService.enrollStudentByAdmin(20L, req));
-        assertNull(inactiveEnrollment.getBatch(), "Batch should be null after reactivation without new batch");
-        assertTrue(inactiveEnrollment.isActive(), "Enrollment should be active after reactivation");
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> enrollmentService.enrollStudentByAdmin(20L, req));
+        assertTrue(ex.getMessage().contains("Batch is required"));
+        verifyNoInteractions(studentRepository, courseRepository, batchRepository, enrollmentRepository);
     }
 
     @Test
