@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -58,11 +58,16 @@ function genPassword() {
 export default function TrainersPage() {
   const [trainers, setTrainers] = useState([])
   const [totalElements, setTotalElements] = useState(0)
+  const [totalActive, setTotalActive] = useState(0)
+  const [totalInactive, setTotalInactive] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const searchTimer = useRef(null)
   const [statusFilter, setStatusFilter] = useState('')
 
   // Modals
@@ -121,6 +126,25 @@ export default function TrainersPage() {
     }))
   }, [filteredBatches])
 
+  const handleSearchChange = (val) => {
+    setSearchInput(val)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => {
+      setSearch(val)
+      setPage(1)
+    }, 300)
+  }
+
+  const pageNumbers = useMemo(() => {
+    const pages = []
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || Math.abs(p - page) <= 1) {
+        pages.push(p)
+      }
+    }
+    return pages
+  }, [totalPages, page])
+
   const fetchTrainers = useCallback(async () => {
     setLoading(true)
     try {
@@ -128,18 +152,20 @@ export default function TrainersPage() {
         search: search.trim() || undefined,
         status: statusFilter || undefined,
         page,
-        limit: 10,
+        limit: pageSize,
       })
-      const data = res.data.data
+      const data = res.data?.data || {}
       setTrainers(data.trainers || [])
-      setTotalElements(data.totalElements || 0)
-      setTotalPages(data.totalPages || 1)
+      setTotalElements(data.totalElements ?? 0)
+      setTotalPages(data.totalPages ?? 1)
+      setTotalActive(data.totalActive ?? 0)
+      setTotalInactive(data.totalInactive ?? 0)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load trainers')
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, page])
+  }, [search, statusFilter, page, pageSize])
 
   useEffect(() => {
     fetchTrainers()
@@ -367,7 +393,7 @@ export default function TrainersPage() {
           <div>
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Active Trainers</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {trainers.filter(t => t.active).length}
+              {totalActive}
             </p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center">
@@ -379,7 +405,7 @@ export default function TrainersPage() {
           <div>
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Inactive</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {trainers.filter(t => !t.active).length}
+              {totalInactive}
             </p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-gray-800 text-slate-500 dark:text-slate-400 flex items-center justify-center font-semibold text-xs">
@@ -394,8 +420,8 @@ export default function TrainersPage() {
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            value={searchInput}
+            onChange={e => handleSearchChange(e.target.value)}
             placeholder="Search by name or email..."
             className="w-full rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900/80 pl-10 pr-4 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
           />
@@ -561,26 +587,68 @@ export default function TrainersPage() {
           </div>
         )}
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-gray-800 text-xs text-slate-500 dark:text-slate-400">
-            <span>Showing page {page} of {totalPages} ({totalElements} trainers)</span>
-            <div className="flex gap-2">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(p => p - 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-700 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-gray-800"
-              >
-                Previous
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage(p => p + 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-700 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-gray-800"
-              >
-                Next
-              </button>
+        {/* Server-side Pagination Footer */}
+        {totalElements > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 dark:border-gray-800 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span>
+                Showing {Math.min((page - 1) * pageSize + 1, totalElements)}–{Math.min(page * pageSize, totalElements)} of {totalElements} trainers
+              </span>
+              <span className="flex items-center gap-1.5">
+                Per page:
+                <CustomSelect
+                  compact
+                  value={String(pageSize)}
+                  onChange={v => { setPageSize(Number(v)); setPage(1) }}
+                  options={[
+                    { value: '10', label: '10' },
+                    { value: '20', label: '20' },
+                    { value: '50', label: '50' },
+                    { value: '100', label: '100' },
+                  ]}
+                  className="!py-1"
+                />
+              </span>
             </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors"
+                  title="Previous Page"
+                >
+                  Previous
+                </button>
+
+                {pageNumbers.map((p, idx, arr) => (
+                  <span key={p} className="flex items-center">
+                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-slate-400">…</span>}
+                    <button
+                      onClick={() => setPage(p)}
+                      className={clsx(
+                        'w-7 h-7 rounded-lg text-xs font-bold transition-colors',
+                        page === p
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-800'
+                      )}
+                    >
+                      {p}
+                    </button>
+                  </span>
+                ))}
+
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors"
+                  title="Next Page"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

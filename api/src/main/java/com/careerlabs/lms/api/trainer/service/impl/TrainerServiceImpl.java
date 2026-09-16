@@ -82,11 +82,16 @@ public class TrainerServiceImpl implements TrainerService {
                 .map(u -> TrainerResponse.from(u, batchesByTrainerId.getOrDefault(u.getId(), List.of())))
                 .toList();
 
+        long totalActive = userRepository.countByRoleAndActive(Role.TRAINER, true);
+        long totalInactive = userRepository.countByRoleAndActive(Role.TRAINER, false);
+
         return new TrainerPageResponse(
                 trainerResponses,
                 userPage.getTotalElements(),
                 userPage.getTotalPages(),
-                userPage.getNumber() + 1
+                userPage.getNumber() + 1,
+                totalActive,
+                totalInactive
         );
     }
 
