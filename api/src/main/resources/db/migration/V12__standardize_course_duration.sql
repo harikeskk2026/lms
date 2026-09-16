@@ -1,9 +1,12 @@
--- V6: Standardize course duration to '<number> (days|weeks|months|years)'
---
--- Phase 1: Normalize recognized patterns
--- Phase 2: Flag unrecognized records as NULL for manual review
--- Phase 3: Verify no invalid durations remain
--- Phase 4: Add CHECK constraint
+
+
+UPDATE courses
+SET duration = TRIM(duration)
+WHERE duration IS NOT NULL AND duration != TRIM(duration);
+
+UPDATE courses
+SET duration = NULL
+WHERE duration IS NOT NULL AND TRIM(duration) = '';
 
 
 -- ============================================================
@@ -20,7 +23,7 @@ BEGIN
     SELECT id, duration
     FROM courses
     WHERE duration IS NOT NULL
-      AND duration ~* '^\d+\s*(hours?|hrs?|h)$'
+      AND duration ~* '^\s*\d+\s*(hours?|hrs?|h)\s*$'
   LOOP
 
     num_val := (regexp_match(rec.duration, '^\s*(\d+)', 'i'))[1]::INTEGER;
@@ -62,12 +65,12 @@ BEGIN
     SELECT id, duration
     FROM courses
     WHERE duration IS NOT NULL
-      AND duration ~* '^\d+\s*-\s*\d+\s*(days?|weeks?|months?|years?)$'
+      AND duration ~* '^\s*\d+\s*-\s*\d+\s*(days?|weeks?|months?|years?)\s*$'
   LOOP
 
     parts := regexp_match(
       rec.duration,
-      '^\s*\d+\s*-\s*(\d+)\s*(days?|weeks?|months?|years?)$',
+      '^\s*\d+\s*-\s*(\d+)\s*(days?|weeks?|months?|years?)\s*$',
       'i'
     );
 
@@ -111,7 +114,7 @@ BEGIN
     SELECT id, duration
     FROM courses
     WHERE duration IS NOT NULL
-      AND duration ~* '^\d+\s+(day|week|month|year)$'
+      AND duration ~* '^\s*\d+\s+(day|week|month|year)\s*$'
   LOOP
 
     num_val := (
@@ -163,28 +166,19 @@ END $$;
 -- ============================================================
 
 UPDATE courses
-SET duration = LOWER(duration)
+SET duration = LOWER(TRIM(duration))
 WHERE duration IS NOT NULL
-  AND duration ~* '^\d+\s+(days|weeks|months|years)$'
-  AND duration != LOWER(duration);
+  AND duration ~* '^\s*\d+\s+(days|weeks|months|years)\s*$'
+  AND duration != LOWER(TRIM(duration));
 
 
 -- ============================================================
--- IMPORTANT FIX:
--- Allow NULL durations before Phase 2.
---
--- Phase 2 intentionally sets unrecognized durations to NULL
--- for manual review.
+-- Phase 2: Allow NULL durations and flag unrecognized durations
+-- as NULL for manual review.
 -- ============================================================
 
 ALTER TABLE courses
   ALTER COLUMN duration DROP NOT NULL;
-
-
--- ============================================================
--- Phase 2: Flag unrecognized durations as NULL
--- for manual review
--- ============================================================
 
 DO $$
 DECLARE
@@ -195,7 +189,7 @@ BEGIN
     SELECT id, duration
     FROM courses
     WHERE duration IS NOT NULL
-      AND duration !~ '^\d+\s+(days|weeks|months|years)$'
+      AND duration !~ '^[1-9][0-9]* (days|weeks|months|years)$'
   LOOP
 
     RAISE NOTICE
@@ -236,11 +230,15 @@ END $$;
 
 
 -- ============================================================
--- Phase 4: Add CHECK constraint
+-- Phase 4: Drop existing constraint if present and re-create
+-- CHECK constraint.
 --
 -- NULL is allowed because unrecognized records are flagged
 -- for manual review.
 -- ============================================================
+
+ALTER TABLE courses
+  DROP CONSTRAINT IF EXISTS chk_courses_duration_standard;
 
 ALTER TABLE courses
   ADD CONSTRAINT chk_courses_duration_standard
