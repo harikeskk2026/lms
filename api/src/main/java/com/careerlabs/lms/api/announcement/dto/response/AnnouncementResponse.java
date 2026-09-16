@@ -34,8 +34,6 @@ public record AnnouncementResponse(
         AudienceRuleType audienceRuleType,
         Double audienceRuleValue,
         Long audienceRuleReferenceId,
-        String attachmentUrl,
-        String attachmentName,
         Instant createdAt,
         /** Populated only when rendering for a specific student; null in admin listings. */
         Boolean viewed,
@@ -83,8 +81,6 @@ public record AnnouncementResponse(
                 a.getAudienceRuleType(),
                 a.getAudienceRuleValue(),
                 a.getAudienceRuleReferenceId(),
-                a.getAttachmentUrl(),
-                a.getAttachmentName(),
                 a.getCreatedAt(),
                 viewed,
                 acknowledged);

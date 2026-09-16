@@ -56,15 +56,15 @@ function validateAssignmentDates(startDate, publishTime, dueDate, closeTime) {
 
 function validateTotalMarks(val) {
   if (val === '' || val === null || val === undefined) {
-    return 'Total marks must be between 1 and 100.'
+    return null
   }
   const strVal = String(val).trim()
-  if (!/^\d+$/.test(strVal) || strVal.length > 3) {
-    return 'Total marks must be between 1 and 100.'
+  if (!/^\d+$/.test(strVal)) {
+    return 'Please enter correct value below 100'
   }
   const num = Number(strVal)
-  if (!Number.isInteger(num) || num < 1 || num > 100) {
-    return 'Total marks must be between 1 and 100.'
+  if (num < 1 || num > 100) {
+    return 'Please enter correct value below 100'
   }
   return null
 }
@@ -74,7 +74,6 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -119,7 +118,6 @@ export default function AssignmentsPage() {
 
   const load = useCallback(() => {
     setLoading(true)
-    const limitParam = pageSize === 'all' ? 1000 : pageSize
     assignmentService.list({
       search: search || undefined,
       courseId: courseFilter || undefined,
@@ -128,17 +126,17 @@ export default function AssignmentsPage() {
       dueDateFrom: dueDateFrom || undefined,
       dueDateTo: dueDateTo || undefined,
       page,
-      limit: limitParam,
+      limit: 20,
     })
       .then(r => {
         const d = r.data
         setAssignments(d.assignments)
         setTotal(d.total)
-        setTotalPages(pageSize === 'all' ? 1 : d.totalPages)
+        setTotalPages(d.totalPages)
       })
       .catch(err => toast.error(err.message || 'Failed to load assignments'))
       .finally(() => setLoading(false))
-  }, [search, courseFilter, batchFilter, statusFilter, dueDateFrom, dueDateTo, page, pageSize])
+  }, [search, courseFilter, batchFilter, statusFilter, dueDateFrom, dueDateTo, page])
 
   useEffect(() => { load() }, [load])
 
@@ -298,8 +296,8 @@ export default function AssignmentsPage() {
       dueDate: form.dueDate || null,
       closeTime: form.closeTime || null,
       totalMarks: form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined
-        ? Number(String(form.totalMarks).trim())
-        : null,
+        ? Number(form.totalMarks)
+        : (status === 'DRAFT' ? 100 : null),
       attachments: attList,
       attachmentUrl: attList[0]?.fileUrl || form.attachmentUrl || null,
       attachmentName: attList[0]?.fileName || form.attachmentName || null,
@@ -322,11 +320,6 @@ export default function AssignmentsPage() {
       errs.batchId = 'Please select a Batch'
     }
 
-    const totalMarksErr = validateTotalMarks(form.totalMarks)
-    if (totalMarksErr) {
-      errs.totalMarks = totalMarksErr
-    }
-
     if (status !== 'DRAFT') {
       if (!form.description?.trim()) {
         errs.description = 'Please enter assignment Description'
@@ -343,10 +336,27 @@ export default function AssignmentsPage() {
       if (!form.closeTime) {
         errs.closeTime = 'Please select a Close Time'
       }
+      if (form.totalMarks === '' || form.totalMarks === null || form.totalMarks === undefined) {
+        errs.totalMarks = 'Please enter Total Marks (1 to 100)'
+      } else {
+        const marksNum = Number(form.totalMarks)
+        if (isNaN(marksNum) || marksNum < 1 || marksNum > 100) {
+          errs.totalMarks = 'Total Marks must be between 1 and 100'
+        }
+      }
       if (dateError) {
         errs.date = dateError
       }
+      if (marksError && !errs.totalMarks) {
+        errs.totalMarks = marksError
+      }
     } else {
+      if (form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined) {
+        const marksNum = Number(form.totalMarks)
+        if (isNaN(marksNum) || marksNum < 1 || marksNum > 100) {
+          errs.totalMarks = 'Total Marks must be between 1 and 100'
+        }
+      }
       if (form.startDate && form.dueDate && dateError) {
         errs.date = dateError
       }
@@ -692,77 +702,28 @@ export default function AssignmentsPage() {
         )}
       </div>
 
-      {/* Bottom Rows Selector & Pagination (Short Box) */}
-      {displayedTotal > 0 && (
-        <div className="flex justify-end pt-1">
-          <div className="glass-card px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 inline-flex items-center gap-2.5 shadow-sm">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))
-                  setPage(1)
-                }}
-                className="text-xs font-semibold px-2 py-0.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value="all">All</option>
-              </select>
-            </div>
-
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
-              {displayedTotal === 0
-                ? '0 of 0'
-                : `${(page - 1) * (pageSize === 'all' ? displayedTotal : pageSize) + 1}–${Math.min(page * (pageSize === 'all' ? displayedTotal : pageSize), displayedTotal)} of ${displayedTotal}`}
-            </span>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-                <button
-                  type="button"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Prev
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, displayedTotal)} of {displayedTotal}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
+              ← Prev
+            </button>
+            {[...Array(Math.min(5, totalPages))].map((_, i) => {
+              const p = Math.max(1, Math.min(page - 2, totalPages - 4)) + i
+              return (
+                <button key={p} onClick={() => setPage(p)}
+                  className={`w-8 h-8 rounded-xl text-sm font-semibold transition-colors ${p === page ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-purple-50'}`}>
+                  {p}
                 </button>
-                {[...Array(totalPages)].map((_, i) => {
-                  const p = i + 1
-                  if (totalPages > 6 && Math.abs(p - page) > 2 && p !== 1 && p !== totalPages) {
-                    if (p === 2 || p === totalPages - 1) {
-                      return <span key={p} className="text-xs text-gray-400 px-0.5">...</span>
-                    }
-                    return null
-                  }
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPage(p)}
-                      className={`w-6 h-6 text-xs font-bold rounded-lg transition-colors ${
-                        p === page
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  )
-                })}
-                <button
-                  type="button"
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            )}
+              )
+            })}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
+              Next →
+            </button>
           </div>
         </div>
       )}
@@ -921,44 +882,31 @@ export default function AssignmentsPage() {
             <p className="text-xs text-red-500 font-medium -mt-1">{dateError}</p>
           )}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              Total Marks <span className="text-red-500">*</span>
-            </label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total Marks</label>
             <input
-              type="text"
-              inputMode="numeric"
-              maxLength={3}
+              type="number"
+              min="1"
+              max="100"
+              step="1"
               value={form.totalMarks}
-              placeholder="Enter marks (1 - 100)"
+              placeholder="Enter your marks"
               onKeyDown={e => {
-                // Allow standard control and navigation keys
-                if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) {
-                  return
-                }
-                // Allow keyboard shortcuts (Ctrl+A, Ctrl+C, Ctrl+V, etc.)
-                if (e.ctrlKey || e.metaKey) {
-                  return
-                }
-                // Disallow anything other than 0-9
-                if (!/^\d$/.test(e.key)) {
+                // Disallow minus (-), plus (+), e/E, and period (.)
+                if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
                   e.preventDefault()
                 }
               }}
               onChange={e => {
-                const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 3)
+                const clean = e.target.value.replace(/[^0-9]/g, '')
                 setForm(f => ({ ...f, totalMarks: clean }))
                 if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
               }}
               className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                errors.totalMarks || (form.totalMarks !== '' && marksError)
-                  ? 'border-red-400 focus:ring-red-400'
-                  : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                errors.totalMarks || marksError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
               }`}
             />
-            {(errors.totalMarks || (form.totalMarks !== '' && marksError)) && (
-              <p className="text-xs text-red-500 font-medium mt-1">
-                {errors.totalMarks || marksError}
-              </p>
+            {(errors.totalMarks || marksError) && (
+              <p className="text-xs text-red-500 font-medium mt-1">{errors.totalMarks || marksError}</p>
             )}
           </div>
           <div>

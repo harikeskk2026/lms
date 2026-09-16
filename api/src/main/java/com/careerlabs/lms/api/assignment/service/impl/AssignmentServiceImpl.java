@@ -523,15 +523,12 @@ public class AssignmentServiceImpl implements AssignmentService {
     private void applyRequest(Assignment assignment, AssignmentRequest request) {
         boolean isDraft = request.getStatus() == AssignmentStatus.DRAFT;
 
-        // Course, Batch, and Total Marks are required
+        // Course and Batch are required for BOTH Save as Draft and Publish
         if (request.getCourseId() == null) {
             throw new BadRequestException("Course is required");
         }
         if (request.getBatchId() == null) {
             throw new BadRequestException("Batch is required");
-        }
-        if (request.getTotalMarks() == null || request.getTotalMarks() < 1 || request.getTotalMarks() > 100) {
-            throw new BadRequestException("Total marks must be between 1 and 100.");
         }
 
         if (!isDraft) {
@@ -549,6 +546,9 @@ public class AssignmentServiceImpl implements AssignmentService {
             }
             if (request.getCloseTime() == null) {
                 throw new BadRequestException("Close Time is required");
+            }
+            if (request.getTotalMarks() == null || request.getTotalMarks() < 1 || request.getTotalMarks() > 100) {
+                throw new BadRequestException("Total Marks must be between 1 and 100");
             }
         }
 

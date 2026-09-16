@@ -135,15 +135,17 @@ class AnnouncementAccessControlTest {
         Announcement notEligible = announcement(3L, AnnouncementStatus.PUBLISHED, null);
 
         when(studentRepository.findByUserId(55L)).thenReturn(Optional.of(student));
-        when(announcementRepository.findActiveByStatus(eq(AnnouncementStatus.PUBLISHED), any()))
-                .thenReturn(List.of(eligible, notEligible));
+        when(announcementRepository.findByStatus(AnnouncementStatus.PUBLISHED))
+                .thenReturn(List.of(eligible, expired, notEligible));
         when(audienceService.isEligible(any(), any())).thenAnswer(inv -> inv.getArgument(0) == eligible);
-        when(viewRepository.findAnnouncementIdsByStudentId(100L)).thenReturn(List.of());
-        when(acknowledgmentRepository.findAnnouncementIdsByStudentId(100L)).thenReturn(List.of());
+        when(viewRepository.existsByAnnouncementIdAndStudentId(1L, 100L)).thenReturn(false);
+        when(acknowledgmentRepository.existsByAnnouncementIdAndStudentId(1L, 100L)).thenReturn(false);
 
         List<AnnouncementResponse> result = announcementService.listForStudent(55L);
 
         assertEquals(List.of(1L), result.stream().map(AnnouncementResponse::id).toList());
+        verify(viewRepository, never()).existsByAnnouncementIdAndStudentId(eq(2L), anyLong());
+        verify(viewRepository, never()).existsByAnnouncementIdAndStudentId(eq(3L), anyLong());
     }
 
     @Test
@@ -399,76 +401,28 @@ class AnnouncementAccessControlTest {
     // ─── Expiry date validation ───────────────────────────────────────────────
 
     @Test
-    @DisplayName("create rejects announcement when expiresAt is in the past for immediate publish")
-    void createRejectsExpiryDateBeforePublishedDate() {
+    @DisplayName("create rejects announcement when expiresAt is today or in the past for immediate publish")
+    void createRejectsExpiryDateOnOrBeforePublishedDate() {
         User adminUser = new User();
         setId(adminUser, 1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
-
-        AnnouncementRequest req = new AnnouncementRequest(
-                "Title", "Body", null, false, LocalDate.now().minusDays(1), null,
-                AnnouncementStatus.PUBLISHED, null, null, false, false,
-                null, null, null, null, null, null, null, null, null,
-                null, null);
-
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> announcementService.create(req, 1L));
-        assertEquals("Expiry date cannot be before the published date", ex.getMessage());
-    }
-
-    @Test
-    @DisplayName("create allows announcement when expiresAt is today (same as published date)")
-    void createAllowsExpiryDateOnPublishedDate() {
-        User adminUser = new User();
-        setId(adminUser, 1L);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
-        when(announcementRepository.save(any(Announcement.class))).thenAnswer(inv -> {
-            Announcement a = inv.getArgument(0);
-            setId(a, 99L);
-            return a;
-        });
 
         AnnouncementRequest req = new AnnouncementRequest(
                 "Title", "Body", null, false, LocalDate.now(), null,
                 AnnouncementStatus.PUBLISHED, null, null, false, false,
-                null, null, null, null, null, null, null, null, null,
-                null, null);
-
-        assertDoesNotThrow(() -> announcementService.create(req, 1L));
-    }
-
-    @Test
-    @DisplayName("create rejects announcement when expiresAt is before scheduled date")
-    void createRejectsExpiryDateBeforeScheduledDate() {
-        User adminUser = new User();
-        setId(adminUser, 1L);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
-
-        Instant scheduledTime = Instant.now().plusSeconds(86400 * 5);
-        LocalDate scheduledDate = scheduledTime.atZone(java.time.ZoneId.systemDefault()).toLocalDate();
-
-        AnnouncementRequest req = new AnnouncementRequest(
-                "Title", "Body", null, false, scheduledDate.minusDays(1), null,
-                AnnouncementStatus.SCHEDULED, null, scheduledTime, false, false,
-                null, null, null, null, null, null, null, null, null,
-                null, null);
+                null, null, null, null, null, null, null, null, null);
 
         BadRequestException ex = assertThrows(BadRequestException.class,
                 () -> announcementService.create(req, 1L));
-        assertTrue(ex.getMessage().contains("Expiry date cannot be before the scheduled publishing date"));
+        assertEquals("Expiry date must be after the published date", ex.getMessage());
     }
 
     @Test
-    @DisplayName("create allows announcement when expiresAt is on scheduled date")
-    void createAllowsExpiryDateOnScheduledDate() {
+    @DisplayName("create rejects announcement when expiresAt is before or on scheduled date")
+    void createRejectsExpiryDateOnOrBeforeScheduledDate() {
         User adminUser = new User();
         setId(adminUser, 1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
-        when(announcementRepository.save(any(Announcement.class))).thenAnswer(inv -> {
-            Announcement a = inv.getArgument(0);
-            setId(a, 99L);
-            return a;
-        });
 
         Instant scheduledTime = Instant.now().plusSeconds(86400 * 5);
         LocalDate scheduledDate = scheduledTime.atZone(java.time.ZoneId.systemDefault()).toLocalDate();
@@ -476,14 +430,15 @@ class AnnouncementAccessControlTest {
         AnnouncementRequest req = new AnnouncementRequest(
                 "Title", "Body", null, false, scheduledDate, null,
                 AnnouncementStatus.SCHEDULED, null, scheduledTime, false, false,
-                null, null, null, null, null, null, null, null, null,
-                null, null);
+                null, null, null, null, null, null, null, null, null);
 
-        assertDoesNotThrow(() -> announcementService.create(req, 1L));
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> announcementService.create(req, 1L));
+        assertTrue(ex.getMessage().contains("Expiry date must be after the scheduled publishing date"));
     }
 
     @Test
-    @DisplayName("schedule rejects new scheduled date when announcement expiresAt is before it")
+    @DisplayName("schedule rejects new scheduled date when announcement expiresAt is on or before it")
     void scheduleRejectsScheduledDateAfterExpiry() {
         Announcement a = announcement(1L, AnnouncementStatus.DRAFT, LocalDate.now().plusDays(2));
         when(announcementRepository.findById(1L)).thenReturn(Optional.of(a));

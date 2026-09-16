@@ -128,31 +128,27 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     // ─── Student listing (audience-filtered + personalized) ────────────────
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<AnnouncementResponse> listForStudent(Long userId) {
         LocalDate today = LocalDate.now();
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user " + userId));
         Map<String, String> vars = placeholderResolver.variablesFor(student);
 
-        java.util.Set<Long> viewedIds = student.getId() != null
-                ? new java.util.HashSet<>(viewRepository.findAnnouncementIdsByStudentId(student.getId()))
-                : java.util.Collections.emptySet();
-        java.util.Set<Long> acknowledgedIds = student.getId() != null
-                ? new java.util.HashSet<>(acknowledgmentRepository.findAnnouncementIdsByStudentId(student.getId()))
-                : java.util.Collections.emptySet();
-
         List<AnnouncementResponse> result = new ArrayList<>();
-        List<Announcement> published = announcementRepository.findActiveByStatus(AnnouncementStatus.PUBLISHED, today);
+        List<Announcement> published = announcementRepository.findByStatus(AnnouncementStatus.PUBLISHED);
 
         for (Announcement a : published) {
+            if (a.getExpiresAt() != null && a.getExpiresAt().isBefore(today)) {
+                continue;
+            }
             if (!audienceService.isEligible(a, student)) {
                 continue;
             }
             String title = placeholderResolver.resolve(a.getTitle(), vars);
             String body = placeholderResolver.resolve(a.getBody(), vars);
-            boolean viewed = viewedIds.contains(a.getId());
-            boolean acknowledged = acknowledgedIds.contains(a.getId());
+            boolean viewed = viewRepository.existsByAnnouncementIdAndStudentId(a.getId(), student.getId());
+            boolean acknowledged = acknowledgmentRepository.existsByAnnouncementIdAndStudentId(a.getId(), student.getId());
             result.add(AnnouncementResponse.from(a, title, body, viewed, acknowledged));
         }
 
@@ -264,13 +260,13 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         LocalDate publishDate;
         if (status == AnnouncementStatus.SCHEDULED && scheduledAt != null) {
             publishDate = scheduledAt.atZone(ZoneId.systemDefault()).toLocalDate();
-            if (expiresAt.isBefore(publishDate)) {
-                throw new BadRequestException("Expiry date cannot be before the scheduled publishing date (" + publishDate + ")");
+            if (!expiresAt.isAfter(publishDate)) {
+                throw new BadRequestException("Expiry date must be after the scheduled publishing date (" + publishDate + ")");
             }
         } else {
             publishDate = LocalDate.now();
-            if (expiresAt.isBefore(publishDate)) {
-                throw new BadRequestException("Expiry date cannot be before the published date");
+            if (!expiresAt.isAfter(publishDate)) {
+                throw new BadRequestException("Expiry date must be after the published date");
             }
         }
     }
@@ -379,8 +375,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         copy.setActionReferenceId(source.getActionReferenceId());
         copy.setActionLabel(source.getActionLabel());
         copy.setActionUrl(source.getActionUrl());
-        copy.setAttachmentUrl(source.getAttachmentUrl());
-        copy.setAttachmentName(source.getAttachmentName());
         copy.setCollege(source.getCollege());
         copy.setCourse(source.getCourse());
         copy.setAudienceRuleType(source.getAudienceRuleType());
@@ -455,15 +449,10 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if (acknowledgmentRepository.existsByAnnouncementIdAndStudentId(announcementId, student.getId())) {
             throw new BadRequestException("Already acknowledged");
         }
-        try {
-            AnnouncementAcknowledgment ack = new AnnouncementAcknowledgment();
-            ack.setAnnouncement(announcement);
-            ack.setStudent(student);
-            acknowledgmentRepository.save(ack);
-        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            // Concurrent double-submit safe
-            return AnnouncementResponse.from(announcement);
-        }
+        AnnouncementAcknowledgment ack = new AnnouncementAcknowledgment();
+        ack.setAnnouncement(announcement);
+        ack.setStudent(student);
+        acknowledgmentRepository.save(ack);
         return AnnouncementResponse.from(announcement);
     }
 
@@ -483,7 +472,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
             List<Student> students = enrollmentRepository.findActiveStudentsByBatchId(batch.getId());
             long lowAttendanceCount = students.stream()
                     .filter(s -> {
-                        if (s.getId() == null) return false;
                         long total = attendanceRepository.countByStudentId(s.getId());
                         if (total == 0) {
                             return false;
@@ -497,7 +485,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                 suggestions.add(new AnnouncementSuggestionResponse(
                         "Attendance Warning - " + batch.getName(),
                         "Attendance for several students in this batch has fallen below the required 75%. "
-                                 + "Please ensure you attend upcoming sessions to remain eligible.",
+                                + "Please ensure you attend upcoming sessions to remain eligible.",
                         AnnouncementCategory.ATTENDANCE,
                         batch.getId(),
                         batch.getName(),
@@ -514,13 +502,9 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                 || announcement.getPriority() == AnnouncementPriority.HIGH)
                 ? NotificationType.URGENT : NotificationType.INFO;
 
-        boolean hasTokens = (announcement.getTitle() != null && announcement.getTitle().contains("{{"))
-                || (announcement.getBody() != null && announcement.getBody().contains("{{"));
-
         boolean advancedTargeting = announcement.getCollege() != null
                 || announcement.getCourse() != null
-                || (announcement.getAudienceRuleType() != null && announcement.getAudienceRuleType() != AudienceRuleType.NONE)
-                || hasTokens;
+                || (announcement.getAudienceRuleType() != null && announcement.getAudienceRuleType() != AudienceRuleType.NONE);
 
         if (!advancedTargeting) {
             if (announcement.getBatch() != null) {
@@ -535,15 +519,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
         for (Student student : audienceService.resolveEligibleStudents(announcement)) {
             if (student.getUser() != null) {
-                String title = announcement.getTitle();
-                String body = announcement.getBody();
-                if (hasTokens) {
-                    Map<String, String> vars = placeholderResolver.variablesFor(student);
-                    title = placeholderResolver.resolve(title, vars);
-                    body = placeholderResolver.resolve(body, vars);
-                }
-                notificationService.notifyUser(student.getUser().getId(), title,
-                        body, type, "/student/announcements");
+                notificationService.notifyUser(student.getUser().getId(), announcement.getTitle(),
+                        announcement.getBody(), type, "/student/announcements");
             }
         }
     }
@@ -564,8 +541,6 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         announcement.setActionReferenceId(request.actionReferenceId());
         announcement.setActionLabel(request.actionLabel());
         announcement.setActionUrl(request.actionUrl());
-        announcement.setAttachmentUrl(request.attachmentUrl());
-        announcement.setAttachmentName(request.attachmentName());
         announcement.setAudienceRuleType(request.audienceRuleType() != null ? request.audienceRuleType() : AudienceRuleType.NONE);
         announcement.setAudienceRuleValue(request.audienceRuleValue());
         announcement.setAudienceRuleReferenceId(request.audienceRuleReferenceId());

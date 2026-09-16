@@ -3,15 +3,14 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
-  Pin, Trash2, Pencil, Plus, Send, ArrowLeft,
-  History, CalendarDays, Check, X as XIcon, Paperclip,
+  Pin, Trash2, Pencil, Plus, Send, Copy, ArrowLeft,
+  BarChart3, History, CalendarDays, Check, X as XIcon, Paperclip,
   ChevronLeft, ChevronRight, Eye, Megaphone, FileText, Sparkles,
   Users, Calendar, Clock, Bookmark, Info, ChevronDown, Upload,
-  RefreshCw,
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
-import api, { adminApi, resolveFileUrl } from '@/lib/api'
+import { adminApi, resolveFileUrl } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import assignmentService from '@/services/assignmentService'
@@ -19,7 +18,6 @@ import DateTimePicker from '@/components/ui/DateTimePicker'
 import CustomSelect from '@/components/ui/CustomSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import { useConfirmModal } from '@/components/ui/ConfirmModal'
-import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 const CATEGORIES = ['GENERAL', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 
@@ -52,18 +50,6 @@ function getDayAfter(dateStr) {
   return `${yr}-${mo}-${da}`
 }
 
-function addDaysToDateStr(dateStr, days) {
-  if (!dateStr) return ''
-  const parts = dateStr.split('T')[0].split('-').map(Number)
-  if (parts.length < 3 || isNaN(parts[0])) return ''
-  const dt = new Date(parts[0], parts[1] - 1, parts[2])
-  dt.setDate(dt.getDate() + days)
-  const yr = dt.getFullYear()
-  const mo = String(dt.getMonth() + 1).padStart(2, '0')
-  const da = String(dt.getDate()).padStart(2, '0')
-  return `${yr}-${mo}-${da}`
-}
-
 function formatSafe(val, fmtStr) {
   if (!val) return null
   try {
@@ -78,13 +64,10 @@ function formatSafe(val, fmtStr) {
 
 const emptyForm = {
   title: '', body: '',
-  batchId: '', courseId: '', collegeId: '',
+  batchId: '', courseId: '',
   isPinned: false, expiresAt: '', category: 'GENERAL', priority: 'NORMAL',
   requiresAcknowledgment: false, allowComments: false,
   scheduledAt: '',
-  actionType: '', actionReferenceId: '', actionLabel: '', actionUrl: '',
-  audienceRuleType: 'NONE', audienceRuleValue: '', audienceRuleReferenceId: '',
-  attachmentUrl: '', attachmentName: '',
 }
 
 export default function AnnouncementsPage() {
@@ -105,7 +88,6 @@ export default function AnnouncementsPage() {
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null)
   const [deletingAnnouncement, setDeletingAnnouncement] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  const [previewAttachment, setPreviewAttachment] = useState(null)
   const [ask, confirmModal] = useConfirmModal()
 
   const load = () => {
@@ -135,17 +117,15 @@ export default function AnnouncementsPage() {
     scheduledAt: status === 'SCHEDULED' && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
     requiresAcknowledgment: form.requiresAcknowledgment,
     allowComments: form.allowComments,
-    actionType: form.actionType || null,
-    actionReferenceId: form.actionReferenceId ? Number(form.actionReferenceId) : null,
-    actionLabel: form.actionLabel || null,
-    actionUrl: form.actionUrl || null,
-    collegeId: form.collegeId || null,
+    actionType: null,
+    actionReferenceId: null,
+    actionLabel: null,
+    actionUrl: null,
+    collegeId: null,
     courseId: form.courseId || null,
-    audienceRuleType: form.audienceRuleType || 'NONE',
-    audienceRuleValue: form.audienceRuleValue !== '' && form.audienceRuleValue !== null && form.audienceRuleValue !== undefined ? Number(form.audienceRuleValue) : null,
-    audienceRuleReferenceId: form.audienceRuleReferenceId ? Number(form.audienceRuleReferenceId) : null,
-    attachmentUrl: form.attachmentUrl || null,
-    attachmentName: form.attachmentName || null,
+    audienceRuleType: 'NONE',
+    audienceRuleValue: null,
+    audienceRuleReferenceId: null,
   })
 
   const handleSave = async (e, status) => {
@@ -189,11 +169,11 @@ export default function AnnouncementsPage() {
       const publishDate = (status === 'SCHEDULED' && form.scheduledAt)
         ? form.scheduledAt.split('T')[0]
         : getTodayString()
-      if (form.expiresAt < publishDate) {
+      if (form.expiresAt <= publishDate) {
         toast.error(
           (status === 'SCHEDULED' && form.scheduledAt)
-            ? `Expiry date cannot be before the scheduled publishing date (${publishDate})`
-            : `Expiry date cannot be before the published date (${publishDate})`
+            ? `Expiry date must be after the scheduled publishing date (${publishDate})`
+            : `Expiry date must be after the published date (tomorrow or later)`
         )
         return
       }
@@ -217,28 +197,28 @@ export default function AnnouncementsPage() {
       setEditId(null)
       setForm(emptyForm)
       load()
-    } catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to save announcement') } finally { setSaving(false) }
+    } catch (err) { toast.error(err?.message || 'Failed') } finally { setSaving(false) }
   }
 
   const handlePublish = async (id) => {
     try { await adminApi.publishAnnouncement(id); toast.success('Published'); load() }
-    catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to publish') }
+    catch (err) { toast.error(err?.message || 'Failed to publish') }
   }
   const handleApprove = async (id) => {
     try { await adminApi.approveAnnouncement(id); toast.success('Approved'); load() }
-    catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to approve') }
+    catch (err) { toast.error(err?.message || 'Failed to approve') }
   }
   const handleReject = async (id) => {
     try { await adminApi.rejectAnnouncement(id); toast.success('Rejected back to draft'); load() }
-    catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to reject') }
+    catch (err) { toast.error(err?.message || 'Failed to reject') }
   }
   const handleDuplicate = async (id) => {
     try { await adminApi.duplicateAnnouncement(id); toast.success('Duplicated as draft'); load() }
-    catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to duplicate') }
+    catch (err) { toast.error(err?.message || 'Failed to duplicate') }
   }
   const handleSubmitForApproval = async (id) => {
     try { await adminApi.submitAnnouncementForApproval(id); toast.success('Submitted for approval'); load() }
-    catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to submit for approval') }
+    catch (err) { toast.error(err?.message || 'Failed to submit for approval') }
   }
   const handleDelete = (id) => {
     const target = announcements.find(a => a.id === id) || { id }
@@ -252,8 +232,8 @@ export default function AnnouncementsPage() {
       toast.success('Deleted')
       setDeletingAnnouncement(null)
       load()
-    } catch (err) {
-      toast.error(err.response?.data?.message || err?.message || 'Failed to delete')
+    } catch {
+      toast.error('Failed')
     } finally {
       setDeleting(false)
     }
@@ -262,53 +242,37 @@ export default function AnnouncementsPage() {
   const handleEdit = (a) => {
     setEditId(a.id)
     setForm({
-      title: a.title || '',
-      body: a.body || '',
-      batchId: a.batchId ? String(a.batchId) : '',
-      collegeId: a.collegeId ? String(a.collegeId) : '',
-      courseId: a.courseId ? String(a.courseId) : '',
-      isPinned: !!a.isPinned,
-      expiresAt: a.expiresAt ? a.expiresAt.split('T')[0] : '',
-      category: a.category || 'GENERAL',
-      priority: a.priority || 'NORMAL',
+      title: a.title, body: a.body,
+      batchId: a.batchId || '', courseId: a.courseId || '',
+      isPinned: a.isPinned, expiresAt: a.expiresAt ? a.expiresAt.split('T')[0] : '',
+      category: a.category || 'GENERAL', priority: a.priority || 'NORMAL',
+      requiresAcknowledgment: !!a.requiresAcknowledgment, allowComments: !!a.allowComments,
       scheduledAt: a.scheduledAt ? a.scheduledAt.slice(0, 16) : '',
-      requiresAcknowledgment: !!a.requiresAcknowledgment,
-      allowComments: !!a.allowComments,
-      actionType: a.actionType || '',
-      actionReferenceId: a.actionReferenceId ? String(a.actionReferenceId) : '',
-      actionLabel: a.actionLabel || '',
-      actionUrl: a.actionUrl || '',
-      audienceRuleType: a.audienceRuleType || 'NONE',
-      audienceRuleValue: a.audienceRuleValue !== null && a.audienceRuleValue !== undefined ? String(a.audienceRuleValue) : '',
-      audienceRuleReferenceId: a.audienceRuleReferenceId ? String(a.audienceRuleReferenceId) : '',
-      attachmentUrl: a.attachmentUrl || '',
-      attachmentName: a.attachmentName || '',
     })
     setFormOpen(true)
   }
 
+  const sortPinnedFirst = (list) => [...list].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0))
   const sections = [
-    { key: 'ALL', label: 'All', items: announcements, color: 'text-purple-600', emptyText: 'No announcements yet' },
-    { key: 'PUBLISHED', label: 'Published', items: announcements.filter(a => a.status === 'PUBLISHED'), color: 'text-emerald-600', emptyText: 'No published announcements' },
-    { key: 'DRAFT', label: 'Drafts', items: announcements.filter(a => a.status === 'DRAFT'), color: 'text-gray-500', emptyText: 'No drafts' },
-    { key: 'SCHEDULED', label: 'Scheduled', items: announcements.filter(a => a.status === 'SCHEDULED'), color: 'text-sky-600', emptyText: 'No scheduled announcements' },
-    { key: 'OTHER', label: 'Other', items: announcements.filter(a => a.status !== 'PUBLISHED' && a.status !== 'DRAFT' && a.status !== 'SCHEDULED'), color: 'text-amber-600', emptyText: 'No pending or rejected announcements' },
+    { key: 'ALL', label: 'All', color: 'text-purple-600', items: sortPinnedFirst(announcements), emptyText: 'No announcements yet.' },
+    { key: 'PUBLISHED', label: 'Published', color: 'text-emerald-600', items: sortPinnedFirst(announcements.filter(a => a.status === 'PUBLISHED')), emptyText: 'No published announcements yet.' },
+    { key: 'DRAFT', label: 'Drafts', color: 'text-gray-500', items: sortPinnedFirst(announcements.filter(a => a.status === 'DRAFT')), emptyText: 'No drafts yet.' },
+    { key: 'SCHEDULED', label: 'Scheduled', color: 'text-sky-600', items: sortPinnedFirst(announcements.filter(a => a.status === 'SCHEDULED')), emptyText: 'Nothing scheduled yet.' },
   ]
-
-  const handleTabClick = (key) => {
-    setActiveSection(key)
-    if (formOpen) {
-      setFormOpen(false)
-      setEditId(null)
-      setForm(emptyForm)
-    }
+  const otherItems = sortPinnedFirst(announcements.filter(a => !['PUBLISHED', 'DRAFT', 'SCHEDULED'].includes(a.status)))
+  if (otherItems.length > 0) {
+    sections.push({ key: 'OTHER', label: 'Other', color: 'text-amber-600', items: otherItems, emptyText: '' })
   }
   const activeTabData = sections.find(s => s.key === activeSection) || sections[0]
 
+  // Every admin announcement endpoint - edit, delete, publish, approve, reject, duplicate,
+  // analytics, history - requires ADMIN or SUPERADMIN on the backend (AdminAnnouncementController
+  // is class-level @PreAuthorize'd). A TRAINER can view this page but every one of those calls
+  // would 403, so only wire the handlers in for roles that can actually use them - TRAINER gets
+  // a read-only list instead of buttons that always fail.
   const cardProps = {
     batches, courses, assignments,
     onView: setViewingAnnouncement,
-    onPreviewAttachment: setPreviewAttachment,
     ...(canCreate ? {
       onEdit: handleEdit, onDelete: handleDelete, onDetails: setDetailsFor,
       onPublish: handlePublish, onApprove: handleApprove, onReject: handleReject, onDuplicate: handleDuplicate,
@@ -322,16 +286,6 @@ export default function AnnouncementsPage() {
         <h1 className="font-display text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
         {!formOpen && (
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              title="Refresh Announcements"
-              className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-purple-600' : 'text-purple-600 dark:text-purple-400'} />
-              <span>Refresh</span>
-            </button>
             <button onClick={() => setView(v => v === 'list' ? 'calendar' : 'list')}
               className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 border border-gray-200 text-gray-600 dark:text-gray-300 rounded-xl px-3 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
               <CalendarDays size={14} /> {view === 'list' ? 'Calendar' : 'List'}
@@ -339,7 +293,8 @@ export default function AnnouncementsPage() {
             {canCreate && (
               <button onClick={() => { setFormOpen(true); setEditId(null); setForm(emptyForm) }}
                 className="flex-1 sm:flex-none justify-center flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold shadow-md shadow-purple-500/20 active:scale-95 transition-all">
-                <Plus size={16} /> Create Announcement
+                <Plus size={16} />
+                Create Announcement
               </button>
             )}
           </div>
@@ -348,37 +303,19 @@ export default function AnnouncementsPage() {
 
       {formOpen ? (
         <AnnouncementForm
-          form={form} setForm={setForm} editId={editId}
-          saving={saving} onSave={handleSave}
-          onCancel={() => { setFormOpen(false); setEditId(null); setForm(emptyForm) }}
+          form={form} setForm={setForm} editId={editId} saving={saving} onSave={handleSave}
+          onCancel={() => { setFormOpen(false); setEditId(null) }}
           batches={batches} courses={courses} assignments={assignments}
-          onPreviewAttachment={setPreviewAttachment}
         />
       ) : (
         <>
-          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 overflow-x-auto">
-            {sections.map(s => {
-              const count = s.items.length
-              const isActive = activeSection === s.key
-              return (
-                <button
-                  key={s.key}
-                  onClick={() => handleTabClick(s.key)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                    isActive
-                      ? 'bg-purple-600 text-white shadow-sm shadow-purple-500/20'
-                      : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  <span>{s.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto pb-1 -mx-1 px-1">
+            {sections.map(s => (
+              <button key={s.key} onClick={() => setActiveSection(s.key)}
+                className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors flex-shrink-0 ${activeSection === s.key ? `border-current ${s.color}` : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                {s.label} ({s.items.length})
+              </button>
+            ))}
           </div>
 
           {view === 'calendar' ? (
@@ -390,35 +327,28 @@ export default function AnnouncementsPage() {
               activeSection={activeSection}
               activeTabData={activeTabData}
               onView={setViewingAnnouncement}
-              onDetails={setDetailsFor}
-              onEdit={canCreate ? handleEdit : undefined}
-              onDelete={canCreate ? handleDelete : undefined}
-              onPublish={canCreate ? handlePublish : undefined}
-              onApprove={canCreate ? handleApprove : undefined}
-              onReject={canCreate ? handleReject : undefined}
-              onDuplicate={canCreate ? handleDuplicate : undefined}
-              onSubmitForApproval={canCreate ? handleSubmitForApproval : undefined}
-              onPreviewAttachment={setPreviewAttachment}
+              {...(canCreate ? {
+                onEdit: handleEdit,
+                onDelete: handleDelete,
+                onDetails: setDetailsFor,
+                onPublish: handlePublish,
+                onApprove: handleApprove,
+                onReject: handleReject,
+                onDuplicate: handleDuplicate,
+                onSubmitForApproval: handleSubmitForApproval,
+              } : {})}
             />
           ) : loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => <div key={i} className="h-24 glass-card animate-pulse" />)}
             </div>
           ) : (
-            <AnnouncementSection
-              title={activeTabData.label}
-              color={activeTabData.color}
-              items={activeTabData.items}
-              emptyText={activeTabData.emptyText}
-              cardProps={cardProps}
-              sections={sections}
-              activeSection={activeSection}
-              setActiveSection={setActiveSection}
-              hideTitle
-            />
+            <AnnouncementSection title={activeTabData.label} color={activeTabData.color} items={activeTabData.items}
+              emptyText={activeTabData.emptyText} cardProps={cardProps} hideTitle />
           )}
         </>
       )}
+
 
       {detailsFor && (
         <DetailsModal announcementId={detailsFor.id} initialTab={detailsFor.tab} onClose={() => setDetailsFor(null)} />
@@ -426,8 +356,7 @@ export default function AnnouncementsPage() {
 
       {viewingAnnouncement && (
         <ViewAnnouncementModal a={viewingAnnouncement} batches={batches}
-          courses={courses} assignments={assignments} onClose={() => setViewingAnnouncement(null)}
-          onPreviewAttachment={setPreviewAttachment} />
+          courses={courses} assignments={assignments} onClose={() => setViewingAnnouncement(null)} />
       )}
 
       <DeleteConfirmModal
@@ -439,14 +368,6 @@ export default function AnnouncementsPage() {
         itemName={deletingAnnouncement?.title}
       />
 
-      {previewAttachment && (
-        <ViewAttachmentModal
-          url={previewAttachment.url}
-          name={previewAttachment.name}
-          onClose={() => setPreviewAttachment(null)}
-        />
-      )}
-
       {confirmModal}
     </div>
   )
@@ -454,45 +375,17 @@ export default function AnnouncementsPage() {
 
 const PLACEHOLDER_TOKENS = ['{{studentName}}', '{{batchName}}', '{{courseName}}', '{{attendancePercentage}}', '{{date}}']
 
-function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, courses, assignments = [], onPreviewAttachment }) {
+function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, courses, assignments = [] }) {
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
   const toggle = (key) => () => setForm(f => ({ ...f, [key]: !f[key] }))
   const bodyRef = useRef(null)
   const [preview, setPreview] = useState(null)
   const [audienceCount, setAudienceCount] = useState(null)
-  const [uploading, setUploading] = useState(false)
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const formData = new FormData()
-    formData.append('file', file)
-    setUploading(true)
-    try {
-      const res = await api.post('/materials/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      const uploadData = res.data?.data || res.data
-      if (uploadData) {
-        setForm(f => ({
-          ...f,
-          attachmentUrl: uploadData.url || uploadData.fileUrl || uploadData.path || '',
-          attachmentName: uploadData.originalName || uploadData.fileName || file.name || 'Attachment',
-        }))
-        toast.success('Attachment uploaded successfully')
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || err?.message || 'Failed to upload attachment')
-    } finally {
-      setUploading(false)
-      if (e.target) e.target.value = ''
-    }
-  }
 
   const todayStr = getTodayString()
   const publishDate = form.scheduledAt ? form.scheduledAt.split('T')[0] : todayStr
-  const minExpiryDate = publishDate
-  const isExpiryInvalid = !!(form.expiresAt && form.expiresAt < publishDate)
+  const minExpiryDate = getDayAfter(publishDate)
+  const isExpiryInvalid = !!(form.expiresAt && form.expiresAt <= publishDate)
 
   const usesPlaceholders = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(`${form.title} ${form.body}`)
 
@@ -510,17 +403,17 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
     const timer = setTimeout(() => {
       adminApi.getAnnouncementAudienceCount({
         batchId: form.batchId || null,
-        collegeId: form.collegeId || null,
+        collegeId: null,
         courseId: form.courseId || null,
-        audienceRuleType: form.audienceRuleType || 'NONE',
-        audienceRuleValue: form.audienceRuleValue ? Number(form.audienceRuleValue) : null,
-        audienceRuleReferenceId: form.audienceRuleReferenceId ? Number(form.audienceRuleReferenceId) : null,
+        audienceRuleType: 'NONE',
+        audienceRuleValue: null,
+        audienceRuleReferenceId: null,
       })
         .then(r => setAudienceCount(r.data.data?.count ?? null))
         .catch(() => setAudienceCount(null))
     }, 400)
     return () => clearTimeout(timer)
-  }, [form.batchId, form.courseId, form.collegeId, form.audienceRuleType, form.audienceRuleValue, form.audienceRuleReferenceId])
+  }, [form.batchId, form.courseId])
 
   const insertPlaceholder = (token) => {
     const el = bodyRef.current
@@ -735,91 +628,28 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
                   Expires On (Optional)
                 </label>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                  !form.expiresAt
-                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                    : isExpiryInvalid
-                    ? 'bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400'
-                    : 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300'
-                }`}>
-                  {!form.expiresAt ? 'No Expiration' : isExpiryInvalid ? 'Invalid Expiration' : `Expires: ${formatSafe(form.expiresAt, 'MMM d, yyyy')}`}
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
+                  Must be after {form.scheduledAt ? 'scheduled date' : 'published date'}
                 </span>
               </div>
-
-              {/* Input container with calendar icon and clear button */}
-              <div className="relative flex items-center">
-                <div className="absolute left-3.5 pointer-events-none text-gray-400 dark:text-gray-500">
-                  <Calendar size={15} />
-                </div>
-                <input
-                  type="date"
-                  min={minExpiryDate}
-                  value={form.expiresAt}
-                  onChange={set('expiresAt')}
-                  className={`w-full h-11 pl-10 pr-10 rounded-xl border ${
-                    isExpiryInvalid
-                      ? 'border-rose-400 dark:border-rose-600 focus:border-rose-500 focus:ring-rose-500/20'
-                      : 'border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-purple-500/20'
-                  } bg-white dark:bg-gray-800 text-sm font-medium outline-none focus:ring-2 text-gray-800 dark:text-gray-200 shadow-2xs transition-all`}
-                />
-                {form.expiresAt && (
-                  <button
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, expiresAt: '' }))}
-                    title="Clear expiration (make permanent)"
-                    className="absolute right-3 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                  >
-                    <XIcon size={14} />
-                  </button>
-                )}
-              </div>
-
-              {/* Quick preset chips */}
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-0.5">Presets:</span>
-                {[
-                  { label: 'Today', val: publishDate },
-                  { label: 'Tomorrow', val: addDaysToDateStr(publishDate, 1) },
-                  { label: '1 Week', val: addDaysToDateStr(publishDate, 7) },
-                  { label: '1 Month', val: addDaysToDateStr(publishDate, 30) },
-                ].map(({ label, val }) => {
-                  const isSelected = form.expiresAt === val
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, expiresAt: isSelected ? '' : val }))}
-                      className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all border ${
-                        isSelected
-                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 hover:text-purple-600 dark:hover:text-purple-400 shadow-2xs'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  )
-                })}
-                {form.expiresAt && (
-                  <button
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, expiresAt: '' }))}
-                    className="text-[11px] font-medium px-2 py-1 text-gray-400 hover:text-rose-500 transition-colors"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {/* Helper text */}
+              <input
+                type="date"
+                min={minExpiryDate}
+                value={form.expiresAt}
+                onChange={set('expiresAt')}
+                className={`w-full h-11 px-3.5 rounded-xl border ${
+                  isExpiryInvalid
+                    ? 'border-rose-400 dark:border-rose-600 focus:border-rose-500 focus:ring-rose-500/20'
+                    : 'border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-purple-500/20'
+                } bg-white dark:bg-gray-800 text-sm font-medium outline-none focus:ring-2 text-gray-800 dark:text-gray-200 shadow-2xs transition-all`}
+              />
               {isExpiryInvalid ? (
-                <p className="text-[11px] text-rose-500 font-medium mt-1.5 flex items-center gap-1">
-                  <span>⚠ Expiry date cannot be before {formatSafe(publishDate, 'MMM d, yyyy') || publishDate}.</span>
+                <p className="text-[11px] text-rose-500 font-medium mt-1">
+                  Expiry date must be after the published date ({publishDate}). Minimum: {minExpiryDate}
                 </p>
               ) : (
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  {form.expiresAt
-                    ? `Notice will remain visible through ${formatSafe(form.expiresAt, 'MMMM d, yyyy')}.`
-                    : `No expiration set. Notice will remain visible permanently.`}
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Leave blank for no expiration. If set, must be after {publishDate}.
                 </p>
               )}
             </div>
@@ -854,78 +684,6 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
                 description="Keep this notice prominently pinned at the top of the student announcement list."
                 checked={form.isPinned}
                 onClick={toggle('isPinned')}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 4: Attachments & Action Link (Optional) */}
-        <div className="rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 p-4 sm:p-5 space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-gray-200/60 dark:border-gray-700/60">
-            <div className="p-1.5 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
-              <Paperclip size={15} />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-800 dark:text-white">Attachment & Action Link (Optional)</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Attach a document/notice or configure a quick-access action button</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">
-                Attachment File
-              </label>
-              {form.attachmentUrl ? (
-                <div className="flex items-center justify-between p-2.5 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onPreviewAttachment && form.attachmentUrl) {
-                        onPreviewAttachment({
-                          url: resolveFileUrl(form.attachmentUrl),
-                          name: form.attachmentName || 'Attachment',
-                        })
-                      }
-                    }}
-                    className="flex items-center gap-2 min-w-0 text-left hover:underline cursor-pointer group"
-                    title="Click to preview attachment"
-                  >
-                    <Paperclip size={14} className="text-sky-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
-                    <span className="font-semibold text-sky-800 dark:text-sky-300 truncate">{form.attachmentName || 'Attached File'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentName: '' }))}
-                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors ml-2 cursor-pointer"
-                    title="Remove attachment"
-                  >
-                    <XIcon size={14} />
-                  </button>
-                </div>
-              ) : (
-                <label className="flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 hover:border-purple-400 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer transition-colors shadow-2xs">
-                  <Upload size={14} className="text-purple-500" />
-                  <span>{uploading ? 'Uploading...' : 'Choose File (PDF, DOCX, Image)'}</span>
-                  <input
-                    type="file"
-                    disabled={uploading}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">
-                Action Button Label (Optional)
-              </label>
-              <input
-                value={form.actionLabel}
-                onChange={set('actionLabel')}
-                placeholder="e.g. View Assignment, Go to Drive"
-                className="w-full h-11 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-medium outline-none focus:ring-2 focus:border-purple-500 text-gray-800 dark:text-gray-200 shadow-2xs"
               />
             </div>
           </div>
@@ -1036,120 +794,20 @@ function FeatureToggleCard({ icon: Icon, title, description, checked, onClick })
   )
 }
 
-function AnnouncementSection({
-  title,
-  color,
-  items,
-  emptyText,
-  cardProps,
-  hideTitle,
-  sections = [],
-  activeSection,
-  setActiveSection,
-}) {
-  const [pageSize, setPageSize] = useState(10)
-  const [currentPage, setCurrentPage] = useState(1)
-
-  const totalItems = items.length
-  const effectivePageSize = pageSize === 'all' ? (totalItems || 1) : Number(pageSize)
-  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize === 'all' ? (totalItems || 1) : effectivePageSize)))
-  const validPage = Math.min(currentPage, totalPages)
-  const startIdx = pageSize === 'all' ? 0 : (validPage - 1) * effectivePageSize
-  const endIdx = pageSize === 'all' ? totalItems : Math.min(startIdx + effectivePageSize, totalItems)
-  const paginatedItems = items.slice(startIdx, endIdx)
-
+function AnnouncementSection({ title, color, items, emptyText, cardProps, hideTitle }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {!hideTitle && <p className={`text-xs font-bold uppercase tracking-wider ${color}`}>{title} ({items.length})</p>}
       {items.length === 0 ? (
         emptyText && <p className="text-sm text-gray-400 glass-card p-6 text-center">{emptyText}</p>
       ) : (
-        <div className="space-y-3">
-          {paginatedItems.map((a, idx) => (
-            <AnnouncementCard
-              key={a.id}
-              a={a}
-              serialNo={startIdx + idx + 1}
-              {...cardProps}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Bottom Rows Selector & Pagination (Short Box) */}
-      {totalItems > 0 && (
-        <div className="flex justify-end pt-1">
-          <div className="glass-card px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 inline-flex items-center gap-2.5 shadow-sm">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value)); setCurrentPage(1); }}
-                className="text-xs font-semibold px-2 py-0.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value="all">All</option>
-              </select>
-            </div>
-
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
-              {totalItems === 0 ? '0 of 0' : `${startIdx + 1}–${endIdx} of ${totalItems}`}
-            </span>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={validPage === 1}
-                  className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Prev
-                </button>
-                {[...Array(totalPages)].map((_, i) => {
-                  const p = i + 1
-                  if (totalPages > 6 && Math.abs(p - validPage) > 2 && p !== 1 && p !== totalPages) {
-                    if (p === 2 || p === totalPages - 1) {
-                      return <span key={p} className="text-xs text-gray-400 px-0.5">...</span>
-                    }
-                    return null
-                  }
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setCurrentPage(p)}
-                      className={`w-6 h-6 text-xs font-bold rounded-lg transition-colors ${
-                        p === validPage
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  )
-                })}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={validPage === totalPages}
-                  className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        items.map(a => <AnnouncementCard key={a.id} a={a} {...cardProps} />)
       )}
     </div>
   )
 }
 
-function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onSubmitForApproval, onDetails, onView, onPreviewAttachment }) {
+function AnnouncementCard({ a, batches, courses, assignments = [], onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onSubmitForApproval, onDetails, onView }) {
   const batch = batches.find(b => b.id === a.batchId)
   const course = courses.find(c => c.id === a.courseId)
   const isDraft = a.status === 'DRAFT'
@@ -1165,11 +823,6 @@ function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onE
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onView(a)} title="Click to view details">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {serialNo !== undefined && (
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-md font-mono flex-shrink-0">
-                #{serialNo}
-              </span>
-            )}
             {a.isPinned && <Pin size={12} className="text-purple-500 flex-shrink-0" />}
             <h3 className="font-display font-bold text-gray-800 dark:text-white">{a.title}</h3>
             {(isDraft || isScheduled || isPending || isExpired) && (
@@ -1199,18 +852,6 @@ function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onE
               {a.actionLabel}
             </span>
           )}
-          {a.attachmentUrl && (
-            <div className="mt-2.5" onClick={e => e.stopPropagation()}>
-              <button
-                type="button"
-                onClick={() => onPreviewAttachment?.({ url: resolveFileUrl(a.attachmentUrl), name: a.attachmentName || 'Attachment' })}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-lg px-2.5 py-1 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer"
-              >
-                <Paperclip size={13} />
-                <span>{a.attachmentName || 'View Attachment'}</span>
-              </button>
-            </div>
-          )}
           <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-400">
             <span>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</span>
             {a.expiresAt && (
@@ -1223,6 +864,11 @@ function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onE
           {isScheduled && a.scheduledAt && <p className="text-[10px] text-sky-500 mt-0.5">Scheduled for {format(new Date(a.scheduledAt), 'dd MMM yyyy, HH:mm')}</p>}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-800/80 sm:justify-end flex-wrap">
+          {onDetails && (
+            <IconButton title="Analytics & History" onClick={() => onDetails({ id: a.id, tab: 'analytics' })} className="bg-gray-100 text-gray-500 hover:bg-gray-200">
+              <BarChart3 size={13} />
+            </IconButton>
+          )}
           {onPublish && (isDraft || isScheduled) && (
             <IconButton title="Publish Now" onClick={() => onPublish(a.id)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
               <Send size={13} />
@@ -1241,6 +887,11 @@ function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onE
           {onReject && isPending && (
             <IconButton title="Reject" onClick={() => onReject(a.id)} className="bg-amber-50 text-amber-600 hover:bg-amber-100">
               <XIcon size={13} />
+            </IconButton>
+          )}
+          {onDuplicate && (
+            <IconButton title="Duplicate" onClick={() => onDuplicate(a.id)} className="bg-gray-100 text-gray-500 hover:bg-gray-200">
+              <Copy size={13} />
             </IconButton>
           )}
           {onEdit && (
@@ -1353,7 +1004,7 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
   )
 }
 
-function ViewAnnouncementModal({ a, batches = [], courses = [], assignments = [], onClose, onPreviewAttachment }) {
+function ViewAnnouncementModal({ a, batches = [], courses = [], assignments = [], onClose }) {
   if (!a) return null
 
   const batch = (batches || []).find(b => b && a && String(b.id) === String(a.batchId))
@@ -1404,21 +1055,11 @@ function ViewAnnouncementModal({ a, batches = [], courses = [], assignments = []
         {a.attachmentUrl && (
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Attachment</p>
-            <button
-              type="button"
-              onClick={() => {
-                if (onPreviewAttachment) {
-                  onPreviewAttachment({
-                    url: resolveFileUrl(a.attachmentUrl),
-                    name: a.attachmentName || 'Attachment',
-                  })
-                }
-              }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-lg px-3 py-1.5 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer"
-            >
+            <a href={resolveFileUrl(a.attachmentUrl)} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 bg-sky-50 border border-sky-200 rounded-lg px-3 py-1.5 hover:bg-sky-100 transition-colors">
               <Paperclip size={14} />
-              <span>{a.attachmentName || 'View Attachment'}</span>
-            </button>
+              <span>{a.attachmentName || 'Download Attachment'}</span>
+            </a>
           </div>
         )}
 
@@ -1470,7 +1111,6 @@ function CalendarView({
   onReject,
   onDuplicate,
   onSubmitForApproval,
-  onPreviewAttachment,
 }) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const year = currentDate.getFullYear()
@@ -1765,9 +1405,6 @@ function CalendarView({
                 >
                   <div className="flex items-center justify-between gap-1.5 mb-1.5 flex-wrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 rounded font-mono flex-shrink-0">
-                        #{idx + 1}
-                      </span>
                       <span className={`w-2 h-2 rounded-full inline-block ${TYPE_DOT[item.type] || 'bg-gray-400'}`} />
                       <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                         {TYPE_LABEL[item.type] || item.type}
@@ -1814,6 +1451,15 @@ function CalendarView({
                     </button>
 
                     <div className="flex items-center gap-1">
+                      {onDetails && (
+                        <IconButton
+                          title="Analytics & History"
+                          onClick={(e) => { e.stopPropagation(); onDetails({ id: a.id, tab: 'analytics' }); }}
+                          className="bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        >
+                          <BarChart3 size={12} />
+                        </IconButton>
+                      )}
                       {onPublish && (a.status === 'DRAFT' || a.status === 'SCHEDULED') && (
                         <IconButton
                           title="Publish Now"
@@ -1850,6 +1496,15 @@ function CalendarView({
                           <XIcon size={12} />
                         </IconButton>
                       )}
+                      {onDuplicate && (
+                        <IconButton
+                          title="Duplicate"
+                          onClick={(e) => { e.stopPropagation(); onDuplicate(a.id); }}
+                          className="bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        >
+                          <Copy size={12} />
+                        </IconButton>
+                      )}
                       {onEdit && (
                         <IconButton
                           title="Edit"
@@ -1884,7 +1539,6 @@ function CalendarView({
           courses={courses}
           assignments={assignments}
           onClose={() => setLocalModalAnnouncement(null)}
-          onPreviewAttachment={onPreviewAttachment}
         />
       )}
     </div>

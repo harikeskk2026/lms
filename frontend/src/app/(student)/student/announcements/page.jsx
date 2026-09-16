@@ -2,12 +2,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { Pin, Megaphone, Search, CalendarDays, ChevronLeft, ChevronRight, X as XIcon, Paperclip, RefreshCw } from 'lucide-react'
+import { Pin, Megaphone, Search, CalendarDays, ChevronLeft, ChevronRight, X as XIcon, Paperclip } from 'lucide-react'
 import { format, formatDistanceToNow, addMonths, subMonths } from 'date-fns'
 import toast from 'react-hot-toast'
 import { studentApi, resolveFileUrl } from '@/lib/api'
 import CustomSelect from '@/components/ui/CustomSelect'
-import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 const FILTERS = ['All', 'Unread', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 
@@ -39,20 +38,12 @@ export default function StudentAnnouncementsPage() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null)
-  const [pageSize, setPageSize] = useState(10)
-  const [page, setPage] = useState(1)
-  const [previewAttachment, setPreviewAttachment] = useState(null)
 
-  const load = () => {
-    setLoading(true)
+  useEffect(() => {
     studentApi.getAnnouncements()
       .then(r => setAnnouncements(r.data.data || []))
       .catch(() => toast.error('Failed to load announcements'))
       .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    load()
   }, [])
 
   const handleOpenDetail = (a) => {
@@ -69,7 +60,7 @@ export default function StudentAnnouncementsPage() {
       setAnnouncements(list => list.map(a => a.id === id ? { ...a, acknowledged: true } : a))
       setViewingAnnouncement(current => current && current.id === id ? { ...current, acknowledged: true } : current)
       toast.success('Acknowledged')
-    } catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to acknowledge') }
+    } catch (err) { toast.error(err?.message || 'Failed') }
   }
 
   const tabs = useMemo(() => [
@@ -98,37 +89,17 @@ export default function StudentAnnouncementsPage() {
     return list
   }, [announcements, filter, search, sortBy])
 
-  const totalItems = visible.length
-  const effectivePageSize = pageSize === 'all' ? (totalItems || 1) : Number(pageSize)
-  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize === 'all' ? (totalItems || 1) : effectivePageSize)))
-  const validPage = Math.min(page, totalPages)
-  const startIdx = pageSize === 'all' ? 0 : (validPage - 1) * effectivePageSize
-  const endIdx = pageSize === 'all' ? totalItems : Math.min(startIdx + effectivePageSize, totalItems)
-  const paginatedVisible = visible.slice(startIdx, endIdx)
-
   return (
     <div className="page-wrapper max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="font-display text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">Announcements</h1>
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            title="Refresh announcements"
-            className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-purple-600' : 'text-purple-600 dark:text-purple-400'} />
-            <span>Refresh</span>
-          </button>
-          <button
-            onClick={() => setView(v => v === 'list' ? 'calendar' : 'list')}
-            className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
-          >
-            <CalendarDays size={14} className="text-purple-600 dark:text-purple-400" />
-            <span>{view === 'list' ? 'Calendar View' : 'List View'}</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setView(v => v === 'list' ? 'calendar' : 'list')}
+          className="flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl px-3.5 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm self-start sm:self-auto"
+        >
+          <CalendarDays size={14} className="text-purple-600 dark:text-purple-400" />
+          <span>{view === 'list' ? 'Calendar View' : 'List View'}</span>
+        </button>
       </div>
 
       {view === 'calendar' ? (
@@ -140,7 +111,7 @@ export default function StudentAnnouncementsPage() {
             {tabs.map(t => (
               <button
                 key={t.key}
-                onClick={() => { setFilter(t.key); setPage(1); }}
+                onClick={() => setFilter(t.key)}
                 className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1.5 ${
                   filter === t.key
                     ? `${t.color}`
@@ -167,7 +138,7 @@ export default function StudentAnnouncementsPage() {
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={search}
-                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Search by title or message content..."
                 className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 shadow-sm"
               />
@@ -176,7 +147,7 @@ export default function StudentAnnouncementsPage() {
               <span className="text-xs text-gray-400 font-medium whitespace-nowrap hidden sm:inline">Sort:</span>
               <CustomSelect
                 value={sortBy}
-                onChange={(val) => { setSortBy(val); setPage(1); }}
+                onChange={setSortBy}
                 options={[
                   { value: 'newest', label: 'Newest First' },
                   { value: 'oldest', label: 'Oldest First' },
@@ -195,88 +166,16 @@ export default function StudentAnnouncementsPage() {
                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">No announcements match this view.</p>
               </div>
             ) : (
-              paginatedVisible.map((a, idx) => (
+              visible.map(a => (
                 <AnnouncementCard
                   key={a.id}
                   a={a}
-                  serialNo={startIdx + idx + 1}
                   onAcknowledge={acknowledge}
                   onViewDetail={handleOpenDetail}
-                  onPreviewAttachment={setPreviewAttachment}
                 />
               ))
             )}
           </div>
-
-          {/* Bottom Rows Selector & Pagination (Short Box) */}
-          {totalItems > 0 && (
-            <div className="flex justify-end pt-1">
-              <div className="glass-card px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 inline-flex items-center gap-2.5 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Rows:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => { setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value)); setPage(1); }}
-                    className="text-xs font-semibold px-2 py-0.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value="all">All</option>
-                  </select>
-                </div>
-
-                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
-                  {totalItems === 0 ? '0 of 0' : `${startIdx + 1}–${endIdx} of ${totalItems}`}
-                </span>
-
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-                    <button
-                      type="button"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={validPage === 1}
-                      className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Prev
-                    </button>
-                    {[...Array(totalPages)].map((_, i) => {
-                      const p = i + 1
-                      if (totalPages > 6 && Math.abs(p - validPage) > 2 && p !== 1 && p !== totalPages) {
-                        if (p === 2 || p === totalPages - 1) {
-                          return <span key={p} className="text-xs text-gray-400 px-0.5">...</span>
-                        }
-                        return null
-                      }
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setPage(p)}
-                          className={`w-6 h-6 text-xs font-bold rounded-lg transition-colors ${
-                            p === validPage
-                              ? 'bg-purple-600 text-white shadow-sm'
-                              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      )
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={validPage === totalPages}
-                      className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </>
       )}
 
@@ -285,22 +184,13 @@ export default function StudentAnnouncementsPage() {
           a={viewingAnnouncement}
           onClose={() => setViewingAnnouncement(null)}
           onAcknowledge={acknowledge}
-          onPreviewAttachment={setPreviewAttachment}
-        />
-      )}
-
-      {previewAttachment && (
-        <ViewAttachmentModal
-          url={previewAttachment.url}
-          name={previewAttachment.name}
-          onClose={() => setPreviewAttachment(null)}
         />
       )}
     </div>
   )
 }
 
-function AnnouncementCard({ a, serialNo, onAcknowledge, onViewDetail, onPreviewAttachment }) {
+function AnnouncementCard({ a, onAcknowledge, onViewDetail }) {
   const route = a.actionType === 'CUSTOM' ? a.actionUrl : ACTION_ROUTES[a.actionType]
 
   return (
@@ -318,11 +208,6 @@ function AnnouncementCard({ a, serialNo, onAcknowledge, onViewDetail, onPreviewA
         <div className="flex-1 min-w-0">
           {/* Metadata Badges */}
           <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
-            {serialNo !== undefined && (
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-md font-mono flex-shrink-0">
-                #{serialNo}
-              </span>
-            )}
             {a.isPinned && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40">
                 <Pin size={10} className="fill-purple-600 text-purple-600" /> Pinned
@@ -354,20 +239,6 @@ function AnnouncementCard({ a, serialNo, onAcknowledge, onViewDetail, onPreviewA
           <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed">
             {a.body}
           </p>
-
-          {/* Attachment Link */}
-          {a.attachmentUrl && (
-            <div className="mt-2.5" onClick={e => e.stopPropagation()}>
-              <button
-                type="button"
-                onClick={() => onPreviewAttachment?.({ url: resolveFileUrl(a.attachmentUrl), name: a.attachmentName || 'Attachment' })}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-850 rounded-lg px-2.5 py-1 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer"
-              >
-                <Paperclip size={13} />
-                <span>{a.attachmentName || 'View Attachment'}</span>
-              </button>
-            </div>
-          )}
 
           {/* Timestamp and Expiry */}
           <div className="flex flex-wrap items-center gap-3 mt-3 pt-1 text-xs text-gray-400">
@@ -417,7 +288,7 @@ function AnnouncementCard({ a, serialNo, onAcknowledge, onViewDetail, onPreviewA
   )
 }
 
-function StudentViewModal({ a, onClose, onAcknowledge, onPreviewAttachment }) {
+function StudentViewModal({ a, onClose, onAcknowledge }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
   if (!mounted || !a) return null
@@ -440,7 +311,7 @@ function StudentViewModal({ a, onClose, onAcknowledge, onPreviewAttachment }) {
             <h3 className="font-display font-bold text-gray-800 dark:text-white text-base sm:text-lg break-words">{a.title}</h3>
             <p className="text-[11px] sm:text-xs text-gray-400 mt-1">{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 cursor-pointer">
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
             <XIcon size={16} />
           </button>
         </div>
@@ -453,14 +324,11 @@ function StudentViewModal({ a, onClose, onAcknowledge, onPreviewAttachment }) {
         {a.attachmentUrl && (
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Attachment</p>
-            <button
-              type="button"
-              onClick={() => onPreviewAttachment?.({ url: resolveFileUrl(a.attachmentUrl), name: a.attachmentName || 'Attachment' })}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-lg px-3 py-1.5 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer"
-            >
+            <a href={resolveFileUrl(a.attachmentUrl)} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 bg-sky-50 border border-sky-200 rounded-lg px-3 py-1.5 hover:bg-sky-100 transition-colors">
               <Paperclip size={14} />
-              <span>{a.attachmentName || 'View Attachment'}</span>
-            </button>
+              <span>{a.attachmentName || 'Download Attachment'}</span>
+            </a>
           </div>
         )}
 
@@ -676,9 +544,6 @@ function StudentCalendarView({ announcements, onViewDetail }) {
                   className="border border-gray-200 dark:border-gray-700/80 rounded-xl p-3.5 hover:shadow-sm hover:border-purple-300 dark:hover:border-purple-700 transition-all cursor-pointer bg-white/40 dark:bg-gray-800/40"
                 >
                   <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 rounded font-mono flex-shrink-0">
-                      #{idx + 1}
-                    </span>
                     <span className={`w-2 h-2 rounded-full inline-block ${TYPE_DOT[item.type]}`} />
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{TYPE_LABEL[item.type]}</span>
                     {item.a.category && (

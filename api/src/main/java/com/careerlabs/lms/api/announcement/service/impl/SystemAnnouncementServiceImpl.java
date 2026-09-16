@@ -26,8 +26,7 @@ public class SystemAnnouncementServiceImpl implements SystemAnnouncementService 
                 title, body, batchId, false, null,
                 category, AnnouncementStatus.PUBLISHED, priority, null,
                 false, false, null, null, null, null,
-                null, null,  null, null, null,
-                null, null);
+                null, null,  null, null, null);
         return announcementService.create(request, systemUserId);
     }
 }

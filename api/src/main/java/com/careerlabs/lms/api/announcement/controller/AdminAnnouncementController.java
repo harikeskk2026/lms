@@ -36,7 +36,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/announcements")
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
 public class AdminAnnouncementController {
 
     private final AnnouncementService announcementService;
@@ -79,7 +79,6 @@ public class AdminAnnouncementController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> create(
             @Valid @RequestBody AnnouncementRequest request,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
@@ -88,7 +87,6 @@ public class AdminAnnouncementController {
     }
 
     @PatchMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> update(
             @PathVariable Long id,
             @Valid @RequestBody AnnouncementRequest request,
@@ -98,39 +96,33 @@ public class AdminAnnouncementController {
     }
 
     @PatchMapping("/{id}/publish")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> publish(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.of("Announcement published", announcementService.publish(id)));
     }
 
     @PatchMapping("/{id}/schedule")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> schedule(
             @PathVariable Long id, @Valid @RequestBody ScheduleRequest request) {
         return ResponseEntity.ok(ApiResponse.of("Announcement scheduled", announcementService.schedule(id, request)));
     }
 
     @PostMapping("/{id}/submit-for-approval")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> submitForApproval(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.of("Submitted for approval", announcementService.submitForApproval(id)));
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> approve(
             @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.of("Announcement approved", announcementService.approve(id, principal.id())));
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> reject(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.of("Announcement rejected", announcementService.reject(id)));
     }
 
     @PostMapping("/{id}/duplicate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> duplicate(
             @PathVariable Long id, @AuthenticationPrincipal JwtUserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.of("Announcement duplicated", announcementService.duplicate(id, principal.id())));
@@ -158,15 +150,7 @@ public class AdminAnnouncementController {
         return ResponseEntity.ok(ApiResponse.of(commentService.add(id, request, principal.id())));
     }
 
-    @DeleteMapping("/comments/{commentId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
-    public ResponseEntity<ApiResponse<Void>> deleteComment(@PathVariable Long commentId) {
-        commentService.delete(commentId);
-        return ResponseEntity.ok(ApiResponse.of("Comment deleted", null));
-    }
-
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         announcementService.delete(id);
         return ResponseEntity.ok(ApiResponse.of("Announcement deleted", null));

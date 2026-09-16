@@ -24,7 +24,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/announcement-templates")
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'TRAINER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
 public class AdminAnnouncementTemplateController {
 
     private final AnnouncementTemplateService templateService;
@@ -39,7 +39,6 @@ public class AdminAnnouncementTemplateController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementTemplateResponse>> create(
             @Valid @RequestBody AnnouncementTemplateRequest request,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
@@ -47,14 +46,12 @@ public class AdminAnnouncementTemplateController {
     }
 
     @PatchMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<AnnouncementTemplateResponse>> update(
             @PathVariable Long id, @Valid @RequestBody AnnouncementTemplateRequest request) {
         return ResponseEntity.ok(ApiResponse.of("Template updated", templateService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         templateService.delete(id);
         return ResponseEntity.ok(ApiResponse.of("Template deleted", null));
