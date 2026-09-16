@@ -11,9 +11,14 @@ import java.util.List;
 
 public interface AssignmentSubmissionService {
 
-    SubmissionListResponse listByAssignment(Long assignmentId, JwtUserPrincipal principal);
+    SubmissionListResponse listByAssignment(Long assignmentId, String search, com.careerlabs.lms.api.submission.dto.response.SubmissionStatus status, String evaluation, java.time.LocalDate dateFrom, java.time.LocalDate dateTo, JwtUserPrincipal principal);
+
+    default SubmissionListResponse listByAssignment(Long assignmentId, JwtUserPrincipal principal) {
+        return listByAssignment(assignmentId, null, null, null, null, null, principal);
+    }
+
     default SubmissionListResponse listByAssignment(Long assignmentId) {
-        return listByAssignment(assignmentId, null);
+        return listByAssignment(assignmentId, null, null, null, null, null, null);
     }
 
     SubmissionRowResponse grade(Long assignmentId, Long submissionId, GradeSubmissionRequest request, JwtUserPrincipal principal);

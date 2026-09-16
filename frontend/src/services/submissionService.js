@@ -1,7 +1,11 @@
 import apiCall from '@/utilities/apiCall'
 
 const submissionService = {
-  list: (assignmentId) => apiCall({ method: 'GET', url: `/assignments/${assignmentId}/submissions` }),
+  list: (assignmentId, params) => apiCall({
+    method: 'GET',
+    url: `/assignments/${assignmentId}/submissions`,
+    params,
+  }),
 
   grade: (assignmentId, submissionId, data) => apiCall({
     method: 'PATCH',

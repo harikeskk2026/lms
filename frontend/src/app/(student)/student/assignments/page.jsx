@@ -94,27 +94,6 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [previewState, setPreviewState] = useState(null)
-
-  const handlePreviewFile = (f) => {
-    const objUrl = URL.createObjectURL(f)
-    setPreviewState({ url: objUrl, name: f.name, isBlob: true })
-  }
-
-  const closePreview = () => {
-    if (previewState?.isBlob && previewState.url) {
-      URL.revokeObjectURL(previewState.url)
-    }
-    setPreviewState(null)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (previewState?.isBlob && previewState.url) {
-        URL.revokeObjectURL(previewState.url)
-      }
-    }
-  }, [previewState])
 
   const processFiles = (pickedFiles) => {
     if (!pickedFiles || pickedFiles.length === 0) return
@@ -263,15 +242,6 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         type="button"
-                        onClick={() => handlePreviewFile(f)}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 px-2 py-1 rounded-lg transition-colors"
-                        title="Preview file"
-                      >
-                        <Eye size={13} />
-                        <span>Preview</span>
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => removeFile(i)}
                         className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                         title="Remove file"
@@ -316,14 +286,6 @@ function SubmitModal({ assignment, onClose, onSuccess }) {
             {loading ? 'Submitting…' : `Submit${files.length > 1 ? ` (${files.length} files)` : ''}`}
           </button>
         </div>
-
-        {previewState && (
-          <ViewAttachmentModal
-            url={previewState.url}
-            name={previewState.name}
-            onClose={closePreview}
-          />
-        )}
       </div>
     </div>,
     document.body

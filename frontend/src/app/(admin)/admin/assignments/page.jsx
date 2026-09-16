@@ -14,8 +14,6 @@ import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
-import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
-import TimePicker12 from '@/components/ui/TimePicker12'
 import { resolveFileUrl } from '@/lib/api'
 
 const STATUS_COLORS = {
@@ -43,27 +41,28 @@ function isPublishDateInFuture(startDate, publishTime) {
 
 function validateAssignmentDates(startDate, publishTime, dueDate, closeTime) {
   if (!startDate || !dueDate) return null
-  const startDT = new Date(`${startDate}T${publishTime || '00:00'}`)
-  const dueDT = new Date(`${dueDate}T${closeTime || '23:59'}`)
-  if (dueDT < startDT) {
+  const cleanPubTime = publishTime ? publishTime.substring(0, 5) : '00:00'
+  const cleanCloseTime = closeTime ? closeTime.substring(0, 5) : '23:59'
+  const startDT = new Date(`${startDate}T${cleanPubTime}`)
+  const dueDT = new Date(`${dueDate}T${cleanCloseTime}`)
+  if (isNaN(startDT.getTime()) || isNaN(dueDT.getTime())) return null
+
+  if (dueDT <= startDT) {
     if (startDate > dueDate) {
       return 'End date cannot be earlier than start date'
     }
-    return 'Close time must be after publish time when on the same date'
+    return 'End date & close time must be after start date & publish time'
   }
   return null
 }
 
 function validateTotalMarks(val) {
   if (val === '' || val === null || val === undefined) {
-    return 'Total marks must be between 1 and 100.'
+    return null
   }
   const strVal = String(val).trim()
-  if (!/^\d+$/.test(strVal) || strVal.length > 3) {
-    return 'Total marks must be between 1 and 100.'
-  }
   const num = Number(strVal)
-  if (!Number.isInteger(num) || num < 1 || num > 100) {
+  if (isNaN(num) || num < 1 || num > 100) {
     return 'Total marks must be between 1 and 100.'
   }
   return null
@@ -96,7 +95,6 @@ export default function AssignmentsPage() {
   const [reopeningAssignment, setReopeningAssignment] = useState(null)
   const [isReopening, setIsReopening] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [previewFile, setPreviewFile] = useState(null) // { url, name }
   const [errors, setErrors] = useState({})
   const searchTimer = useRef(null)
 
@@ -165,6 +163,10 @@ export default function AssignmentsPage() {
       ? assignment.attachments
       : (assignment.attachmentUrl ? [{ fileUrl: assignment.attachmentUrl, fileName: assignment.attachmentName }] : [])
 
+    const initialMarks = assignment.totalMarks != null
+      ? String(Math.min(100, Math.max(1, Math.round(Number(assignment.totalMarks)))))
+      : ''
+
     setForm({
       title: assignment.title,
       description: assignment.description,
@@ -174,7 +176,7 @@ export default function AssignmentsPage() {
       publishTime: assignment.publishTime ? assignment.publishTime.substring(0, 5) : '',
       dueDate: assignment.dueDate,
       closeTime: assignment.closeTime ? assignment.closeTime.substring(0, 5) : '',
-      totalMarks: assignment.totalMarks != null ? assignment.totalMarks : '',
+      totalMarks: initialMarks,
       attachmentUrl: assignment.attachmentUrl || '',
       attachmentName: assignment.attachmentName || '',
       attachments: existingAtts,
@@ -298,7 +300,7 @@ export default function AssignmentsPage() {
       dueDate: form.dueDate || null,
       closeTime: form.closeTime || null,
       totalMarks: form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined
-        ? Number(String(form.totalMarks).trim())
+        ? Math.min(100, Math.max(1, Math.round(Number(String(form.totalMarks).trim()))))
         : null,
       attachments: attList,
       attachmentUrl: attList[0]?.fileUrl || form.attachmentUrl || null,
@@ -322,6 +324,21 @@ export default function AssignmentsPage() {
       errs.batchId = 'Please select a Batch'
     }
 
+    const hasSubmissions = editAssignment && Number(editAssignment.submissionCount) > 0
+    if (hasSubmissions) {
+      const initialCourseId = editAssignment.course?.id != null ? String(editAssignment.course.id) : ''
+      const initialBatchId = editAssignment.batch?.id != null ? String(editAssignment.batch.id) : ''
+      const isCourseChanged = form.courseId && String(form.courseId) !== initialCourseId
+      const isBatchChanged = form.batchId && String(form.batchId) !== initialBatchId
+
+      if (isCourseChanged) {
+        errs.courseId = 'Course and Batch cannot be changed once students have submitted.'
+      }
+      if (isBatchChanged) {
+        errs.batchId = 'Course and Batch cannot be changed once students have submitted.'
+      }
+    }
+
     const totalMarksErr = validateTotalMarks(form.totalMarks)
     if (totalMarksErr) {
       errs.totalMarks = totalMarksErr
@@ -343,13 +360,10 @@ export default function AssignmentsPage() {
       if (!form.closeTime) {
         errs.closeTime = 'Please select a Close Time'
       }
-      if (dateError) {
-        errs.date = dateError
-      }
-    } else {
-      if (form.startDate && form.dueDate && dateError) {
-        errs.date = dateError
-      }
+    }
+
+    if (dateError) {
+      errs.date = dateError
     }
 
     return errs
@@ -359,6 +373,10 @@ export default function AssignmentsPage() {
     const errs = validateForm(status)
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
+      const firstErrMsg = errs.courseId || errs.batchId || errs.date || errs.title || errs.startDate || errs.dueDate || errs.publishTime || errs.closeTime || errs.totalMarks || Object.values(errs)[0]
+      if (firstErrMsg) {
+        toast.error(firstErrMsg)
+      }
       return
     }
     setErrors({})
@@ -383,7 +401,8 @@ export default function AssignmentsPage() {
       setEditAssignment(null)
       load()
     } catch (err) {
-      toast.error(err.message || `Failed to ${editAssignment ? 'update' : 'create'} assignment`)
+      const errMsg = err?.response?.data?.message || err.message || `Failed to ${editAssignment ? 'update' : 'create'} assignment`
+      toast.error(errMsg)
     } finally { setSaving(false) }
   }
 
@@ -462,6 +481,15 @@ export default function AssignmentsPage() {
   }
 
   const handleCourseChange = (selectedCourseId) => {
+    const hasSubmissions = editAssignment && Number(editAssignment.submissionCount) > 0
+    const initialCourseId = editAssignment?.course?.id != null ? String(editAssignment.course.id) : ''
+
+    if (hasSubmissions && selectedCourseId && String(selectedCourseId) !== initialCourseId) {
+      setErrors(prev => ({ ...prev, courseId: 'Course and Batch cannot be changed once students have submitted.' }))
+      toast.error('Course and Batch cannot be changed once students have submitted.')
+      return
+    }
+
     setErrors(prev => ({ ...prev, courseId: undefined, batchId: undefined }))
     setForm(f => {
       const isBatchValid = selectedCourseId && f.batchId
@@ -819,10 +847,16 @@ export default function AssignmentsPage() {
               onChange={handleCourseChange}
               placeholder="Select course"
               searchPlaceholder="Search course..."
+              disabled={!!(editAssignment && Number(editAssignment.submissionCount) > 0)}
               error={!!errors.courseId}
             />
             {errors.courseId && (
               <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
+            )}
+            {editAssignment && Number(editAssignment.submissionCount) > 0 && !errors.courseId && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1">
+                Course and Batch cannot be changed once students have submitted ({editAssignment.submissionCount} submission{editAssignment.submissionCount > 1 ? 's' : ''}).
+              </p>
             )}
           </div>
           <div>
@@ -831,11 +865,19 @@ export default function AssignmentsPage() {
               options={batchOptions}
               value={form.batchId}
               onChange={(v) => {
+                const hasSubmissions = editAssignment && Number(editAssignment.submissionCount) > 0
+                const initialBatchId = editAssignment?.batch?.id != null ? String(editAssignment.batch.id) : ''
+                if (hasSubmissions && v && String(v) !== initialBatchId) {
+                  setErrors(prev => ({ ...prev, batchId: 'Course and Batch cannot be changed once students have submitted.' }))
+                  toast.error('Course and Batch cannot be changed once students have submitted.')
+                  return
+                }
                 setForm(f => ({ ...f, batchId: v }))
                 if (errors.batchId) setErrors(prev => ({ ...prev, batchId: undefined }))
               }}
               placeholder="Select batch"
               searchPlaceholder="Search batch..."
+              disabled={!!(editAssignment && Number(editAssignment.submissionCount) > 0)}
               error={!!errors.batchId}
             />
             {errors.batchId && (
@@ -868,13 +910,16 @@ export default function AssignmentsPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish Time</label>
-              <TimePicker12
+              <input
+                type="time"
                 value={form.publishTime}
-                error={!!errors.publishTime}
-                onChange={val => {
-                  setForm(f => ({ ...f, publishTime: val }))
+                onChange={e => {
+                  setForm(f => ({ ...f, publishTime: e.target.value }))
                   if (errors.publishTime) setErrors(prev => ({ ...prev, publishTime: undefined }))
                 }}
+                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                  errors.publishTime || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
               />
               {errors.publishTime && (
                 <p className="text-xs text-red-500 font-medium mt-1">{errors.publishTime}</p>
@@ -903,13 +948,16 @@ export default function AssignmentsPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Close Time</label>
-              <TimePicker12
+              <input
+                type="time"
                 value={form.closeTime}
-                error={!!errors.closeTime}
-                onChange={val => {
-                  setForm(f => ({ ...f, closeTime: val }))
+                onChange={e => {
+                  setForm(f => ({ ...f, closeTime: e.target.value }))
                   if (errors.closeTime) setErrors(prev => ({ ...prev, closeTime: undefined }))
                 }}
+                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
+                  errors.closeTime || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
               />
               {errors.closeTime && (
                 <p className="text-xs text-red-500 font-medium mt-1">{errors.closeTime}</p>
@@ -918,11 +966,14 @@ export default function AssignmentsPage() {
           </div>
 
           {dateError && (
-            <p className="text-xs text-red-500 font-medium -mt-1">{dateError}</p>
+            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium animate-fadeIn">
+              <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
+              <span>{dateError}</span>
+            </div>
           )}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              Total Marks <span className="text-red-500">*</span>
+              Total Marks
             </label>
             <input
               type="text"
@@ -939,15 +990,56 @@ export default function AssignmentsPage() {
                 if (e.ctrlKey || e.metaKey) {
                   return
                 }
-                // Disallow anything other than 0-9
-                if (!/^\d$/.test(e.key)) {
+                // Allow 0-9 and decimal point
+                if (!/[\d.]/.test(e.key)) {
                   e.preventDefault()
                 }
               }}
               onChange={e => {
-                const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 3)
-                setForm(f => ({ ...f, totalMarks: clean }))
+                const raw = e.target.value
+                if (raw === '') {
+                  setForm(f => ({ ...f, totalMarks: '' }))
+                  if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
+                  return
+                }
+                // Clean input, allow only digits and dot
+                const clean = raw.replace(/[^0-9.]/g, '')
+                if (clean === '') {
+                  setForm(f => ({ ...f, totalMarks: '' }))
+                  return
+                }
+                const num = parseFloat(clean)
+                if (!isNaN(num)) {
+                  if (num > 100) {
+                    setForm(f => ({ ...f, totalMarks: '100' }))
+                  } else if (clean.includes('.')) {
+                    if (clean.endsWith('.') && clean.indexOf('.') === clean.lastIndexOf('.')) {
+                      setForm(f => ({ ...f, totalMarks: clean }))
+                    } else {
+                      const rounded = Math.min(100, Math.max(1, Math.round(num)))
+                      setForm(f => ({ ...f, totalMarks: String(rounded) }))
+                    }
+                  } else {
+                    const intStr = clean.slice(0, 3)
+                    if (Number(intStr) > 100) {
+                      setForm(f => ({ ...f, totalMarks: '100' }))
+                    } else {
+                      setForm(f => ({ ...f, totalMarks: intStr }))
+                    }
+                  }
+                } else {
+                  setForm(f => ({ ...f, totalMarks: '' }))
+                }
                 if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
+              }}
+              onBlur={() => {
+                if (form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined) {
+                  const num = parseFloat(String(form.totalMarks))
+                  if (!isNaN(num)) {
+                    const rounded = Math.min(100, Math.max(1, Math.round(num)))
+                    setForm(f => ({ ...f, totalMarks: String(rounded) }))
+                  }
+                }
               }}
               className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
                 errors.totalMarks || (form.totalMarks !== '' && marksError)
@@ -986,14 +1078,6 @@ export default function AssignmentsPage() {
                       <span className="break-words truncate max-w-[280px]">{att.fileName}</span>
                     </span>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewFile({ url: resolveFileUrl(att.fileUrl), name: att.fileName })}
-                        className="flex items-center gap-1 font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 px-2 py-1 rounded-lg transition-colors cursor-pointer"
-                        title="Preview file"
-                      >
-                        <Eye size={12} /> Preview
-                      </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveAttachment(idx)}
@@ -1118,14 +1202,6 @@ export default function AssignmentsPage() {
           </>
         }
       />
-
-      {previewFile && (
-        <ViewAttachmentModal
-          url={previewFile.url}
-          name={previewFile.name}
-          onClose={() => setPreviewFile(null)}
-        />
-      )}
     </div>
   )
 }

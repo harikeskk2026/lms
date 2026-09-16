@@ -80,6 +80,9 @@ export default function AssignmentDetailPage() {
   const [reopening, setReopening] = useState(false)
   const searchTimer = useRef(null)
 
+  const [overallSubmissions, setOverallSubmissions] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+
   const loadAssignment = () => {
     setLoading(true)
     assignmentService.get(id)
@@ -88,10 +91,25 @@ export default function AssignmentDetailPage() {
       .finally(() => setLoading(false))
   }
 
-  const loadSubmissions = () => {
+  const loadOverallSubmissions = () => {
+    submissionService.list(id)
+      .then(r => {
+        setOverallSubmissions(r.data?.submissions || [])
+      })
+      .catch(() => {})
+  }
+
+  const loadSubmissions = (currentFilters = filters) => {
     setSubLoading(true)
     setSubError(false)
-    submissionService.list(id)
+    const params = {}
+    if (currentFilters.search?.trim()) params.search = currentFilters.search.trim()
+    if (currentFilters.status) params.status = currentFilters.status
+    if (currentFilters.evaluation) params.evaluation = currentFilters.evaluation
+    if (currentFilters.dateFrom) params.dateFrom = currentFilters.dateFrom
+    if (currentFilters.dateTo) params.dateTo = currentFilters.dateTo
+
+    submissionService.list(id, params)
       .then(r => {
         const list = r.data?.submissions || []
         setSubmissions(list)
@@ -103,11 +121,16 @@ export default function AssignmentDetailPage() {
             feedbacks[s.submissionId] = s.feedback || ''
           }
         })
-        setGradeInputs(grades)
-        setFeedbackInputs(feedbacks)
+        setGradeInputs(prev => ({ ...prev, ...grades }))
+        setFeedbackInputs(prev => ({ ...prev, ...feedbacks }))
       })
       .catch(err => { toast.error(err.message || 'Failed to load submissions'); setSubError(true) })
       .finally(() => setSubLoading(false))
+  }
+
+  const handleRefresh = () => {
+    loadSubmissions(filters)
+    loadOverallSubmissions()
   }
 
   const handleGradeInline = async (row) => {
@@ -131,7 +154,8 @@ export default function AssignmentDetailPage() {
         reviewed: true,
       })
       toast.success(`Marks & feedback saved for ${row.studentName}`)
-      loadSubmissions()
+      loadSubmissions(filters)
+      loadOverallSubmissions()
     } catch (err) {
       toast.error(err.message || 'Failed to save marks and feedback')
     } finally {
@@ -139,7 +163,14 @@ export default function AssignmentDetailPage() {
     }
   }
 
-  useEffect(() => { loadAssignment(); loadSubmissions() }, [id])
+  useEffect(() => {
+    loadAssignment()
+    loadOverallSubmissions()
+  }, [id])
+
+  useEffect(() => {
+    loadSubmissions(filters)
+  }, [id, filters])
 
   const isEvaluated = (s) => Boolean(s && (s.reviewed || s.marks != null))
   const isPendingEvaluation = (s) => Boolean(
@@ -151,46 +182,38 @@ export default function AssignmentDetailPage() {
 
   // Summary cards always reflect every student in the batch, independent of the
   // filters/search applied to the table below.
+  const statsSource = overallSubmissions.length > 0 ? overallSubmissions : submissions
   const stats = useMemo(() => ({
-    totalStudents: submissions.length,
-    submitted: submissions.filter(s => s.status === 'SUBMITTED' || s.status === 'PENDING_APPROVAL').length,
-    notSubmitted: submissions.filter(s => s.status === 'PENDING').length,
-    late: submissions.filter(s => s.status === 'LATE').length,
-    evaluated: submissions.filter(isEvaluated).length,
-    pendingEvaluation: submissions.filter(isPendingEvaluation).length,
-  }), [submissions])
+    totalStudents: statsSource.length,
+    submitted: statsSource.filter(s => s.status === 'SUBMITTED' || s.status === 'PENDING_APPROVAL').length,
+    notSubmitted: statsSource.filter(s => s.status === 'PENDING').length,
+    late: statsSource.filter(s => s.status === 'LATE').length,
+    evaluated: statsSource.filter(isEvaluated).length,
+    pendingEvaluation: statsSource.filter(isPendingEvaluation).length,
+  }), [statsSource])
 
-  const filteredSubmissions = useMemo(() => {
-    const q = filters.search.trim().toLowerCase()
-    return submissions.filter(row => {
-      if (q) {
-        const matches = row.studentName?.toLowerCase().includes(q)
-          || row.studentEmail?.toLowerCase().includes(q)
-          || String(row.studentId).includes(q)
-        if (!matches) return false
-      }
-      if (filters.status && row.status !== filters.status) return false
-      if (filters.evaluation === 'EVALUATED' && !isEvaluated(row)) return false
-      if (filters.evaluation === 'PENDING' && !isPendingEvaluation(row)) return false
-      if (filters.dateFrom && (!row.submittedAt || new Date(row.submittedAt) < new Date(filters.dateFrom))) return false
-      if (filters.dateTo && (!row.submittedAt || new Date(row.submittedAt) > new Date(`${filters.dateTo}T23:59:59`))) return false
-      return true
-    })
-  }, [submissions, filters])
-
-  const totalSubmissionPages = Math.max(1, Math.ceil(filteredSubmissions.length / SUBMISSIONS_PAGE_SIZE))
+  const totalSubmissionPages = Math.max(1, Math.ceil(submissions.length / SUBMISSIONS_PAGE_SIZE))
   const validSubmissionPage = Math.min(page, totalSubmissionPages)
-  const pagedSubmissions = filteredSubmissions.slice(
+  const pagedSubmissions = submissions.slice(
     (validSubmissionPage - 1) * SUBMISSIONS_PAGE_SIZE,
     validSubmissionPage * SUBMISSIONS_PAGE_SIZE
   )
 
   const handleSearch = (v) => {
+    setSearchInput(v)
     clearTimeout(searchTimer.current)
     searchTimer.current = setTimeout(() => { setFilters(f => ({ ...f, search: v })); setPage(1) }, 300)
   }
 
   const updateFilter = (key, value) => {
+    if (key === 'dateFrom' && value && filters.dateTo && value > filters.dateTo) {
+      toast.error('"From" date cannot be later than "To" date')
+      return
+    }
+    if (key === 'dateTo' && value && filters.dateFrom && value < filters.dateFrom) {
+      toast.error('"To" date cannot be earlier than "From" date')
+      return
+    }
     setFilters(f => ({ ...f, [key]: value }))
     setPage(1)
   }
@@ -247,7 +270,8 @@ export default function AssignmentDetailPage() {
     try {
       await submissionService.approveOrReject(id, row.submissionId, { action: 'APPROVE' })
       toast.success(`Submission approved for ${row.studentName}`)
-      loadSubmissions()
+      loadSubmissions(filters)
+      loadOverallSubmissions()
     } catch (err) {
       toast.error(err.message || 'Failed to approve submission')
     } finally {
@@ -266,7 +290,8 @@ export default function AssignmentDetailPage() {
       toast.success(`Submission rejected for ${rejectTarget.studentName}`)
       setRejectTarget(null)
       setRejectReason('')
-      loadSubmissions()
+      loadSubmissions(filters)
+      loadOverallSubmissions()
     } catch (err) {
       toast.error(err.message || 'Failed to reject submission')
     } finally {
@@ -308,7 +333,8 @@ export default function AssignmentDetailPage() {
       })
       toast.success('Evaluation saved successfully!')
       setEvaluatingRow(null)
-      loadSubmissions()
+      loadSubmissions(filters)
+      loadOverallSubmissions()
     } catch (err) {
       toast.error(err.message || 'Failed to save evaluation')
     } finally {
@@ -456,8 +482,19 @@ export default function AssignmentDetailPage() {
             <input
               placeholder="Search by name, email, or student ID..."
               className="bg-transparent text-sm outline-none w-full text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
+              value={searchInput}
               onChange={e => handleSearch(e.target.value)}
             />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => handleSearch('')}
+                className="text-gray-400 hover:text-purple-600 text-xs ml-0.5 cursor-pointer"
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
           </div>
           <CustomSelect
             value={filters.status}
@@ -482,18 +519,57 @@ export default function AssignmentDetailPage() {
             placeholder="All Evaluations"
             compact
           />
-          <input
-            type="date" value={filters.dateFrom} onChange={e => updateFilter('dateFrom', e.target.value)}
-            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-            title="Submitted from"
-          />
-          <input
-            type="date" value={filters.dateTo} onChange={e => updateFilter('dateTo', e.target.value)}
-            className="bg-purple-50 dark:bg-purple-900/20 text-sm text-gray-700 dark:text-gray-300 rounded-xl px-3 py-2 outline-none border-0"
-            title="Submitted to"
-          />
-          <button onClick={loadSubmissions} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-            <RefreshCw size={15} />
+          <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
+            <Calendar size={14} className="text-purple-400 flex-shrink-0" />
+            <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">From:</span>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              max={filters.dateTo || undefined}
+              onChange={e => updateFilter('dateFrom', e.target.value)}
+              className="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 cursor-pointer"
+              title="Submitted from"
+            />
+            {filters.dateFrom && (
+              <button
+                type="button"
+                onClick={() => updateFilter('dateFrom', '')}
+                className="text-gray-400 hover:text-purple-600 text-xs ml-0.5 cursor-pointer"
+                title="Clear From date"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
+            <Calendar size={14} className="text-purple-400 flex-shrink-0" />
+            <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">To:</span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              min={filters.dateFrom || undefined}
+              onChange={e => updateFilter('dateTo', e.target.value)}
+              className="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-300 cursor-pointer"
+              title="Submitted to"
+            />
+            {filters.dateTo && (
+              <button
+                type="button"
+                onClick={() => updateFilter('dateTo', '')}
+                className="text-gray-400 hover:text-purple-600 text-xs ml-0.5 cursor-pointer"
+                title="Clear To date"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer"
+            title="Refresh submissions"
+          >
+            <RefreshCw size={15} className={subLoading ? 'animate-spin text-purple-600' : ''} />
           </button>
         </div>
 
@@ -502,11 +578,11 @@ export default function AssignmentDetailPage() {
         ) : subError ? (
           <div className="p-10 text-center text-gray-400">
             Failed to load submissions.
-            <button onClick={loadSubmissions} className="block mx-auto mt-2 text-sm text-purple-600 font-semibold hover:underline">Try again</button>
+            <button onClick={handleRefresh} className="block mx-auto mt-2 text-sm text-purple-600 font-semibold hover:underline">Try again</button>
           </div>
-        ) : submissions.length === 0 ? (
+        ) : stats.totalStudents === 0 ? (
           <div className="p-10 text-center text-gray-400">No students in this batch</div>
-        ) : filteredSubmissions.length === 0 ? (
+        ) : submissions.length === 0 ? (
           <div className="p-10 text-center text-gray-400">No submissions match your filters</div>
         ) : (
           <div className="overflow-x-auto">
@@ -741,10 +817,10 @@ export default function AssignmentDetailPage() {
         )}
 
         {/* Pagination */}
-        {!subLoading && !subError && filteredSubmissions.length > SUBMISSIONS_PAGE_SIZE && (
+        {!subLoading && !subError && submissions.length > SUBMISSIONS_PAGE_SIZE && (
           <div className="flex items-center justify-between px-5 py-4 border-t border-purple-100 dark:border-purple-900/30">
             <p className="text-xs text-gray-500">
-              Showing {(validSubmissionPage - 1) * SUBMISSIONS_PAGE_SIZE + 1}–{Math.min(validSubmissionPage * SUBMISSIONS_PAGE_SIZE, filteredSubmissions.length)} of {filteredSubmissions.length}
+              Showing {(validSubmissionPage - 1) * SUBMISSIONS_PAGE_SIZE + 1}–{Math.min(validSubmissionPage * SUBMISSIONS_PAGE_SIZE, submissions.length)} of {submissions.length}
             </p>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={validSubmissionPage === 1}

@@ -309,6 +309,18 @@ public class AssignmentServiceImpl implements AssignmentService {
     public AssignmentResponse update(Long id, AssignmentRequest request, JwtUserPrincipal principal) {
         Assignment assignment = findOrThrow(id);
         requireAssignmentBatchOwnership(assignment, principal);
+
+        List<AssignmentSubmission> submissions = submissionRepository.findByAssignmentId(id);
+        if (submissions != null && !submissions.isEmpty()) {
+            boolean courseChanged = request.getCourseId() != null
+                    && !Objects.equals(request.getCourseId(), assignment.getCourse() != null ? assignment.getCourse().getId() : null);
+            boolean batchChanged = request.getBatchId() != null
+                    && !Objects.equals(request.getBatchId(), assignment.getBatch() != null ? assignment.getBatch().getId() : null);
+            if (courseChanged || batchChanged) {
+                throw new BadRequestException("Course and Batch cannot be changed once students have submitted.");
+            }
+        }
+
         if (request.getBatchId() != null && !request.getBatchId().equals(assignment.getBatch().getId())) {
             requireBatchOwnership(request.getBatchId(), principal);
         }
@@ -523,14 +535,14 @@ public class AssignmentServiceImpl implements AssignmentService {
     private void applyRequest(Assignment assignment, AssignmentRequest request) {
         boolean isDraft = request.getStatus() == AssignmentStatus.DRAFT;
 
-        // Course, Batch, and Total Marks are required
+        // Course and Batch are required
         if (request.getCourseId() == null) {
             throw new BadRequestException("Course is required");
         }
         if (request.getBatchId() == null) {
             throw new BadRequestException("Batch is required");
         }
-        if (request.getTotalMarks() == null || request.getTotalMarks() < 1 || request.getTotalMarks() > 100) {
+        if (request.getTotalMarks() != null && (request.getTotalMarks() < 1 || request.getTotalMarks() > 100)) {
             throw new BadRequestException("Total marks must be between 1 and 100.");
         }
 
@@ -560,7 +572,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                     ? LocalDateTime.of(request.getDueDate(), request.getCloseTime())
                     : request.getDueDate().atTime(23, 59, 59);
 
-            if (dueDateTime.isBefore(startDateTime)) {
+            if (!dueDateTime.isAfter(startDateTime)) {
                 throw new BadRequestException("Due date & close time must be after publish date & time");
             }
         }

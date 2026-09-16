@@ -71,87 +71,91 @@ export default function TimePicker12({
 
   return (
     <div
-      className={`flex items-center gap-1 sm:gap-1.5 rounded-xl border bg-gray-50 dark:bg-gray-800 px-2.5 py-2 text-sm text-gray-800 dark:text-gray-200 transition-all min-w-0 ${
+      className={`inline-flex items-center justify-between gap-1 sm:gap-2 rounded-xl border bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 transition-all w-full ${
         error
           ? 'border-red-400 focus-within:ring-2 focus-within:ring-red-400'
           : 'border-gray-200 dark:border-gray-700 focus-within:ring-2 focus-within:ring-purple-500'
       } ${className}`}
     >
-      <Clock size={14} className="text-purple-500 shrink-0" />
+      <div className="flex items-center gap-1">
+        <Clock size={15} className="text-purple-500 shrink-0 mr-1" />
 
-      {/* Hour Select (01 - 12) */}
-      <select
-        disabled={disabled}
-        value={hour12}
-        onChange={handleHourChange}
-        className="appearance-none bg-transparent text-sm font-semibold text-center w-7 outline-none cursor-pointer text-gray-800 dark:text-gray-100 py-0.5"
-        title="Hour (1 - 12)"
-      >
-        <option value="" disabled className="dark:bg-gray-800">--</option>
-        {HOURS.map(h => (
-          <option key={h} value={h} className="dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-            {h}
-          </option>
-        ))}
-      </select>
-
-      <span className="font-bold text-gray-400 select-none text-xs">:</span>
-
-      {/* Minute Select (00 - 59) */}
-      <select
-        disabled={disabled}
-        value={minute}
-        onChange={handleMinuteChange}
-        className="appearance-none bg-transparent text-sm font-semibold text-center w-7 outline-none cursor-pointer text-gray-800 dark:text-gray-100 py-0.5"
-        title="Minute (00 - 59)"
-      >
-        <option value="" disabled className="dark:bg-gray-800">--</option>
-        {MINUTES.map(m => (
-          <option key={m} value={m} className="dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-            {m}
-          </option>
-        ))}
-      </select>
-
-      {/* AM / PM Toggle Pills */}
-      <div className="flex items-center ml-auto bg-gray-200/70 dark:bg-gray-700/60 rounded-lg p-0.5 text-[11px] font-bold select-none shrink-0">
-        <button
-          type="button"
+        {/* Hour Select (01 - 12) */}
+        <select
           disabled={disabled}
-          onClick={() => handlePeriodChange('AM')}
-          className={`px-1.5 py-0.5 rounded transition-all ${
-            hasValue && period === 'AM'
-              ? 'bg-purple-600 text-white shadow-2xs'
-              : 'text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-300'
-          }`}
+          value={hour12}
+          onChange={handleHourChange}
+          className="appearance-none bg-transparent text-sm font-semibold text-center w-7 outline-none cursor-pointer text-gray-800 dark:text-gray-100 py-0.5 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+          title="Hour (1 - 12)"
         >
-          AM
-        </button>
-        <button
-          type="button"
+          <option value="" disabled className="dark:bg-gray-800">--</option>
+          {HOURS.map(h => (
+            <option key={h} value={h} className="dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+              {h}
+            </option>
+          ))}
+        </select>
+
+        <span className="font-bold text-gray-400 select-none text-xs">:</span>
+
+        {/* Minute Select (00 - 59) */}
+        <select
           disabled={disabled}
-          onClick={() => handlePeriodChange('PM')}
-          className={`px-1.5 py-0.5 rounded transition-all ${
-            hasValue && period === 'PM'
-              ? 'bg-purple-600 text-white shadow-2xs'
-              : 'text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-300'
-          }`}
+          value={minute}
+          onChange={handleMinuteChange}
+          className="appearance-none bg-transparent text-sm font-semibold text-center w-7 outline-none cursor-pointer text-gray-800 dark:text-gray-100 py-0.5 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+          title="Minute (00 - 59)"
         >
-          PM
-        </button>
+          <option value="" disabled className="dark:bg-gray-800">--</option>
+          {MINUTES.map(m => (
+            <option key={m} value={m} className="dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+              {m}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Clear Button */}
-      {hasValue && !disabled && (
-        <button
-          type="button"
-          onClick={handleClear}
-          title="Clear time"
-          className="text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors shrink-0 ml-0.5"
-        >
-          <X size={13} />
-        </button>
-      )}
+      {/* AM / PM Toggle Pills & Clear */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center bg-gray-200/80 dark:bg-gray-700/70 rounded-lg p-0.5 text-[11px] font-bold select-none shrink-0 border border-gray-300/40 dark:border-gray-600/40">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => handlePeriodChange('AM')}
+            className={`px-2 py-0.5 rounded-md transition-all font-semibold cursor-pointer ${
+              hasValue && period === 'AM'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-300'
+            }`}
+          >
+            AM
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => handlePeriodChange('PM')}
+            className={`px-2 py-0.5 rounded-md transition-all font-semibold cursor-pointer ${
+              hasValue && period === 'PM'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-300'
+            }`}
+          >
+            PM
+          </button>
+        </div>
+
+        {/* Clear Button */}
+        {hasValue && !disabled && (
+          <button
+            type="button"
+            onClick={handleClear}
+            title="Clear time"
+            className="text-gray-400 hover:text-red-500 p-0.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors shrink-0 cursor-pointer"
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

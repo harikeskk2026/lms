@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.careerlabs.lms.api.submission.dto.response.SubmissionStatus;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,9 +40,16 @@ public class SubmissionController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<SubmissionListResponse>> list(@PathVariable Long assignmentId,
-                                                                    @AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(submissionService.listByAssignment(assignmentId, principal)));
+    public ResponseEntity<ApiResponse<SubmissionListResponse>> list(
+            @PathVariable Long assignmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) SubmissionStatus status,
+            @RequestParam(required = false) String evaluation,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.of(submissionService.listByAssignment(
+                assignmentId, search, status, evaluation, dateFrom, dateTo, principal)));
     }
 
     @PatchMapping("/{submissionId}")

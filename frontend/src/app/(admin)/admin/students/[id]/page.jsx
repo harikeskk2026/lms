@@ -88,20 +88,9 @@ export default function StudentDetailPage() {
 
   useEffect(() => { load(); loadAcademics() }, [id])
 
-  // Admin no longer manages address/qualification/linkedinUrl/githubUrl/college
-  // here - those are self-managed by the student via My Profile - so this
-  // payload only ever touches what's still admin-owned (name, phone,
-  // placement status, batch, course).
-  const buildUpdatePayload = (overrides) => ({
-    name: student.name,
-    phone: student.phone,
-    placementStatus: student.placementStatus,
-    ...overrides,
-  })
-
   const handlePlacementUpdate = async (status) => {
     try {
-      await studentService.update(id, buildUpdatePayload({ placementStatus: status }))
+      await studentService.updatePlacementStatus(id, status)
       toast.success('Placement status updated')
       load()
     } catch (err) { toast.error(err.message || 'Failed to update') }
