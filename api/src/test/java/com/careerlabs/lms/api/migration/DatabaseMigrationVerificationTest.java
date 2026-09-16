@@ -38,19 +38,48 @@ public class DatabaseMigrationVerificationTest {
     }
 
     @Test
-    @DisplayName("1. Existing DB (lms): Migrate V11 to latest without checksum errors and verify V12")
+    @DisplayName("1. Existing DB upgrade: Migrate an existing V11 database to latest (V16) without checksum errors")
     void testFlywayMigrationOnPostgres() throws Exception {
-        System.out.println("=== Starting Flyway Migration on Existing DB (lms) ===");
+        System.out.println("=== Starting Flyway Migration on an Existing DB (V11 -> latest V16) ===");
 
-        try (Connection testConn = DriverManager.getConnection(LMS_URL, DB_USER, DB_PASS)) {
-            // Accessible
+        String testDbName = "lms_existing_upgrade_test";
+        String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
+
+        try {
+            recreateDatabase(testDbName);
         } catch (Exception e) {
-            org.junit.jupiter.api.Assumptions.abort("PostgreSQL database not available at " + LMS_URL + ": " + e.getMessage());
+            org.junit.jupiter.api.Assumptions.abort("Cannot create database: " + e.getMessage());
             return;
         }
 
+        // 1. Migrate to V11 - the state of an "existing" database before V12/V13/V15/V16 exist
+        Flyway flywayToV11 = Flyway.configure()
+                .dataSource(testDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("11")
+                .locations("classpath:db/migration")
+                .load();
+        MigrateResult v11Result = flywayToV11.migrate();
+        assertTrue(v11Result.success, "Migration to V11 must succeed");
+        assertEquals("11", v11Result.targetSchemaVersion, "Existing database must be at version 11");
+
+        // 2. Seed rows representing existing data (valid and legacy/unrecognized durations).
+        //    Drop the CHECK constraint so V12 is the one that re-normalizes and re-creates it.
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE courses DROP CONSTRAINT IF EXISTS chk_courses_duration_standard;");
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (901, 'Existing Valid', 'Desc', '6 months', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (902, 'Existing Unrecognized', 'Desc', 'Contact coordinator', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+        }
+
+        // 3. Migrate the existing database to latest with STRICT checksum validation (default).
+        //    The V5.1 pre-fix and new V15/V16 must not break already-applied V1-V11 migration records.
         Flyway flyway = Flyway.configure()
-                .dataSource(LMS_URL, DB_USER, DB_PASS)
+                .dataSource(testDbUrl, DB_USER, DB_PASS)
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
                 .ignoreMigrationPatterns("*:ignored")
@@ -66,13 +95,20 @@ public class DatabaseMigrationVerificationTest {
                 result.targetSchemaVersion :
                 (flyway.info().current() != null && flyway.info().current().getVersion() != null ?
                         flyway.info().current().getVersion().getVersion() : null);
-        assertEquals("13", currentVersion, "Target schema version must be 13");
+        assertEquals("16", currentVersion, "Target schema version must be 16");
 
-        // Inspect database schema
-        try (Connection conn = DriverManager.getConnection(LMS_URL, DB_USER, DB_PASS)) {
+        // 4. Existing rows were preserved; unrecognized durations flagged as NULL; valid durations kept
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
+            assertCourseDuration(conn, 901, "6 months");   // existing valid duration preserved
+            assertCourseDuration(conn, 902, null);          // unrecognized duration -> NULL (manual review)
             verifyFinalSchema(conn);
         }
-        System.out.println("=== Existing DB (lms) Migration to Latest PASSED ===");
+
+        try {
+            executeSqlOnPostgres("DROP DATABASE IF EXISTS " + testDbName + ";");
+        } catch (Exception ignored) {}
+
+        System.out.println("=== Existing DB (V11 -> latest V16) Migration PASSED ===");
     }
 
     @Test
@@ -158,6 +194,117 @@ public class DatabaseMigrationVerificationTest {
         System.out.println("=== Teammate Scenario: Checksum 860137096 to Latest PASSED ===");
     }
 
+    @Test
+    @DisplayName("1d. Teammate Scenario: Partial V13 variant DB (checksum -322843820) starts up and converges via V16")
+    void testTeammatePartialV13VariantStartup() throws Exception {
+        String testDbName = "lms_teammate_v13variant_test";
+        String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
+
+        recreateDatabase(testDbName);
+
+        // 1. Simulate teammate database: migrate cleanly up to V12
+        Flyway flywayToV12 = Flyway.configure()
+                .dataSource(testDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("12")
+                .locations("classpath:db/migration")
+                .load();
+        MigrateResult v12Result = flywayToV12.migrate();
+        assertTrue(v12Result.success, "Initial migration to V12 must succeed");
+
+        // 2. Recreate the exact state recorded for such databases:
+        //    the committed V13 DDL was applied EXCEPT the syllabus_modules / syllabus_topics /
+        //    quiz_questions constraints (partial variant), and flyway_schema_history records
+        //    V13 with the legacy applied checksum -322843820.
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS);
+             Statement stmt = conn.createStatement()) {
+
+            try (var in = getClass().getResourceAsStream("/db/migration/V13__numeric_field_check_constraints.sql")) {
+                assertNotNull(in, "V13 migration script must be readable from the classpath");
+                String v13Sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                stmt.execute(v13Sql);
+            }
+
+            // Drop the 5 constraints the partial variant never added
+            stmt.execute("ALTER TABLE syllabus_modules DROP CONSTRAINT IF EXISTS chk_syllabus_modules_duration;");
+            stmt.execute("ALTER TABLE syllabus_modules DROP CONSTRAINT IF EXISTS chk_syllabus_modules_order;");
+            stmt.execute("ALTER TABLE syllabus_topics DROP CONSTRAINT IF EXISTS chk_syllabus_topics_duration;");
+            stmt.execute("ALTER TABLE syllabus_topics DROP CONSTRAINT IF EXISTS chk_syllabus_topics_order;");
+            stmt.execute("ALTER TABLE quiz_questions DROP CONSTRAINT IF EXISTS chk_quiz_questions_order;");
+
+            // Record V13 as applied with the legacy teammate checksum (partial variant)
+            stmt.executeUpdate("INSERT INTO flyway_schema_history " +
+                    "(installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success) " +
+                    "VALUES (15, '13', 'numeric field check constraints', 'SQL', " +
+                    "'V13__numeric_field_check_constraints.sql', -322843820, 'postgres', NOW(), 0, TRUE)");
+        }
+
+        // Confirm the simulation is faithful: the 5 constraints are truly absent
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
+            for (String con : new String[]{"chk_syllabus_modules_duration", "chk_syllabus_modules_order",
+                    "chk_syllabus_topics_duration", "chk_syllabus_topics_order", "chk_quiz_questions_order"}) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT COUNT(*) FROM pg_constraint WHERE conname = ?")) {
+                    ps.setString(1, con);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        assertEquals(0, rs.getInt(1), con + " must be absent in the simulated partial V13 variant");
+                    }
+                }
+            }
+        }
+
+        // 3. Boot Spring Boot Application against this database. Pre-fix this failed with
+        //    'checksum mismatch for migration version 13'. With the fix, FlywayConfig
+        //    recognizes the legacy V13 checksum and V16 fills in the missing constraints.
+        SpringApplicationBuilder builder = new SpringApplicationBuilder(LmsApiApplication.class);
+        ConfigurableApplicationContext context = null;
+        try {
+            context = builder.run(
+                    "--server.port=0",
+                    "--spring.datasource.url=" + testDbUrl,
+                    "--spring.datasource.username=" + DB_USER,
+                    "--spring.datasource.password=" + DB_PASS,
+                    "--spring.flyway.enabled=true",
+                    "--spring.jpa.hibernate.ddl-auto=none",
+                    "--app.seed.enabled=false"
+            );
+            assertNotNull(context, "Application context must not be null");
+            assertTrue(context.isRunning(), "Spring Boot must boot on the partial V13 variant database");
+        } finally {
+            if (context != null) {
+                context.close();
+            }
+        }
+
+        // 4. Verify database reached V16 and all V13 numeric constraints now exist (V16 filled the gap)
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
+            verifyFinalSchema(conn);
+
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT version, success FROM flyway_schema_history WHERE version IN ('14','15','16') ORDER BY version")) {
+                boolean has14 = false, has15 = false, has16 = false;
+                while (rs.next()) {
+                    if ("14".equals(rs.getString(1))) has14 = rs.getBoolean(2);
+                    if ("15".equals(rs.getString(1))) has15 = rs.getBoolean(2);
+                    if ("16".equals(rs.getString(1))) has16 = rs.getBoolean(2);
+                }
+                assertTrue(has14, "V14 (add_announcement_attachments) must be applied successfully");
+                assertTrue(has15, "V15 (ensure_course_duration_nullable) must be applied successfully");
+                assertTrue(has16, "V16 (complete_partial_v13_constraints) must be applied successfully");
+            }
+        }
+
+        try {
+            executeSqlOnPostgres("DROP DATABASE IF EXISTS " + testDbName + ";");
+        } catch (Exception ignored) {}
+
+        System.out.println("=== Teammate Scenario: Partial V13 variant (checksum -322843820) to Latest PASSED ===");
+    }
+
 
     @Test
     @DisplayName("2. Fresh DB: Migrate V0 through latest on a completely blank database")
@@ -188,8 +335,8 @@ public class DatabaseMigrationVerificationTest {
         System.out.println("Target schema version: " + result.targetSchemaVersion);
 
         assertTrue(result.success, "Fresh database migration must succeed");
-        assertEquals("13", result.targetSchemaVersion, "Fresh database target schema version must be 13");
-        assertEquals(14, result.migrationsExecuted, "Must execute all 14 migrations (V0 through V13)");
+        assertEquals("16", result.targetSchemaVersion, "Fresh database target schema version must be 16");
+        assertEquals(18, result.migrationsExecuted, "Must execute all 18 migrations (V0 through V16 incl. V5.1)");
 
         try (Connection conn = DriverManager.getConnection(freshDbUrl, DB_USER, DB_PASS)) {
             verifyFinalSchema(conn);
@@ -204,12 +351,12 @@ public class DatabaseMigrationVerificationTest {
     }
 
     @Test
-    @DisplayName("3. Historical Versions: Genuinely migrate every prior version (V1..V11) to latest")
+    @DisplayName("3. Historical Versions: Migrate every prior version (V1..V15) to latest (V16)")
     void testHistoricalVersionsIncrementalMigration() throws Exception {
         String testDbName = "lms_hist_test";
         String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
 
-        for (int v = 1; v <= 12; v++) {
+        for (int v = 1; v <= 15; v++) {
             System.out.printf("--- Testing Migration: V%d -> latest ---%n", v);
             recreateDatabase(testDbName);
 
@@ -239,7 +386,7 @@ public class DatabaseMigrationVerificationTest {
 
             MigrateResult latestResult = flywayToLatest.migrate();
             assertTrue(latestResult.success, "Migration from V" + v + " to latest must succeed");
-            assertEquals("13", latestResult.targetSchemaVersion, "Final schema version must be 13");
+            assertEquals("16", latestResult.targetSchemaVersion, "Final schema version must be 16");
 
             try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
                 verifyFinalSchema(conn);
@@ -251,7 +398,7 @@ public class DatabaseMigrationVerificationTest {
             executeSqlOnPostgres("DROP DATABASE IF EXISTS " + testDbName + ";");
         } catch (Exception ignored) {}
 
-        System.out.println("=== All Historical Versions (V1..V11 -> latest) PASSED ===");
+        System.out.println("=== All Historical Versions (V1..V16 -> latest) PASSED ===");
     }
 
     @Test
@@ -458,7 +605,201 @@ public class DatabaseMigrationVerificationTest {
     }
 
     @Test
-    @DisplayName("6. Application Startup: Verify Spring Boot context boots successfully with Flyway on PostgreSQL")
+    @DisplayName("6a. Production NOT NULL scenario: courses.duration NOT NULL + legacy/unrecognized durations migrate cleanly")
+    void testProductionNotNullDurationMigration() throws Exception {
+        System.out.println("=== Testing Production Scenario: courses.duration NOT NULL + legacy data -> latest ===");
+
+        String testDbName = "lms_notnull_duration_test";
+        String testDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + testDbName;
+
+        recreateDatabase(testDbName);
+
+        // 1. Migrate to V5 (before the V6 duration standardization)
+        Flyway flywayToV5 = Flyway.configure()
+                .dataSource(testDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("5")
+                .locations("classpath:db/migration")
+                .load();
+        MigrateResult v5Result = flywayToV5.migrate();
+        assertTrue(v5Result.success, "Migration to V5 must succeed");
+
+        // 2. Seed courses with non-NULL durations (valid, legacy, and unrecognized values)
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (701, 'Valid Duration', 'Desc', '3 months', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (702, 'Legacy Range', 'Desc', '6-8 weeks', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (703, 'Legacy Hours', 'Desc', '16 hours', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (704, 'Unrecognized 1', 'Desc', 'Custom TBD', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (705, 'Unrecognized 2', 'Desc', '12 WEEKS', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+
+            // 3. Simulate the production state: duration is NOT NULL (previously set by Hibernate
+            //    ddl-auto=update mapping Course.duration with @Column(nullable = false)).
+            //    All seeded rows are non-NULL, so adding the constraint succeeds.
+            stmt.execute("ALTER TABLE courses ALTER COLUMN duration SET NOT NULL;");
+        }
+
+        // 4. Confirm the NOT NULL constraint is actually in place (repro of the live failure pre-fix)
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'courses' AND column_name = 'duration'");
+                 ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals("NO", rs.getString(1), "courses.duration MUST be NOT NULL before V6 runs (reproducing the live bug)");
+            }
+        }
+
+        // 5. Migrate to latest. Pre-fix this failed at V6 with
+        //    'null value in column "duration" of relation "courses" violates not-null constraint'
+        Flyway flywayToLatest = Flyway.configure()
+                .dataSource(testDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("latest")
+                .locations("classpath:db/migration")
+                .load();
+
+        MigrateResult result = flywayToLatest.migrate();
+        assertTrue(result.success, "Migration from NOT NULL duration DB to latest must succeed (no restart loop)");
+        assertEquals("16", result.targetSchemaVersion, "Target schema version must be 16");
+
+        // 6. Verify data normalization and final schema
+        try (Connection conn = DriverManager.getConnection(testDbUrl, DB_USER, DB_PASS)) {
+            assertCourseDuration(conn, 701, "3 months");    // valid duration preserved
+            assertCourseDuration(conn, 702, "8 weeks");     // 6-8 weeks -> 8 weeks
+            assertCourseDuration(conn, 703, "2 days");      // 16 hours -> 2 days
+            assertCourseDuration(conn, 704, null);          // 'Custom TBD' -> NULL (manual review)
+            assertCourseDuration(conn, 705, null);          // '12 WEEKS' -> NULL (manual review)
+
+            // No data destroyed: all 5 rows still present
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM courses")) {
+                assertTrue(rs.next());
+                assertEquals(5, rs.getInt(1), "All seeded courses must be preserved");
+            }
+
+            verifyFinalSchema(conn);
+        }
+
+        // 7. Boot the full Spring Boot app once more to prove the restart loop is gone:
+        //    Flyway validation passes and there are no pending migrations to fail.
+        SpringApplicationBuilder builder = new SpringApplicationBuilder(LmsApiApplication.class);
+        ConfigurableApplicationContext context = null;
+        try {
+            context = builder.run(
+                    "--server.port=0",
+                    "--spring.datasource.url=" + testDbUrl,
+                    "--spring.datasource.username=" + DB_USER,
+                    "--spring.datasource.password=" + DB_PASS,
+                    "--spring.flyway.enabled=true",
+                    "--spring.jpa.hibernate.ddl-auto=none",
+                    "--app.seed.enabled=false"
+            );
+            assertNotNull(context, "Spring Boot context must boot on the previously-failing NOT NULL DB");
+            assertTrue(context.isRunning(), "Application must start after the corrective migration (no restart loop)");
+        } finally {
+            if (context != null) {
+                context.close();
+            }
+        }
+
+        try {
+            executeSqlOnPostgres("DROP DATABASE IF EXISTS " + testDbName + ";");
+        } catch (Exception ignored) {}
+
+        System.out.println("=== Production NOT NULL duration scenario (V5 -> latest) PASSED ===");
+    }
+
+    @Test
+    @DisplayName("6b. Schema convergence: fresh DB and existing NOT NULL duration DB reach identical final schema")
+    void testFreshAndNotNullSchemaConvergence() throws Exception {
+        System.out.println("=== Testing schema convergence: fresh DB vs NOT NULL duration DB ===");
+
+        String freshDbName = "lms_converge_fresh_test";
+        String notNullDbName = "lms_converge_notnull_test";
+        String freshDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + freshDbName;
+        String notNullDbUrl = "jdbc:postgresql://" + PG_HOST + ":" + PG_PORT + "/" + notNullDbName;
+
+        // Fresh database
+        try {
+            recreateDatabase(freshDbName);
+        } catch (Exception e) {
+            org.junit.jupiter.api.Assumptions.abort("Cannot create database: " + e.getMessage());
+            return;
+        }
+        Flyway flywayFresh = Flyway.configure()
+                .dataSource(freshDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("latest")
+                .locations("classpath:db/migration")
+                .load();
+        MigrateResult freshResult = flywayFresh.migrate();
+        assertTrue(freshResult.success, "Fresh DB migration must succeed");
+        assertEquals("16", freshResult.targetSchemaVersion, "Fresh DB must reach schema version 16");
+
+        // Existing/NOT NULL database (as in production)
+        recreateDatabase(notNullDbName);
+        Flyway flywayToV5 = Flyway.configure()
+                .dataSource(notNullDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("5")
+                .locations("classpath:db/migration")
+                .load();
+        flywayToV5.migrate();
+        try (Connection conn = DriverManager.getConnection(notNullDbUrl, DB_USER, DB_PASS);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("INSERT INTO courses (id, title, description, duration, level, status, created_at, updated_at) " +
+                    "VALUES (801, 'Legacy Duration Course', 'Desc', 'Self-paced', 'BEGINNER', 'PUBLISHED', NOW(), NOW());");
+            stmt.execute("ALTER TABLE courses ALTER COLUMN duration SET NOT NULL;");
+        }
+        Flyway flywayNotNull = Flyway.configure()
+                .dataSource(notNullDbUrl, DB_USER, DB_PASS)
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .ignoreMigrationPatterns("*:ignored")
+                .target("latest")
+                .locations("classpath:db/migration")
+                .load();
+        MigrateResult notNullResult = flywayNotNull.migrate();
+        assertTrue(notNullResult.success, "NOT NULL DB migration must succeed");
+        assertEquals("16", notNullResult.targetSchemaVersion, "NOT NULL DB must reach schema version 16");
+
+        // Compare duration column nullability + CHECK constraint across both databases
+        String freshState;
+        String notNullState;
+        try (Connection conn = DriverManager.getConnection(freshDbUrl, DB_USER, DB_PASS)) {
+            freshState = durationSchemaState(conn);
+        }
+        try (Connection conn = DriverManager.getConnection(notNullDbUrl, DB_USER, DB_PASS)) {
+            notNullState = durationSchemaState(conn);
+        }
+        assertEquals(freshState, notNullState,
+                "Fresh DB and existing NOT NULL DB must converge to the same courses.duration schema state");
+        System.out.println("  fresh state = " + freshState);
+        System.out.println("  not-null state = " + notNullState);
+
+        try {
+            executeSqlOnPostgres("DROP DATABASE IF EXISTS " + freshDbName + ";");
+            executeSqlOnPostgres("DROP DATABASE IF EXISTS " + notNullDbName + ";");
+        } catch (Exception ignored) {}
+
+        System.out.println("=== Fresh vs NOT NULL duration schema convergence PASSED ===");
+    }
+
+    @Test
+    @DisplayName("7. Application Startup: Verify Spring Boot context boots successfully with Flyway on PostgreSQL")
     void testApplicationStartupWithPostgresAndFlyway() {
         System.out.println("=== Testing Spring Boot Application Startup with Flyway against PostgreSQL ===");
         SpringApplicationBuilder builder = new SpringApplicationBuilder(LmsApiApplication.class);
@@ -492,6 +833,27 @@ public class DatabaseMigrationVerificationTest {
                         "Course " + courseId + " duration should be normalized to: " + expectedDuration);
             }
         }
+    }
+
+    private String durationSchemaState(Connection conn) throws Exception {
+        StringBuilder state = new StringBuilder();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'courses' AND column_name = 'duration'");
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                state.append("is_nullable=").append(rs.getString("is_nullable"));
+            }
+        }
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'chk_courses_duration_standard'");
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                state.append(" | check=").append(rs.getString(1));
+            } else {
+                state.append(" | check=MISSING");
+            }
+        }
+        return state.toString();
     }
 
     private void verifyFinalSchema(Connection conn) throws Exception {
@@ -557,6 +919,15 @@ public class DatabaseMigrationVerificationTest {
              ResultSet rs = ps.executeQuery()) {
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1), "Constraint chk_courses_duration_standard MUST exist");
+        }
+
+        // 7b. courses.duration MUST be nullable (legacy/unrecognized values are NULLed for manual review)
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT is_nullable FROM information_schema.columns " +
+                        "WHERE table_name = 'courses' AND column_name = 'duration'");
+             ResultSet rs = ps.executeQuery()) {
+            assertTrue(rs.next(), "courses.duration column must exist");
+            assertEquals("YES", rs.getString(1), "courses.duration MUST be nullable (NULL allowed for manual-review rows)");
         }
 
         // 8. Questions question_type check constraint must allow SHORT_ANSWER

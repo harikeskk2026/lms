@@ -32,7 +32,7 @@ public class Course {
 
     private String thumbnail;
 
-    @Column(nullable = false)
+    @Column
     private String duration;
 
     @Enumerated(EnumType.STRING)
