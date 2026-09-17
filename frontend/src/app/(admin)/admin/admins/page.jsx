@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase, Eye, Pencil, Trash2 } from 'lucide-react'
+import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase, Eye, Pencil, Trash2, FileDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -26,6 +26,7 @@ import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import FormDrawer from '@/components/ui/FormDrawer'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 import Pagination from '@/components/ui/Pagination'
+import ViewToggle from '@/components/ui/ViewToggle'
 import clsx from 'clsx'
 
 const EMPTY_FORM = { name: '', email: '', password: '', phone: '', designation: '', department: '' }
@@ -59,6 +60,7 @@ export default function AdminsPage() {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput, 400)
   const [statusFilter, setStatusFilter] = useState('')
+  const [viewMode, setViewMode] = useState('table')
   const abortRef = useRef(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -75,6 +77,7 @@ export default function AdminsPage() {
 
   const [deletingAdmin, setDeletingAdmin] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => setMounted(true), [])
 
@@ -252,6 +255,50 @@ export default function AdminsPage() {
     }
   }
 
+  const downloadCSV = async () => {
+    try {
+      setExporting(true)
+      const exportLimit = Math.max(totalElements || 0, 10000)
+      const res = await adminApi.getAdmins({ search: search.trim() || undefined, status: statusFilter || undefined, page: 1, limit: exportLimit })
+      const data = res.data.data || res.data
+      const allAdmins = data.admins || data.content || []
+      if (allAdmins.length === 0) {
+        toast.error('No admins found to export')
+        return
+      }
+
+      const headers = ['Name', 'Email', 'Phone', 'Department', 'Designation', 'Login Access', 'Created']
+      const rows = allAdmins.map(a => [
+        a.name || '',
+        a.email || '',
+        a.phone || '',
+        a.department || '',
+        a.designation || '',
+        a.active ? 'Active' : 'Inactive',
+        a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '',
+      ])
+
+      const csvContent = '﻿' + [headers, ...rows]
+        .map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `admins_export_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success(`Exported all ${allAdmins.length} admin records`)
+    } catch (err) {
+      toast.error('Failed to export admins: ' + (err.response?.data?.message || err.message || 'Unknown error'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (authLoading || user?.role !== 'SUPERADMIN') {
     return <div className="p-12 text-center text-slate-400">Checking access...</div>
   }
@@ -264,7 +311,7 @@ export default function AdminsPage() {
             <div className="p-2 rounded-xl bg-purple-100 text-purple-700"><ShieldCheck size={22} /></div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Admins Management</h1>
           </div>
-          <p className="text-slate-500 text-sm mt-1">SUPERADMIN only — create, manage and reset Admin credentials.</p>
+          <p className="text-slate-500 text-sm mt-1">Manage admin profiles, credentials, and access status.</p>
         </div>
         <button onClick={() => { setForm({ ...EMPTY_FORM }); setTouched({}); setFormSubmitted(false); setShowAddModal(true) }}
           className="inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-brand-500/20">
@@ -288,6 +335,16 @@ export default function AdminsPage() {
             placeholder="All Login Access"
             compact
           />
+          <button
+            onClick={downloadCSV}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-slate-100 text-slate-600 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-slate-200 transition-colors disabled:opacity-50"
+          >
+            {exporting ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+            {exporting ? 'Exporting...' : 'Export'}
+          </button>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+
           <button onClick={fetchAdmins} className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" title="Refresh">
             <RefreshCw size={16} className={clsx(loading && 'animate-spin')} />
           </button>
@@ -304,6 +361,79 @@ export default function AdminsPage() {
           </div>
         ) : admins.length === 0 ? (
           <div className="p-12 text-center"><ShieldCheck size={40} className="mx-auto text-slate-300 mb-3" /><p className="font-bold text-slate-700">No admins found</p></div>
+        ) : viewMode === 'card' ? (
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {admins.map(admin => (
+              <div
+                key={admin.id}
+                className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 transition-all"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                      {admin.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 truncate">{admin.name}</p>
+                      <p className="text-xs text-slate-400 font-mono truncate">{admin.email}</p>
+                    </div>
+                  </div>
+                  <LoginAccessToggle
+                    active={admin.active}
+                    name={admin.name}
+                    onToggle={() => handleToggle(admin)}
+                    disabled={admin.id === user?.id}
+                    disabledReason="You cannot deactivate your own account"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-slate-400 uppercase text-[10px] font-semibold mb-0.5">Contact</p>
+                    <span className="text-slate-600 truncate block">{admin.phone || '—'}</span>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 uppercase text-[10px] font-semibold mb-0.5">Created</p>
+                    <span className="text-slate-600 truncate block">{admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : '—'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-slate-400 uppercase text-[10px] font-semibold mb-0.5">Role Info</p>
+                    {admin.designation || admin.department ? (
+                      <span className="text-slate-700 font-medium">
+                        {admin.designation || '—'}{admin.department ? ` · ${admin.department}` : ''}
+                      </span>
+                    ) : <span className="text-slate-400 italic">—</span>}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-slate-100">
+                  <button onClick={() => router.push(`/admin/admins/${admin.id}`)}
+                    className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
+                    <Eye size={14} />
+                  </button>
+                  <button onClick={() => setResetTarget(admin)}
+                    className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
+                    <KeyRound size={14} />
+                  </button>
+                  <button onClick={() => handleOpenEdit(admin)}
+                    className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors" title="Edit">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => setDeletingAdmin(admin)}
+                    disabled={admin.id === user?.id}
+                    className={clsx(
+                      'w-7 h-7 rounded-lg flex items-center justify-center transition-colors',
+                      admin.id === user?.id
+                        ? 'bg-slate-50 text-slate-300 dark:bg-gray-800/50 dark:text-gray-600 cursor-not-allowed'
+                        : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60'
+                    )}
+                    title={admin.id === user?.id ? 'You cannot delete your own account' : 'Delete'}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

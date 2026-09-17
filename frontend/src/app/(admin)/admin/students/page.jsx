@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Eye } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Eye, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
@@ -28,6 +28,7 @@ import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 import Pagination from '@/components/ui/Pagination'
+import ViewToggle from '@/components/ui/ViewToggle'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
@@ -242,6 +243,7 @@ export default function StudentsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [batchFilter, setBatchFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [placementFilter, setPlacementFilter] = useState('')
@@ -253,6 +255,7 @@ export default function StudentsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [viewMode, setViewMode] = useState('table')
   const [deletingStudent, setDeletingStudent] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [resetTarget, setResetTarget] = useState(null)
@@ -295,6 +298,7 @@ export default function StudentsPage() {
   }, [])
 
   const handleSearch = (v) => {
+    setSearchInput(v)
     clearTimeout(searchTimer.current)
     searchTimer.current = setTimeout(() => { setSearch(v); setPage(1) }, 300)
   }
@@ -500,20 +504,22 @@ export default function StudentsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Students</h1>
-          <span className="inline-flex items-center gap-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-3 py-1.5 rounded-full">
-            <span className="text-purple-400 font-medium">Total</span>
-            <span className="text-purple-700 dark:text-purple-200">{total}</span>
-          </span>
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-6 border border-purple-100 dark:border-purple-900/30">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+              <Users size={22} />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Students Management</h1>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage student profiles, course enrollments, batches, and placement status.</p>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all"
+          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 shadow-md shadow-purple-500/20 active:scale-95"
         >
-          <Plus size={16} /> Add Student
+          <Plus size={18} /> Add Student
         </button>
       </div>
 
@@ -522,6 +528,7 @@ export default function StudentsPage() {
         <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl px-3 py-2 flex-1 min-w-[200px]">
           <Search size={15} className="text-purple-400 flex-shrink-0" />
           <input
+            value={searchInput}
             placeholder="Search by name or email..."
             className="bg-transparent text-sm outline-none w-full text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
             onChange={e => handleSearch(e.target.value)}
@@ -571,6 +578,7 @@ export default function StudentsPage() {
           {exporting ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
           {exporting ? 'Exporting...' : 'Export'}
         </button>
+        <ViewToggle value={viewMode} onChange={setViewMode} />
         <button onClick={load} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
           <RefreshCw size={15} />
         </button>
@@ -582,6 +590,90 @@ export default function StudentsPage() {
           <div className="p-6 space-y-3">
             {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}
           </div>
+        ) : viewMode === 'card' ? (
+          students.length === 0 ? (
+            <div className="px-4 py-10 text-center text-gray-400">No students found</div>
+          ) : (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {students.map(s => (
+                <div
+                  key={s.id}
+                  onClick={() => router.push(`/admin/students/${s.id}`)}
+                  className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900/60 p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50 cursor-pointer transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {s.name[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-800 dark:text-white truncate">{s.name}</p>
+                        <p className="text-xs text-gray-400 truncate">{s.email}</p>
+                      </div>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <LoginAccessToggle active={s.active} name={s.name} onToggle={() => handleToggleStatus(s)} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-gray-400 uppercase text-[10px] font-semibold mb-0.5">Enrollment</p>
+                      <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded inline-block">{s.enrollmentNo || '—'}</span>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 uppercase text-[10px] font-semibold mb-0.5">College</p>
+                      <span className="font-semibold text-gray-700 dark:text-gray-300 truncate block">{s.college?.name || '—'}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-gray-400 uppercase text-[10px] font-semibold mb-0.5">Course</p>
+                      <span className="text-gray-500 truncate block">
+                        {(s.courses && s.courses.length > 0) ? s.courses.map(c => c.title).join(', ') : '—'}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-gray-400 uppercase text-[10px] font-semibold mb-1">Batch</p>
+                      {s.batches && s.batches.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {s.batches.map(b => (
+                            <div key={b.id}>
+                              <p className="font-semibold text-gray-700 dark:text-gray-300">{b.name}</p>
+                              <p className="text-[10px] text-gray-400">{b.course?.title}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <span className="text-gray-400">Not enrolled</span>}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PLACEMENT_COLORS[s.placementStatus] || 'bg-gray-100 text-gray-500'}`}>
+                      {s.placementStatus?.replace('_', ' ') || '—'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-gray-100 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => router.push(`/admin/students/${s.id}`)}
+                      className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
+                      <Eye size={14} />
+                    </button>
+                    <button onClick={() => setResetTarget(s)}
+                      className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
+                      <KeyRound size={14} />
+                    </button>
+                    <button onClick={() => openEdit(s)}
+                      className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors" title="Edit">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => setDeletingStudent(s)}
+                      className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 flex items-center justify-center transition-colors" title="Delete">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
