@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuizEffectiveStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizType;
+import com.careerlabs.lms.api.quiz.entity.ResultVisibility;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -26,6 +27,7 @@ public record StudentQuizResponse(
         LocalDateTime scheduledStart,
         LocalDateTime scheduledEnd,
         QuizEffectiveStatus effectiveStatus,
+        ResultVisibility resultVisibility,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -49,6 +51,7 @@ public record StudentQuizResponse(
                 quiz.getScheduledStart(),
                 quiz.getScheduledEnd(),
                 effectiveStatus,
+                quiz.getResultVisibility(),
                 quiz.getCreatedAt(),
                 quiz.getUpdatedAt());
     }

@@ -10,6 +10,7 @@ import com.careerlabs.lms.api.quiz.entity.StudentGameStats;
 import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.service.GamificationService;
 import com.careerlabs.lms.api.quiz.service.QuizAnalyticsService;
+import com.careerlabs.lms.api.quiz.service.QuizAvailabilityService;
 import com.careerlabs.lms.api.quiz.service.WeakAreaService;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import org.springframework.stereotype.Service;
@@ -28,13 +29,16 @@ public class QuizAnalyticsServiceImpl implements QuizAnalyticsService {
     private final WeakAreaService weakAreaService;
     private final GamificationService gamificationService;
     private final CourseAccessGuard accessGuard;
+    private final QuizAvailabilityService quizAvailabilityService;
 
     public QuizAnalyticsServiceImpl(QuizAttemptRepository quizAttemptRepository, WeakAreaService weakAreaService,
-                                     GamificationService gamificationService, CourseAccessGuard accessGuard) {
+                                     GamificationService gamificationService, CourseAccessGuard accessGuard,
+                                     QuizAvailabilityService quizAvailabilityService) {
         this.quizAttemptRepository = quizAttemptRepository;
         this.weakAreaService = weakAreaService;
         this.gamificationService = gamificationService;
         this.accessGuard = accessGuard;
+        this.quizAvailabilityService = quizAvailabilityService;
     }
 
     @Override
@@ -55,7 +59,9 @@ public class QuizAnalyticsServiceImpl implements QuizAnalyticsService {
                 .toList();
         List<WeakAreaResponse> weakAreas = weakAreaService.getWeakAreas(studentId);
 
-        List<QuizAttemptResponse> recentAttempts = submitted.stream().limit(10).map(QuizAttemptResponse::from).toList();
+        List<QuizAttemptResponse> recentAttempts = submitted.stream().limit(10)
+                .map(a -> QuizAttemptResponse.from(a, quizAvailabilityService.isResultsPending(a.getQuiz())))
+                .toList();
 
         StudentGameStats stats = gamificationService.getOrCreateStats(studentId);
 

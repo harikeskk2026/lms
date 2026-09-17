@@ -264,7 +264,7 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         gamificationService.processSubmission(studentId, attempt);
 
         return QuizResultResponse.from(attempt, questionAttempts, attempt.getQuiz().isShowExplanation(),
-                isResultsPending(attempt.getQuiz()));
+                quizAvailabilityService.isResultsPending(attempt.getQuiz()));
     }
 
     @Override
@@ -273,31 +273,14 @@ public class QuizAttemptServiceImpl implements QuizAttemptService {
         QuizAttempt attempt = findAttemptOwnedBy(attemptId, studentId);
         List<QuestionAttempt> questionAttempts = questionAttemptRepository.findByAttemptIdOrderByOrderIndexAsc(attemptId);
         return QuizResultResponse.from(attempt, questionAttempts, attempt.getQuiz().isShowExplanation(),
-                isResultsPending(attempt.getQuiz()));
-    }
-
-    /**
-     * Whether a SUBMITTED attempt's score/answer-key should stay hidden per the
-     * quiz's {@code resultVisibility} rule — re-evaluated on every read, so a quiz
-     * that closes (AFTER_CLOSE) or gets an admin release (MANUAL) reveals results
-     * without needing to touch the attempt row itself.
-     */
-    private boolean isResultsPending(Quiz quiz) {
-        return switch (quiz.getResultVisibility()) {
-            case IMMEDIATE -> false;
-            case AFTER_CLOSE -> {
-                QuizEffectiveStatus status = quizAvailabilityService.effectiveStatus(quiz);
-                yield status != QuizEffectiveStatus.COMPLETED && status != QuizEffectiveStatus.ARCHIVED;
-            }
-            case MANUAL -> !quiz.isResultsReleased();
-        };
+                quizAvailabilityService.isResultsPending(attempt.getQuiz()));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<QuizAttemptResponse> listMine(Long studentId) {
         return quizAttemptRepository.findByStudentIdOrderByStartedAtDesc(studentId).stream()
-                .map(QuizAttemptResponse::from)
+                .map(a -> QuizAttemptResponse.from(a, quizAvailabilityService.isResultsPending(a.getQuiz())))
                 .toList();
     }
 

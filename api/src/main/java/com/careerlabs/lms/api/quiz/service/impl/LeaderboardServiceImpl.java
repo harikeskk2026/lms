@@ -1,5 +1,7 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
+import com.careerlabs.lms.api.enrollment.entity.Enrollment;
+import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.quiz.dto.response.LeaderboardResponse;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
@@ -7,6 +9,8 @@ import com.careerlabs.lms.api.quiz.entity.StudentGameStats;
 import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.repository.StudentGameStatsRepository;
 import com.careerlabs.lms.api.quiz.service.LeaderboardService;
+import com.careerlabs.lms.api.student.entity.Student;
+import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -17,8 +21,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,24 +34,30 @@ public class LeaderboardServiceImpl implements LeaderboardService {
     private final StudentGameStatsRepository studentGameStatsRepository;
     private final QuizAttemptRepository quizAttemptRepository;
     private final UserRepository userRepository;
+    private final StudentRepository studentRepository;
+    private final EnrollmentRepository enrollmentRepository;
 
     public LeaderboardServiceImpl(StudentGameStatsRepository studentGameStatsRepository,
-                                   QuizAttemptRepository quizAttemptRepository, UserRepository userRepository) {
+                                   QuizAttemptRepository quizAttemptRepository, UserRepository userRepository,
+                                   StudentRepository studentRepository, EnrollmentRepository enrollmentRepository) {
         this.studentGameStatsRepository = studentGameStatsRepository;
         this.quizAttemptRepository = quizAttemptRepository;
         this.userRepository = userRepository;
+        this.studentRepository = studentRepository;
+        this.enrollmentRepository = enrollmentRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
     public LeaderboardResponse getLeaderboard(String type, Long studentId) {
         String normalized = type == null || type.isBlank() ? "GLOBAL" : type.toUpperCase();
+        Set<Long> peerUserIds = resolvePeerUserIds(studentId);
 
         List<Map.Entry<Long, Double>> ranked = switch (normalized) {
-            case "WEEKLY" -> xpSince(Instant.now().minus(7, ChronoUnit.DAYS));
-            case "MONTHLY" -> xpSince(Instant.now().minus(30, ChronoUnit.DAYS));
-            case "MOST_IMPROVED" -> mostImproved();
-            default -> globalXp();
+            case "WEEKLY" -> xpSince(Instant.now().minus(7, ChronoUnit.DAYS), peerUserIds);
+            case "MONTHLY" -> xpSince(Instant.now().minus(30, ChronoUnit.DAYS), peerUserIds);
+            case "MOST_IMPROVED" -> mostImproved(peerUserIds);
+            default -> globalXp(peerUserIds);
         };
 
         List<LeaderboardResponse.Entry> entries = toEntries(ranked);
@@ -56,17 +69,54 @@ public class LeaderboardServiceImpl implements LeaderboardService {
         return new LeaderboardResponse(normalized, entries, mine);
     }
 
-    private List<Map.Entry<Long, Double>> globalXp() {
-        return studentGameStatsRepository.findAll().stream()
+    /**
+     * User ids of students who share at least one active batch (or, absent a batch
+     * assignment, course) enrollment with the caller, so the leaderboard only ranks
+     * the caller against their own cohort instead of every student in the system.
+     * Falls back to just the caller when they have no student profile or no active
+     * enrollment, rather than silently widening back out to everyone.
+     */
+    private Set<Long> resolvePeerUserIds(Long callerUserId) {
+        Optional<Student> callerOpt = studentRepository.findByUserId(callerUserId);
+        if (callerOpt.isEmpty()) {
+            return Set.of(callerUserId);
+        }
+        Long callerStudentId = callerOpt.get().getId();
+        List<Enrollment> activeEnrollments =
+                enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(callerStudentId);
+        if (activeEnrollments.isEmpty()) {
+            return Set.of(callerUserId);
+        }
+
+        Set<Long> peerStudentIds = new HashSet<>();
+        for (Enrollment enrollment : activeEnrollments) {
+            if (enrollment.getBatch() != null) {
+                peerStudentIds.addAll(enrollmentRepository.findActiveStudentIdsByBatchId(enrollment.getBatch().getId()));
+            } else {
+                peerStudentIds.addAll(enrollmentRepository.findActiveStudentIdsByCourseId(enrollment.getCourse().getId()));
+            }
+        }
+        peerStudentIds.add(callerStudentId);
+
+        return studentRepository.findAllById(peerStudentIds).stream()
+                .map(s -> s.getUser().getId())
+                .collect(Collectors.toSet());
+    }
+
+    private List<Map.Entry<Long, Double>> globalXp(Set<Long> peerUserIds) {
+        return studentGameStatsRepository.findByStudentIdIn(peerUserIds).stream()
                 .filter(s -> s.getTotalXp() > 0)
                 .sorted(Comparator.comparingInt(StudentGameStats::getTotalXp).reversed())
                 .map(s -> Map.entry(s.getStudentId(), (double) s.getTotalXp()))
                 .toList();
     }
 
-    private List<Map.Entry<Long, Double>> xpSince(Instant since) {
+    private List<Map.Entry<Long, Double>> xpSince(Instant since, Set<Long> peerUserIds) {
         Map<Long, Double> xpByStudent = new HashMap<>();
         for (QuizAttempt attempt : quizAttemptRepository.findAllSubmittedSince(since)) {
+            if (!peerUserIds.contains(attempt.getStudentId())) {
+                continue;
+            }
             double xp = xpFor(attempt);
             if (xp > 0) {
                 xpByStudent.merge(attempt.getStudentId(), xp, Double::sum);
@@ -78,9 +128,9 @@ public class LeaderboardServiceImpl implements LeaderboardService {
                 .toList();
     }
 
-    private List<Map.Entry<Long, Double>> mostImproved() {
+    private List<Map.Entry<Long, Double>> mostImproved(Set<Long> peerUserIds) {
         Map<Long, Map<Long, List<QuizAttempt>>> byStudentThenQuiz = quizAttemptRepository.findAll().stream()
-                .filter(a -> a.getStatus() == AttemptStatus.SUBMITTED)
+                .filter(a -> a.getStatus() == AttemptStatus.SUBMITTED && peerUserIds.contains(a.getStudentId()))
                 .collect(Collectors.groupingBy(QuizAttempt::getStudentId,
                         Collectors.groupingBy(a -> a.getQuiz().getId())));
 
@@ -123,9 +173,20 @@ public class LeaderboardServiceImpl implements LeaderboardService {
         return entries;
     }
 
+    private static final int COMPLETION_XP = 10;
+
+    /** Mirrors {@code GamificationServiceImpl.xpFor} so WEEKLY/MONTHLY rankings
+     * (recomputed from attempts here) agree with the totalXp stored per-student. */
     private int xpFor(QuizAttempt attempt) {
-        boolean passed = Boolean.TRUE.equals(attempt.getPassed());
-        return (attempt.getCorrectCount() * 10) + (passed ? 50 : 0);
+        return COMPLETION_XP + performanceXp(scorePercentage(attempt));
+    }
+
+    private int performanceXp(double scorePercentage) {
+        if (scorePercentage >= 90) return 20;
+        if (scorePercentage >= 75) return 15;
+        if (scorePercentage >= 60) return 10;
+        if (scorePercentage >= 40) return 5;
+        return 0;
     }
 
     private double scorePercentage(QuizAttempt attempt) {

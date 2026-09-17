@@ -71,6 +71,69 @@ Answer: Java Virtual Machine
 Explanation: JVM executes Java bytecode.
 `
 
+// Builds a minimal, dependency-free PDF (base-14 Courier font, paginated) from
+// plain text — the frontend has no PDF-generation library installed, and the
+// sample template is fixed ASCII content, so hand-rolling the PDF byte stream
+// avoids pulling in a new dependency just for this one download button.
+function buildTemplatePdf(text) {
+  const fontSize = 10
+  const lineHeight = 14
+  const margin = 50
+  const pageWidth = 595.28
+  const pageHeight = 841.89
+  const linesPerPage = Math.max(1, Math.floor((pageHeight - margin * 2) / lineHeight))
+
+  const allLines = text.replace(/\r\n/g, '\n').split('\n')
+  const pages = []
+  for (let i = 0; i < allLines.length; i += linesPerPage) {
+    pages.push(allLines.slice(i, i + linesPerPage))
+  }
+  if (pages.length === 0) pages.push([''])
+
+  const escapePdfText = (s) => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+  const byteLength = (s) => new TextEncoder().encode(s).length
+
+  const fontObjNum = 3 + pages.length * 2
+  const pageObjNums = pages.map((_, i) => 3 + i * 2)
+  const contentObjNums = pages.map((_, i) => 4 + i * 2)
+  const totalObjs = fontObjNum
+
+  const objects = new Array(totalObjs + 1)
+  objects[1] = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`
+  objects[2] = `2 0 obj\n<< /Type /Pages /Kids [${pageObjNums.map(n => `${n} 0 R`).join(' ')}] /Count ${pages.length} >>\nendobj\n`
+
+  pages.forEach((pageLines, idx) => {
+    const pageObjNum = pageObjNums[idx]
+    const contentObjNum = contentObjNums[idx]
+    objects[pageObjNum] = `${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjNum} 0 R >> >> /Contents ${contentObjNum} 0 R >>\nendobj\n`
+
+    let stream = `BT\n/F1 ${fontSize} Tf\n1 0 0 1 ${margin} ${pageHeight - margin} Tm\n`
+    pageLines.forEach((line, i) => {
+      stream += `(${escapePdfText(line)}) Tj\n`
+      if (i < pageLines.length - 1) stream += `0 -${lineHeight} Td\n`
+    })
+    stream += `ET`
+    objects[contentObjNum] = `${contentObjNum} 0 obj\n<< /Length ${byteLength(stream)} >>\nstream\n${stream}\nendstream\nendobj\n`
+  })
+
+  objects[fontObjNum] = `${fontObjNum} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>\nendobj\n`
+
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+  for (let n = 1; n <= totalObjs; n++) {
+    offsets[n] = byteLength(pdf)
+    pdf += objects[n]
+  }
+  const xrefStart = byteLength(pdf)
+  pdf += `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`
+  for (let n = 1; n <= totalObjs; n++) {
+    pdf += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${totalObjs + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
+
+  return pdf
+}
+
 let draftCounter = 0
 function nextDraftKey() {
   draftCounter += 1
@@ -221,11 +284,11 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
   }
 
   function downloadSample() {
-    const blob = new Blob([SAMPLE_TEMPLATE], { type: 'text/plain;charset=utf-8;' })
+    const blob = new Blob([buildTemplatePdf(SAMPLE_TEMPLATE)], { type: 'application/pdf' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'quiz-pdf-template.txt'
+    a.download = 'quiz-pdf-template.pdf'
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -547,11 +610,21 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date/Time</label>
-              <DateTimePicker value={form.scheduledStart} onChange={val => setForm(f => ({ ...f, scheduledStart: val }))} requireExplicitTime />
+              <DateTimePicker
+                value={form.scheduledStart}
+                onChange={val => { setForm(f => ({ ...f, scheduledStart: val })); if (formErrors.scheduledEnd) setFormErrors(prev => ({ ...prev, scheduledEnd: undefined })) }}
+                requireExplicitTime
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">End Date/Time</label>
-              <DateTimePicker value={form.scheduledEnd} onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))} requireExplicitTime />
+              <DateTimePicker
+                value={form.scheduledEnd}
+                onChange={val => { setForm(f => ({ ...f, scheduledEnd: val })); if (formErrors.scheduledEnd) setFormErrors(prev => ({ ...prev, scheduledEnd: undefined })) }}
+                minDate={form.scheduledStart ? form.scheduledStart.split('T')[0] : undefined}
+                requireExplicitTime
+                hasError={!!formErrors.scheduledEnd}
+              />
               {formErrors.scheduledEnd && <p className="text-xs text-red-500 mt-1">{formErrors.scheduledEnd}</p>}
             </div>
           </div>
@@ -595,7 +668,7 @@ export default function CreatePdfQuizPanel({ topics, courses, batches, onTopicsC
             )}
           </div>
           <button type="button" onClick={downloadSample} className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-700">
-            <Download size={12} /> Download sample template (.txt)
+            <Download size={12} /> Download sample template (.pdf)
           </button>
           <p className="text-xs text-gray-400">
             The PDF is stored privately for your reference and is never shown to students. Supports MCQ, Multiple Correct,

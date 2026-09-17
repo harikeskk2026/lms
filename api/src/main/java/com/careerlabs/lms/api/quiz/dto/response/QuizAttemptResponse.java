@@ -24,10 +24,17 @@ public record QuizAttemptResponse(
         int skippedCount,
         Integer timeTaken,
         AttemptStatus status,
-        Boolean passed
+        Boolean passed,
+        boolean resultsPending
 ) {
 
-    public static QuizAttemptResponse from(QuizAttempt attempt) {
+    /**
+     * @param resultsPending when true (the quiz's result-visibility rule hasn't
+     *                       released this attempt's outcome yet), every scoring
+     *                       field is nulled out — same gating as {@link QuizResultResponse}.
+     */
+    public static QuizAttemptResponse from(QuizAttempt attempt, boolean resultsPending) {
+        boolean revealScoring = attempt.getStatus() == AttemptStatus.SUBMITTED && !resultsPending;
         return new QuizAttemptResponse(
                 attempt.getId(),
                 attempt.getQuiz().getId(),
@@ -35,14 +42,15 @@ public record QuizAttemptResponse(
                 attempt.getAttemptNumber(),
                 attempt.getStartedAt(),
                 attempt.getCompletedAt(),
-                attempt.getScore(),
+                revealScoring ? attempt.getScore() : null,
                 attempt.getTotalScore(),
-                attempt.getAccuracy(),
-                attempt.getCorrectCount(),
-                attempt.getWrongCount(),
-                attempt.getSkippedCount(),
+                revealScoring ? attempt.getAccuracy() : null,
+                revealScoring ? attempt.getCorrectCount() : 0,
+                revealScoring ? attempt.getWrongCount() : 0,
+                revealScoring ? attempt.getSkippedCount() : 0,
                 attempt.getTimeTaken(),
                 attempt.getStatus(),
-                attempt.getPassed());
+                revealScoring ? attempt.getPassed() : null,
+                attempt.getStatus() == AttemptStatus.SUBMITTED && resultsPending);
     }
 }

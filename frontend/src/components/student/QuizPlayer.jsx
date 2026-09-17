@@ -6,6 +6,7 @@ import {
   CheckCircle, AlertCircle, Loader2, Clock, Target, Zap, Flame, Trophy,
   Bookmark, BookmarkCheck, List, FileText, Info,
 } from 'lucide-react'
+import { format } from 'date-fns'
 import quizService from '@/services/quizService'
 import { getApiBaseUrl } from '@/lib/api'
 import tokenStorage from '@/utilities/tokenStorage'
@@ -157,16 +158,31 @@ function HeroBanner() {
 // Challenge on the left, Rules and Quiz Information as separate cards on the
 // right ────────────────────────────────────────────────────────────────────
 const EFFECTIVE_STATUS_LABELS = { LIVE: 'Live', SCHEDULED: 'Scheduled', COMPLETED: 'Closed', ARCHIVED: 'Archived' }
+const EFFECTIVE_STATUS_PILL_STYLES = {
+  LIVE:      'bg-green-100 text-green-700',
+  SCHEDULED: 'bg-amber-100 text-amber-700',
+  COMPLETED: 'bg-gray-200 text-gray-600',
+  ARCHIVED:  'bg-gray-200 text-gray-600',
+}
 
 function InfoPanel({ quiz, starting, onStart }) {
-  const maxXp = (quiz.totalQuestions || 0) * 10 + 50
+  // 10 XP for completing + up to 20 performance XP at 90-100% (see GamificationServiceImpl.xpFor)
+  const maxXp = 30
   const attemptsExhausted = quiz.attemptsUsed >= quiz.maxAttempts
+  const quizClosed = quiz.effectiveStatus === 'COMPLETED'
+  const quizNotOpen = quiz.effectiveStatus === 'SCHEDULED'
+  const startBlocked = attemptsExhausted || quizClosed || quizNotOpen
   const rules = [
     'Navigate between questions freely',
     'Answers save automatically as you go',
     'Auto-submits when timer reaches zero',
     `Pass mark: ${quiz.passingScore}%`,
     quiz.maxAttempts > 1 ? `Up to ${quiz.maxAttempts} attempts allowed (${quiz.attemptsUsed || 0} used)` : 'Single attempt only',
+    quiz.resultVisibility === 'MANUAL'
+      ? 'Result will be released by your instructor after review'
+      : quiz.resultVisibility === 'AFTER_CLOSE'
+        ? 'Result will be available once the quiz closes'
+        : 'Result shown immediately after submitting',
   ]
   const statTiles = [
     { icon: FileText, value: quiz.totalQuestions, label: 'Questions', bg: 'bg-purple-100', color: 'text-purple-600' },
@@ -225,12 +241,12 @@ function InfoPanel({ quiz, starting, onStart }) {
           </div>
         )}
 
-        {attemptsExhausted ? (
+        {startBlocked ? (
           <button
             disabled
             className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-400 font-bold cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Max Attempts Reached
+            {quizClosed ? 'Quiz Closed' : quizNotOpen ? 'Not Open Yet' : 'Max Attempts Reached'}
           </button>
         ) : (
           <button
@@ -282,13 +298,18 @@ function InfoPanel({ quiz, starting, onStart }) {
               ['Duration', `${quiz.duration} minutes`],
               ['Pass Mark', `${quiz.passingScore}%`],
               ['Maximum XP', `+${maxXp}`],
-              ['Status', EFFECTIVE_STATUS_LABELS[quiz.effectiveStatus] || 'Live'],
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between gap-3">
                 <span className="text-gray-400 shrink-0">{label}</span>
                 <span className="text-gray-700 font-semibold text-right">{value}</span>
               </div>
             ))}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-gray-400 shrink-0">Status</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${EFFECTIVE_STATUS_PILL_STYLES[quiz.effectiveStatus] || EFFECTIVE_STATUS_PILL_STYLES.LIVE}`}>
+                {EFFECTIVE_STATUS_LABELS[quiz.effectiveStatus] || 'Live'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -327,8 +348,8 @@ function QuizStatsSidebar({ answered, totalQ, xp }) {
 // `quiz` is the summary object from GET /student/quizzes (no questions embedded -
 // questions are only ever revealed once `start()` is called, so no answer key can
 // leak before the attempt begins).
-export default function QuizPlayer({ quiz, onClose, onComplete }) {
-  const [phase, setPhase] = useState('intro')   // intro | starting | playing | submitting | results
+export default function QuizPlayer({ quiz, onClose, onComplete, viewResultAttemptId }) {
+  const [phase, setPhase] = useState(viewResultAttemptId ? 'loadingResult' : 'intro')   // loadingResult | intro | starting | playing | submitting | results
   const [attempt, setAttempt] = useState(null)  // StartAttemptResponse
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState({})    // { [questionId]: number[] }
@@ -352,6 +373,20 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
   useEffect(() => {
     quizService.getQuizAnalytics().then(r => setGameStats(r.data)).catch(() => {})
   }, [])
+
+  // "View Result" entry point (from an already-submitted quiz's card) - skips
+  // start/playing entirely and jumps straight to the results phase, reusing the
+  // exact same resultsPending gating the just-submitted screen already has.
+  useEffect(() => {
+    if (!viewResultAttemptId) return
+    quizService.getAttempt(viewResultAttemptId)
+      .then(r => { setResult(r.data); setPhase('results') })
+      .catch(err => {
+        toast.error(err.message || 'Failed to load result')
+        onClose?.()
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewResultAttemptId])
 
   // Timer
   useEffect(() => {
@@ -500,6 +535,15 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
     })
   }
 
+  // ── PHASE: LOADING RESULT (viewResultAttemptId entry point) ─────────────────
+  if (phase === 'loadingResult') return createPortal(
+    <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 flex flex-col items-center justify-center gap-4">
+      <Loader2 size={40} className="text-purple-500 animate-spin" />
+      <p className="text-gray-500 font-medium">Loading your result…</p>
+    </div>,
+    document.body
+  )
+
   // ── PHASE: SUBMITTING ─────────────────────────────────────────────────────────
   // Rendered via a portal straight onto <body> — not just fixed/z-50 — so this
   // full-screen takeover can never be partially covered by the dashboard's own
@@ -513,6 +557,42 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
   )
 
   // ── PHASE: RESULTS ────────────────────────────────────────────────────────────
+  // When the quiz's result-visibility rule hasn't released this attempt yet, the
+  // backend nulls out every scoring field on `result` (see QuizResultResponse) -
+  // so this branch must render before anything below touches result.score/etc.
+  if (phase === 'results' && result?.resultsPending) {
+    const isManual = quiz.resultVisibility === 'MANUAL'
+    return createPortal(
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 z-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white border border-purple-100 rounded-3xl shadow-xl p-8 text-center space-y-4 animate-fadeInUp">
+          <div className="w-16 h-16 rounded-2xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
+            <Clock size={28} />
+          </div>
+          <div>
+            <h3 className="font-display font-extrabold text-xl text-gray-900">Quiz Submitted!</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              {isManual
+                ? 'Result not released yet. Your instructor will release it soon.'
+                : 'Your result will be available once the quiz closes.'}
+            </p>
+            {!isManual && quiz.scheduledEnd && (
+              <p className="text-xs text-gray-400 mt-2">
+                Quiz closes on {format(new Date(quiz.scheduledEnd), 'MMM d, yyyy h:mm a')}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold hover:from-purple-700 hover:to-violet-700 active:scale-[0.98] transition-all"
+          >
+            Back to Quizzes
+          </button>
+        </div>
+      </div>,
+      document.body
+    )
+  }
+
   if (phase === 'results' && result) {
     const scorePct = result.totalScore > 0 ? Math.round((result.score / result.totalScore) * 100) : 0
     const passed = scorePct >= quiz.passingScore
@@ -677,8 +757,22 @@ export default function QuizPlayer({ quiz, onClose, onComplete }) {
             <ChevronLeft size={18} />
           </button>
           <div className="min-w-0">
-            <p className="text-gray-800 font-bold text-sm break-words">{quiz.title}</p>
-            {phase === 'playing' && <p className="text-gray-400 text-xs">Question {current + 1} of {totalQ} · {progressPct}% Complete</p>}
+            {phase === 'intro' ? (
+              <>
+                <p className="text-gray-400 text-[11px] font-semibold">
+                  Quizzes <span className="mx-1">›</span> <span className="text-gray-600">{quiz.title}</span>
+                </p>
+                <p className="text-gray-900 font-display font-extrabold text-lg break-words mt-0.5">{quiz.title}</p>
+                <p className="text-gray-400 text-xs mt-0.5">
+                  View quiz details, rules and questions. Click Start {quiz.type === 'MCQ' && quiz.maxAttempts === 1 ? 'Challenge' : 'Quiz'} to begin.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-800 font-bold text-sm break-words">{quiz.title}</p>
+                {phase === 'playing' && <p className="text-gray-400 text-xs">Question {current + 1} of {totalQ} · {progressPct}% Complete</p>}
+              </>
+            )}
           </div>
         </div>
 

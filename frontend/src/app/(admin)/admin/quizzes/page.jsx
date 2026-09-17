@@ -702,6 +702,16 @@ export default function QuizzesPage() {
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-xs font-semibold transition-colors" title="View">
                       <Eye size={13} /> View
                     </button>
+                    <button onClick={() => openEdit(q)} disabled={loadingEditQuiz}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 text-xs font-semibold transition-colors disabled:opacity-50" title="Edit Quiz">
+                      {loadingEditQuiz ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />} Edit
+                    </button>
+                    {q.resultVisibility === 'MANUAL' && !q.resultsReleased && (
+                      <button onClick={() => handleReleaseResults(q)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300 text-xs font-semibold transition-colors" title="Release Results">
+                        <Send size={13} /> Release Results
+                      </button>
+                    )}
                   </div>
                 </div>
               )

@@ -52,6 +52,18 @@ public class QuizAvailabilityServiceImpl implements QuizAvailabilityService {
     }
 
     @Override
+    public boolean isResultsPending(Quiz quiz) {
+        return switch (quiz.getResultVisibility()) {
+            case IMMEDIATE -> false;
+            case AFTER_CLOSE -> {
+                QuizEffectiveStatus status = effectiveStatus(quiz);
+                yield status != QuizEffectiveStatus.COMPLETED && status != QuizEffectiveStatus.ARCHIVED;
+            }
+            case MANUAL -> !quiz.isResultsReleased();
+        };
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public boolean isAssignedTo(Quiz quiz, Long studentUserId) {
         List<QuizAssignment> assignments = quizAssignmentRepository.findByQuizId(quiz.getId());

@@ -10,6 +10,7 @@ import tokenStorage from '@/utilities/tokenStorage'
 import { isValidPhone, PHONE_ERROR_MESSAGE, isValidUrl, LINKEDIN_URL_ERROR_MESSAGE, GITHUB_URL_ERROR_MESSAGE, isValidName, NAME_ERROR_MESSAGE, filterNameKey, filterPhoneKey, sanitizePhone } from '@/utilities/validators'
 import ProfilePhotoUploader from '@/components/shared/profile/ProfilePhotoUploader'
 import AcademicDetailsSection from '@/components/student/profile/AcademicDetailsSection'
+import AchievementBadges from '@/components/student/AchievementBadges'
 
 const INPUT_CLS = 'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500'
 const LABEL_CLS = 'block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1'
@@ -308,7 +309,18 @@ export default function StudentProfilePage() {
         <AcademicDetailsSection onSaved={load} />
       </div>
 
-      {/* Section 3: Security */}
+      {/* Section 3: Achievements */}
+      <div className="glass-card p-4 sm:p-6">
+        <h3 className="font-display font-bold text-gray-800 dark:text-white mb-1 flex items-center gap-2">
+          <Award size={16} className="text-purple-600" /> Achievements & Badges
+        </h3>
+        <p className="text-xs text-gray-400 mb-4">
+          Badges you've unlocked from the Quizzes module. Only achievements confirmed by the server are shown here.
+        </p>
+        <AchievementBadges embedded onlyUnlocked />
+      </div>
+
+      {/* Section 4: Security */}
       <div className="glass-card p-4 sm:p-6">
         <h3 className="font-display font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <ShieldCheck size={16} className="text-purple-600" /> Security

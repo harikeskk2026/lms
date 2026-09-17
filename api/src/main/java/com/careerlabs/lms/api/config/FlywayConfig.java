@@ -74,7 +74,12 @@ public class FlywayConfig {
     // numeric checks): -322843820. The committed V13 is the exact intended migration;
     // V16 fills in the missing constraints for such databases. This whitelist lets the
     // application start on those databases without repair or history modification.
-    public static final Set<Integer> SUPPORTED_V13_CHECKSUMS = Set.of(-322843820);
+    //
+    // 1183276725: another local-draft V13 variant applied to a developer database before
+    // the committed V13 was finalized. Same tolerance as above - V16 is idempotent
+    // (guards every ADD CONSTRAINT with an information_schema/pg_constraint check), so it
+    // safely fills in whatever this draft did or didn't apply.
+    public static final Set<Integer> SUPPORTED_V13_CHECKSUMS = Set.of(-322843820, 1183276725);
 
     // Applied V15 checksum in flyway_schema_history for the shared developer database,
     // which applied an early comment-free draft of this migration under the version

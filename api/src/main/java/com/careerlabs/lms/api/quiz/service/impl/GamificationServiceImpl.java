@@ -69,10 +69,24 @@ public class GamificationServiceImpl implements GamificationService {
         }
     }
 
+    private static final int COMPLETION_XP = 10;
+
+    /**
+     * +10 for completing the attempt at all (even a 0-mark submission), plus a
+     * performance tier on top based on score percentage. Awarded exactly once,
+     * from {@link #processSubmission}, which only ever runs on submit - never on
+     * start or abandon - so starting/exiting before submitting earns 0 XP.
+     */
     private int xpFor(QuizAttempt attempt) {
-        boolean passed = Boolean.TRUE.equals(attempt.getPassed());
-        int correctCount = attempt.getCorrectCount();
-        return (correctCount * 10) + (passed ? 50 : 0);
+        return COMPLETION_XP + performanceXp(scorePercentage(attempt));
+    }
+
+    private int performanceXp(double scorePercentage) {
+        if (scorePercentage >= 90) return 20;
+        if (scorePercentage >= 75) return 15;
+        if (scorePercentage >= 60) return 10;
+        if (scorePercentage >= 40) return 5;
+        return 0;
     }
 
     private void updateStreak(StudentGameStats stats) {
