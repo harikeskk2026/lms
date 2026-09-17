@@ -56,7 +56,7 @@ public class Batch {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private BatchMode mode = BatchMode.HYBRID;
+    private BatchMode mode = BatchMode.OFFLINE;
 
     @Column(name = "max_students", nullable = false)
     private int maxStudents = 30;

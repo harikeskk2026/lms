@@ -2100,7 +2100,6 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
               options={[
                 { value: 'ONLINE', label: 'ONLINE' },
                 { value: 'OFFLINE', label: 'OFFLINE' },
-                { value: 'HYBRID', label: 'HYBRID' },
               ]}
             />
           </div>

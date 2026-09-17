@@ -804,7 +804,6 @@ export default function BatchDetailPage() {
                     options={[
                       { value: 'ONLINE', label: 'ONLINE' },
                       { value: 'OFFLINE', label: 'OFFLINE' },
-                      { value: 'HYBRID', label: 'HYBRID' },
                     ]}
                   />
                 </div>

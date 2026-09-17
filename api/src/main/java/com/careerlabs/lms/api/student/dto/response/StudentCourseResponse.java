@@ -50,7 +50,7 @@ public record StudentCourseResponse(
             return new BatchInfo(
                     b.getId(),
                     b.getName(),
-                    b.getMode() != null ? b.getMode().name() : "HYBRID",
+                    b.getMode() != null ? b.getMode().name() : "ONLINE",
                     b.getTiming(),
                     b.getStartDate(),
                     b.getEndDate()

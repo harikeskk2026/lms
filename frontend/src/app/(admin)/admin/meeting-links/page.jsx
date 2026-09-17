@@ -234,17 +234,16 @@ export default function AdminMeetingLinksPage() {
     }
   }, [filterCourse, filterBatch, filterStatus, searchQuery])
 
-  const isOnlineOrHybridBatch = (b) => {
+  const isOnlineBatch = (b) => {
     if (!b) return false
-    const mode = String(b.mode || 'ONLINE').toUpperCase()
-    return mode === 'ONLINE' || mode === 'HYBRID'
+    return String(b.mode || 'ONLINE').toUpperCase() === 'ONLINE'
   }
 
-  const onlineAndHybridBatches = batches.filter(isOnlineOrHybridBatch)
+  const onlineBatches = batches.filter(isOnlineBatch)
 
   const batchOptionsForForm = form.courseId
-    ? onlineAndHybridBatches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
-    : onlineAndHybridBatches
+    ? onlineBatches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
+    : onlineBatches
 
   const availableTrainersForForm = (() => {
     if (form.batchId) {
@@ -442,8 +441,8 @@ export default function AdminMeetingLinksPage() {
   }
 
   const filterBatchesList = filterCourse
-    ? onlineAndHybridBatches.filter(b => String(getBatchCourseId(b)) === String(filterCourse))
-    : onlineAndHybridBatches
+    ? onlineBatches.filter(b => String(getBatchCourseId(b)) === String(filterCourse))
+    : onlineBatches
 
   const statusOrder = (m) => {
     const s = getDisplayStatus(m)

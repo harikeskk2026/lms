@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Users, Calendar, Clock, Monitor, MapPin, Pencil, Trash2, Search } from 'lucide-react'
+import { Plus, Users, Calendar, Monitor, MapPin, Pencil, Trash2, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
@@ -15,11 +15,10 @@ import CustomSelect from '@/components/ui/CustomSelect'
 import MultiSelect from '@/components/ui/MultiSelect'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
-const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
+const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin }
 const MODE_COLORS = {
   ONLINE: 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
   OFFLINE: 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/40',
-  HYBRID: 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40',
 }
 const BATCH_GRADIENTS = [
   'from-purple-500 to-violet-600', 'from-blue-500 to-indigo-600',
@@ -221,7 +220,6 @@ export default function BatchesPage() {
     ALL: userBatches.length,
     ONLINE: userBatches.filter(b => b.mode === 'ONLINE').length,
     OFFLINE: userBatches.filter(b => b.mode === 'OFFLINE').length,
-    HYBRID: userBatches.filter(b => b.mode === 'HYBRID').length,
   }
 
   // Search is server-side (see `load`); only the mode tab is filtered client-side here.
@@ -273,7 +271,6 @@ export default function BatchesPage() {
           { key: 'ALL', label: 'All Batches' },
           { key: 'ONLINE', label: 'Online' },
           { key: 'OFFLINE', label: 'Offline' },
-          { key: 'HYBRID', label: 'Hybrid' },
         ].map(t => {
           const isActive = modeTab === t.key
           const count = modeCounts[t.key] || 0
@@ -571,7 +568,6 @@ export default function BatchesPage() {
                   options={[
                     { value: 'ONLINE', label: 'ONLINE' },
                     { value: 'OFFLINE', label: 'OFFLINE' },
-                    { value: 'HYBRID', label: 'HYBRID' },
                   ]}
                 />
               </div>

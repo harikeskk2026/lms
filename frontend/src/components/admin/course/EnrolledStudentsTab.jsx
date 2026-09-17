@@ -709,7 +709,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                   value={selectedBatchId}
                   onChange={setSelectedBatchId}
                   disabled={activeBatches.length === 0}
-                  options={activeBatches.map(b => ({ value: b.id, label: `${b.name} (${b.mode || 'HYBRID'}) · Max ${b.maxStudents || 30} seats` }))}
+                  options={activeBatches.map(b => ({ value: b.id, label: `${b.name} (${b.mode || 'ONLINE'}) · Max ${b.maxStudents || 30} seats` }))}
                   placeholder="Select a batch..."
                 />
                 {selectedBatchObj && (

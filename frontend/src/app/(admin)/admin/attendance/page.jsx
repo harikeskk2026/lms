@@ -145,6 +145,8 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
   const [selectedIds, setSelectedIds]     = useState([])
   const [bulkStatus, setBulkStatus]       = useState('PRESENT')
   const [history, setHistory]             = useState([])
+  const [offlineDate, setOfflineDate]     = useState('')
+  const [loadingOffline, setLoadingOffline] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(studentSearch), 400)
@@ -283,6 +285,7 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
     setSaveResult(null)
     setClassNotes('')
     setAttachments([])
+    setOfflineDate('')
     syncUrlParams(bId, cId)
     if (!bId) {
       setClasses([])
@@ -306,6 +309,40 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
       toast.error('Failed to load classes for batch')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Offline batches don't need a Scheduled Class / MeetingLink to attend - just
+  // a batch + a date. If a DailyClass already exists for that date it's reused;
+  // otherwise one is created silently (no meeting link/platform/passcode ever
+  // involved) so the trainer never sees an extra "create a class" step.
+  const loadOfflineAttendance = async (dateStr) => {
+    if (!selectedBatch) return toast.error('Select a batch first')
+    if (!dateStr) return toast.error('Select a date')
+    setLoadingOffline(true)
+    try {
+      let match = classes.find(c => c.date && String(c.date).slice(0, 10) === dateStr)
+      let clsList = classes
+
+      if (!match) {
+        const res = await adminApi.createClass({
+          batchId: Number(selectedBatch),
+          date: `${dateStr}T09:00:00`,
+          title: 'Offline Class',
+        })
+        match = res.data?.data
+        const r = await adminApi.getClasses({ batchId: selectedBatch })
+        clsList = r.data?.data || []
+        setClasses(clsList)
+      }
+
+      setSelectedClass(String(match.id))
+      syncUrlParams(selectedBatch, match.id)
+      await fetchAttendanceSheet(match.id, selectedBatch, clsList, batches)
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to load attendance for this date')
+    } finally {
+      setLoadingOffline(false)
     }
   }
 
@@ -467,6 +504,11 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
   const counts = Object.fromEntries(Object.keys(STATUS_CONFIG).map(s => [s, 0]))
   for (const s of Object.values(statuses)) counts[s] = (counts[s] || 0) + 1
 
+  const selectedBatchObj = batches.find(b => String(b.id) === String(selectedBatch))
+  const selectedBatchMode = selectedBatchObj?.mode
+  const offlineMinDate = selectedBatchObj?.startDate ? String(selectedBatchObj.startDate).slice(0, 10) : undefined
+  const offlineMaxDate = selectedBatchObj?.endDate ? String(selectedBatchObj.endDate).slice(0, 10) : undefined
+
   // Build student pct map from batch detail
   const studentPctMap = {}
   if (batchDetail?.matrix) {
@@ -501,42 +543,81 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
               searchable={batches.length >= 10}
             />
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Class</label>
-            <CustomSelect
-              value={selectedClass}
-              onChange={(val) => {
-                const nextVal = val ? String(val) : ''
-                setSelectedClass(nextVal)
-                syncUrlParams(selectedBatch, nextVal)
-              }}
-              options={classes.map(c => ({
-                value: String(c.id),
-                label: formatClassOptionLabel(c)
-              }))}
-              placeholder={classes.length === 0 && selectedBatch ? "No classes scheduled for today" : "Select class"}
-              emptyLabel="No related classes found for this date"
-              disabled={!selectedBatch}
-              searchable={classes.length >= 10}
-            />
-            {classes.length === 0 && selectedBatch && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 font-medium">
-                No active/scheduled classes found for today for this batch.
-              </p>
-            )}
-          </div>
+          {selectedBatchMode === 'OFFLINE' ? (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Date</label>
+              <input
+                type="date"
+                value={offlineDate}
+                min={offlineMinDate}
+                max={offlineMaxDate}
+                onChange={e => {
+                  const val = e.target.value
+                  if (val && ((offlineMinDate && val < offlineMinDate) || (offlineMaxDate && val > offlineMaxDate))) {
+                    toast.error(`Pick a date within the batch schedule (${offlineMinDate} to ${offlineMaxDate})`)
+                    return
+                  }
+                  setOfflineDate(val)
+                }}
+                disabled={!selectedBatch}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+              />
+              {offlineMinDate && offlineMaxDate && (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Batch runs {offlineMinDate} to {offlineMaxDate}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Class</label>
+              <CustomSelect
+                value={selectedClass}
+                onChange={(val) => {
+                  const nextVal = val ? String(val) : ''
+                  setSelectedClass(nextVal)
+                  syncUrlParams(selectedBatch, nextVal)
+                }}
+                options={classes.map(c => ({
+                  value: String(c.id),
+                  label: formatClassOptionLabel(c)
+                }))}
+                placeholder={classes.length === 0 && selectedBatch ? "No classes scheduled for today" : "Select class"}
+                emptyLabel="No related classes found for this date"
+                disabled={!selectedBatch}
+                searchable={classes.length >= 10}
+              />
+              {classes.length === 0 && selectedBatch && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                  No active/scheduled classes found for today for this batch.
+                </p>
+              )}
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => {
-            syncUrlParams(selectedBatch, selectedClass)
-            fetchAttendanceSheet(selectedClass, selectedBatch, classes, batches)
-          }}
-          disabled={!selectedClass || loading}
-          className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all"
-        >
-          <CheckSquare size={16} />
-          {loading ? 'Loading...' : 'Load Attendance Sheet'}
-        </button>
+
+        {selectedBatchMode === 'OFFLINE' ? (
+          <button
+            onClick={() => loadOfflineAttendance(offlineDate)}
+            disabled={!offlineDate || loadingOffline}
+            className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all"
+          >
+            <CheckSquare size={16} />
+            {loadingOffline ? 'Loading...' : 'Load Attendance Sheet'}
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              syncUrlParams(selectedBatch, selectedClass)
+              fetchAttendanceSheet(selectedClass, selectedBatch, classes, batches)
+            }}
+            disabled={!selectedClass || loading}
+            className="mt-4 flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 transition-all"
+          >
+            <CheckSquare size={16} />
+            {loading ? 'Loading...' : 'Load Attendance Sheet'}
+          </button>
+        )}
       </GlassCard>
 
       {/* Step 2: Mark */}
@@ -2144,7 +2225,7 @@ function TodayTab({ onMarkAttendance, onViewAttendance, onClassDeleted, refreshK
       hasAttendanceData,
       isOnline,
       isOffline,
-      modeLabel: isOffline ? 'OFFLINE' : isOnline ? 'ONLINE' : (c.mode || 'HYBRID')
+      modeLabel: isOffline ? 'OFFLINE' : 'ONLINE'
     }
   }
 

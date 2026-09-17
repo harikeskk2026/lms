@@ -151,7 +151,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         if (request.getBatchId() != null) {
             Batch batch = batchAuthGuard.requireBatchOwnership(principal, request.getBatchId());
             if (batch.getMode() == BatchMode.OFFLINE) {
-                throw new BadRequestException("Scheduled class meetings can only be created for ONLINE or HYBRID batches");
+                throw new BadRequestException("Scheduled class meetings can only be created for ONLINE batches");
             }
             m.setBatch(batch);
             if (request.getCourseId() == null && batch.getCourse() != null) {
@@ -308,7 +308,7 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         if (request.getBatchId() != null) {
             Batch batch = batchAuthGuard.requireBatchOwnership(principal, request.getBatchId());
             if (batch.getMode() == BatchMode.OFFLINE) {
-                throw new BadRequestException("Scheduled class meetings can only be created for ONLINE or HYBRID batches");
+                throw new BadRequestException("Scheduled class meetings can only be created for ONLINE batches");
             }
             m.setBatch(batch);
             if (request.getCourseId() == null && batch.getCourse() != null) {

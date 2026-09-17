@@ -8,7 +8,7 @@ export const batchSchema = z.object({
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
   timing: z.string().optional().or(z.literal('')),
-  mode: z.enum(['ONLINE', 'OFFLINE', 'HYBRID'], { errorMap: () => ({ message: 'Mode is required' }) }),
+  mode: z.enum(['ONLINE', 'OFFLINE'], { errorMap: () => ({ message: 'Mode is required' }) }),
   maxStudents: z.coerce.number().min(1, 'Max students must be at least 1').max(500, 'Max students must be at most 500'),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate) {
