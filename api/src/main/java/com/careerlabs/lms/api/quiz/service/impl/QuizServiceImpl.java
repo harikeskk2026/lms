@@ -84,8 +84,23 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional(readOnly = true)
     public List<QuizResponse> list() {
-        return quizRepository.findAllByOrderByCreatedAtDesc().stream()
+        return list(null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<QuizResponse> list(String search) {
+        List<QuizResponse> responses = quizRepository.findAllByOrderByCreatedAtDesc().stream()
                 .map(this::toResponse)
+                .toList();
+
+        String normalized = search == null ? null : search.trim();
+        if (normalized == null || normalized.isEmpty()) {
+            return responses;
+        }
+        String needle = normalized.toLowerCase(java.util.Locale.ROOT);
+        return responses.stream()
+                .filter(q -> q.title() != null && q.title().toLowerCase(java.util.Locale.ROOT).contains(needle))
                 .toList();
     }
 

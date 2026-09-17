@@ -11,6 +11,10 @@ public interface CourseService {
 
     List<CourseResponse> list(JwtUserPrincipal principal);
 
+    /** Same as {@link #list(JwtUserPrincipal)}, additionally narrowed to courses whose title, course code, or
+     * level contains {@code search} (case-insensitive). A blank/null search is a no-op. */
+    List<CourseResponse> list(JwtUserPrincipal principal, String search);
+
     CourseResponse get(Long id, JwtUserPrincipal principal);
 
     CourseResponse create(CourseRequest request);

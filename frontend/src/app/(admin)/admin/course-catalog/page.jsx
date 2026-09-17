@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import { resolveFileUrl } from '@/lib/api'
 import { courseSchema } from '@/validations/courseValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
@@ -40,11 +41,13 @@ export default function CourseCatalogPage() {
   const [saving, setSaving] = useState(false)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('ALL')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const searchQuery = useDebouncedValue(searchInput, 400)
   const [deletingCourse, setDeletingCourse] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [uploadingThumb, setUploadingThumb] = useState(false)
   const thumbFileInputRef = useRef(null)
+  const coursesAbortRef = useRef(null)
 
   useEffect(() => {
     if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN' && user.role !== 'TRAINER') {
@@ -64,12 +67,20 @@ export default function CourseCatalogPage() {
   const thumbnailValue = watch('thumbnail')
 
   const load = useCallback(() => {
+    coursesAbortRef.current?.abort()
+    const controller = new AbortController()
+    coursesAbortRef.current = controller
     setLoading(true)
-    courseService.list()
+    courseService.list({ search: searchQuery.trim() || undefined }, { signal: controller.signal })
       .then(r => setCourses(r.data || []))
-      .catch(err => toast.error(err.message || 'Failed to load courses'))
-      .finally(() => setLoading(false))
-  }, [])
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load courses')
+      })
+      .finally(() => {
+        if (coursesAbortRef.current === controller) setLoading(false)
+      })
+  }, [searchQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -175,16 +186,8 @@ export default function CourseCatalogPage() {
     ARCHIVED: courses.filter(c => c.status === 'ARCHIVED').length,
   }
 
-  const filteredCourses = courses.filter(c => {
-    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return matchesStatus
-
-    const titleMatch = Boolean(c.title && c.title.toLowerCase().includes(q))
-    const codeMatch = Boolean(c.courseCode && c.courseCode.toLowerCase().includes(q))
-    const levelMatch = Boolean(c.level && c.level.toLowerCase().includes(q))
-    return matchesStatus && (titleMatch || codeMatch || levelMatch)
-  })
+  // Search is server-side (see `load`); only the status tab is filtered client-side here.
+  const filteredCourses = courses.filter(c => statusFilter === 'ALL' || c.status === statusFilter)
 
   if (user && user.role !== 'SUPERADMIN' && user.role !== 'ADMIN' && user.role !== 'TRAINER') {
     return null
@@ -246,8 +249,8 @@ export default function CourseCatalogPage() {
           <input
             type="text"
             placeholder="Search courses..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
           />
         </div>
@@ -265,7 +268,7 @@ export default function CourseCatalogPage() {
         <div className="glass-card p-12 text-center text-gray-400 space-y-2">
           <p className="text-sm">No courses matching your filter.</p>
           <button
-            onClick={() => { setStatusFilter('ALL'); setSearchQuery('') }}
+            onClick={() => { setStatusFilter('ALL'); setSearchInput('') }}
             className="text-xs text-purple-600 font-semibold hover:underline"
           >
             Reset Filters

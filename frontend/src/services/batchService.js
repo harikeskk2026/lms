@@ -1,7 +1,7 @@
 import apiCall from '@/utilities/apiCall'
 
 const batchService = {
-  list: () => apiCall({ method: 'GET', url: '/batches' }),
+  list: (params, config) => apiCall({ method: 'GET', url: '/batches', params, ...config }),
 
   get: (id) => apiCall({ method: 'GET', url: `/batches/${id}` }),
 

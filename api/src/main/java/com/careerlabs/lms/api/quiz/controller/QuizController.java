@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -46,8 +47,8 @@ public class QuizController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<QuizResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(quizService.list()));
+    public ResponseEntity<ApiResponse<List<QuizResponse>>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(ApiResponse.of(quizService.list(search)));
     }
 
     @GetMapping("/{id}")

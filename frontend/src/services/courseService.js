@@ -1,7 +1,7 @@
 import apiCall from '@/utilities/apiCall'
 
 const courseService = {
-  list: () => apiCall({ method: 'GET', url: '/courses' }),
+  list: (params, config) => apiCall({ method: 'GET', url: '/courses', params, ...config }),
 
   get: (id) => apiCall({ method: 'GET', url: `/courses/${id}` }),
 
@@ -17,7 +17,7 @@ const courseService = {
 
   mine: () => apiCall({ method: 'GET', url: '/courses/mine' }),
 
-  getEnrollments: (courseId, params) => apiCall({ method: 'GET', url: `/courses/${courseId}/enrollments`, params }),
+  getEnrollments: (courseId, params, config) => apiCall({ method: 'GET', url: `/courses/${courseId}/enrollments`, params, ...config }),
 
   enrollStudent: (courseId, data) => apiCall({ method: 'POST', url: `/courses/${courseId}/enroll`, data }),
 

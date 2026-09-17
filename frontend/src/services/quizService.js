@@ -2,7 +2,7 @@ import apiCall from '@/utilities/apiCall'
 
 const quizService = {
   // Admin - quizzes
-  listQuizzes: () => apiCall({ method: 'GET', url: '/admin/quizzes' }),
+  listQuizzes: (params, config) => apiCall({ method: 'GET', url: '/admin/quizzes', params, ...config }),
   getQuiz: (id) => apiCall({ method: 'GET', url: `/admin/quizzes/${id}` }),
   createQuiz: (quiz) => apiCall({ method: 'POST', url: '/admin/quizzes', data: quiz }),
   updateQuiz: (id, quiz) => apiCall({ method: 'PUT', url: `/admin/quizzes/${id}`, data: quiz }),
@@ -27,7 +27,7 @@ const quizService = {
     apiCall({ method: 'GET', url: `/admin/quizzes/${quizId}/attempts/${attemptId}` }),
 
   // Admin - question bank
-  listQuestions: (filters = {}) => apiCall({ method: 'GET', url: '/admin/questions', params: filters }),
+  listQuestions: (filters = {}, config) => apiCall({ method: 'GET', url: '/admin/questions', params: filters, ...config }),
   getQuestion: (id) => apiCall({ method: 'GET', url: `/admin/questions/${id}` }),
   createQuestion: (question) => apiCall({ method: 'POST', url: '/admin/questions', data: question }),
   updateQuestion: (id, question) => apiCall({ method: 'PUT', url: `/admin/questions/${id}`, data: question }),

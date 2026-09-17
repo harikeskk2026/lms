@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -63,26 +64,44 @@ public class CourseServiceImpl implements CourseService {
     @Override
     @Transactional(readOnly = true)
     public List<CourseResponse> list(JwtUserPrincipal principal) {
+        return list(principal, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CourseResponse> list(JwtUserPrincipal principal, String search) {
+        List<CourseResponse> responses;
         if (accessGuard.isAdmin(principal)) {
-            return courseRepository.findAllByOrderByCreatedAtDesc().stream()
+            responses = courseRepository.findAllByOrderByCreatedAtDesc().stream()
                     .map(CourseResponse::from)
                     .toList();
-        }
-
-        if (accessGuard.isTrainer(principal)) {
-            return courseRepository.findCoursesByTrainerId(principal.id()).stream()
+        } else if (accessGuard.isTrainer(principal)) {
+            responses = courseRepository.findCoursesByTrainerId(principal.id()).stream()
                     .map(c -> CourseResponse.from(c, true))
                     .toList();
-        }
-
-        if (accessGuard.isStudent(principal)) {
+        } else if (accessGuard.isStudent(principal)) {
             Set<Long> enrolledIds = enrolledCourseIds(principal);
-            return courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED).stream()
+            responses = courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED).stream()
                     .map(c -> CourseResponse.from(c, enrolledIds.contains(c.getId())))
                     .toList();
+        } else {
+            responses = List.of();
         }
 
-        return List.of();
+        String normalized = search == null ? null : search.trim();
+        if (normalized == null || normalized.isEmpty()) {
+            return responses;
+        }
+        String needle = normalized.toLowerCase(Locale.ROOT);
+        return responses.stream()
+                .filter(c -> containsIgnoreCase(c.title(), needle)
+                        || containsIgnoreCase(c.courseCode(), needle)
+                        || (c.level() != null && containsIgnoreCase(c.level().name(), needle)))
+                .toList();
+    }
+
+    private boolean containsIgnoreCase(String value, String lowerCaseNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerCaseNeedle);
     }
 
     @Override

@@ -47,6 +47,7 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
   
   const containerRef = useRef(null)
   const inputRef = useRef(null)
+  const searchAbortRef = useRef(null)
 
   const isDarkRoleAdmin = role === 'ADMIN' || role === 'SUPERADMIN' || role === 'TRAINER'
 
@@ -84,12 +85,16 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
 
   // Search execution
   const handleSearch = useCallback(async (q) => {
+    searchAbortRef.current?.abort()
     if (!q.trim()) {
       setResults({ pages: [], students: [], courses: [], batches: [], assignments: [] })
       setLoading(false)
       return
     }
 
+    const controller = new AbortController()
+    searchAbortRef.current = controller
+    const signal = controller.signal
     setLoading(true)
     const lower = q.toLowerCase().trim()
 
@@ -106,9 +111,9 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
     try {
       if (isDarkRoleAdmin) {
         const [stRes, cRes, bRes] = await Promise.allSettled([
-          adminApi.getStudents({ search: lower, limit: 5 }),
-          courseService.list(),
-          batchService.list()
+          adminApi.getStudents({ search: lower, limit: 5 }, { signal }),
+          courseService.list({ search: lower }, { signal }),
+          batchService.list({ search: lower }, { signal })
         ])
 
         if (stRes.status === 'fulfilled') {
@@ -119,17 +124,17 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
         if (cRes.status === 'fulfilled') {
           const cData = cRes.value?.data || cRes.value
           const cList = Array.isArray(cData) ? cData : (cData?.courses || [])
-          courses = cList.filter(c => c.title?.toLowerCase().includes(lower)).slice(0, 5)
+          courses = cList.slice(0, 5)
         }
         if (bRes.status === 'fulfilled') {
           const bData = bRes.value?.data || bRes.value
           const bList = Array.isArray(bData) ? bData : (bData?.batches || [])
-          batches = bList.filter(b => b.name?.toLowerCase().includes(lower) || b.course?.title?.toLowerCase().includes(lower)).slice(0, 5)
+          batches = bList.slice(0, 5)
         }
       } else {
         const [cRes, aRes] = await Promise.allSettled([
-          studentApi.getCourses(),
-          studentApi.getAssignments()
+          studentApi.getCourses({ signal }),
+          studentApi.getAssignments({ signal })
         ])
 
         if (cRes.status === 'fulfilled') {
@@ -144,9 +149,11 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
         }
       }
     } catch (err) {
+      if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError') return
       console.error('Header search error:', err)
     }
 
+    if (searchAbortRef.current !== controller) return
     setResults({
       pages: matchedPages,
       students,
@@ -162,7 +169,7 @@ export default function HeaderSearch({ role = 'STUDENT' }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       handleSearch(query)
-    }, 200)
+    }, 400)
     return () => clearTimeout(timer)
   }, [query, handleSearch])
 

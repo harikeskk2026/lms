@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.quiz.dto.request.CreateQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuestionAnalyticsResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuestionPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuestionResponse;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.entity.QuestionType;
@@ -40,13 +41,21 @@ public class QuestionController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<QuestionResponse>>> search(
+    public ResponseEntity<ApiResponse<Object>> search(
             @RequestParam(required = false) Long topicId,
             @RequestParam(required = false) Long courseId,
             @RequestParam(required = false) QuizDifficulty difficulty,
             @RequestParam(required = false) QuestionType questionType,
             @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit) {
+        // page/limit are opt-in: existing callers (e.g. the quiz-creation question-bank picker) call this
+        // without them and must keep getting the full, flat array they always have.
+        if (page != null && limit != null) {
+            QuestionPageResponse paged = questionService.search(topicId, courseId, difficulty, questionType, active, search, page, limit);
+            return ResponseEntity.ok(ApiResponse.of(paged));
+        }
         List<QuestionResponse> results = questionService.search(topicId, courseId, difficulty, questionType, active, search);
         return ResponseEntity.ok(ApiResponse.of(results));
     }

@@ -414,8 +414,12 @@ function InterviewPrepTab() {
     try { return JSON.parse(localStorage.getItem('iq_reviewed') || '{}') } catch { return {} }
   })
   const searchTimer = useRef(null)
+  const loadAbortRef = useRef(null)
 
   const load = useCallback(async (p = 1, append = false) => {
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     if (p === 1) setLoading(true); else setLoadingMore(true)
     try {
       const r = await studentApi.getInterviewPrep({
@@ -423,17 +427,20 @@ function InterviewPrepTab() {
         difficulty: activeDiff || undefined,
         search: search || undefined,
         page: p, limit: 20
-      })
+      }, { signal: controller.signal })
       const data = r.data.data
       if (append) setQuestions(prev => [...prev, ...data.questions])
       else setQuestions(data.questions)
       setTotal(data.total)
       if (data.categories?.length) setCategories(data.categories)
-    } catch {
+    } catch (err) {
+      if (err.code === 'ERR_CANCELED') return
       toast.error('Failed to load interview questions')
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      if (loadAbortRef.current === controller) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
   }, [activeCategory, activeDiff, search])
 

@@ -7,6 +7,7 @@ import com.careerlabs.lms.api.quiz.dto.request.CreateQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.QuestionOptionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuestionAnalyticsResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuestionPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuestionResponse;
 import com.careerlabs.lms.api.quiz.entity.AnswerMode;
 import com.careerlabs.lms.api.quiz.entity.AttemptStatus;
@@ -21,6 +22,9 @@ import com.careerlabs.lms.api.quiz.repository.QuestionRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizTopicRepository;
 import com.careerlabs.lms.api.quiz.service.QuestionService;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +56,21 @@ public class QuestionServiceImpl implements QuestionService {
         return questionRepository.findAll(spec).stream()
                 .map(QuestionResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public QuestionPageResponse search(Long topicId, Long courseId, QuizDifficulty difficulty, QuestionType questionType,
+                                        Boolean active, String search, int page, int limit) {
+        Specification<Question> spec = buildSpecification(topicId, courseId, difficulty, questionType, active, search);
+        int pageNumber = Math.max(page, 1);
+        int pageSize = limit > 0 ? limit : 20;
+        Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
+        Page<Question> result = questionRepository.findAll(spec, pageable);
+        List<QuestionResponse> questions = result.getContent().stream()
+                .map(QuestionResponse::from)
+                .toList();
+        return new QuestionPageResponse(questions, result.getTotalElements(), pageNumber, result.getTotalPages());
     }
 
     @Override

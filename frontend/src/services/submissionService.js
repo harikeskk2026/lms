@@ -1,10 +1,11 @@
 import apiCall from '@/utilities/apiCall'
 
 const submissionService = {
-  list: (assignmentId, params) => apiCall({
+  list: (assignmentId, params, config) => apiCall({
     method: 'GET',
     url: `/assignments/${assignmentId}/submissions`,
     params,
+    ...config,
   }),
 
   grade: (assignmentId, submissionId, data) => apiCall({

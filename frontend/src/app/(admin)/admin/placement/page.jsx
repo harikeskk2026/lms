@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 import { Plus, ChevronDown, ChevronUp, Star, Trash2, Pencil, Calendar, Building2, MapPin, Users, CheckCircle, X, FileText, Upload } from 'lucide-react'
@@ -291,10 +291,14 @@ export default function PlacementPage() {
     return () => clearTimeout(t)
   }, [iqSearch])
 
+  const iqAbortRef = useRef(null)
   useEffect(() => {
-    adminApi.getInterviewQuestions({ difficulty: iqDiff, search: debouncedIqSearch, courseId: iqCourse || undefined })
+    iqAbortRef.current?.abort()
+    const controller = new AbortController()
+    iqAbortRef.current = controller
+    adminApi.getInterviewQuestions({ difficulty: iqDiff, search: debouncedIqSearch, courseId: iqCourse || undefined }, { signal: controller.signal })
       .then(res => setIqList(res.data.data?.items || res.data.data || []))
-      .catch(() => { })
+      .catch(err => { if (err.code !== 'ERR_CANCELED') { /* silent, matches prior behavior */ } })
   }, [iqDiff, debouncedIqSearch, iqCourse])
 
   const handlePlacementStatus = async (studentId, status) => {

@@ -1,7 +1,7 @@
 import apiCall from '@/utilities/apiCall'
 
 const assignmentService = {
-  list: (params) => apiCall({ method: 'GET', url: '/assignments', params }),
+  list: (params, config) => apiCall({ method: 'GET', url: '/assignments', params, ...config }),
 
   get: (id) => apiCall({ method: 'GET', url: `/assignments/${id}` }),
 

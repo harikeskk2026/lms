@@ -16,6 +16,10 @@ public interface QuizService {
 
     List<QuizResponse> list();
 
+    /** Same as {@link #list()}, additionally narrowed to quizzes whose title contains {@code search}
+     * (case-insensitive). A blank/null search is a no-op. */
+    List<QuizResponse> list(String search);
+
     QuizResponse get(Long id);
 
     QuizResponse create(CreateQuizRequest request, Long createdBy);
