@@ -20,13 +20,19 @@ import { safeErrorMessage } from '@/utilities/safeErrorMessage'
  * @param {Object} [options.headers] - extra headers
  * @param {Function} [options.onUploadProgress] - axios upload progress callback, for large file uploads
  * @param {number} [options.timeout] - overrides the default 10s timeout, e.g. for large video uploads
+ * @param {AbortSignal} [options.signal] - lets a caller cancel an in-flight request (e.g. a superseded
+ *   as-you-type search request) via AbortController; a cancelled call rejects and is silently ignored
+ *   by callers that check `error.name === 'CanceledError'` / `axios.isCancel(error)`
  * @returns {Promise<any>} the response body's `data` field (the ApiResponse envelope)
  */
-export default async function apiCall({ method = 'GET', url, data, params, headers, onUploadProgress, timeout }) {
+export default async function apiCall({ method = 'GET', url, data, params, headers, onUploadProgress, timeout, signal }) {
   try {
-    const response = await api.request({ method, url, data, params, headers, onUploadProgress, timeout })
+    const response = await api.request({ method, url, data, params, headers, onUploadProgress, timeout, signal })
     return response.data
   } catch (error) {
+    if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+      throw error
+    }
     const message = safeErrorMessage(error, 'Request failed')
     const apiError = new Error(message)
     apiError.status = error.response?.status

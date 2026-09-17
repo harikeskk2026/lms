@@ -12,8 +12,11 @@ export const adminApi = {
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
 
   // Admins (SUPERADMIN only)
-  getAdmins: (params) => api.get('/admin/admins', { params }),
+  getAdmins: (params, config) => api.get('/admin/admins', { params, ...config }),
+  getAdmin: (id) => api.get(`/admin/admins/${id}`),
   createAdmin: (data) => api.post('/admin/admins', data),
+  updateAdmin: (id, data) => api.put(`/admin/admins/${id}`, data),
+  deleteAdmin: (id) => api.delete(`/admin/admins/${id}`),
   toggleAdminStatus: (id) => api.patch(`/admin/admins/${id}/status`),
   resetUserPassword: (userId, newPassword) => api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
   resetStudentPassword: (id, data) => {
@@ -27,14 +30,14 @@ export const adminApi = {
   },
 
   // Students
-  getStudents: (params) => api.get('/students', { params }),
+  getStudents: (params, config) => api.get('/students', { params, ...config }),
   createStudent: (data) => api.post('/students', data),
   getStudentDetail: (id) => api.get(`/students/${id}`),
   updateStudent: (id, data) => api.put(`/students/${id}`, data),
   toggleStudentStatus: (id) => api.patch(`/students/${id}/status`),
 
   // Trainers
-  getTrainers: (params) => api.get('/trainers', { params }),
+  getTrainers: (params, config) => api.get('/trainers', { params, ...config }),
   createTrainer: (data) => api.post('/trainers', data),
   getTrainerDetail: (id) => api.get(`/trainers/${id}`),
   updateTrainer: (id, data) => api.put(`/trainers/${id}`, data),
@@ -61,7 +64,7 @@ export const adminApi = {
   deleteClass: (id) => api.delete(`/admin/classes/${id}`),
 
   // Attendance
-  getAttendanceSheet: (classId, search) => api.get(`/admin/attendance/${classId}`, { params: search ? { search } : {} }),
+  getAttendanceSheet: (classId, search, config) => api.get(`/admin/attendance/${classId}`, { params: search ? { search } : {}, ...config }),
   markAttendance: (classId, records) => api.post(`/admin/attendance/${classId}`, { records }),
   // Attendance system
   getAttendanceOverview: () => api.get('/admin/attendance'),
@@ -69,7 +72,7 @@ export const adminApi = {
   getLowAttendance: (params) => api.get('/admin/attendance/low', { params }),
   getStudentAttHistory: (id) => api.get(`/admin/attendance/student/${id}`),
   getBatchAttDetail: (id, p) => api.get(`/admin/attendance/batch/${id}`, { params: p }),
-  getAttendanceAlerts: (params) => api.get('/admin/attendance/alerts', { params }),
+  getAttendanceAlerts: (params, config) => api.get('/admin/attendance/alerts', { params, ...config }),
   generateAlerts: (params) => api.post('/admin/attendance/alerts/generate', null, { params }),
   resolveAlert: (id) => api.patch(`/admin/attendance/alerts/${id}/resolve`),
   getAttendanceDashboard: () => api.get('/admin/attendance/dashboard'),
@@ -83,13 +86,13 @@ export const adminApi = {
   verifyCorrection: (id) => api.get(`/admin/attendance/corrections/${id}/verify`),
   getAttendancePolicy: (params) => api.get('/admin/attendance/policy', { params }),
   saveAttendancePolicy: (data) => api.put('/admin/attendance/policy', data),
-  getAttendanceHistory: (params) => api.get('/admin/attendance/history', { params }),
+  getAttendanceHistory: (params, config) => api.get('/admin/attendance/history', { params, ...config }),
   getAttendanceAuditLogs: (params) => api.get('/admin/attendance/audit-logs', { params }),
   getStudentAuditLogs: (id) => api.get(`/admin/attendance/student/${id}/audit-logs`),
   exportCSV: (params) => api.get('/reports/export', { params }),
 
   // Meeting Links / Scheduled Classes
-  getMeetings: (params) => api.get('/admin/meetings', { params }),
+  getMeetings: (params, config) => api.get('/admin/meetings', { params, ...config }),
   createMeeting: (data) => api.post('/admin/meetings', data),
   updateMeeting: (id, data) => api.put(`/admin/meetings/${id}`, data),
   updateMeetingStatus: (id, status) => api.patch(`/admin/meetings/${id}/status`, null, { params: { status } }),
@@ -107,7 +110,7 @@ export const adminApi = {
   deleteQuestion: (quizId, qId) => api.delete(`/admin/quizzes/${quizId}/questions/${qId}`),
 
   // Interview Questions
-  getInterviewQuestions: (params) => api.get('/admin/interview-questions', { params }),
+  getInterviewQuestions: (params, config) => api.get('/admin/interview-questions', { params, ...config }),
   createInterviewQuestion: (data) => api.post('/admin/interview-questions', data),
   updateInterviewQuestion: (id, data) => api.patch(`/admin/interview-questions/${id}`, data),
   deleteInterviewQuestion: (id) => api.delete(`/admin/interview-questions/${id}`),
@@ -223,7 +226,7 @@ export const adminApi = {
 
 export const studentApi = {
   getDashboard: () => api.get('/student/dashboard'),
-  getCourses: () => api.get('/student/courses'),
+  getCourses: (config) => api.get('/student/courses', config),
   getCourse: (id) => api.get(`/student/courses/${id}`),
   getSyllabus: (id) => api.get(`/student/courses/${id}/syllabus`),
   getMaterials: (id) => api.get(`/student/courses/${id}/materials`),
@@ -238,7 +241,7 @@ export const studentApi = {
   getCalendarDay: (date) => api.get('/student/attendance/calendar/day', { params: { date } }),
   getMyCorrections: () => api.get('/student/attendance/corrections'),
   requestCorrection: (data) => api.post('/student/attendance/corrections', data),
-  getAssignments: () => api.get('/student/assignments'),
+  getAssignments: (config) => api.get('/student/assignments', config),
   submitAssignment: (id, form) => api.post(`/assignments/${id}/submissions`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
@@ -247,7 +250,7 @@ export const studentApi = {
   submitQuiz: (id, body) => api.post(`/student/quizzes/${id}/attempt`, body),
   getQuizLeaderboard: (id) => api.get(`/student/quizzes/${id}/leaderboard`),
   getQuizAnalytics: () => api.get('/student/quiz-analytics'),
-  getInterviewPrep: (p) => api.get('/student/interview-prep', { params: p }),
+  getInterviewPrep: (p, config) => api.get('/student/interview-prep', { params: p, ...config }),
   getAptitudeTips: () => api.get('/student/interview-prep/aptitude-tips'),
   getInterviewResources: () => api.get('/student/interview-prep/resources'),
   getPlacement: () => api.get('/student/placement'),
