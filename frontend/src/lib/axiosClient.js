@@ -60,10 +60,19 @@ api.interceptors.request.use(config => {
 // identical network requests, share the in-flight promise for any GET with
 // the same url+params; the entry is cleared as soon as it settles, so this
 // never serves stale data on a later, separate fetch.
+//
+// Skipped entirely when the caller passes its own AbortSignal: that's the
+// abort-stale-then-refetch pattern used by every searchable/paginated list
+// page (courses, batches, trainers, students, ...). Two calls with the same
+// url+params but different signals happen constantly there (e.g. React
+// re-invoking an effect fires the fetch twice, cancelling the first before
+// the second starts) - sharing one promise between them meant the second
+// caller's own request was silently killed by the first caller's abort,
+// leaving the list stuck empty even though the API itself responded fine.
 const inFlightGETs = new Map()
 const rawRequest = api.request.bind(api)
 api.request = (config = {}) => {
-  if ((config.method || 'get').toLowerCase() !== 'get') return rawRequest(config)
+  if ((config.method || 'get').toLowerCase() !== 'get' || config.signal) return rawRequest(config)
 
   const key = `${config.url}?${JSON.stringify(config.params || {})}`
   const pending = inFlightGETs.get(key)
