@@ -1,10 +1,11 @@
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Eye, BarChart3, Users, Send, X, ClipboardList, CheckCircle, AlertCircle, FileText, Pencil, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionBankPanel from '@/components/admin/QuestionBankPanel'
 import QuestionForm from '@/components/admin/QuestionForm'
@@ -13,6 +14,7 @@ import CreatePdfQuizPanel from '@/components/admin/CreatePdfQuizPanel'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const STEP_LABELS = ['Basic Details', 'Questions', 'Preview']
 
@@ -69,7 +71,9 @@ export default function QuizzesPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [courseFilter, setCourseFilter] = useState('')
   const [batchFilter, setBatchFilter] = useState('')
-  const [quizSearch, setQuizSearch] = useState('')
+  const [quizSearchInput, setQuizSearchInput] = useState('')
+  const quizSearch = useDebouncedValue(quizSearchInput, 400)
+  const quizzesAbortRef = useRef(null)
   const [activeTab, setActiveTab]   = useState('quizzes')
   const [questionSearch, setQuestionSearch] = useState('')
   const [pickerTopicFilter, setPickerTopicFilter] = useState('')
@@ -114,12 +118,26 @@ export default function QuizzesPage() {
   }
 
   const load = () => {
+    quizzesAbortRef.current?.abort()
+    const controller = new AbortController()
+    quizzesAbortRef.current = controller
     setLoading(true)
-    quizService.listQuizzes().then(r => setQuizzes(r.data || [])).catch(() => toast.error('Failed to load quizzes')).finally(() => setLoading(false))
+    quizService.listQuizzes({ search: quizSearch.trim() || undefined }, { signal: controller.signal })
+      .then(r => setQuizzes(r.data || []))
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error('Failed to load quizzes')
+      })
+      .finally(() => {
+        if (quizzesAbortRef.current === controller) setLoading(false)
+      })
   }
 
   useEffect(() => {
     load()
+  }, [quizSearch])
+
+  useEffect(() => {
     loadBankQuestions()
     quizService.listTopics().then(r => setTopics(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
@@ -563,12 +581,12 @@ export default function QuizzesPage() {
     } catch (err) { toast.error(err.message || 'Failed to release results') }
   }
 
+  // Title search is server-side (see `load`); type/status/course/batch stay client-side.
   const filtered = quizzes.filter(q => {
     if (typeFilter && q.type !== typeFilter) return false
     if (statusFilter && q.effectiveStatus !== statusFilter) return false
     if (courseFilter && String(q.courseId) !== String(courseFilter)) return false
     if (batchFilter && String(q.batchId) !== String(batchFilter)) return false
-    if (quizSearch && !q.title?.toLowerCase().includes(quizSearch.toLowerCase())) return false
     return true
   })
 
@@ -700,8 +718,8 @@ export default function QuizzesPage() {
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
-              value={quizSearch}
-              onChange={e => { setQuizSearch(e.target.value); setQuizPage(1); }}
+              value={quizSearchInput}
+              onChange={e => { setQuizSearchInput(e.target.value); setQuizPage(1); }}
               placeholder="Search quizzes by title..."
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 pl-10 pr-4 py-2 text-sm text-gray-800 dark:text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white dark:focus:bg-gray-800 transition-all"
             />
@@ -864,63 +882,15 @@ export default function QuizzesPage() {
                   </table>
                 </div>
 
-                {/* Pagination Footer */}
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 flex-wrap gap-3">
-                  <div className="flex items-center gap-2">
-                    <span>Per page:</span>
-                    <CustomSelect
-                      value={quizPageSize}
-                      onChange={(val) => { setQuizPageSize(Number(val)); setQuizPage(1); }}
-                      options={[
-                        { value: 10, label: '10' },
-                        { value: 25, label: '25' },
-                        { value: 50, label: '50' },
-                      ]}
-                      compact
-                    />
-                    <span className="ml-2 font-medium">
-                      Showing {filtered.length > 0 ? quizStartIndex + 1 : 0}–{quizEndIndex} of {filtered.length} quizzes
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setQuizPage(p => Math.max(1, p - 1))}
-                      disabled={validQuizPage === 1}
-                      className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 flex items-center justify-center transition-colors"
-                      title="Previous Page"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-
-                    {Array.from({ length: totalQuizPages }, (_, i) => i + 1)
-                      .filter(p => p === 1 || p === totalQuizPages || Math.abs(p - validQuizPage) <= 1)
-                      .map((p, idx, arr) => (
-                        <React.Fragment key={p}>
-                          {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-400">...</span>}
-                          <button
-                            onClick={() => setQuizPage(p)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
-                              validQuizPage === p
-                                ? 'bg-purple-600 text-white shadow-sm'
-                                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        </React.Fragment>
-                      ))}
-
-                    <button
-                      onClick={() => setQuizPage(p => Math.min(totalQuizPages, p + 1))}
-                      disabled={validQuizPage >= totalQuizPages || totalQuizPages === 0}
-                      className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 flex items-center justify-center transition-colors"
-                      title="Next Page"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </div>
+                <Pagination
+                  data={filtered}
+                  page={quizPage}
+                  pageSize={quizPageSize}
+                  onPageChange={setQuizPage}
+                  onPageSizeChange={(v) => { setQuizPageSize(v); setQuizPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                  label="quizzes"
+                />
               </div>
             )}
           </div>

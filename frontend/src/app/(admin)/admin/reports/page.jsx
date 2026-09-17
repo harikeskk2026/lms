@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import {
   FileDown, Download, BarChart2, FileText, Users, Eye, X,
-  Sparkles, Filter, ChevronLeft, ChevronRight, CheckSquare, RotateCcw,
+  Sparkles, Filter, CheckSquare, RotateCcw,
   AlertTriangle, Target, UserCheck, Briefcase, Calendar, Search,
   Award, CheckCircle2, Check, ArrowUpRight, ArrowDownRight, Layers,
   Laptop, TrendingUp, TrendingDown, BookOpen
@@ -14,6 +14,7 @@ import batchService from '@/services/batchService'
 import courseService from '@/services/courseService'
 import { adminApi } from '@/lib/api'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const TABS = ['Attendance', 'Performance', 'Placement', 'Export']
 
@@ -102,17 +103,6 @@ function downloadCSV(data, filename) {
   a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`
   a.click()
   URL.revokeObjectURL(url)
-}
-
-function getPageWindow(current, total, size = 5) {
-  if (total <= size) return Array.from({ length: total }, (_, i) => i + 1)
-  let start = Math.max(1, current - Math.floor(size / 2))
-  let end = start + size - 1
-  if (end > total) {
-    end = total
-    start = end - size + 1
-  }
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
 function getGradeFromScore(score) {
@@ -1029,67 +1019,15 @@ export default function ReportsPage() {
                 </table>
               </div>
 
-              {/* Attendance Pagination Controls */}
-              <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
-                <div className="flex items-center gap-3">
-                  <span>
-                    Showing {attFiltered.length > 0 ? (attPage - 1) * attPageSize + 1 : 0} to {Math.min(attPage * attPageSize, attFiltered.length)} of {attFiltered.length} students
-                  </span>
-                  <div className="flex items-center gap-1.5 pl-3 border-l border-gray-200 dark:border-gray-700">
-                    <span className="text-gray-400 font-medium">Rows:</span>
-                    <select
-                      value={attPageSize}
-                      onChange={(e) => {
-                        setAttPageSize(Number(e.target.value))
-                        setAttPage(1)
-                      }}
-                      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200 font-semibold outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-2xs"
-                    >
-                      {[5, 10, 20, 50, 100].map(sz => (
-                        <option key={sz} value={sz}>{sz} rows</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setAttPage(p => Math.max(1, p - 1))}
-                    disabled={attPage === 1}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  {getPageWindow(attPage, attTotalPages).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setAttPage(p)}
-                      className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        attPage === p
-                          ? 'bg-purple-600 text-white shadow-xs'
-                          : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  {attTotalPages > 5 && <span className="px-1 text-gray-400">...</span>}
-                  {attTotalPages > 5 && (
-                    <button
-                      onClick={() => setAttPage(attTotalPages)}
-                      className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600"
-                    >
-                      {attTotalPages}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setAttPage(p => Math.min(attTotalPages, p + 1))}
-                    disabled={attPage === attTotalPages}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
+              <Pagination
+                data={attFiltered}
+                page={attPage}
+                pageSize={attPageSize}
+                onPageChange={setAttPage}
+                onPageSizeChange={(v) => { setAttPageSize(v); setAttPage(1) }}
+                pageSizeOptions={[5, 10, 20, 50, 100]}
+                label="students"
+              />
             </div>
           )}
         </div>
@@ -1414,67 +1352,15 @@ export default function ReportsPage() {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
-              <div className="flex items-center gap-3">
-                <span>
-                  Showing {perfFiltered.length > 0 ? (perfPage - 1) * perfPageSize + 1 : 0} to {Math.min(perfPage * perfPageSize, perfFiltered.length)} of {perfFiltered.length} students
-                </span>
-                <div className="flex items-center gap-1.5 pl-3 border-l border-gray-200 dark:border-gray-700">
-                  <span className="text-gray-400 font-medium">Rows:</span>
-                  <select
-                    value={perfPageSize}
-                    onChange={(e) => {
-                      setPerfPageSize(Number(e.target.value))
-                      setPerfPage(1)
-                    }}
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200 font-semibold outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-2xs"
-                  >
-                    {[5, 10, 20, 50, 100].map(sz => (
-                      <option key={sz} value={sz}>{sz} rows</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPerfPage(p => Math.max(1, p - 1))}
-                  disabled={perfPage === 1}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                {getPageWindow(perfPage, perfTotalPages).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setPerfPage(p)}
-                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                      perfPage === p
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                {perfTotalPages > 5 && <span className="px-1 text-gray-400">...</span>}
-                {perfTotalPages > 5 && (
-                  <button
-                    onClick={() => setPerfPage(perfTotalPages)}
-                    className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600"
-                  >
-                    {perfTotalPages}
-                  </button>
-                )}
-                <button
-                  onClick={() => setPerfPage(p => Math.min(perfTotalPages, p + 1))}
-                  disabled={perfPage === perfTotalPages}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              data={perfFiltered}
+              page={perfPage}
+              pageSize={perfPageSize}
+              onPageChange={setPerfPage}
+              onPageSizeChange={(v) => { setPerfPageSize(v); setPerfPage(1) }}
+              pageSizeOptions={[5, 10, 20, 50, 100]}
+              label="students"
+            />
           </div>
         </div>
       )}
@@ -1791,67 +1677,15 @@ export default function ReportsPage() {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
-              <div className="flex items-center gap-3">
-                <span>
-                  Showing {placementFiltered.length > 0 ? (placementPage - 1) * placementPageSize + 1 : 0} to {Math.min(placementPage * placementPageSize, placementFiltered.length)} of {placementFiltered.length} students
-                </span>
-                <div className="flex items-center gap-1.5 pl-3 border-l border-gray-200 dark:border-gray-700">
-                  <span className="text-gray-400 font-medium">Rows:</span>
-                  <select
-                    value={placementPageSize}
-                    onChange={(e) => {
-                      setPlacementPageSize(Number(e.target.value))
-                      setPlacementPage(1)
-                    }}
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200 font-semibold outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-2xs"
-                  >
-                    {[5, 10, 20, 50, 100].map(sz => (
-                      <option key={sz} value={sz}>{sz} rows</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPlacementPage(p => Math.max(1, p - 1))}
-                  disabled={placementPage === 1}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                {getPageWindow(placementPage, placementTotalPages).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setPlacementPage(p)}
-                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                      placementPage === p
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                {placementTotalPages > 5 && <span className="px-1 text-gray-400">...</span>}
-                {placementTotalPages > 5 && (
-                  <button
-                    onClick={() => setPlacementPage(placementTotalPages)}
-                    className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600"
-                  >
-                    {placementTotalPages}
-                  </button>
-                )}
-                <button
-                  onClick={() => setPlacementPage(p => Math.min(placementTotalPages, p + 1))}
-                  disabled={placementPage === placementTotalPages}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              data={placementFiltered}
+              page={placementPage}
+              pageSize={placementPageSize}
+              onPageChange={setPlacementPage}
+              onPageSizeChange={(v) => { setPlacementPageSize(v); setPlacementPage(1) }}
+              pageSizeOptions={[5, 10, 20, 50, 100]}
+              label="students"
+            />
           </div>
         </div>
       )}

@@ -1,9 +1,10 @@
 'use client'
-import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Eye, Search, Upload, FileText, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Plus, Pencil, Trash2, Eye, Search, Upload, FileText, BarChart3 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import { QUESTION_TYPES, QUESTION_DIFFICULTIES } from '@/validations/questionValidation'
 import SlidePanel from '@/components/admin/SlidePanel'
 import QuestionForm from '@/components/admin/QuestionForm'
@@ -12,6 +13,7 @@ import ExcelCsvImporter from '@/components/admin/ExcelCsvImporter'
 import PdfQuestionImporter from '@/components/admin/PdfQuestionImporter'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const DIFFICULTY_COLORS = {
   EASY: 'bg-green-100 text-green-700',
@@ -51,21 +53,44 @@ export default function QuestionBankPanel({ onChange }) {
   const [bulkActioning, setBulkActioning] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [totalQuestions, setTotalQuestions] = useState(0)
   const [deleteModal, setDeleteModal] = useState({ open: false, question: null, isBulk: false, loading: false })
 
   const [filters, setFilters] = useState({ topicId: '', courseId: '', difficulty: '', questionType: '', active: '', search: '' })
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, 400)
+  const abortRef = useRef(null)
+
+  useEffect(() => {
+    setFilters(f => ({ ...f, search: debouncedSearch }))
+    setCurrentPage(1)
+  }, [debouncedSearch])
 
   const load = useCallback(() => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     const query = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
-    quizService.listQuestions(query)
+    query.page = currentPage
+    query.limit = pageSize
+    quizService.listQuestions(query, { signal: controller.signal })
       .then(r => {
-        setQuestions(r.data || [])
+        const data = r.data
+        const list = Array.isArray(data) ? data : (data?.questions || data?.content || data?.items || [])
+        const total = Array.isArray(data) ? list.length : (data?.totalElements ?? data?.total ?? list.length)
+        setQuestions(list)
+        setTotalQuestions(total)
         setSelectedIds([])
       })
-      .catch(err => toast.error(err.message || 'Failed to load questions'))
-      .finally(() => setLoading(false))
-  }, [filters])
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load questions')
+      })
+      .finally(() => {
+        if (abortRef.current === controller) setLoading(false)
+      })
+  }, [filters, currentPage, pageSize])
 
   const loadTopics = useCallback(() => {
     quizService.listTopics().then(r => setTopics(r.data || [])).catch(() => {})
@@ -161,11 +186,8 @@ export default function QuestionBankPanel({ onChange }) {
     }
   }
 
-  const totalPages = Math.ceil(questions.length / pageSize) || 1
-  const validCurrentPage = Math.min(currentPage, totalPages)
-  const startIndex = (validCurrentPage - 1) * pageSize
-  const endIndex = Math.min(startIndex + pageSize, questions.length)
-  const paginatedQuestions = questions.slice(startIndex, endIndex)
+  // `questions` is already the current page's rows from the server.
+  const paginatedQuestions = questions
 
   const toggleSelectAll = () => {
     const pageIds = paginatedQuestions.map(q => q.id)
@@ -214,11 +236,8 @@ export default function QuestionBankPanel({ onChange }) {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             placeholder="Search question text..."
-            value={filters.search}
-            onChange={e => {
-              setFilters(f => ({ ...f, search: e.target.value }))
-              setCurrentPage(1)
-            }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
@@ -343,59 +362,15 @@ export default function QuestionBankPanel({ onChange }) {
             </table>
           </div>
 
-          {/* Pagination Footer */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <span>Per page:</span>
-              <CustomSelect
-                value={pageSize}
-                onChange={(val) => { setPageSize(Number(val)); setCurrentPage(1); }}
-                options={[{ value: 10, label: '10' }, { value: 25, label: '25' }, { value: 50, label: '50' }, { value: 100, label: '100' }]}
-                compact
-              />
-              <span className="ml-2 font-medium">
-                Showing {questions.length > 0 ? startIndex + 1 : 0}–{endIndex} of {questions.length} questions
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={validCurrentPage === 1}
-                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 flex items-center justify-center transition-colors"
-                title="Previous Page"
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPages || Math.abs(p - validCurrentPage) <= 1)
-                .map((p, idx, arr) => (
-                  <React.Fragment key={p}>
-                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-400">...</span>}
-                    <button
-                      onClick={() => setCurrentPage(p)}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
-                        validCurrentPage === p
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  </React.Fragment>
-                ))}
-
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={validCurrentPage >= totalPages || totalPages === 0}
-                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 flex items-center justify-center transition-colors"
-                title="Next Page"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            total={totalQuestions}
+            page={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(v) => { setPageSize(v); setCurrentPage(1); }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            label="questions"
+          />
         </div>
       )}
 

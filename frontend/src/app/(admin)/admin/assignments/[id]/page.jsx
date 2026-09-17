@@ -16,6 +16,7 @@ import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { resolveFileUrl } from '@/lib/api'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 text-gray-600',
@@ -99,7 +100,12 @@ export default function AssignmentDetailPage() {
       .catch(() => {})
   }
 
+  const loadSubmissionsAbortRef = useRef(null)
+
   const loadSubmissions = (currentFilters = filters) => {
+    loadSubmissionsAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadSubmissionsAbortRef.current = controller
     setSubLoading(true)
     setSubError(false)
     const params = {}
@@ -109,7 +115,7 @@ export default function AssignmentDetailPage() {
     if (currentFilters.dateFrom) params.dateFrom = currentFilters.dateFrom
     if (currentFilters.dateTo) params.dateTo = currentFilters.dateTo
 
-    submissionService.list(id, params)
+    submissionService.list(id, params, { signal: controller.signal })
       .then(r => {
         const list = r.data?.submissions || []
         setSubmissions(list)
@@ -124,8 +130,14 @@ export default function AssignmentDetailPage() {
         setGradeInputs(prev => ({ ...prev, ...grades }))
         setFeedbackInputs(prev => ({ ...prev, ...feedbacks }))
       })
-      .catch(err => { toast.error(err.message || 'Failed to load submissions'); setSubError(true) })
-      .finally(() => setSubLoading(false))
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load submissions')
+        setSubError(true)
+      })
+      .finally(() => {
+        if (loadSubmissionsAbortRef.current === controller) setSubLoading(false)
+      })
   }
 
   const handleRefresh = () => {
@@ -816,24 +828,14 @@ export default function AssignmentDetailPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {!subLoading && !subError && submissions.length > SUBMISSIONS_PAGE_SIZE && (
-          <div className="flex items-center justify-between px-5 py-4 border-t border-purple-100 dark:border-purple-900/30">
-            <p className="text-xs text-gray-500">
-              Showing {(validSubmissionPage - 1) * SUBMISSIONS_PAGE_SIZE + 1}–{Math.min(validSubmissionPage * SUBMISSIONS_PAGE_SIZE, submissions.length)} of {submissions.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={validSubmissionPage === 1}
-                className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
-                ← Prev
-              </button>
-              <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{validSubmissionPage} / {totalSubmissionPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalSubmissionPages, p + 1))} disabled={validSubmissionPage === totalSubmissionPages}
-                className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
-                Next →
-              </button>
-            </div>
-          </div>
+        {!subLoading && !subError && (
+          <Pagination
+            data={submissions}
+            page={page}
+            pageSize={SUBMISSIONS_PAGE_SIZE}
+            onPageChange={setPage}
+            label="submissions"
+          />
         )}
       </div>
 

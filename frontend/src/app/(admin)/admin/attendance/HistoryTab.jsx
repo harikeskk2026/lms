@@ -1,12 +1,13 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X, Eye, User, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock, BookOpen, Layers, CheckCircle2, ArrowRight, Activity, ShieldCheck } from 'lucide-react'
+import { Search, X, Eye, User, Calendar, Clock, BookOpen, Layers, CheckCircle2, ArrowRight, Activity, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const getBatchCourseId = (b) => {
   if (!b) return null
@@ -378,7 +379,12 @@ export default function HistoryTab({ refreshKey = 0 }) {
     return filtered.length > 0 ? filtered : courses
   }, [courses, batches, filters.batchId])
 
+  const loadAbortRef = useRef(null)
+
   const load = useCallback(() => {
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     setLoading(true)
     const params = { page, limit: pageSize }
     if (filters.from) params.from = filters.from
@@ -388,7 +394,7 @@ export default function HistoryTab({ refreshKey = 0 }) {
     if (filters.status) params.status = filters.status
     if (filters.search) params.search = filters.search
 
-    adminApi.getAttendanceHistory(params)
+    adminApi.getAttendanceHistory(params, { signal: controller.signal })
       .then(r => {
         const data = r.data.data
         setRows(data?.items || [])
@@ -396,8 +402,13 @@ export default function HistoryTab({ refreshKey = 0 }) {
         setTotal(totalCount)
         setTotalPages(data?.totalPages || Math.ceil(totalCount / pageSize) || 1)
       })
-      .catch(() => toast.error('Failed to load attendance history'))
-      .finally(() => setLoading(false))
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error('Failed to load attendance history')
+      })
+      .finally(() => {
+        if (loadAbortRef.current === controller) setLoading(false)
+      })
   }, [page, pageSize, filters])
 
   useEffect(() => { load() }, [load, refreshKey])
@@ -564,80 +575,17 @@ export default function HistoryTab({ refreshKey = 0 }) {
         </GlassCard>
       )}
 
-      {/* Pagination & Controls Bar */}
-      <GlassCard className="p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <p className="text-gray-600 dark:text-gray-400">
-            {total > 0
-              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total} records`
-              : '0 records found'}
-          </p>
-          <div className="flex items-center gap-1.5 text-gray-500 pl-3 border-l border-gray-200 dark:border-gray-700">
-            <span>Rows:</span>
-            <CustomSelect
-              value={pageSize}
-              onChange={(val) => {
-                setPageSize(Number(val))
-                setPage(1)
-              }}
-              options={[10, 20, 50, 100].map(s => ({ value: s, label: s }))}
-              compact
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setPage(1)}
-            disabled={page === 1 || loading}
-            title="First Page"
-            className="p-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-          >
-            <ChevronsLeft size={14} />
-          </button>
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1 || loading}
-            title="Previous Page"
-            className="p-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-          >
-            <ChevronLeft size={14} />
-          </button>
-
-          <div className="flex items-center gap-1 px-1">
-            {[...Array(Math.min(5, totalPages))].map((_, i) => {
-              const p = Math.max(1, Math.min(page - 2, totalPages - 4)) + i
-              if (p > totalPages || p < 1) return null
-              return (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  disabled={loading}
-                  className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${p === page ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 border border-gray-200 dark:border-gray-700'}`}
-                >
-                  {p}
-                </button>
-              )
-            })}
-          </div>
-
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages || loading}
-            title="Next Page"
-            className="p-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-          >
-            <ChevronRight size={14} />
-          </button>
-          <button
-            onClick={() => setPage(totalPages)}
-            disabled={page >= totalPages || loading}
-            title="Last Page"
-            className="p-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-          >
-            <ChevronsRight size={14} />
-          </button>
-        </div>
+      <GlassCard>
+        <Pagination
+          total={total}
+          totalPages={totalPages}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+          label="records"
+          className="border-t-0"
+        />
       </GlassCard>
 
       {detailStudentId && (

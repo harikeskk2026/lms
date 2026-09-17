@@ -1,10 +1,11 @@
 'use client'
 import React, { useState, useRef } from 'react'
-import { Upload, FileSpreadsheet, Download, CheckCircle, AlertCircle, Trash2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Upload, FileSpreadsheet, Download, CheckCircle, AlertCircle, Trash2, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import quizService from '@/services/quizService'
 import courseService from '@/services/courseService'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const SAMPLE_CSV = `Question,Type,Difficulty,Points,Option 1,Option 2,Option 3,Option 4,Correct Options,Explanation,Topic,Course
 "Which keyword is used to inherit a class in Java?",MCQ,EASY,1,extends,implements,inherits,super,extends,"extends is used for class inheritance",Java Basics,Java Full Stack
@@ -572,38 +573,15 @@ export default function ExcelCsvImporter({ onImported, onCancel, topics = [], co
               </table>
             </div>
 
-            {/* Preview Pagination Footer */}
-            <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 bg-gray-50/50 dark:bg-gray-800/40">
-              <div className="flex items-center gap-1.5">
-                <span>Per page:</span>
-                <CustomSelect
-                  value={previewPageSize}
-                  onChange={(val) => { setPreviewPageSize(Number(val)); setPreviewPage(1); }}
-                  options={[{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]}
-                  compact
-                />
-                <span className="ml-1">Showing {extractedQuestions.length > 0 ? previewStartIndex + 1 : 0}–{previewEndIndex} of {extractedQuestions.length}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPreviewPage(p => Math.max(1, p - 1))}
-                  disabled={validPreviewPage === 1}
-                  className="p-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40"
-                >
-                  <ChevronLeft size={13} />
-                </button>
-                <span className="font-bold px-1">{validPreviewPage} / {totalPreviewPages}</span>
-                <button
-                  type="button"
-                  onClick={() => setPreviewPage(p => Math.min(totalPreviewPages, p + 1))}
-                  disabled={validPreviewPage >= totalPreviewPages}
-                  className="p-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40"
-                >
-                  <ChevronRight size={13} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              data={extractedQuestions}
+              page={previewPage}
+              pageSize={previewPageSize}
+              onPageChange={setPreviewPage}
+              onPageSizeChange={(v) => { setPreviewPageSize(v); setPreviewPage(1); }}
+              pageSizeOptions={[5, 10, 20]}
+              label="questions"
+            />
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">

@@ -10,6 +10,7 @@ import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 const STATUS_STYLES = {
   DRAFT: 'bg-gray-100 text-gray-600',
@@ -52,6 +53,8 @@ export default function RecordedSessionsPage() {
   const [securityLoading, setSecurityLoading] = useState(false)
   const [deletingSession, setDeletingSession] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const isValidUrl = (url) => {
     if (!url || !url.trim()) return true
@@ -199,6 +202,10 @@ export default function RecordedSessionsPage() {
     } catch (err) { toast.error(err.message || 'Failed to archive') }
   }
 
+  const validPage = Math.min(page, Math.max(1, Math.ceil(sessions.length / pageSize)))
+  const pageStart = (validPage - 1) * pageSize
+  const pagedSessions = sessions.slice(pageStart, pageStart + pageSize)
+
   const MAX_FILE_SIZE_BYTES = 400 * 1024 * 1024 // 400MB
 
   const handleUpload = async () => {
@@ -331,7 +338,7 @@ export default function RecordedSessionsPage() {
               <tbody>
                 {sessions.length === 0 ? (
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No recorded sessions yet</td></tr>
-                ) : sessions.map(s => (
+                ) : pagedSessions.map(s => (
                   <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/20 dark:hover:bg-purple-900/10">
                     <td className="px-3 py-3 font-semibold text-gray-800 dark:text-white break-words">{s.title}</td>
                     <td className="px-3 py-3 text-xs text-gray-500">{s.courseName}</td>
@@ -379,6 +386,15 @@ export default function RecordedSessionsPage() {
             </table>
           </div>
         )}
+
+        <Pagination
+          data={sessions}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+          label="sessions"
+        />
       </div>
 
       {/* Create/Edit panel */}

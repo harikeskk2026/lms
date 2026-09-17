@@ -5,6 +5,7 @@ import { ChevronLeft, Trophy, FileDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { adminApi } from '@/lib/api'
 import toast from 'react-hot-toast'
+import Pagination from '@/components/ui/Pagination'
 
 function formatTime(seconds) {
   if (!seconds) return '—'
@@ -47,6 +48,8 @@ export default function AdminLeaderboardPage() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [quizTitle, setQuizTitle] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   useEffect(() => {
     async function load() {
@@ -75,9 +78,11 @@ export default function AdminLeaderboardPage() {
 
   const { leaderboard = [] } = data || {}
   const top3 = leaderboard.slice(0, 3)
-  const rest  = leaderboard.slice(3)
   const MEDALS = ['🥇', '🥈', '🥉']
   const PODIUM_ORDER = [1, 0, 2]
+  const validPage = Math.min(page, Math.max(1, Math.ceil(leaderboard.length / pageSize)))
+  const pageStart = (validPage - 1) * pageSize
+  const pagedLeaderboard = leaderboard.slice(pageStart, pageStart + pageSize)
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 p-4">
@@ -165,11 +170,11 @@ export default function AdminLeaderboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaderboard.map((entry, i) => (
+                  {pagedLeaderboard.map((entry, i) => (
                     <tr key={i} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/30 dark:hover:bg-purple-900/10 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-bold text-gray-500 text-sm">
-                          {i < 3 ? MEDALS[i] : `#${entry.rank}`}
+                          {entry.rank <= 3 ? MEDALS[entry.rank - 1] : `#${entry.rank}`}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -208,6 +213,15 @@ export default function AdminLeaderboardPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              data={leaderboard}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+              pageSizeOptions={[10, 20, 50, 100]}
+              label="students"
+            />
           </div>
         </>
       )}

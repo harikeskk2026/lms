@@ -24,6 +24,7 @@ import batchService from '@/services/batchService'
 import { useAuth } from '@/context/AuthContext'
 import CustomSelect from '@/components/ui/CustomSelect'
 import FormDrawer from '@/components/ui/FormDrawer'
+import Pagination from '@/components/ui/Pagination'
 
 export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatus }) {
   const { user } = useAuth()
@@ -35,6 +36,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
   const [enrollments, setEnrollments] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -66,9 +68,13 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
   const [failureModalOpen, setFailureModalOpen] = useState(false)
 
   const searchTimer = useRef(null)
+  const loadEnrollmentsAbortRef = useRef(null)
 
   // Load course enrollments
   const loadEnrollments = useCallback(() => {
+    loadEnrollmentsAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadEnrollmentsAbortRef.current = controller
     setLoading(true)
     setError(null)
     courseService.getEnrollments(courseId, {
@@ -76,8 +82,8 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
       batchId: batchFilter || undefined,
       status: statusFilter || undefined,
       page,
-      limit: 20,
-    })
+      limit: pageSize,
+    }, { signal: controller.signal })
       .then(res => {
         const d = res.data
         setEnrollments(d.enrollments || [])
@@ -85,11 +91,14 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         setTotalPages(d.totalPages || 1)
       })
       .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
         console.error('Failed to load course enrollments:', err)
         setError(err.message || 'Failed to load enrolled students')
       })
-      .finally(() => setLoading(false))
-  }, [courseId, search, batchFilter, statusFilter, page])
+      .finally(() => {
+        if (loadEnrollmentsAbortRef.current === controller) setLoading(false)
+      })
+  }, [courseId, search, batchFilter, statusFilter, page, pageSize])
 
   useEffect(() => {
     loadEnrollments()
@@ -469,7 +478,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
 
                   return (
                     <tr key={item.enrollmentId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
-                      <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * 20 + index + 1}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * pageSize + index + 1}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-xs flex-shrink-0">
@@ -541,46 +550,15 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
             </table>
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  ← Prev
-                </button>
-                {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                  const p = Math.max(1, Math.min(page - 2, totalPages - 4)) + i
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-xl text-sm font-semibold transition-colors ${
-                        p === page
-                          ? 'bg-purple-600 text-white shadow-sm shadow-purple-500/20'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  )
-                })}
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            total={total}
+            totalPages={totalPages}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+            label="students"
+          />
         </>
       )}
 

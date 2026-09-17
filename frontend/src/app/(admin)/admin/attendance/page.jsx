@@ -21,6 +21,7 @@ import AttendanceMatrix from '@/components/admin/AttendanceMatrix'
 import AttendanceHeatmap from '@/components/admin/AttendanceHeatmap'
 import HistoryTab from './HistoryTab'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 
 // recharts is a heavy dependency - load it only for the trend charts below,
@@ -152,16 +153,18 @@ function MarkAttendanceTab({ onAttendanceSaved, initialBatchId, initialClassId, 
 
   useEffect(() => {
     if (!selectedClass || !sheet) return
-    let isCancelled = false
-    adminApi.getAttendanceSheet(selectedClass, debouncedSearch)
+    const controller = new AbortController()
+    adminApi.getAttendanceSheet(selectedClass, debouncedSearch, { signal: controller.signal })
       .then(res => {
-        if (isCancelled) return
         const rawSheet = res.data?.data
         const studentList = Array.isArray(rawSheet) ? rawSheet : (rawSheet?.students || [])
         setSheet(prev => prev ? { ...prev, students: studentList } : prev)
       })
-      .catch(err => console.error('Failed to search students via API:', err))
-    return () => { isCancelled = true }
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        console.error('Failed to search students via API:', err)
+      })
+    return () => controller.abort()
   }, [debouncedSearch, selectedClass])
 
   const handleFileUpload = async (e) => {
@@ -813,6 +816,8 @@ function BatchOverviewTab({ refreshKey = 0 }) {
   const [detailLoading, setDetailLoading] = useState(false)
   const [monthFilter, setMonthFilter]   = useState('')
   const [studentSearch, setStudentSearch] = useState('')
+  const [studentPage, setStudentPage]   = useState(1)
+  const [studentPageSize, setStudentPageSize] = useState(20)
 
   const loadOverview = useCallback(() => {
     setLoading(true)
@@ -884,6 +889,12 @@ function BatchOverviewTab({ refreshKey = 0 }) {
       ? Math.round(studentList.reduce((acc, s) => acc + (s.pct || 0), 0) / studentList.length)
       : (selectedBatch.avgAttendance || 0)
 
+    const studentTotalPages = Math.ceil(filteredStudents.length / studentPageSize) || 1
+    const validStudentPage = Math.min(studentPage, studentTotalPages)
+    const studentStartIndex = (validStudentPage - 1) * studentPageSize
+    const studentEndIndex = Math.min(studentStartIndex + studentPageSize, filteredStudents.length)
+    const paginatedStudents = filteredStudents.slice(studentStartIndex, studentEndIndex)
+
     return (
       <div className="space-y-5">
         {/* Navigation & Filters Bar */}
@@ -943,12 +954,9 @@ function BatchOverviewTab({ refreshKey = 0 }) {
                   type="text"
                   placeholder="Search student by name or email..."
                   value={studentSearch}
-                  onChange={e => setStudentSearch(e.target.value)}
+                  onChange={e => { setStudentSearch(e.target.value); setStudentPage(1) }}
                   className="w-full pl-9 pr-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-              </div>
-              <div className="text-xs text-gray-500 font-medium">
-                Showing <span className="font-semibold text-gray-800 dark:text-gray-200">{filteredStudents.length}</span> of {studentList.length} students
               </div>
             </div>
 
@@ -966,8 +974,8 @@ function BatchOverviewTab({ refreshKey = 0 }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
-                  {filteredStudents.length > 0 ? (
-                    filteredStudents.map((row, idx) => {
+                  {paginatedStudents.length > 0 ? (
+                    paginatedStudents.map((row, idx) => {
                       const avatarBg = STUDENT_AVATAR_PALETTE[idx % STUDENT_AVATAR_PALETTE.length]
                       const firstChar = (row.name?.trim()?.charAt(0) || 'S').toUpperCase()
                       
@@ -992,7 +1000,7 @@ function BatchOverviewTab({ refreshKey = 0 }) {
                           className="hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors"
                         >
                           <td className="px-6 py-4 text-sm font-semibold text-gray-500 dark:text-gray-400">
-                            {idx + 1}
+                            {studentStartIndex + idx + 1}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3.5">
@@ -1052,6 +1060,15 @@ function BatchOverviewTab({ refreshKey = 0 }) {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              data={filteredStudents}
+              page={studentPage}
+              pageSize={studentPageSize}
+              onPageChange={setStudentPage}
+              onPageSizeChange={(v) => { setStudentPageSize(v); setStudentPage(1) }}
+              label="students"
+            />
           </div>
         ) : null}
       </div>
@@ -1537,14 +1554,24 @@ function AlertsTab({ onAlertsChanged, refreshKey = 0 }) {
     return () => clearTimeout(handler)
   }, [searchQuery])
 
+  const loadAbortRef = useRef(null)
+
   const load = useCallback(async (resolved = false, search = '') => {
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     setLoading(true)
     try {
       const params = { resolved: resolved ? 'true' : 'false' }
       if (search && search.trim()) params.search = search.trim()
-      const r = await adminApi.getAttendanceAlerts(params)
+      const r = await adminApi.getAttendanceAlerts(params, { signal: controller.signal })
       setAlerts(r.data.data || [])
-    } catch { toast.error('Failed to load alerts') } finally { setLoading(false) }
+    } catch (err) {
+      if (err.code === 'ERR_CANCELED') return
+      toast.error('Failed to load alerts')
+    } finally {
+      if (loadAbortRef.current === controller) setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load(showResolved, debouncedSearch) }, [load, showResolved, debouncedSearch, refreshKey])

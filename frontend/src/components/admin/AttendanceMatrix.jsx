@@ -1,5 +1,7 @@
 'use client'
+import { useState } from 'react'
 import { format } from 'date-fns'
+import Pagination from '@/components/ui/Pagination'
 
 const STATUS_CELL = {
   PRESENT: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
@@ -27,6 +29,9 @@ function PctChip({ pct }) {
  *   matrix  — array of { studentId, name, email, enrollmentNo, records: { [classId]: status|null }, present, total, pct }
  */
 export default function AttendanceMatrix({ classes = [], matrix = [] }) {
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+
   if (!classes.length) {
     return (
       <div className="text-center py-10 text-gray-400 text-sm">
@@ -35,8 +40,11 @@ export default function AttendanceMatrix({ classes = [], matrix = [] }) {
     )
   }
 
+  const pagedMatrix = matrix.slice((page - 1) * pageSize, page * pageSize)
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-purple-100 dark:border-purple-900/30">
+    <div className="rounded-xl border border-purple-100 dark:border-purple-900/30 overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="w-full text-xs min-w-[600px]">
         <thead>
           <tr className="bg-purple-50/70 dark:bg-purple-900/20">
@@ -55,7 +63,7 @@ export default function AttendanceMatrix({ classes = [], matrix = [] }) {
           </tr>
         </thead>
         <tbody>
-          {matrix.map((row, i) => (
+          {pagedMatrix.map((row, i) => (
             <tr key={row.studentId}
               className={`border-t border-purple-50 dark:border-purple-900/20 hover:bg-purple-50/30 dark:hover:bg-purple-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30 dark:bg-gray-900/10'}`}>
               <td className="sticky left-0 z-10 bg-white dark:bg-[#0f0a1e] px-4 py-2.5 whitespace-nowrap border-r border-purple-50 dark:border-purple-900/20">
@@ -104,6 +112,16 @@ export default function AttendanceMatrix({ classes = [], matrix = [] }) {
           </tr>
         </tfoot>
       </table>
+      </div>
+      <Pagination
+        data={matrix}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+        pageSizeOptions={[10, 20, 50, 100]}
+        label="students"
+      />
     </div>
   )
 }

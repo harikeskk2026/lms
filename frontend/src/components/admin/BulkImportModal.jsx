@@ -21,6 +21,7 @@ import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import { isValidEmail, isValidPhone, isValidPassword } from '@/utilities/validators'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 
 /**
  * Parses a simple CSV string on the client side for instant preview and validation.
@@ -97,6 +98,8 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
 
   const [file, setFile] = useState(null)
   const [parsedData, setParsedData] = useState(null)
+  const [previewPage, setPreviewPage] = useState(1)
+  const [previewPageSize, setPreviewPageSize] = useState(10)
   const [isDragging, setIsDragging] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -192,6 +195,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
         const text = e.target.result
         const parsed = parseClientCsv(text)
         setParsedData(parsed)
+        setPreviewPage(1)
       } catch (err) {
         toast.error('Failed to parse CSV preview: ' + err.message)
       }
@@ -642,7 +646,7 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                          {parsedData.rows.slice(0, 10).map((r) => {
+                          {parsedData.rows.slice((previewPage - 1) * previewPageSize, previewPage * previewPageSize).map((r) => {
                             const issues = clientValidation.rowIssues[r._rowNum]
                             return (
                               <tr key={r._rowNum} className={issues ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}>
@@ -678,11 +682,15 @@ export default function BulkImportModal({ open, onClose, courses = [], batches =
                         </tbody>
                       </table>
                     </div>
-                    {parsedData.rows.length > 10 && (
-                      <div className="bg-gray-50 dark:bg-gray-800/50 p-2 text-center text-xs text-gray-500">
-                        Showing first 10 of {parsedData.rows.length} rows
-                      </div>
-                    )}
+                    <Pagination
+                      data={parsedData.rows}
+                      page={previewPage}
+                      pageSize={previewPageSize}
+                      onPageChange={setPreviewPage}
+                      onPageSizeChange={(v) => { setPreviewPageSize(v); setPreviewPage(1) }}
+                      pageSizeOptions={[10, 20, 50]}
+                      label="rows"
+                    />
                   </div>
                 </div>
               )}

@@ -14,6 +14,7 @@ import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import Pagination from '@/components/ui/Pagination'
 import { resolveFileUrl } from '@/lib/api'
 
 const STATUS_COLORS = {
@@ -115,7 +116,12 @@ export default function AssignmentsPage() {
 
   const displayedTotal = isTrainer ? displayedAssignments.length : total
 
+  const loadAbortRef = useRef(null)
+
   const load = useCallback(() => {
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     setLoading(true)
     const limitParam = pageSize === 'all' ? 1000 : pageSize
     assignmentService.list({
@@ -127,15 +133,20 @@ export default function AssignmentsPage() {
       dueDateTo: dueDateTo || undefined,
       page,
       limit: limitParam,
-    })
+    }, { signal: controller.signal })
       .then(r => {
         const d = r.data
         setAssignments(d.assignments)
         setTotal(d.total)
         setTotalPages(pageSize === 'all' ? 1 : d.totalPages)
       })
-      .catch(err => toast.error(err.message || 'Failed to load assignments'))
-      .finally(() => setLoading(false))
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load assignments')
+      })
+      .finally(() => {
+        if (loadAbortRef.current === controller) setLoading(false)
+      })
   }, [search, courseFilter, batchFilter, statusFilter, dueDateFrom, dueDateTo, page, pageSize])
 
   useEffect(() => { load() }, [load])
@@ -718,82 +729,19 @@ export default function AssignmentsPage() {
             </table>
           </div>
         )}
+
+        <Pagination
+          total={displayedTotal}
+          totalPages={totalPages}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+          pageSizeOptions={[5, 10, 20, 50]}
+          showAllOption
+          label="assignments"
+        />
       </div>
-
-      {/* Bottom Rows Selector & Pagination (Short Box) */}
-      {displayedTotal > 0 && (
-        <div className="flex justify-end pt-1">
-          <div className="glass-card px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 inline-flex items-center gap-2.5 shadow-sm">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))
-                  setPage(1)
-                }}
-                className="text-xs font-semibold px-2 py-0.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value="all">All</option>
-              </select>
-            </div>
-
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
-              {displayedTotal === 0
-                ? '0 of 0'
-                : `${(page - 1) * (pageSize === 'all' ? displayedTotal : pageSize) + 1}–${Math.min(page * (pageSize === 'all' ? displayedTotal : pageSize), displayedTotal)} of ${displayedTotal}`}
-            </span>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-                <button
-                  type="button"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Prev
-                </button>
-                {[...Array(totalPages)].map((_, i) => {
-                  const p = i + 1
-                  if (totalPages > 6 && Math.abs(p - page) > 2 && p !== 1 && p !== totalPages) {
-                    if (p === 2 || p === totalPages - 1) {
-                      return <span key={p} className="text-xs text-gray-400 px-0.5">...</span>
-                    }
-                    return null
-                  }
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPage(p)}
-                      className={`w-6 h-6 text-xs font-bold rounded-lg transition-colors ${
-                        p === page
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  )
-                })}
-                <button
-                  type="button"
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Create / Edit Panel */}
       <SlidePanel

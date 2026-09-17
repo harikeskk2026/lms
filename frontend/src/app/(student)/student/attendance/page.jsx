@@ -11,6 +11,7 @@ import AttendanceDayModal from '@/components/student/AttendanceDayModal'
 import CorrectionRequestModal from '@/components/student/CorrectionRequestModal'
 import AttendanceCorrectionsList from '@/components/student/AttendanceCorrectionsList'
 import SkeletonCard from '@/components/student/SkeletonCard'
+import Pagination from '@/components/ui/Pagination'
 import { studentApi } from '@/lib/api'
 
 // recharts is a heavy dependency - load it only for the trend chart below,
@@ -61,6 +62,8 @@ export default function AttendancePage() {
   const [dayLoading, setDayLoading]       = useState(false)
   const [correctionRecord, setCorrectionRecord] = useState(null)
   const correctionsRef = useRef(null)
+  const [listPage, setListPage] = useState(1)
+  const [listPageSize, setListPageSize] = useState(10)
 
   const openDay = (dateStr) => {
     setSelectedDate(dateStr)
@@ -83,6 +86,10 @@ export default function AttendancePage() {
       .catch(() => {})
       .finally(() => setTrendLoading(false))
   }, [])
+
+  useEffect(() => {
+    setListPage(1)
+  }, [activeMonth])
 
   // Compute metrics
   const pct     = summary.percentage !== undefined ? summary.percentage : 0
@@ -226,42 +233,56 @@ export default function AttendancePage() {
         <div className="glass-card p-3 sm:p-5">
           {view === 'calendar' ? (
             <AttendanceCalendar calendarData={calendar} activeMonth={activeMonth} onDayClick={openDay} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-purple-100 dark:border-purple-900/30">
-                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Date</th>
-                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Day</th>
-                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Class</th>
-                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Status</th>
-                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Marked At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...calendar]
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))
-                    .map((c, i) => (
-                    <tr key={i} className="border-b border-purple-50 dark:border-purple-900/20 hover:bg-purple-50/40 dark:hover:bg-purple-900/10">
-                      <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 font-medium">{format(new Date(c.date), 'MMM d, yyyy')}</td>
-                      <td className="py-2.5 px-3 text-gray-500">{format(new Date(c.date), 'EEEE')}</td>
-                      <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 break-words font-medium">{c.classTitle}</td>
-                      <td className="py-2.5 px-3">
-                        {c.status ? (
-                          <StatusChip status={c.status} correctionPending={c.correctionPending} requestedStatus={c.correctionRequestedStatus} />
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-gray-400 text-xs">
-                        {c.markedAt ? format(new Date(c.markedAt), 'h:mm a') : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : (() => {
+            const sortedCalendar = [...calendar].sort((a, b) => new Date(b.date) - new Date(a.date))
+            const listStart = (listPage - 1) * listPageSize
+            const pagedCalendar = sortedCalendar.slice(listStart, listStart + listPageSize)
+            return (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[500px]">
+                    <thead>
+                      <tr className="border-b border-purple-100 dark:border-purple-900/30">
+                        <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Date</th>
+                        <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Day</th>
+                        <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Class</th>
+                        <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Status</th>
+                        <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs">Marked At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedCalendar.map((c, i) => (
+                        <tr key={i} className="border-b border-purple-50 dark:border-purple-900/20 hover:bg-purple-50/40 dark:hover:bg-purple-900/10">
+                          <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 font-medium">{format(new Date(c.date), 'MMM d, yyyy')}</td>
+                          <td className="py-2.5 px-3 text-gray-500">{format(new Date(c.date), 'EEEE')}</td>
+                          <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 break-words font-medium">{c.classTitle}</td>
+                          <td className="py-2.5 px-3">
+                            {c.status ? (
+                              <StatusChip status={c.status} correctionPending={c.correctionPending} requestedStatus={c.correctionRequestedStatus} />
+                            ) : (
+                              <span className="text-xs text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-400 text-xs">
+                            {c.markedAt ? format(new Date(c.markedAt), 'h:mm a') : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  data={sortedCalendar}
+                  page={listPage}
+                  pageSize={listPageSize}
+                  onPageChange={setListPage}
+                  onPageSizeChange={(v) => { setListPageSize(v); setListPage(1) }}
+                  pageSizeOptions={[10, 20, 50]}
+                  label="classes"
+                />
+              </>
+            )
+          })()}
         </div>
       )}
 
