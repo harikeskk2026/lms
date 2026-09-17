@@ -8,4 +8,6 @@ import java.util.List;
 public interface DriveRepository extends JpaRepository<Drive, Long> {
 
     List<Drive> findAllByOrderByDriveDateAsc();
+
+    long countByCreatedBy(Long createdBy);
 }

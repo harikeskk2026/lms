@@ -1,10 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase } from 'lucide-react'
+import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase, Eye, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import {
   isValidEmail,
   EMAIL_ERROR_MESSAGE,
@@ -18,10 +19,13 @@ import {
   isValidPassword,
   PASSWORD_ERROR_MESSAGE
 } from '@/utilities/validators'
+import LoginAccessToggle from '@/components/admin/LoginAccessToggle'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import FormDrawer from '@/components/ui/FormDrawer'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
+import Pagination from '@/components/ui/Pagination'
 import clsx from 'clsx'
 
 const EMPTY_FORM = { name: '', email: '', password: '', phone: '', designation: '', department: '' }
@@ -49,16 +53,28 @@ export default function AdminsPage() {
   const [admins, setAdmins] = useState([])
   const [totalElements, setTotalElements] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const search = useDebouncedValue(searchInput, 400)
   const [statusFilter, setStatusFilter] = useState('')
+  const abortRef = useRef(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErr, setFormErr] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [resetTarget, setResetTarget] = useState(null)
   const [mounted, setMounted] = useState(false)
+
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingAdmin, setEditingAdmin] = useState(null)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [editTouched, setEditTouched] = useState({})
+  const [editFormSubmitted, setEditFormSubmitted] = useState(false)
+
+  const [deletingAdmin, setDeletingAdmin] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => setMounted(true), [])
 
@@ -70,19 +86,23 @@ export default function AdminsPage() {
   }, [user, authLoading, router])
 
   const fetchAdmins = useCallback(async () => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     try {
-      const res = await adminApi.getAdmins({ search: search.trim() || undefined, status: statusFilter || undefined, page, limit: 10 })
+      const res = await adminApi.getAdmins({ search: search.trim() || undefined, status: statusFilter || undefined, page, limit: pageSize }, { signal: controller.signal })
       const data = res.data.data || res.data
       setAdmins(data.admins || data.content || [])
       setTotalElements(data.totalElements ?? data.total ?? 0)
       setTotalPages(data.totalPages ?? 1)
     } catch (err) {
+      if (err.code === 'ERR_CANCELED') return
       toast.error(err.response?.data?.message || 'Failed to load admins')
     } finally {
-      setLoading(false)
+      if (abortRef.current === controller) setLoading(false)
     }
-  }, [search, statusFilter, page])
+  }, [search, statusFilter, page, pageSize])
 
   useEffect(() => {
     if (user?.role === 'SUPERADMIN') fetchAdmins()
@@ -116,6 +136,85 @@ export default function AdminsPage() {
 
   const isFormValid = !errors.name && !errors.email && !errors.password && !errors.phone && Boolean(form.name.trim() && form.email.trim() && form.password)
 
+  const editErrors = {
+    name: !editForm.name.trim()
+      ? 'Full Name is required'
+      : !isValidName(editForm.name.trim())
+      ? NAME_ERROR_MESSAGE
+      : null,
+    email: !editForm.email.trim()
+      ? 'Email Address is required'
+      : !isValidEmail(editForm.email.trim())
+      ? EMAIL_ERROR_MESSAGE
+      : null,
+    phone: editForm.phone && editForm.phone.trim() && !isValidPhone(editForm.phone.trim())
+      ? PHONE_ERROR_MESSAGE
+      : null,
+  }
+
+  const isEditValid = !editErrors.name && !editErrors.email && !editErrors.phone && Boolean(editForm.name.trim() && editForm.email.trim())
+
+  const isEditDirty = Boolean(editingAdmin && (
+    editForm.name !== (editingAdmin.name || '') ||
+    editForm.email !== (editingAdmin.email || '') ||
+    editForm.phone !== (editingAdmin.phone || '') ||
+    editForm.designation !== (editingAdmin.designation || '') ||
+    editForm.department !== (editingAdmin.department || '')
+  ))
+
+  function handleOpenEdit(admin) {
+    setEditingAdmin(admin)
+    setEditForm({
+      name: admin.name || '',
+      email: admin.email || '',
+      password: '',
+      phone: admin.phone || '',
+      designation: admin.designation || '',
+      department: admin.department || '',
+    })
+    setEditTouched({})
+    setEditFormSubmitted(false)
+    setShowEditModal(true)
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault()
+    setEditFormSubmitted(true)
+    if (!isEditValid) return
+    setSubmitting(true)
+    try {
+      await adminApi.updateAdmin(editingAdmin.id, {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim() || null,
+        designation: editForm.designation.trim() || null,
+        department: editForm.department.trim() || null,
+      })
+      toast.success('Admin updated successfully!')
+      setShowEditModal(false)
+      fetchAdmins()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update admin')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deletingAdmin) return
+    setIsDeleting(true)
+    try {
+      await adminApi.deleteAdmin(deletingAdmin.id)
+      toast.success('Admin deleted successfully')
+      setDeletingAdmin(null)
+      fetchAdmins()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete admin')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   async function handleCreate(e) {
     e.preventDefault()
     setFormSubmitted(true)
@@ -146,10 +245,10 @@ export default function AdminsPage() {
   async function handleToggle(admin) {
     try {
       await adminApi.toggleAdminStatus(admin.id)
-      toast.success(`Admin ${admin.active ? 'deactivated' : 'activated'} successfully`)
+      toast.success(`Login access ${admin.active ? 'blocked' : 'allowed'} for ${admin.name}`)
       fetchAdmins()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update status')
+      toast.error(err.response?.data?.message || 'Failed to update login access')
     }
   }
 
@@ -176,17 +275,17 @@ export default function AdminsPage() {
       <div className="glass-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative w-full md:w-80">
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by name or email..." className="input-field pl-10 text-sm py-2" />
+          <input type="text" value={searchInput} onChange={e => { setSearchInput(e.target.value); setPage(1) }} placeholder="Search by name or email..." className="input-field pl-10 text-sm py-2" />
         </div>
         <div className="flex items-center gap-3">
           <CustomSelect
             value={statusFilter}
             onChange={(val) => { setStatusFilter(val); setPage(1) }}
             options={[
-              { value: 'active', label: 'Active Only' },
-              { value: 'inactive', label: 'Inactive Only' },
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
             ]}
-            placeholder="All Statuses"
+            placeholder="All Login Access"
             compact
           />
           <button onClick={fetchAdmins} className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" title="Refresh">
@@ -210,17 +309,21 @@ export default function AdminsPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px] tracking-wider">
                 <tr>
+                  <th className="py-3.5 px-4 text-center w-16">S.No.</th>
                   <th className="py-3.5 px-6">Admin</th>
                   <th className="py-3.5 px-4">Contact</th>
                   <th className="py-3.5 px-4">Role Info</th>
-                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Login Access</th>
                   <th className="py-3.5 px-4">Created</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {admins.map(admin => (
+                {admins.map((admin, index) => (
                   <tr key={admin.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-4 px-4 text-center font-semibold text-slate-500 text-xs">
+                      {(page - 1) * pageSize + index + 1}
+                    </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-sm flex-shrink-0">{admin.name[0]?.toUpperCase()}</div>
@@ -234,14 +337,40 @@ export default function AdminsPage() {
                       ) : <span className="text-xs text-slate-400 italic">—</span>}
                     </td>
                     <td className="py-4 px-4">
-                      <button onClick={() => handleToggle(admin)} className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold', admin.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')} title="Toggle status">
-                        <span className={clsx('w-2 h-2 rounded-full', admin.active ? 'bg-green-500' : 'bg-slate-400')} />{admin.active ? 'Active' : 'Inactive'}
-                      </button>
+                      <LoginAccessToggle
+                        active={admin.active}
+                        name={admin.name}
+                        onToggle={() => handleToggle(admin)}
+                        disabled={admin.id === user?.id}
+                        disabledReason="You cannot deactivate your own account"
+                      />
                     </td>
                     <td className="py-4 px-4 text-xs text-slate-500">{admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : '—'}</td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => setResetTarget(admin)} className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50" title="Reset Password"><KeyRound size={16} /></button>
+                        <button onClick={() => router.push(`/admin/admins/${admin.id}`)}
+                          className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
+                          <Eye size={14} />
+                        </button>
+                        <button onClick={() => setResetTarget(admin)}
+                          className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
+                          <KeyRound size={14} />
+                        </button>
+                        <button onClick={() => handleOpenEdit(admin)}
+                          className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors" title="Edit">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => setDeletingAdmin(admin)}
+                          disabled={admin.id === user?.id}
+                          className={clsx(
+                            'w-7 h-7 rounded-lg flex items-center justify-center transition-colors',
+                            admin.id === user?.id
+                              ? 'bg-slate-50 text-slate-300 dark:bg-gray-800/50 dark:text-gray-600 cursor-not-allowed'
+                              : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60'
+                          )}
+                          title={admin.id === user?.id ? 'You cannot delete your own account' : 'Delete'}>
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -250,15 +379,15 @@ export default function AdminsPage() {
             </table>
           </div>
         )}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 text-xs text-slate-500">
-            <span>Page {page} of {totalPages} ({totalElements} admins)</span>
-            <div className="flex gap-2">
-              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Previous</button>
-              <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Next</button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          total={totalElements}
+          totalPages={totalPages}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+          label="admins"
+        />
       </div>
 
       <FormDrawer
@@ -415,6 +544,133 @@ export default function AdminsPage() {
           </div>
         </form>
       </FormDrawer>
+
+      <FormDrawer
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit Admin"
+        subtitle="Update this administrator's profile details"
+        isDirty={isEditDirty}
+      >
+        <form onSubmit={handleUpdate} noValidate className="space-y-4">
+          <div>
+            <label className="form-label">Full Name *</label>
+            <input
+              type="text"
+              value={editForm.name}
+              onKeyDown={filterNameKey}
+              onChange={e => {
+                const val = e.target.value
+                setEditForm(f => ({ ...f, name: val }))
+              }}
+              onBlur={() => setEditTouched(t => ({ ...t, name: true }))}
+              placeholder="Enter full name"
+              className={clsx(
+                'input-field text-sm',
+                (editTouched.name || editFormSubmitted) && editErrors.name && 'border-red-500 focus:ring-red-400'
+              )}
+            />
+            {(editTouched.name || editFormSubmitted) && editErrors.name && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{editErrors.name}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="form-label">Email Address *</label>
+            <div className="relative">
+              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                onBlur={() => setEditTouched(t => ({ ...t, email: true }))}
+                placeholder="Enter email address"
+                className={clsx(
+                  'input-field pl-9 text-sm',
+                  (editTouched.email || editFormSubmitted) && editErrors.email && 'border-red-500 focus:ring-red-400'
+                )}
+              />
+            </div>
+            {(editTouched.email || editFormSubmitted) && editErrors.email && (
+              <p className="text-xs text-red-500 mt-1 font-medium">{editErrors.email}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label">Phone Number</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={editForm.phone}
+                onKeyDown={filterPhoneKey}
+                onChange={e => {
+                  const val = sanitizePhone(e.target.value)
+                  setEditForm(f => ({ ...f, phone: val }))
+                }}
+                onBlur={() => setEditTouched(t => ({ ...t, phone: true }))}
+                placeholder="Enter phone number"
+                className={clsx(
+                  'input-field text-sm',
+                  (editTouched.phone || editFormSubmitted) && editErrors.phone && 'border-red-500 focus:ring-red-400'
+                )}
+              />
+              {(editTouched.phone || editFormSubmitted) && editErrors.phone && (
+                <p className="text-xs text-red-500 mt-1 font-medium">{editErrors.phone}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="form-label">Designation</label>
+              <input
+                type="text"
+                value={editForm.designation}
+                onChange={e => setEditForm(f => ({ ...f, designation: e.target.value }))}
+                placeholder="Enter designation"
+                className="input-field text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">Department</label>
+            <input
+              type="text"
+              value={editForm.department}
+              onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))}
+              placeholder="Enter department"
+              className="input-field text-sm"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="btn-secondary text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !isEditValid}
+              className="btn-primary text-sm min-w-[110px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </FormDrawer>
+
+      <DeleteConfirmModal
+        isOpen={!!deletingAdmin}
+        onClose={() => setDeletingAdmin(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Admin?"
+        itemName={deletingAdmin?.name}
+        loading={isDeleting}
+      />
 
       <ResetPasswordModal open={!!resetTarget} user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={fetchAdmins} />
     </div>

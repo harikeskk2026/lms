@@ -139,5 +139,7 @@ public interface MeetingLinkRepository extends JpaRepository<MeetingLink, Long> 
             "ORDER BY m.scheduledStart ASC")
     List<MeetingLink> findVisibleToStudentOnDate(@Param("batchId") Long batchId, @Param("courseId") Long courseId,
                                                   @Param("dayStart") LocalDateTime dayStart, @Param("dayEnd") LocalDateTime dayEnd);
+
+    long countByCreatedBy(Long createdBy);
 }
 

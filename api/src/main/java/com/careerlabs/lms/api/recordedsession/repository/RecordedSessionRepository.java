@@ -15,4 +15,6 @@ public interface RecordedSessionRepository extends JpaRepository<RecordedSession
     List<RecordedSession> findByStatusOrderByCreatedAtDesc(RecordedSessionStatus status);
  
     long countByStatus(RecordedSessionStatus status);
+
+    long countByCreatedBy(Long createdBy);
 }

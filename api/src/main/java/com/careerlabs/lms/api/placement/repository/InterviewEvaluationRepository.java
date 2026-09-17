@@ -8,4 +8,5 @@ import java.util.List;
 public interface InterviewEvaluationRepository extends JpaRepository<InterviewEvaluation, Long> {
     List<InterviewEvaluation> findByInterview_IdOrderByCreatedAtDesc(Long interviewId);
     List<InterviewEvaluation> findByStudent_IdOrderByCreatedAtDesc(Long studentId);
+    long countByEvaluator_Id(Long evaluatorId);
 }

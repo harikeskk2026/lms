@@ -33,4 +33,13 @@ public interface AnnouncementCommentRepository extends JpaRepository<Announcemen
     void deleteAllByAnnouncementId(@Param("announcementId") Long announcementId);
 
     void deleteAllByUser_Id(Long userId);
+
+    /**
+     * Re-attributes comments authored by a deleted admin on announcements they
+     * don't own (their own announcements, and every comment on them, are
+     * cascade-deleted separately). Reassigning keeps the comment/thread intact.
+     */
+    @Modifying
+    @Query("UPDATE AnnouncementComment c SET c.user = (SELECT u FROM User u WHERE u.id = :toUserId) WHERE c.user.id = :fromUserId")
+    void reassignUser(@Param("fromUserId") Long fromUserId, @Param("toUserId") Long toUserId);
 }

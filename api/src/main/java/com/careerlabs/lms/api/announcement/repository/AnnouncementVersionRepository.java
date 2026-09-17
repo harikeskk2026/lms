@@ -17,4 +17,9 @@ public interface AnnouncementVersionRepository extends JpaRepository<Announcemen
     @Modifying
     @Query("DELETE FROM AnnouncementVersion v WHERE v.announcement.id = :announcementId")
     void deleteAllByAnnouncementId(@Param("announcementId") Long announcementId);
+
+    /** Edit-history rows are workflow metadata, not the editor's personal data - reassign, don't delete. */
+    @Modifying
+    @Query("UPDATE AnnouncementVersion v SET v.changedBy = (SELECT u FROM User u WHERE u.id = :toUserId) WHERE v.changedBy.id = :fromUserId")
+    void reassignChangedBy(@Param("fromUserId") Long fromUserId, @Param("toUserId") Long toUserId);
 }

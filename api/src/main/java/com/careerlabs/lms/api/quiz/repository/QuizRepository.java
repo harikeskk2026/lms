@@ -24,4 +24,6 @@ public interface QuizRepository extends JpaRepository<Quiz, Long> {
 
     @Query("SELECT q.id FROM Quiz q WHERE q.courseId = :courseId")
     List<Long> findIdsByCourseId(@Param("courseId") Long courseId);
+
+    long countByCreatedBy(Long createdBy);
 }

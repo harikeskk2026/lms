@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.quiz.repository;
 import com.careerlabs.lms.api.quiz.entity.InterviewQuestion;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,4 +18,9 @@ public interface InterviewQuestionRepository
     long countByCategoryAndActiveTrue(String category);
 
     boolean existsByQuestionTextIgnoreCase(String questionText);
+
+    /** Shared platform content - reassign attribution rather than delete it when its author is removed. */
+    @Modifying
+    @Query("UPDATE InterviewQuestion q SET q.createdBy = :toUserId WHERE q.createdBy = :fromUserId")
+    void reassignCreatedBy(@Param("fromUserId") Long fromUserId, @Param("toUserId") Long toUserId);
 }
