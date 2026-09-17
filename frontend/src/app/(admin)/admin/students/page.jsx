@@ -20,12 +20,14 @@ import {
   filterPhoneKey,
   sanitizePhone,
 } from '@/utilities/validators'
+import LoginAccessToggle from '@/components/admin/LoginAccessToggle'
 import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import BulkImportModal from '@/components/admin/BulkImportModal'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
+import Pagination from '@/components/ui/Pagination'
 
 const PLACEMENT_COLORS = {
   SEEKING:      'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40',
@@ -34,9 +36,12 @@ const PLACEMENT_COLORS = {
   NOT_SEEKING:  'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
 }
 
+const EMPTY_COURSE_GROUP = { courseId: '', batchId: '' }
+
 const EMPTY_FORM = {
-  name: '', email: '', phone: '', collegeName: '', password: '', batchId: '',
-  courseId: '', placementStatus: 'SEEKING',
+  name: '', email: '', phone: '', collegeName: '', password: '',
+  courseGroups: [{ ...EMPTY_COURSE_GROUP }],
+  placementStatus: 'SEEKING',
 }
 
 // Guarantees at least one uppercase, one lowercase, one digit, and one
@@ -64,11 +69,176 @@ function genPassword() {
 
 const toOptions = (list, labelFn) => list.map(item => ({ value: String(item.id), label: labelFn(item) }))
 
+// Mirrors the backend's ScheduleOverlapUtil exactly (see
+// api/.../common/util/ScheduleOverlapUtil.java) so the form can warn about a
+// conflict before the user ever submits - the backend remains authoritative.
+const TIME_12H_PATTERN = /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i
+const TIME_24H_PATTERN = /^(\d{1,2})(?::(\d{2}))?$/
+
+function parseTimeToMinutes(raw) {
+  if (!raw) return null
+  const s = raw.trim()
+  const m12 = s.match(TIME_12H_PATTERN)
+  if (m12) {
+    let hour = parseInt(m12[1], 10)
+    const minute = m12[2] ? parseInt(m12[2], 10) : 0
+    const ampm = m12[3].toUpperCase()
+    if (hour === 12) hour = ampm === 'AM' ? 0 : 12
+    else if (ampm === 'PM') hour += 12
+    return hour * 60 + minute
+  }
+  const m24 = s.match(TIME_24H_PATTERN)
+  if (m24) {
+    const hour = parseInt(m24[1], 10)
+    const minute = m24[2] ? parseInt(m24[2], 10) : 0
+    return hour * 60 + minute
+  }
+  return null
+}
+
+function parseTimingRange(timing) {
+  if (!timing) return null
+  const normalized = timing.replace(/[–—]/g, '-')
+  const parts = normalized.split('-')
+  if (parts.length !== 2) return null
+  const start = parseTimeToMinutes(parts[0])
+  const end = parseTimeToMinutes(parts[1])
+  if (start == null || end == null || start >= end) return null
+  return { start, end }
+}
+
+function isDateOverlap(start1, end1, start2, end2) {
+  if (!start1 || !end1 || !start2 || !end2) return true
+  return start1 <= end2 && end1 >= start2
+}
+
+function isTimeOverlap(timing1, timing2) {
+  if (!timing1?.trim() || !timing2?.trim()) return true
+  if (timing1.trim().toLowerCase() === timing2.trim().toLowerCase()) return true
+  const r1 = parseTimingRange(timing1)
+  const r2 = parseTimingRange(timing2)
+  if (!r1 || !r2) return timing1.trim().toLowerCase() === timing2.trim().toLowerCase()
+  return r1.start < r2.end && r1.end > r2.start
+}
+
+function isScheduleOverlap(batchA, batchB) {
+  return isDateOverlap(batchA.startDate, batchA.endDate, batchB.startDate, batchB.endDate)
+    && isTimeOverlap(batchA.timing, batchB.timing)
+}
+
+/** Pairwise-checks every group's selected batch against every other selected batch. */
+function computeScheduleConflicts(groups, batches) {
+  const conflicts = {}
+  const selected = groups
+    .map((g, idx) => ({ idx, batch: g.batchId ? batches.find(b => String(b.id) === String(g.batchId)) : null }))
+    .filter(x => x.batch)
+
+  for (let i = 0; i < selected.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (isScheduleOverlap(selected[i].batch, selected[j].batch)) {
+        const a = selected[i], b = selected[j]
+        conflicts[a.idx] = `Overlaps with ${b.batch.course?.title || 'another selected'} batch "${b.batch.name}" (${b.batch.timing || 'full day'}).`
+        if (!conflicts[b.idx]) {
+          conflicts[b.idx] = `Overlaps with ${a.batch.course?.title || 'another selected'} batch "${a.batch.name}" (${a.batch.timing || 'full day'}).`
+        }
+      }
+    }
+  }
+  return conflicts
+}
+
+/**
+ * Repeating "Course -> Batch" group editor for student enrollment. Unlike
+ * the trainer assignment groups, batch is single-select here: Enrollment has
+ * a unique (student, course) row with one nullable batch column, so a
+ * student can only be in one batch per course (but many courses at once).
+ */
+function CourseBatchGroups({ groups, onChange, courseOptions, batches, conflicts }) {
+  const usedCourseIds = groups.map(g => g.courseId).filter(Boolean)
+
+  const updateGroup = (idx, patch) => onChange(groups.map((g, i) => (i === idx ? { ...g, ...patch } : g)))
+  const addGroup = () => onChange([...groups, { ...EMPTY_COURSE_GROUP }])
+  const removeGroup = (idx) => onChange(groups.length <= 1 ? [{ ...EMPTY_COURSE_GROUP }] : groups.filter((_, i) => i !== idx))
+
+  const lastGroup = groups[groups.length - 1]
+  const canAddMore = usedCourseIds.length < courseOptions.length && Boolean(lastGroup?.courseId)
+
+  return (
+    <div>
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
+      <div className="space-y-2.5">
+        {groups.map((group, idx) => {
+          const availableCourseOptions = courseOptions.filter(
+            c => c.value === group.courseId || !usedCourseIds.includes(c.value)
+          )
+          const batchOptionsForGroup = group.courseId
+            ? toOptions(batches.filter(b => String(b.course?.id) === String(group.courseId)), b => b.name)
+            : []
+          const conflict = conflicts?.[idx]
+
+          return (
+            <div key={idx} className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 sm:items-start">
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 block uppercase tracking-wide">Course *</label>
+                  <SearchableSelect
+                    options={availableCourseOptions}
+                    value={group.courseId}
+                    onChange={(val) => updateGroup(idx, { courseId: val, batchId: '' })}
+                    placeholder="Select course"
+                    searchPlaceholder="Search course..."
+                    emptyLabel="No published courses available"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1 block uppercase tracking-wide">Batch</label>
+                  <SearchableSelect
+                    options={batchOptionsForGroup}
+                    value={group.batchId}
+                    onChange={(val) => updateGroup(idx, { batchId: val })}
+                    placeholder={group.courseId ? 'No batch (assign later)' : 'Select a course first'}
+                    searchPlaceholder="Search batch..."
+                    disabled={!group.courseId}
+                    emptyLabel="No batches created for this course yet"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeGroup(idx)}
+                  className="mt-5 justify-self-end sm:justify-self-auto w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                  title="Remove this course"
+                >
+                  ✕
+                </button>
+              </div>
+              {conflict && (
+                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block flex-shrink-0" />
+                  {conflict}
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={addGroup}
+        disabled={!canAddMore}
+        className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        <Plus size={13} /> Add Another Course
+      </button>
+    </div>
+  )
+}
+
 export default function StudentsPage() {
   const router = useRouter()
   const [students, setStudents] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -87,8 +257,12 @@ export default function StudentsPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [resetTarget, setResetTarget] = useState(null)
   const searchTimer = useRef(null)
+  const loadAbortRef = useRef(null)
 
   const load = useCallback(() => {
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     setLoading(true)
     studentService.list({
       search: search || undefined,
@@ -96,17 +270,22 @@ export default function StudentsPage() {
       status: statusFilter || undefined,
       placementStatus: placementFilter || undefined,
       page,
-      limit: 20,
-    })
+      limit: pageSize,
+    }, { signal: controller.signal })
       .then(r => {
         const d = r.data
         setStudents(d.students)
         setTotal(d.total)
         setTotalPages(d.totalPages)
       })
-      .catch(err => toast.error(err.message || 'Failed to load students'))
-      .finally(() => setLoading(false))
-  }, [search, batchFilter, statusFilter, placementFilter, page])
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load students')
+      })
+      .finally(() => {
+        if (loadAbortRef.current === controller) setLoading(false)
+      })
+  }, [search, batchFilter, statusFilter, placementFilter, page, pageSize])
 
   useEffect(() => { load() }, [load])
 
@@ -129,7 +308,26 @@ export default function StudentsPage() {
   const isEmailValid = isValidEmail(form.email)
   const isPasswordValid = isValidPassword(form.password)
 
-  const isFormValid = isNameValid && isPhoneValid && Boolean(form.courseId) && (editStudent ? true : (isEmailValid && isPasswordValid))
+  const hasAnyCourse = form.courseGroups.some(g => g.courseId)
+  const scheduleConflicts = computeScheduleConflicts(form.courseGroups, batches)
+  const hasScheduleConflicts = Object.keys(scheduleConflicts).length > 0
+
+  const isFormValid = isNameValid && isPhoneValid && hasAnyCourse && !hasScheduleConflicts && (editStudent ? true : (isEmailValid && isPasswordValid))
+
+  const initialGroupsFromEditStudent = (student) => {
+    const byCourse = new Map()
+    for (const c of (student?.courses || [])) {
+      byCourse.set(String(c.id), { courseId: String(c.id), batchId: '' })
+    }
+    for (const b of (student?.batches || [])) {
+      const cid = b.course?.id != null ? String(b.course.id) : null
+      if (!cid) continue
+      if (byCourse.has(cid)) byCourse.get(cid).batchId = String(b.id)
+      else byCourse.set(cid, { courseId: cid, batchId: String(b.id) })
+    }
+    const groups = Array.from(byCourse.values())
+    return groups.length > 0 ? groups : [{ ...EMPTY_COURSE_GROUP }]
+  }
 
   const isDirty = editStudent
     ? Boolean(
@@ -137,10 +335,9 @@ export default function StudentsPage() {
         form.phone !== (editStudent.phone || '') ||
         form.collegeName !== (editStudent.college?.name || '') ||
         form.placementStatus !== (editStudent.placementStatus || 'SEEKING') ||
-        form.courseId !== (editStudent.courses?.[0]?.id ? String(editStudent.courses[0].id) : '') ||
-        form.batchId !== (editStudent.batches?.[0]?.id ? String(editStudent.batches[0].id) : '')
+        JSON.stringify(form.courseGroups) !== JSON.stringify(initialGroupsFromEditStudent(editStudent))
       )
-    : Boolean(form.name || form.email || form.phone || form.collegeName || form.password || form.courseId || form.batchId)
+    : Boolean(form.name || form.email || form.phone || form.collegeName || form.password || hasAnyCourse)
 
   const openCreate = () => {
     setEditStudent(null)
@@ -153,16 +350,13 @@ export default function StudentsPage() {
 
   const openEdit = (student) => {
     setEditStudent(student)
-    const initialBatch = (student.batches && student.batches.length > 0) ? student.batches[0] : null
-    const initialCourse = (student.courses && student.courses.length > 0) ? student.courses[0] : initialBatch?.course
     setForm({
       name: student.name,
       email: student.email,
       phone: student.phone || '',
       collegeName: student.college?.name || '',
       password: '',
-      batchId: initialBatch?.id ? String(initialBatch.id) : '',
-      courseId: initialCourse?.id ? String(initialCourse.id) : '',
+      courseGroups: initialGroupsFromEditStudent(student),
       placementStatus: student.placementStatus || 'SEEKING',
     })
     setEmailError('')
@@ -171,20 +365,14 @@ export default function StudentsPage() {
     setPanelOpen(true)
   }
 
-  // Course changed - the batch list is scoped to the selected course, so any
-  // previously chosen batch (which belonged to a different course) no longer
-  // applies.
-  const handleCourseChange = (courseId) => {
-    setForm(f => ({ ...f, courseId, batchId: '' }))
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitted(true)
     setEmailError('')
     if (!isFormValid) {
       if (!isNameValid) toast.error(NAME_ERROR_MESSAGE)
-      else if (!form.courseId) toast.error('Please select a course')
+      else if (!hasAnyCourse) toast.error('Please select at least one course')
+      else if (hasScheduleConflicts) toast.error('Resolve the schedule conflicts before saving')
       else if (!editStudent && !isEmailValid) toast.error(EMAIL_ERROR_MESSAGE)
       else if (!isPhoneValid) toast.error(PHONE_ERROR_MESSAGE)
       else if (!editStudent && !isPasswordValid) toast.error(PASSWORD_ERROR_MESSAGE)
@@ -192,15 +380,16 @@ export default function StudentsPage() {
     }
     setSaving(true)
     try {
-      const batchId = form.batchId ? Number(form.batchId) : null
-      const courseId = form.courseId ? Number(form.courseId) : null
+      const courseBatchAssignments = form.courseGroups
+        .filter(g => g.courseId)
+        .map(g => ({ courseId: Number(g.courseId), batchId: g.batchId ? Number(g.batchId) : null }))
       if (editStudent) {
         await studentService.update(editStudent.id, {
           name: form.name.trim(),
           phone: form.phone.trim() || null,
           collegeName: form.collegeName.trim() || null,
           placementStatus: form.placementStatus,
-          batchId, courseId,
+          courseBatchAssignments,
         })
         toast.success('Student updated successfully')
       } else {
@@ -210,7 +399,7 @@ export default function StudentsPage() {
           phone: form.phone.trim() || null,
           collegeName: form.collegeName.trim() || null,
           password: form.password,
-          batchId, courseId,
+          courseBatchAssignments,
         })
         toast.success('Student created successfully')
       }
@@ -225,12 +414,14 @@ export default function StudentsPage() {
     } finally { setSaving(false) }
   }
 
-  const handleToggleStatus = async (id, current) => {
+  const handleToggleStatus = async (student) => {
     try {
-      await studentService.toggleStatus(id)
-      toast.success(`Login access ${current ? 'disabled' : 'enabled'}`)
+      await studentService.toggleStatus(student.id)
+      toast.success(`Login access ${student.active ? 'blocked' : 'allowed'} for ${student.name}`)
       load()
-    } catch { toast.error('Failed to update login access') }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update login access')
+    }
   }
 
   const handleConfirmDelete = async () => {
@@ -300,16 +491,11 @@ export default function StudentsPage() {
     }
   }
 
-  // Batches are scoped to whichever course is selected - a batch always
-  // belongs to exactly one course, so showing every batch regardless of
-  // course just invites mis-assignment.
-  const batchesForCourse = form.courseId
-    ? batches.filter(b => String(b.course?.id) === String(form.courseId))
-    : []
-  const batchOptions = toOptions(batchesForCourse, b => b.name)
   // Only published courses should be available for student enrollment.
-  // In edit mode, preserve the currently assigned course if it happens to be non-published so existing data remains visible.
-  const publishedCourses = courses.filter(c => c.status === 'PUBLISHED' || (editStudent && String(c.id) === String(form.courseId)))
+  // In edit mode, preserve any currently assigned course even if it's no
+  // longer published, so existing enrollments remain visible/selectable.
+  const selectedCourseIds = form.courseGroups.map(g => g.courseId).filter(Boolean)
+  const publishedCourses = courses.filter(c => c.status === 'PUBLISHED' || (editStudent && selectedCourseIds.includes(String(c.id))))
   const courseOptions = toOptions(publishedCourses, c => c.title + (c.status && c.status !== 'PUBLISHED' ? ` (${c.status})` : ''))
 
   return (
@@ -416,7 +602,7 @@ export default function StudentsPage() {
                       onClick={() => router.push(`/admin/students/${s.id}`)}
                       className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/30 dark:hover:bg-purple-900/20 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * 20 + i + 1}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * pageSize + i + 1}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -456,14 +642,8 @@ export default function StudentsPage() {
                           {s.placementStatus?.replace('_', ' ') || '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(s.id, s.active); }}
-                          title={s.active ? 'Click to disable login access' : 'Click to enable login access'}
-                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.active ? 'bg-purple-500' : 'bg-gray-200 dark:bg-gray-700'}`}
-                        >
-                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform`} style={{ transform: s.active ? 'translateX(18px)' : 'translateX(2px)' }} />
-                        </button>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <LoginAccessToggle active={s.active} name={s.name} onToggle={() => handleToggleStatus(s)} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -492,33 +672,17 @@ export default function StudentsPage() {
             </table>
           </div>
         )}
-      </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
-              ← Prev
-            </button>
-            {[...Array(Math.min(5, totalPages))].map((_, i) => {
-              const p = Math.max(1, Math.min(page - 2, totalPages - 4)) + i
-              return (
-                <button key={p} onClick={() => setPage(p)}
-                  className={`w-8 h-8 rounded-xl text-sm font-semibold transition-colors ${p === page ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-purple-50'}`}>
-                  {p}
-                </button>
-              )
-            })}
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-              className="px-3 py-1.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-purple-50 transition-colors">
-              Next →
-            </button>
-          </div>
-        </div>
-      )}
+        <Pagination
+          total={total}
+          totalPages={totalPages}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+          label="students"
+        />
+      </div>
 
       {/* Add / Edit Student Panel */}
       <SlidePanel
@@ -651,40 +815,21 @@ export default function StudentsPage() {
           )}
 
           {/*
-            Course + Batch: what CareerLabs is training this student on.
-            Course lists every course ever created; Batch is filtered down
-            to batches that belong to the selected course.
+            Course + Batch: what CareerLabs is training this student on. A
+            student can enroll in multiple courses, but only one batch per
+            course - see CourseBatchGroups.
           */}
           <div className="pt-1">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-                <SearchableSelect
-                  options={courseOptions}
-                  value={form.courseId}
-                  onChange={handleCourseChange}
-                  placeholder="Select course"
-                  searchPlaceholder="Search course..."
-                  emptyLabel="No published courses available"
-                />
-                {submitted && !form.courseId && (
-                  <p className="text-xs text-red-500 mt-1.5 font-semibold">Please select a course</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign to Batch</label>
-                <SearchableSelect
-                  options={batchOptions}
-                  value={form.batchId}
-                  onChange={(v) => setForm(f => ({ ...f, batchId: v }))}
-                  placeholder={form.courseId ? 'No batch (assign later)' : 'Select a course first'}
-                  searchPlaceholder="Search batch..."
-                  disabled={!form.courseId}
-                  emptyLabel="No batches created for this course yet"
-                />
-              </div>
-            </div>
+            <CourseBatchGroups
+              groups={form.courseGroups}
+              onChange={(groups) => setForm(f => ({ ...f, courseGroups: groups }))}
+              courseOptions={courseOptions}
+              batches={batches}
+              conflicts={scheduleConflicts}
+            />
+            {submitted && !hasAnyCourse && (
+              <p className="text-xs text-red-500 mt-1.5 font-semibold">Please select at least one course</p>
+            )}
           </div>
 
           {editStudent && (

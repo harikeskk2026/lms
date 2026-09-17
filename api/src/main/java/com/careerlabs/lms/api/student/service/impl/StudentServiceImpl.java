@@ -31,6 +31,7 @@ import com.careerlabs.lms.api.quiz.repository.QuizAttemptRepository;
 import com.careerlabs.lms.api.quiz.repository.StudentAchievementRepository;
 import com.careerlabs.lms.api.quiz.repository.StudentGameStatsRepository;
 import com.careerlabs.lms.api.recordedsession.repository.PlaybackSessionRepository;
+import com.careerlabs.lms.api.student.dto.request.StudentCourseBatchAssignment;
 import com.careerlabs.lms.api.student.dto.request.StudentCreateRequest;
 import com.careerlabs.lms.api.student.dto.request.StudentUpdateRequest;
 import com.careerlabs.lms.api.student.dto.response.StudentCountResponse;
@@ -68,6 +69,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -219,7 +221,8 @@ public class StudentServiceImpl implements StudentService {
         if (request.getCollegeName() != null && !request.getCollegeName().isBlank()) {
             student.setCollege(findOrCreateCollege(request.getCollegeName()));
         }
-        if (request.getCourseId() != null) {
+        boolean hasAssignments = request.getCourseBatchAssignments() != null && !request.getCourseBatchAssignments().isEmpty();
+        if (!hasAssignments && request.getCourseId() != null) {
             Course course = findCourseOrThrow(request.getCourseId());
             if (course.getStatus() != CourseStatus.PUBLISHED) {
                 throw new BadRequestException("Cannot enroll student in course '" + course.getTitle() + "' because it is not PUBLISHED (current status: " + course.getStatus() + ")");
@@ -228,9 +231,15 @@ public class StudentServiceImpl implements StudentService {
         }
 
         student = studentRepository.save(student);
-        syncCourseEnrollment(student);
-        if (request.getBatchId() != null) {
-            assignBatch(student, request.getBatchId());
+
+        if (hasAssignments) {
+            applyCourseBatchAssignments(student, request.getCourseBatchAssignments());
+            student = studentRepository.save(student);
+        } else {
+            syncCourseEnrollment(student);
+            if (request.getBatchId() != null) {
+                assignBatch(student, request.getBatchId());
+            }
         }
 
         List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
@@ -244,7 +253,9 @@ public class StudentServiceImpl implements StudentService {
         applyRequest(student, request);
         userRepository.save(student.getUser());
         student = studentRepository.save(student);
-        syncCourseEnrollment(student);
+        if (request.getCourseBatchAssignments() == null) {
+            syncCourseEnrollment(student);
+        }
 
         List<Enrollment> enrollments = enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId());
         return StudentResponse.from(student, enrollments);
@@ -392,9 +403,12 @@ public class StudentServiceImpl implements StudentService {
         if (currentCount >= batch.getMaxStudents()) {
             throw new ConflictException("Batch '" + batch.getName() + "' is full (" + batch.getMaxStudents() + " max)");
         }
-        // Schedule conflict: new batch must not overlap with any of the student's active enrollment batches.
+        // Schedule conflict: new batch must not overlap with any of the student's active
+        // enrollment batches. Exclude this batch's own course so replacing an existing
+        // course's batch with a different one of the same course isn't compared against itself.
         if (student.getId() != null) {
-            batchScheduleConflictValidator.validate(student, batch, null);
+            Long ownCourseId = batch.getCourse() != null ? batch.getCourse().getId() : null;
+            batchScheduleConflictValidator.validate(student, batch, ownCourseId);
         }
         if (student.getId() != null && batch.getCourse() != null) {
             Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(student.getId(), batch.getCourse().getId())
@@ -434,6 +448,12 @@ public class StudentServiceImpl implements StudentService {
         } else if (request.getCollegeName() != null && request.getCollegeName().isBlank()) {
             student.setCollege(null);
         }
+
+        if (request.getCourseBatchAssignments() != null) {
+            applyCourseBatchAssignments(student, request.getCourseBatchAssignments());
+            return;
+        }
+
         if (request.getBatchId() != null) {
             assignBatch(student, request.getBatchId());
         }
@@ -447,6 +467,77 @@ public class StudentServiceImpl implements StudentService {
         } else {
             student.setCourse(null);
         }
+    }
+
+    /**
+     * Applies a student's full desired set of course enrollments (each with
+     * at most one batch, per the Enrollment unique student+course constraint):
+     * deactivates enrollments for courses no longer selected (preserving
+     * attendance/grade history instead of deleting the row), then validates
+     * and upserts each selected course's enrollment. Deactivating dropped
+     * courses first means a batch being dropped can't cause a false-positive
+     * schedule conflict against a newly picked one. Cross-course schedule
+     * conflicts among the newly selected batches are still caught because
+     * {@link #assignBatch} checks against the student's currently persisted
+     * active enrollments, which include whichever of this same batch of
+     * assignments were already processed earlier in this loop.
+     */
+    private void applyCourseBatchAssignments(Student student, List<StudentCourseBatchAssignment> assignments) {
+        Set<Long> seenCourseIds = new HashSet<>();
+        for (StudentCourseBatchAssignment a : assignments) {
+            if (a.getCourseId() != null && !seenCourseIds.add(a.getCourseId())) {
+                throw new BadRequestException("Each course can only be selected once.");
+            }
+        }
+
+        Set<Long> desiredCourseIds = assignments.stream()
+                .map(StudentCourseBatchAssignment::getCourseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (student.getId() != null) {
+            for (Enrollment e : enrollmentRepository.findAllByStudentIdAndActiveTrueOrderByEnrolledAtDesc(student.getId())) {
+                if (e.getCourse() != null && !desiredCourseIds.contains(e.getCourse().getId())) {
+                    e.setActive(false);
+                    enrollmentRepository.save(e);
+                }
+            }
+        }
+
+        Course primaryCourse = null;
+        for (StudentCourseBatchAssignment assignment : assignments) {
+            if (assignment.getCourseId() == null) {
+                continue;
+            }
+            Course course = findCourseOrThrow(assignment.getCourseId());
+            if (course.getStatus() != CourseStatus.PUBLISHED) {
+                throw new BadRequestException("Cannot enroll student in course '" + course.getTitle() + "' because it is not PUBLISHED (current status: " + course.getStatus() + ")");
+            }
+            if (primaryCourse == null) {
+                primaryCourse = course;
+            }
+
+            if (assignment.getBatchId() != null) {
+                Batch batch = batchRepository.findById(assignment.getBatchId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + assignment.getBatchId()));
+                if (batch.getCourse() == null || !batch.getCourse().getId().equals(course.getId())) {
+                    throw new BadRequestException("Batch '" + batch.getName() + "' does not belong to course '" + course.getTitle() + "'.");
+                }
+                assignBatch(student, assignment.getBatchId());
+            } else if (student.getId() != null) {
+                Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(student.getId(), course.getId())
+                        .orElseGet(() -> {
+                            Enrollment e = new Enrollment();
+                            e.setStudent(student);
+                            e.setCourse(course);
+                            return e;
+                        });
+                enrollment.setBatch(null);
+                enrollment.setActive(true);
+                enrollmentRepository.save(enrollment);
+            }
+        }
+        student.setCourse(primaryCourse);
     }
 
     /**

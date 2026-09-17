@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
+
 public class StudentCreateRequest {
 
     @NotBlank(message = StudentValidationMessages.NAME_REQUIRED)
@@ -30,6 +32,8 @@ public class StudentCreateRequest {
     private Long batchId;
 
     private Long courseId;
+
+    private List<StudentCourseBatchAssignment> courseBatchAssignments;
 
     private String collegeName;
 
@@ -79,6 +83,14 @@ public class StudentCreateRequest {
 
     public void setCourseId(Long courseId) {
         this.courseId = courseId;
+    }
+
+    public List<StudentCourseBatchAssignment> getCourseBatchAssignments() {
+        return courseBatchAssignments;
+    }
+
+    public void setCourseBatchAssignments(List<StudentCourseBatchAssignment> courseBatchAssignments) {
+        this.courseBatchAssignments = courseBatchAssignments;
     }
 
     public String getCollegeName() {

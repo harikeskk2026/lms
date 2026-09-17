@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
+
 /**
  * Admin-side student update - deliberately does NOT include address,
  * qualification, linkedinUrl, githubUrl, or collegeId. Those are now managed
@@ -29,6 +31,8 @@ public class StudentUpdateRequest {
     private Long batchId;
 
     private Long courseId;
+
+    private List<StudentCourseBatchAssignment> courseBatchAssignments;
 
     private String collegeName;
 
@@ -70,6 +74,14 @@ public class StudentUpdateRequest {
 
     public void setCourseId(Long courseId) {
         this.courseId = courseId;
+    }
+
+    public List<StudentCourseBatchAssignment> getCourseBatchAssignments() {
+        return courseBatchAssignments;
+    }
+
+    public void setCourseBatchAssignments(List<StudentCourseBatchAssignment> courseBatchAssignments) {
+        this.courseBatchAssignments = courseBatchAssignments;
     }
 
     public String getCollegeName() {
