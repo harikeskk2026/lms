@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound, Eye } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound, Eye, FileDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
@@ -26,6 +26,7 @@ import MultiSelect from '@/components/ui/MultiSelect'
 import FormDrawer from '@/components/ui/FormDrawer'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
 import Pagination from '@/components/ui/Pagination'
+import ViewToggle from '@/components/ui/ViewToggle'
 import clsx from 'clsx'
 
 const EMPTY_COURSE_GROUP = { courseId: '', batchIds: [] }
@@ -163,6 +164,8 @@ export default function TrainersPage() {
   const [searchInput, setSearchInput] = useState('')
   const searchTimer = useRef(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [batchFilter, setBatchFilter] = useState('')
+  const [viewMode, setViewMode] = useState('table')
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false)
@@ -180,6 +183,7 @@ export default function TrainersPage() {
   const [submitting, setSubmitting] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [resetTarget, setResetTarget] = useState(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -209,6 +213,13 @@ export default function TrainersPage() {
     }))
   }, [courses])
 
+  const batchFilterOptions = useMemo(() => {
+    return batches.map(b => ({
+      value: String(b.id),
+      label: b.course?.title ? `${b.name} — ${b.course.title}` : b.name,
+    }))
+  }, [batches])
+
   const handleSearchChange = (val) => {
     setSearchInput(val)
     if (searchTimer.current) clearTimeout(searchTimer.current)
@@ -229,6 +240,7 @@ export default function TrainersPage() {
       const res = await adminApi.getTrainers({
         search: search.trim() || undefined,
         status: statusFilter || undefined,
+        batchId: batchFilter || undefined,
         page,
         limit: pageSize,
       }, { signal: controller.signal })
@@ -244,7 +256,7 @@ export default function TrainersPage() {
     } finally {
       if (fetchTrainersAbortRef.current === controller) setLoading(false)
     }
-  }, [search, statusFilter, page, pageSize])
+  }, [search, statusFilter, batchFilter, page, pageSize])
 
   useEffect(() => {
     fetchTrainers()
@@ -443,6 +455,55 @@ export default function TrainersPage() {
     }
   }
 
+  const downloadCSV = async () => {
+    try {
+      setExporting(true)
+      const exportLimit = Math.max(totalElements || 0, 10000)
+      const res = await adminApi.getTrainers({
+        search: search.trim() || undefined,
+        status: statusFilter || undefined,
+        batchId: batchFilter || undefined,
+        page: 1,
+        limit: exportLimit,
+      })
+      const allTrainers = res.data?.data?.trainers || []
+      if (allTrainers.length === 0) {
+        toast.error('No trainers found to export')
+        return
+      }
+
+      const headers = ['Name', 'Email', 'Phone', 'Department', 'Designation', 'Assigned Batches', 'Login Access']
+      const rows = allTrainers.map(t => [
+        t.name || '',
+        t.email || '',
+        t.phone || '',
+        t.department || '',
+        t.designation || '',
+        (t.batches && t.batches.length > 0) ? t.batches.map(b => b.name).join('; ') : '',
+        t.active ? 'Active' : 'Inactive',
+      ])
+
+      const csvContent = '﻿' + [headers, ...rows]
+        .map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `trainers_export_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success(`Exported all ${allTrainers.length} trainer records`)
+    } catch (err) {
+      toast.error('Failed to export trainers: ' + (err.response?.data?.message || err.message || 'Unknown error'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -491,20 +552,25 @@ export default function TrainersPage() {
             compact
           />
 
-          {(search || statusFilter) && (
-            <button
-              onClick={() => {
-                setSearchInput('')
-                setSearch('')
-                setStatusFilter('')
-                setPage(1)
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-gray-800 transition-colors"
-            >
-              <X size={14} />
-              Clear Filters
-            </button>
-          )}
+          <CustomSelect
+            value={batchFilter}
+            onChange={(val) => { setBatchFilter(val); setPage(1) }}
+            options={batchFilterOptions}
+            placeholder="All Batches"
+            searchable={batchFilterOptions.length >= 10}
+            compact
+          />
+
+          <button
+            onClick={downloadCSV}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            {exporting ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+            {exporting ? 'Exporting...' : 'Export'}
+          </button>
+
+          <ViewToggle value={viewMode} onChange={setViewMode} />
 
           <button
             onClick={fetchTrainers}
@@ -531,6 +597,102 @@ export default function TrainersPage() {
             <UserCheck size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
             <p className="font-bold text-slate-700 dark:text-slate-200 text-lg">No trainers found</p>
             <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Try adjusting your search criteria or add a new trainer.</p>
+          </div>
+        ) : viewMode === 'card' ? (
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {trainers.map(trainer => (
+              <div
+                key={trainer.id}
+                className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900/60 p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50 transition-all"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                      {trainer.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 dark:text-white truncate">{trainer.name}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 font-mono truncate">{trainer.email}</p>
+                    </div>
+                  </div>
+                  <LoginAccessToggle active={trainer.active} name={trainer.name} onToggle={() => handleToggleStatus(trainer)} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-slate-400 dark:text-slate-500 uppercase text-[10px] font-semibold mb-0.5">Contact</p>
+                    {trainer.phone ? (
+                      <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                        <Phone size={12} className="text-slate-400 flex-shrink-0" />
+                        <span className="truncate">{trainer.phone}</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500 italic">No contact</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-slate-400 dark:text-slate-500 uppercase text-[10px] font-semibold mb-0.5">Department</p>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium truncate block">{trainer.department || '—'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-slate-400 dark:text-slate-500 uppercase text-[10px] font-semibold mb-0.5">Designation / Role</p>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium truncate block">{trainer.designation || '—'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-slate-400 dark:text-slate-500 uppercase text-[10px] font-semibold mb-1">Assigned Batches</p>
+                  {trainer.batches && trainer.batches.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {trainer.batches.map(b => (
+                        <Link
+                          key={b.id}
+                          href={`/admin/batches/${b.id}`}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/70 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 transition-all"
+                          title={`${b.courseTitle ? b.courseTitle + ' · ' : ''}${b.timing || 'No time set'}`}
+                        >
+                          <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', b.active ? 'bg-green-500' : 'bg-slate-400')} />
+                          <span className="break-words">{b.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400 dark:text-slate-500 italic">No batches assigned</span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-slate-100 dark:border-gray-800">
+                  <button
+                    onClick={() => router.push(`/admin/trainers/${trainer.id}`)}
+                    className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors"
+                    title="View Details"
+                  >
+                    <Eye size={14} />
+                  </button>
+                  <button
+                    onClick={() => setResetTarget({ ...trainer, role: 'TRAINER' })}
+                    className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors"
+                    title="Reset Password"
+                  >
+                    <KeyRound size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleOpenEdit(trainer)}
+                    className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors"
+                    title="Edit Trainer"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleOpenDelete(trainer)}
+                    className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 flex items-center justify-center transition-colors"
+                    title="Delete Trainer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="overflow-x-auto">

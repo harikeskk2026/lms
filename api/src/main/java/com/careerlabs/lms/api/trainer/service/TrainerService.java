@@ -7,7 +7,7 @@ import com.careerlabs.lms.api.trainer.dto.response.TrainerResponse;
 
 public interface TrainerService {
 
-    TrainerPageResponse listTrainers(String search, String status, int page, int limit);
+    TrainerPageResponse listTrainers(String search, String status, Long batchId, int page, int limit);
 
     TrainerResponse getTrainer(Long id);
 

@@ -15,7 +15,9 @@ import com.careerlabs.lms.api.trainer.service.TrainerService;
 import com.careerlabs.lms.api.user.entity.Role;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -51,7 +53,7 @@ public class TrainerServiceImpl implements TrainerService {
 
     @Override
     @Transactional(readOnly = true)
-    public TrainerPageResponse listTrainers(String search, String status, int page, int limit) {
+    public TrainerPageResponse listTrainers(String search, String status, Long batchId, int page, int limit) {
         Pageable pageable = PageRequest.of(Math.max(0, page - 1), limit, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Specification<User> spec = (root, query, cb) -> {
@@ -69,6 +71,14 @@ public class TrainerServiceImpl implements TrainerService {
                 predicates.add(cb.equal(root.get("active"), true));
             } else if ("inactive".equalsIgnoreCase(status)) {
                 predicates.add(cb.equal(root.get("active"), false));
+            }
+
+            if (batchId != null) {
+                Subquery<Long> subquery = query.subquery(Long.class);
+                var batchRoot = subquery.from(Batch.class);
+                Join<Batch, User> trainerJoin = batchRoot.join("trainers");
+                subquery.select(trainerJoin.get("id")).where(cb.equal(batchRoot.get("id"), batchId));
+                predicates.add(root.get("id").in(subquery));
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));

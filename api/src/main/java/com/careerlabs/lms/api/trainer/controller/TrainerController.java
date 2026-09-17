@@ -33,9 +33,10 @@ public class TrainerController {
     public ResponseEntity<ApiResponse<TrainerPageResponse>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long batchId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int limit) {
-        TrainerPageResponse response = trainerService.listTrainers(search, status, page, limit);
+        TrainerPageResponse response = trainerService.listTrainers(search, status, batchId, page, limit);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

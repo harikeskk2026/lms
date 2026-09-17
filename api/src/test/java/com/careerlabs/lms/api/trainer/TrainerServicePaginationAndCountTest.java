@@ -65,7 +65,7 @@ class TrainerServicePaginationAndCountTest {
         when(userRepository.countByRoleAndActive(Role.TRAINER, false)).thenReturn(36L);
         when(batchRepository.findByTrainerIdInOrderByCreatedAtDesc(any())).thenReturn(List.of());
 
-        TrainerPageResponse response = trainerService.listTrainers(null, null, 1, 10);
+        TrainerPageResponse response = trainerService.listTrainers(null, null, null, 1, 10);
 
         assertNotNull(response);
         assertEquals(2, response.getTrainers().size());
