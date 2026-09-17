@@ -5,13 +5,13 @@ import com.careerlabs.lms.api.batch.entity.BatchMode;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public record BatchResponse(
         Long id,
         String name,
         CourseSummary course,
-        Long trainerId,
-        TrainerSummary trainer,
+        List<TrainerSummary> trainers,
         LocalDate startDate,
         LocalDate endDate,
         String timing,
@@ -25,17 +25,16 @@ public record BatchResponse(
 ) {
 
     public static BatchResponse from(Batch batch, int studentCount) {
-        return from(batch, studentCount, null);
+        return from(batch, studentCount, List.of());
     }
 
-    public static BatchResponse from(Batch batch, int studentCount, TrainerSummary trainer) {
+    public static BatchResponse from(Batch batch, int studentCount, List<TrainerSummary> trainers) {
         String status = computeStatus(batch.getStartDate(), batch.getEndDate());
         return new BatchResponse(
                 batch.getId(),
                 batch.getName(),
                 new CourseSummary(batch.getCourse().getId(), batch.getCourse().getTitle()),
-                batch.getTrainerId(),
-                trainer,
+                trainers != null ? trainers : List.of(),
                 batch.getStartDate(),
                 batch.getEndDate(),
                 batch.getTiming(),

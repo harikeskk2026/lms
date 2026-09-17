@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public class BatchRequest {
 
@@ -17,7 +18,7 @@ public class BatchRequest {
     @NotNull(message = BatchValidationMessages.COURSE_ID_REQUIRED)
     private Long courseId;
 
-    private Long trainerId;
+    private List<Long> trainerIds;
 
     @NotNull(message = BatchValidationMessages.START_DATE_REQUIRED)
     private LocalDate startDate;
@@ -50,12 +51,12 @@ public class BatchRequest {
         this.courseId = courseId;
     }
 
-    public Long getTrainerId() {
-        return trainerId;
+    public List<Long> getTrainerIds() {
+        return trainerIds;
     }
 
-    public void setTrainerId(Long trainerId) {
-        this.trainerId = trainerId;
+    public void setTrainerIds(List<Long> trainerIds) {
+        this.trainerIds = trainerIds;
     }
 
     public LocalDate getStartDate() {

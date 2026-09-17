@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Users, Calendar, Clock, Monitor, MapPin, Pencil, Trash2, Search } from 'lucide-react'
 import { format } from 'date-fns'
@@ -8,9 +8,11 @@ import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import SlidePanel from '@/components/admin/SlidePanel'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import MultiSelect from '@/components/ui/MultiSelect'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const MODE_ICONS = { ONLINE: Monitor, OFFLINE: MapPin, HYBRID: Clock }
@@ -69,11 +71,16 @@ export default function BatchesPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingBatch, setDeletingBatch] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', courseId: '', trainerId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: '' })
+  const [form, setForm] = useState({ name: '', courseId: '', trainerIds: [], startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: '' })
 
   // Clean Time Pickers
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
+
+  const [searchInput, setSearchInput] = useState('')
+  const searchQuery = useDebouncedValue(searchInput, 400)
+  const [modeTab, setModeTab] = useState('ALL')
+  const batchesAbortRef = useRef(null)
 
   const selectedCourse = courses.find(c => String(c.id) === String(form.courseId))
   const batchDateError = validateBatchDates(form.startDate, form.endDate, selectedCourse?.duration)
@@ -81,15 +88,26 @@ export default function BatchesPage() {
   const maxEndDateStr = maxEndDate ? format(maxEndDate, 'yyyy-MM-dd') : undefined
 
   const load = () => {
+    batchesAbortRef.current?.abort()
+    const controller = new AbortController()
+    batchesAbortRef.current = controller
     setLoading(true)
-    batchService.list()
+    batchService.list({ search: searchQuery.trim() || undefined }, { signal: controller.signal })
       .then(r => setBatches(r.data || []))
-      .catch(err => toast.error(err.message || 'Failed to load batches'))
-      .finally(() => setLoading(false))
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load batches')
+      })
+      .finally(() => {
+        if (batchesAbortRef.current === controller) setLoading(false)
+      })
   }
 
   useEffect(() => {
     load()
+  }, [searchQuery])
+
+  useEffect(() => {
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     adminApi.getTrainers({ limit: 100, status: 'active' })
       .then(r => {
@@ -101,7 +119,7 @@ export default function BatchesPage() {
 
   const openCreate = () => {
     setEditingBatch(null)
-    setForm({ name: '', courseId: '', trainerId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: '' })
+    setForm({ name: '', courseId: '', trainerIds: [], startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: '' })
     setStartTime('')
     setEndTime('')
     setPanelOpen(true)
@@ -109,12 +127,13 @@ export default function BatchesPage() {
 
   const handleOpenEdit = (batch) => {
     setEditingBatch(batch)
-    const rawTrainerId = batch.trainer?.id ? String(batch.trainer.id) : (batch.trainerId ? String(batch.trainerId) : '')
-    const isTrainerActive = batch.trainer?.active === true || (rawTrainerId && trainers.some(t => String(t.id) === rawTrainerId && t.active === true))
+    const activeTrainerIds = (batch.trainers || [])
+      .filter(t => t.active === true)
+      .map(t => String(t.id))
     setForm({
       name: batch.name || '',
       courseId: batch.course?.id ? String(batch.course.id) : (batch.courseId ? String(batch.courseId) : ''),
-      trainerId: isTrainerActive ? rawTrainerId : '',
+      trainerIds: activeTrainerIds,
       startDate: batch.startDate ? batch.startDate.slice(0, 10) : '',
       endDate: batch.endDate ? batch.endDate.slice(0, 10) : '',
       timing: batch.timing || '',
@@ -157,7 +176,7 @@ export default function BatchesPage() {
       ...form,
       timing: formattedTiming,
       courseId: Number(form.courseId),
-      trainerId: form.trainerId ? Number(form.trainerId) : null,
+      trainerIds: form.trainerIds.map(Number),
       maxStudents: form.maxStudents ? Number(form.maxStudents) : 30,
     }
     try {
@@ -193,12 +212,9 @@ export default function BatchesPage() {
     }
   }
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [modeTab, setModeTab] = useState('ALL')
-
   const isTrainer = user?.role === 'TRAINER'
   const userBatches = isTrainer && user?.id
-    ? batches.filter(b => b.trainerId === user.id || b.trainer?.id === user.id)
+    ? batches.filter(b => (b.trainers || []).some(t => t.id === user.id))
     : batches
 
   const modeCounts = {
@@ -208,17 +224,8 @@ export default function BatchesPage() {
     HYBRID: userBatches.filter(b => b.mode === 'HYBRID').length,
   }
 
-  const displayedBatches = userBatches.filter(b => {
-    if (modeTab !== 'ALL' && b.mode !== modeTab) return false
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase().trim()
-    return (
-      b.name?.toLowerCase().includes(q) ||
-      b.course?.title?.toLowerCase().includes(q) ||
-      b.trainer?.name?.toLowerCase().includes(q) ||
-      b.mode?.toLowerCase().includes(q)
-    )
-  })
+  // Search is server-side (see `load`); only the mode tab is filtered client-side here.
+  const displayedBatches = userBatches.filter(b => modeTab === 'ALL' || b.mode === modeTab)
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -235,14 +242,14 @@ export default function BatchesPage() {
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
               placeholder="Search batches..."
               className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm"
             />
-            {searchQuery && (
+            {searchInput && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => setSearchInput('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
               >
                 ✕
@@ -375,12 +382,16 @@ export default function BatchesPage() {
                       </span>
                     </div>
 
-                    {b.trainer && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-[9px]">
-                          {b.trainer.name[0]}
-                        </div>
-                        <span className="break-words">{b.trainer.name}</span>
+                    {b.trainers && b.trainers.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {b.trainers.map(t => (
+                          <div key={t.id} className="flex items-center gap-1.5 text-xs text-gray-500">
+                            <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-[9px]">
+                              {t.name[0]}
+                            </div>
+                            <span className="break-words">{t.name}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -461,24 +472,26 @@ export default function BatchesPage() {
               )}
             </div>
 
-            {/* Assign Lead Trainer */}
+            {/* Assign Trainers */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Lead Trainer (Optional)</label>
-              <CustomSelect
-                value={form.trainerId}
-                onChange={(val) => setForm(f => ({ ...f, trainerId: val }))}
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Trainers (Optional)</label>
+              <MultiSelect
+                value={form.trainerIds}
+                onChange={(vals) => setForm(f => ({ ...f, trainerIds: vals.map(String) }))}
                 options={trainers.filter(t => t.active === true).map(t => ({
-                  value: t.id,
+                  value: String(t.id),
                   label: `${t.name}${t.designation ? ` (${t.designation})` : ''}`
                 }))}
-                placeholder="Select lead trainer (optional)"
+                placeholder="Select one or more trainers (optional)"
                 searchable={trainers.length >= 10}
               />
-              {editingBatch?.trainer && editingBatch.trainer.active === false && !form.trainerId && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
-                  Previous trainer ({editingBatch.trainer.name}) is inactive. Please select an active trainer or leave unassigned.
-                </p>
-              )}
+              {(editingBatch?.trainers || [])
+                .filter(t => t.active === false && !form.trainerIds.includes(String(t.id)))
+                .map(t => (
+                  <p key={t.id} className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
+                    Previous trainer ({t.name}) is inactive. Please select an active trainer or remove them.
+                  </p>
+                ))}
             </div>
 
             {/* Clean Start & End Time Fields */}

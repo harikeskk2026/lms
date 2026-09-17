@@ -35,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -154,7 +155,11 @@ class EnrollmentAuthorizationTest {
         setId(b, id);
         b.setName(name);
         b.setCourse(course);
-        b.setTrainerId(trainerId);
+        if (trainerId != null) {
+            User trainer = new User();
+            setId(trainer, trainerId);
+            b.setTrainers(Set.of(trainer));
+        }
         b.setActive(true);
         b.setMaxStudents(30);
         return b;

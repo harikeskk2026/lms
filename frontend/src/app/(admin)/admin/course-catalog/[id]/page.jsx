@@ -25,6 +25,7 @@ import { resolveFileUrl, adminApi } from '@/lib/api'
 
 import SlidePanel from '@/components/admin/SlidePanel'
 import CustomSelect from '@/components/ui/CustomSelect'
+import MultiSelect from '@/components/ui/MultiSelect'
 
 const TABS = ['Overview', 'Syllabus', 'Materials', 'Batches', 'Enrolled Students']
 const MATERIAL_TYPES = ['PDF', 'DOCUMENT', 'PRESENTATION', 'VIDEO', 'LINK', 'OTHER']
@@ -1960,7 +1961,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30, trainerId: '' })
+  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30, trainerIds: [] })
   const [saving, setSaving] = useState(false)
 
   // Clean Time Pickers
@@ -1973,7 +1974,7 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
       .then(r => {
         let list = (r.data || []).filter(b => String(b.course?.id) === String(courseId))
         if (user?.role === 'TRAINER' && user?.id) {
-          list = list.filter(b => b.trainerId === user.id || b.trainer?.id === user.id)
+          list = list.filter(b => (b.trainers || []).some(t => t.id === user.id))
         }
         setBatches(list)
       })
@@ -1996,12 +1997,12 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
         ...form,
         timing: formattedTiming,
         courseId: Number(courseId),
-        trainerId: form.trainerId ? Number(form.trainerId) : null,
+        trainerIds: form.trainerIds.map(Number),
         maxStudents: Number(form.maxStudents),
       })
       toast.success('Batch created')
       setShowForm(false)
-      setForm({ name: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30, trainerId: '' })
+      setForm({ name: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30, trainerIds: [] })
       load()
     } catch (err) { toast.error(err.message || 'Failed to create batch') } finally { setSaving(false) }
   }
@@ -2026,16 +2027,16 @@ function BatchesTab({ courseId, courseTitle, trainers = [], loadingTrainers = fa
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Trainer (Optional)</label>
-            <CustomSelect
-              value={form.trainerId}
-              onChange={(val) => setForm(f => ({ ...f, trainerId: val }))}
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Trainers (Optional)</label>
+            <MultiSelect
+              value={form.trainerIds}
+              onChange={(vals) => setForm(f => ({ ...f, trainerIds: vals.map(String) }))}
               disabled={loadingTrainers}
               options={trainers.filter(t => t.active === true).map(t => ({
-                value: t.id,
+                value: String(t.id),
                 label: t.name + (t.designation ? ` · ${t.designation}` : ''),
               }))}
-              placeholder={loadingTrainers ? 'Loading trainers...' : 'Select trainer (optional)'}
+              placeholder={loadingTrainers ? 'Loading trainers...' : 'Select trainers (optional)'}
               searchable
             />
           </div>

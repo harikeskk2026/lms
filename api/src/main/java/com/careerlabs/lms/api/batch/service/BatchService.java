@@ -12,6 +12,10 @@ public interface BatchService {
 
     List<BatchResponse> list(JwtUserPrincipal principal);
 
+    /** Same as {@link #list(JwtUserPrincipal)}, additionally narrowed to batches whose name or course title
+     * contains {@code search} (case-insensitive). A blank/null search is a no-op. */
+    List<BatchResponse> list(JwtUserPrincipal principal, String search);
+
     BatchResponse get(Long id);
 
     BatchResponse get(Long id, JwtUserPrincipal principal);

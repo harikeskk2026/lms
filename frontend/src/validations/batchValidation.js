@@ -3,8 +3,8 @@ import { z } from 'zod'
 export const batchSchema = z.object({
   name: z.string().min(1, 'Batch name is required'),
   courseId: z.coerce.number({ invalid_type_error: 'Course is required' }).positive('Course is required'),
-  trainerId: z.union([z.coerce.number().positive(), z.literal('')]).optional()
-    .transform(v => (v === '' || v === undefined ? null : v)),
+  trainerIds: z.array(z.coerce.number().positive()).optional()
+    .transform(v => v ?? []),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
   timing: z.string().optional().or(z.literal('')),

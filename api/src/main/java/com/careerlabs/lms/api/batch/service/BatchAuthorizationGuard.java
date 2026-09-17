@@ -35,7 +35,7 @@ public class BatchAuthorizationGuard {
     /**
      * Verify the batch exists and belongs to the trainer.
      * Admins/SuperAdmins always pass.
-     * TRAINER must own the batch (batch.trainerId == principal.id()).
+     * TRAINER must be one of the batch's assigned trainers (batch.trainers contains principal.id()).
      * Throws ForbiddenException if not authorized.
      */
     public Batch requireBatchOwnership(JwtUserPrincipal principal, Long batchId) {
@@ -50,7 +50,7 @@ public class BatchAuthorizationGuard {
         }
 
         if (isTrainer(principal)) {
-            if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
+            if (!batch.hasTrainer(principal.id())) {
                 throw new ForbiddenException("You are not assigned to this batch");
             }
             return batch;
@@ -83,7 +83,7 @@ public class BatchAuthorizationGuard {
         if (isAdmin(principal)) return true;
         if (!isTrainer(principal)) return false;
         return batchRepository.findById(batchId)
-                .map(b -> b.getTrainerId() != null && b.getTrainerId().equals(principal.id()))
+                .map(b -> b.hasTrainer(principal.id()))
                 .orElse(false);
     }
 
@@ -98,7 +98,7 @@ public class BatchAuthorizationGuard {
         if (createdBy != null && createdBy.equals(principal.id())) return true;
         if (batchId != null) {
             return batchRepository.findById(batchId)
-                    .map(b -> b.getTrainerId() != null && b.getTrainerId().equals(principal.id()))
+                    .map(b -> b.hasTrainer(principal.id()))
                     .orElse(false);
         }
         return false;

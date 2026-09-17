@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.batch.entity;
 
 import com.careerlabs.lms.api.course.entity.Course;
+import com.careerlabs.lms.api.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,6 +11,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -17,6 +20,8 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "batches")
@@ -33,8 +38,13 @@ public class Batch {
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
 
-    @Column(name = "trainer_id")
-    private Long trainerId;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "batch_trainers",
+            joinColumns = @JoinColumn(name = "batch_id"),
+            inverseJoinColumns = @JoinColumn(name = "trainer_id")
+    )
+    private Set<User> trainers = new HashSet<>();
 
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
@@ -92,12 +102,16 @@ public class Batch {
         this.course = course;
     }
 
-    public Long getTrainerId() {
-        return trainerId;
+    public Set<User> getTrainers() {
+        return trainers;
     }
 
-    public void setTrainerId(Long trainerId) {
-        this.trainerId = trainerId;
+    public void setTrainers(Set<User> trainers) {
+        this.trainers = trainers != null ? trainers : new HashSet<>();
+    }
+
+    public boolean hasTrainer(Long trainerId) {
+        return trainerId != null && trainers.stream().anyMatch(t -> t.getId().equals(trainerId));
     }
 
     public LocalDate getStartDate() {

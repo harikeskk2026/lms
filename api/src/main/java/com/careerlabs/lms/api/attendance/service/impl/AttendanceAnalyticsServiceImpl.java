@@ -33,7 +33,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -73,6 +72,15 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
         this.attendanceRiskService = attendanceRiskService;
         this.meetingLinkRepository = meetingLinkRepository;
         this.userRepository = userRepository;
+    }
+
+    /** A batch can have several trainers now; join their names for display. */
+    private String joinedTrainerNames(Batch batch) {
+        if (batch == null || batch.getTrainers().isEmpty()) return null;
+        return batch.getTrainers().stream()
+                .map(User::getName)
+                .sorted()
+                .collect(Collectors.joining(", "));
     }
 
     @Override
@@ -285,21 +293,6 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 .filter(e -> e.getBatch() != null)
                 .collect(Collectors.groupingBy(e -> e.getBatch().getId(), Collectors.collectingAndThen(Collectors.counting(), Long::intValue)));
 
-        Set<Long> trainerIds = new HashSet<>();
-        for (DailyClass cls : classes) {
-            if (cls.getBatch() != null && cls.getBatch().getTrainerId() != null) {
-                trainerIds.add(cls.getBatch().getTrainerId());
-            }
-        }
-        for (MeetingLink m : allMeetings) {
-            if (m.getBatch() != null && m.getBatch().getTrainerId() != null) {
-                trainerIds.add(m.getBatch().getTrainerId());
-            }
-        }
-        Map<Long, String> trainerNameById = trainerIds.isEmpty() ? Map.of() : userRepository.findAllById(trainerIds).stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toMap(User::getId, User::getName, (existing, replacement) -> existing));
-
         Map<Long, MeetingLink> meetingByDailyClassId = new java.util.HashMap<>();
         Map<String, MeetingLink> meetingByBatchAndTitle = new java.util.HashMap<>();
         Map<Long, MeetingLink> meetingByBatchId = new java.util.HashMap<>();
@@ -338,9 +331,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
             String timing = null;
 
             if (cls.getBatch() != null) {
-                if (cls.getBatch().getTrainerId() != null) {
-                    trainerName = trainerNameById.get(cls.getBatch().getTrainerId());
-                }
+                trainerName = joinedTrainerNames(cls.getBatch());
                 if (cls.getBatch().getCourse() != null) {
                     courseTitle = cls.getBatch().getCourse().getTitle();
                 }
@@ -434,9 +425,7 @@ public class AttendanceAnalyticsServiceImpl implements AttendanceAnalyticsServic
                 String timing = null;
 
                 if (m.getBatch() != null) {
-                    if (m.getBatch().getTrainerId() != null) {
-                        trainerName = trainerNameById.get(m.getBatch().getTrainerId());
-                    }
+                    trainerName = joinedTrainerNames(m.getBatch());
                     if (m.getBatch().getCourse() != null) {
                         courseTitle = m.getBatch().getCourse().getTitle();
                     }

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -31,8 +32,9 @@ public class BatchController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<BatchResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(batchService.list(principal)));
+    public ResponseEntity<ApiResponse<List<BatchResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal,
+                                                                   @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(ApiResponse.of(batchService.list(principal, search)));
     }
 
     @GetMapping("/{id}")

@@ -28,6 +28,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -95,7 +96,7 @@ class BatchServiceTrainerValidationTest {
         BatchRequest req = new BatchRequest();
         req.setName("Batch A");
         req.setCourseId(10L);
-        req.setTrainerId(trainerId);
+        req.setTrainerIds(trainerId != null ? List.of(trainerId) : null);
         req.setStartDate(LocalDate.of(2026, 9, 1));
         req.setEndDate(LocalDate.of(2026, 12, 1));
         req.setTiming("09:00 AM - 11:00 AM");
@@ -166,7 +167,7 @@ class BatchServiceTrainerValidationTest {
         setId(existingBatch, 50L);
         existingBatch.setName("Existing Batch");
         existingBatch.setCourse(course);
-        existingBatch.setTrainerId(1L); // previously assigned to activeTrainer
+        existingBatch.setTrainers(Set.of(activeTrainer)); // previously assigned to activeTrainer
 
         when(batchRepository.findById(50L)).thenReturn(Optional.of(existingBatch));
         when(userRepository.findById(2L)).thenReturn(Optional.of(inactiveTrainer));
@@ -186,7 +187,7 @@ class BatchServiceTrainerValidationTest {
         setId(existingBatch, 50L);
         existingBatch.setName("Existing Batch");
         existingBatch.setCourse(course);
-        existingBatch.setTrainerId(2L); // previously assigned to inactiveTrainer
+        existingBatch.setTrainers(Set.of(inactiveTrainer)); // previously assigned to inactiveTrainer
 
         when(batchRepository.findById(50L)).thenReturn(Optional.of(existingBatch));
         when(userRepository.findById(2L)).thenReturn(Optional.of(inactiveTrainer));
@@ -206,7 +207,7 @@ class BatchServiceTrainerValidationTest {
         setId(existingBatch, 50L);
         existingBatch.setName("Inactive Batch");
         existingBatch.setCourse(course);
-        existingBatch.setTrainerId(2L);
+        existingBatch.setTrainers(Set.of(inactiveTrainer));
         existingBatch.setActive(false);
         existingBatch.setStartDate(LocalDate.of(2026, 9, 1));
         existingBatch.setEndDate(LocalDate.of(2026, 12, 1));
@@ -231,7 +232,7 @@ class BatchServiceTrainerValidationTest {
         setId(existingBatch, 50L);
         existingBatch.setName("Inactive Batch");
         existingBatch.setCourse(course);
-        existingBatch.setTrainerId(1L);
+        existingBatch.setTrainers(Set.of(activeTrainer));
         existingBatch.setActive(false);
         existingBatch.setStartDate(LocalDate.of(2026, 9, 1));
         existingBatch.setEndDate(LocalDate.of(2026, 12, 1));
@@ -257,7 +258,7 @@ class BatchServiceTrainerValidationTest {
         setId(existingBatch, 50L);
         existingBatch.setName("Existing Batch");
         existingBatch.setCourse(course);
-        existingBatch.setTrainerId(2L); // previously assigned to inactiveTrainer
+        existingBatch.setTrainers(Set.of(inactiveTrainer)); // previously assigned to inactiveTrainer
 
         when(batchRepository.findById(50L)).thenReturn(Optional.of(existingBatch));
         when(userRepository.findById(1L)).thenReturn(Optional.of(activeTrainer));

@@ -75,8 +75,7 @@ public class AssignmentSubmissionServiceImpl implements AssignmentSubmissionServ
         if (principal == null || principal.role() == null) return;
         String role = principal.role().toUpperCase();
         if ("TRAINER".equals(role) || "ROLE_TRAINER".equals(role)) {
-            if (assignment == null || assignment.getBatch() == null || assignment.getBatch().getTrainerId() == null
-                    || !assignment.getBatch().getTrainerId().equals(principal.id())) {
+            if (assignment == null || assignment.getBatch() == null || !assignment.getBatch().hasTrainer(principal.id())) {
                 throw new ForbiddenException("You are not authorized to access or grade submissions for this batch");
             }
         }

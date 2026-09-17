@@ -3,6 +3,8 @@ package com.careerlabs.lms.api.trainer.dto.request;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
+import java.util.List;
+
 public class TrainerUpdateRequest {
 
     @NotBlank(message = "Name is required")
@@ -17,6 +19,8 @@ public class TrainerUpdateRequest {
     private String department;
     private Long courseId;
     private Long batchId;
+    private List<Long> batchIds;
+    private List<CourseBatchAssignment> courseBatchAssignments;
 
     public TrainerUpdateRequest() {
     }
@@ -43,6 +47,22 @@ public class TrainerUpdateRequest {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
+    }
+
+    public List<Long> getBatchIds() {
+        return batchIds;
+    }
+
+    public void setBatchIds(List<Long> batchIds) {
+        this.batchIds = batchIds;
+    }
+
+    public List<CourseBatchAssignment> getCourseBatchAssignments() {
+        return courseBatchAssignments;
+    }
+
+    public void setCourseBatchAssignments(List<CourseBatchAssignment> courseBatchAssignments) {
+        this.courseBatchAssignments = courseBatchAssignments;
     }
 
     public String getName() {

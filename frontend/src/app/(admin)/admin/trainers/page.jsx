@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
@@ -18,12 +19,16 @@ import {
   isValidPassword,
   PASSWORD_ERROR_MESSAGE
 } from '@/utilities/validators'
+import LoginAccessToggle from '@/components/admin/LoginAccessToggle'
 import ResetPasswordModal from '@/components/admin/ResetPasswordModal'
-import SearchableSelect from '@/components/admin/SearchableSelect'
 import CustomSelect from '@/components/ui/CustomSelect'
+import MultiSelect from '@/components/ui/MultiSelect'
 import FormDrawer from '@/components/ui/FormDrawer'
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter'
+import Pagination from '@/components/ui/Pagination'
 import clsx from 'clsx'
+
+const EMPTY_COURSE_GROUP = { courseId: '', batchIds: [] }
 
 const EMPTY_FORM = {
   name: '',
@@ -32,8 +37,7 @@ const EMPTY_FORM = {
   phone: '',
   designation: '',
   department: '',
-  courseId: '',
-  batchId: '',
+  courseGroups: [{ ...EMPTY_COURSE_GROUP }],
 }
 
 function genPassword() {
@@ -55,7 +59,97 @@ function genPassword() {
   return combined.join('')
 }
 
+/**
+ * Repeating "Course -> Batches" group editor. Each group pins one course and
+ * a multi-select of that course's batches; courses already used by another
+ * group are hidden from the picker so the same course can't be added twice.
+ */
+function CourseBatchGroups({ groups, onChange, courseOptions, batches }) {
+  const usedCourseIds = groups.map(g => g.courseId).filter(Boolean)
+
+  const updateGroup = (idx, patch) => {
+    onChange(groups.map((g, i) => (i === idx ? { ...g, ...patch } : g)))
+  }
+  const addGroup = () => onChange([...groups, { ...EMPTY_COURSE_GROUP }])
+  const removeGroup = (idx) => {
+    onChange(groups.length <= 1 ? [{ ...EMPTY_COURSE_GROUP }] : groups.filter((_, i) => i !== idx))
+  }
+
+  const lastGroup = groups[groups.length - 1]
+  const canAddMore = usedCourseIds.length < courseOptions.length && Boolean(lastGroup?.courseId)
+
+  return (
+    <div>
+      <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1.5 block">
+        Course &amp; Batch Assignments <span className="text-[11px] text-slate-400 font-normal">(Optional)</span>
+      </label>
+      <div className="space-y-2.5">
+        {groups.map((group, idx) => {
+          const availableCourseOptions = courseOptions.filter(
+            c => c.value === group.courseId || !usedCourseIds.includes(c.value)
+          )
+          const batchOptionsForGroup = group.courseId
+            ? batches
+                .filter(b => b.course && String(b.course.id) === String(group.courseId))
+                .map(b => ({
+                  value: String(b.id),
+                  label: `${b.name}${b.trainers && b.trainers.length > 0 ? ` (Current: ${b.trainers.map(t => t.name).join(', ')})` : ' (Unassigned)'}`,
+                }))
+            : []
+
+          return (
+            <div key={idx} className="p-3 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50/60 dark:bg-gray-800/40">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 sm:items-end">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-1 block uppercase tracking-wide">Course</label>
+                  <CustomSelect
+                    value={group.courseId}
+                    onChange={(val) => updateGroup(idx, { courseId: val, batchIds: [] })}
+                    options={availableCourseOptions}
+                    placeholder="Select course"
+                    searchable={availableCourseOptions.length >= 10}
+                    compact
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-1 block uppercase tracking-wide">Batches</label>
+                  <MultiSelect
+                    value={group.batchIds}
+                    onChange={(vals) => updateGroup(idx, { batchIds: vals })}
+                    options={batchOptionsForGroup}
+                    placeholder={group.courseId ? 'Select batches' : 'Select a course first'}
+                    disabled={!group.courseId}
+                    emptyLabel={group.courseId ? 'No batches for this course' : 'Select a course first'}
+                    compact
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeGroup(idx)}
+                  className="justify-self-end sm:justify-self-auto w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                  title="Remove this course"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={addGroup}
+        disabled={!canAddMore}
+        className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        <Plus size={13} /> Add Another Course
+      </button>
+    </div>
+  )
+}
+
 export default function TrainersPage() {
+  const router = useRouter()
   const [trainers, setTrainers] = useState([])
   const [totalElements, setTotalElements] = useState(0)
   const [totalActive, setTotalActive] = useState(0)
@@ -108,23 +202,12 @@ export default function TrainersPage() {
     loadCoursesAndBatches()
   }, [loadCoursesAndBatches])
 
-  const filteredBatches = form.courseId
-    ? batches.filter(b => b.course && String(b.course.id) === String(form.courseId))
-    : []
-
   const courseOptions = useMemo(() => {
     return courses.map(c => ({
       value: String(c.id),
       label: c.title,
     }))
   }, [courses])
-
-  const batchOptions = useMemo(() => {
-    return filteredBatches.map(b => ({
-      value: String(b.id),
-      label: `${b.name}${b.trainer ? ` (Current: ${b.trainer.name})` : ' (Unassigned)'}`,
-    }))
-  }, [filteredBatches])
 
   const handleSearchChange = (val) => {
     setSearchInput(val)
@@ -135,17 +218,12 @@ export default function TrainersPage() {
     }, 300)
   }
 
-  const pageNumbers = useMemo(() => {
-    const pages = []
-    for (let p = 1; p <= totalPages; p++) {
-      if (p === 1 || p === totalPages || Math.abs(p - page) <= 1) {
-        pages.push(p)
-      }
-    }
-    return pages
-  }, [totalPages, page])
+  const fetchTrainersAbortRef = useRef(null)
 
   const fetchTrainers = useCallback(async () => {
+    fetchTrainersAbortRef.current?.abort()
+    const controller = new AbortController()
+    fetchTrainersAbortRef.current = controller
     setLoading(true)
     try {
       const res = await adminApi.getTrainers({
@@ -153,7 +231,7 @@ export default function TrainersPage() {
         status: statusFilter || undefined,
         page,
         limit: pageSize,
-      })
+      }, { signal: controller.signal })
       const data = res.data?.data || {}
       setTrainers(data.trainers || [])
       setTotalElements(data.totalElements ?? 0)
@@ -161,9 +239,10 @@ export default function TrainersPage() {
       setTotalActive(data.totalActive ?? 0)
       setTotalInactive(data.totalInactive ?? 0)
     } catch (err) {
+      if (err.code === 'ERR_CANCELED') return
       toast.error(err.response?.data?.message || 'Failed to load trainers')
     } finally {
-      setLoading(false)
+      if (fetchTrainersAbortRef.current === controller) setLoading(false)
     }
   }, [search, statusFilter, page, pageSize])
 
@@ -231,7 +310,7 @@ export default function TrainersPage() {
 
   // Open Create Modal
   function handleOpenAdd() {
-    setForm({ ...EMPTY_FORM, password: '', courseId: '', batchId: '' })
+    setForm({ ...EMPTY_FORM, password: '', courseGroups: [{ ...EMPTY_COURSE_GROUP }] })
     setTouched({})
     setFormSubmitted(false)
     setFormErr({})
@@ -242,8 +321,18 @@ export default function TrainersPage() {
   // Open Edit Modal
   function handleOpenEdit(trainer) {
     setEditingTrainer(trainer)
-    const existingBatchId = trainer.batches?.[0]?.id || ''
-    const matchingBatch = batches.find(b => String(b.id) === String(existingBatchId))
+    // Group the trainer's existing batches by their course so each course
+    // shows up as its own row, pre-populated with all of that course's
+    // currently-assigned batches (not just the first one).
+    const batchesByCourse = new Map()
+    for (const tb of (trainer.batches || [])) {
+      const courseId = batches.find(b => String(b.id) === String(tb.id))?.course?.id
+      if (!courseId) continue
+      const key = String(courseId)
+      if (!batchesByCourse.has(key)) batchesByCourse.set(key, [])
+      batchesByCourse.get(key).push(String(tb.id))
+    }
+    const existingGroups = Array.from(batchesByCourse.entries()).map(([courseId, batchIds]) => ({ courseId, batchIds }))
     setForm({
       name: trainer.name || '',
       email: trainer.email || '',
@@ -251,8 +340,7 @@ export default function TrainersPage() {
       phone: trainer.phone || '',
       designation: trainer.designation || '',
       department: trainer.department || '',
-      courseId: matchingBatch?.course?.id ? String(matchingBatch.course.id) : '',
-      batchId: existingBatchId ? String(existingBatchId) : '',
+      courseGroups: existingGroups.length > 0 ? existingGroups : [{ ...EMPTY_COURSE_GROUP }],
     })
     setTouched({})
     setFormSubmitted(false)
@@ -281,8 +369,9 @@ export default function TrainersPage() {
         phone: form.phone.trim() || null,
         designation: form.designation.trim() || null,
         department: form.department.trim() || null,
-        courseId: form.courseId ? Number(form.courseId) : null,
-        batchId: form.batchId ? Number(form.batchId) : null,
+        courseBatchAssignments: form.courseGroups
+          .filter(g => g.courseId)
+          .map(g => ({ courseId: Number(g.courseId), batchIds: g.batchIds.map(Number) })),
       })
       toast.success('Trainer created successfully!')
       setShowAddModal(false)
@@ -311,8 +400,9 @@ export default function TrainersPage() {
         phone: form.phone.trim() || null,
         designation: form.designation.trim() || null,
         department: form.department.trim() || null,
-        courseId: form.courseId ? Number(form.courseId) : null,
-        batchId: form.batchId ? Number(form.batchId) : null,
+        courseBatchAssignments: form.courseGroups
+          .filter(g => g.courseId)
+          .map(g => ({ courseId: Number(g.courseId), batchIds: g.batchIds.map(Number) })),
       })
       toast.success('Trainer updated successfully!')
       setShowEditModal(false)
@@ -327,19 +417,13 @@ export default function TrainersPage() {
     }
   }
 
-  // Toggle Active Status
   async function handleToggleStatus(trainer) {
-    const nextStatus = !trainer.active
-    setTrainers(prev => prev.map(t => t.id === trainer.id ? { ...t, active: nextStatus } : t))
     try {
-      const res = await adminApi.toggleTrainerStatus(trainer.id)
-      const serverActive = res.data?.data?.active !== undefined ? res.data.data.active : nextStatus
-      setTrainers(prev => prev.map(t => t.id === trainer.id ? { ...t, active: serverActive } : t))
-      toast.success(`Trainer ${trainer.name} status updated to ${serverActive ? 'Active' : 'Inactive'}`)
+      await adminApi.toggleTrainerStatus(trainer.id)
+      toast.success(`Login access ${trainer.active ? 'blocked' : 'allowed'} for ${trainer.name}`)
       fetchTrainers()
     } catch (err) {
-      setTrainers(prev => prev.map(t => t.id === trainer.id ? { ...t, active: trainer.active } : t))
-      toast.error(err.response?.data?.message || 'Failed to update trainer status')
+      toast.error(err.response?.data?.message || 'Failed to update login access')
     }
   }
 
@@ -403,7 +487,7 @@ export default function TrainersPage() {
               { value: 'active', label: 'Active' },
               { value: 'inactive', label: 'Inactive' },
             ]}
-            placeholder="All Statuses"
+            placeholder="All Login Access"
             compact
           />
 
@@ -454,13 +538,12 @@ export default function TrainersPage() {
               <thead className="bg-purple-50/60 dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="py-3.5 px-4 text-center w-16">S.No.</th>
-                  <th className="py-3.5 px-6">Trainer Name</th>
-                  <th className="py-3.5 px-4">Email</th>
+                  <th className="py-3.5 px-6">Trainer</th>
                   <th className="py-3.5 px-4">Contact</th>
                   <th className="py-3.5 px-4">Department</th>
                   <th className="py-3.5 px-4">Designation / Role</th>
                   <th className="py-3.5 px-4">Assigned Batches</th>
-                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Login Access</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
               </thead>
@@ -475,11 +558,11 @@ export default function TrainersPage() {
                         <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0">
                           {trainer.name[0]?.toUpperCase()}
                         </div>
-                        <span className="font-bold text-slate-900 dark:text-white">{trainer.name}</span>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-white">{trainer.name}</p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{trainer.email}</p>
+                        </div>
                       </div>
-                    </td>
-                    <td className="py-4 px-4 text-xs font-mono text-slate-600 dark:text-slate-300">
-                      {trainer.email}
                     </td>
 
                     <td className="py-4 px-4">
@@ -530,43 +613,38 @@ export default function TrainersPage() {
                     </td>
 
                     <td className="py-4 px-4">
-                      <button
-                        onClick={() => handleToggleStatus(trainer)}
-                        className={clsx(
-                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150',
-                          trainer.active
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border dark:border-green-800/50'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-gray-800 dark:text-slate-400 dark:border dark:border-gray-700'
-                        )}
-                        title="Click to toggle status"
-                      >
-                        <span className={clsx('w-2 h-2 rounded-full', trainer.active ? 'bg-green-500' : 'bg-slate-400')} />
-                        {trainer.active ? 'Active' : 'Inactive'}
-                      </button>
+                      <LoginAccessToggle active={trainer.active} name={trainer.name} onToggle={() => handleToggleStatus(trainer)} />
                     </td>
 
                     <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => router.push(`/admin/trainers/${trainer.id}`)}
+                          className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors"
+                          title="View Details"
+                        >
+                          <Eye size={14} />
+                        </button>
                         <button
                           onClick={() => setResetTarget({ ...trainer, role: 'TRAINER' })}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                          className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors"
                           title="Reset Password"
                         >
-                          <KeyRound size={16} />
+                          <KeyRound size={14} />
                         </button>
                         <button
                           onClick={() => handleOpenEdit(trainer)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 dark:hover:text-purple-300 transition-colors"
+                          className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors"
                           title="Edit Trainer"
                         >
-                          <Pencil size={16} />
+                          <Pencil size={14} />
                         </button>
                         <button
                           onClick={() => handleOpenDelete(trainer)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition-colors"
+                          className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 flex items-center justify-center transition-colors"
                           title="Delete Trainer"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -577,70 +655,15 @@ export default function TrainersPage() {
           </div>
         )}
 
-        {/* Server-side Pagination Footer */}
-        {totalElements > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 dark:border-gray-800 text-xs text-slate-500 dark:text-slate-400">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span>
-                Showing {Math.min((page - 1) * pageSize + 1, totalElements)}–{Math.min(page * pageSize, totalElements)} of {totalElements} trainers
-              </span>
-              <span className="flex items-center gap-1.5">
-                Per page:
-                <CustomSelect
-                  compact
-                  value={String(pageSize)}
-                  onChange={v => { setPageSize(Number(v)); setPage(1) }}
-                  options={[
-                    { value: '10', label: '10' },
-                    { value: '20', label: '20' },
-                    { value: '50', label: '50' },
-                    { value: '100', label: '100' },
-                  ]}
-                  className="!py-1"
-                />
-              </span>
-            </div>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <button
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors"
-                  title="Previous Page"
-                >
-                  Previous
-                </button>
-
-                {pageNumbers.map((p, idx, arr) => (
-                  <span key={p} className="flex items-center">
-                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-slate-400">…</span>}
-                    <button
-                      onClick={() => setPage(p)}
-                      className={clsx(
-                        'w-7 h-7 rounded-lg text-xs font-bold transition-colors',
-                        page === p
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-800'
-                      )}
-                    >
-                      {p}
-                    </button>
-                  </span>
-                ))}
-
-                <button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors"
-                  title="Next Page"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <Pagination
+          total={totalElements}
+          totalPages={totalPages}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+          label="trainers"
+        />
       </div>
 
       {/* Add Trainer Drawer */}
@@ -779,36 +802,12 @@ export default function TrainersPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">
-                Course <span className="text-[11px] text-slate-400 font-normal">(Optional)</span>
-              </label>
-              <SearchableSelect
-                options={courseOptions}
-                value={form.courseId}
-                onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
-                placeholder="Select Course"
-                searchPlaceholder="Search course..."
-                emptyLabel="No courses found"
-              />
-            </div>
-
-            <div>
-              <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-xs mb-1">
-                Batch <span className="text-[11px] text-slate-400 font-normal">(Optional)</span>
-              </label>
-              <SearchableSelect
-                options={batchOptions}
-                value={form.batchId}
-                onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
-                placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
-                searchPlaceholder="Search batch..."
-                disabled={!form.courseId}
-                emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
-              />
-            </div>
-          </div>
+          <CourseBatchGroups
+            groups={form.courseGroups}
+            onChange={(groups) => setForm(prev => ({ ...prev, courseGroups: groups }))}
+            courseOptions={courseOptions}
+            batches={batches}
+          />
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-gray-800">
             <button
@@ -938,36 +937,12 @@ export default function TrainersPage() {
               <p className="text-amber-700 dark:text-amber-300">Batches cannot be assigned to an inactive trainer. Please activate this trainer account before assigning batches.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                  Course <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                </label>
-                <SearchableSelect
-                  options={courseOptions}
-                  value={form.courseId}
-                  onChange={(val) => setForm(prev => ({ ...prev, courseId: val, batchId: '' }))}
-                  placeholder="Select Course"
-                  searchPlaceholder="Search course..."
-                  emptyLabel="No courses found"
-                />
-              </div>
-
-              <div>
-                <label className="form-label text-slate-700 dark:text-slate-300 font-semibold text-sm">
-                  Assign Batch <span className="text-xs text-slate-400 font-normal">(Optional)</span>
-                </label>
-                <SearchableSelect
-                  options={batchOptions}
-                  value={form.batchId}
-                  onChange={(val) => setForm(prev => ({ ...prev, batchId: val }))}
-                  placeholder={form.courseId ? 'Select Batch' : 'Select course first'}
-                  searchPlaceholder="Search batch..."
-                  disabled={!form.courseId}
-                  emptyLabel={form.courseId ? 'No batches for this course' : 'Select course first'}
-                />
-              </div>
-            </div>
+            <CourseBatchGroups
+              groups={form.courseGroups}
+              onChange={(groups) => setForm(prev => ({ ...prev, courseGroups: groups }))}
+              courseOptions={courseOptions}
+              batches={batches}
+            />
           )}
 
           {editingTrainer?.batches && editingTrainer.batches.length > 0 && (

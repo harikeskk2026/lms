@@ -23,6 +23,7 @@ public class TrainerCreateRequest {
     private Long courseId;
     private Long batchId;
     private java.util.List<Long> batchIds;
+    private java.util.List<CourseBatchAssignment> courseBatchAssignments;
 
     public TrainerCreateRequest() {
     }
@@ -58,6 +59,14 @@ public class TrainerCreateRequest {
 
     public void setBatchIds(java.util.List<Long> batchIds) {
         this.batchIds = batchIds;
+    }
+
+    public java.util.List<CourseBatchAssignment> getCourseBatchAssignments() {
+        return courseBatchAssignments;
+    }
+
+    public void setCourseBatchAssignments(java.util.List<CourseBatchAssignment> courseBatchAssignments) {
+        this.courseBatchAssignments = courseBatchAssignments;
     }
 
     public String getName() {

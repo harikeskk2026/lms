@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, UserPlus, Trash2, UserCheck, Pencil, Search } from 'lucide-react'
 import { format } from 'date-fns'
@@ -9,10 +9,13 @@ import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import { useAuth } from '@/context/AuthContext'
 import { adminApi } from '@/lib/api'
 import studentService from '@/services/studentService'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import reportService from '@/services/reportService'
 import courseService from '@/services/courseService'
 import SlidePanel from '@/components/admin/SlidePanel'
 import CustomSelect from '@/components/ui/CustomSelect'
+import MultiSelect from '@/components/ui/MultiSelect'
+import Pagination from '@/components/ui/Pagination'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
 
 const TABS = ['Overview', 'Students', 'Attendance']
@@ -48,20 +51,60 @@ export default function BatchDetailPage() {
   const [courses, setCourses] = useState([])
   const [editForm, setEditForm] = useState({ name: '', courseId: '', startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: 30 })
   const [hasSearched, setHasSearched] = useState(false)
-  const [studentRosterQuery, setStudentRosterQuery] = useState('')
+  const [studentRosterInput, setStudentRosterInput] = useState('')
+  const studentRosterQuery = useDebouncedValue(studentRosterInput, 400)
   const [rejectModal, setRejectModal] = useState({ open: false, student: null, reason: '' })
+  const [rosterPage, setRosterPage] = useState(1)
+  const [rosterPageSize, setRosterPageSize] = useState(20)
+  const [rawDisplayedRoster, setRawDisplayedRoster] = useState([])
+  const [displayedRosterTotal, setDisplayedRosterTotal] = useState(0)
+  const [rosterSearching, setRosterSearching] = useState(false)
+  const [perfById, setPerfById] = useState({})
+  const rosterAbortRef = useRef(null)
 
-  const filteredRoster = roster.filter(s => {
-    if (!studentRosterQuery.trim()) return true
-    const q = studentRosterQuery.toLowerCase().trim()
-    return (
-      s.name?.toLowerCase().includes(q) ||
-      s.email?.toLowerCase().includes(q) ||
-      s.enrollmentNo?.toLowerCase().includes(q)
+  // The roster table itself is server-searched + server-paginated (see the
+  // effect below); `roster` (the full, unfiltered batch roster fetched once
+  // in `load()`) is kept only for the "enrolled" stat and to exclude
+  // already-enrolled students from the Add-Student search. Attendance/quiz
+  // stats come from a separate per-batch performance report, so each raw
+  // search result page is enriched with it here rather than re-fetched.
+  useEffect(() => {
+    if (!id) return
+    rosterAbortRef.current?.abort()
+    const controller = new AbortController()
+    rosterAbortRef.current = controller
+    setRosterSearching(true)
+    studentService.list(
+      { batchId: id, search: studentRosterQuery.trim() || undefined, page: rosterPage, limit: rosterPageSize },
+      { signal: controller.signal }
     )
-  })
+      .then(r => {
+        const data = r.data
+        setRawDisplayedRoster(data?.students || [])
+        setDisplayedRosterTotal(data?.totalElements ?? data?.total ?? 0)
+      })
+      .catch(err => {
+        if (err.code === 'ERR_CANCELED') return
+        toast.error(err.message || 'Failed to load students')
+      })
+      .finally(() => {
+        if (rosterAbortRef.current === controller) setRosterSearching(false)
+      })
+  }, [id, studentRosterQuery, rosterPage, rosterPageSize])
 
-  const handleAssignTrainer = async (newTrainerId) => {
+  useEffect(() => { setRosterPage(1) }, [studentRosterQuery])
+
+  const displayedRoster = rawDisplayedRoster.map(s => ({
+    id: s.id,
+    name: s.name,
+    email: s.email,
+    enrollmentNo: s.enrollmentNo,
+    placementStatus: s.placementStatus,
+    attendancePct: perfById[s.id]?.attendancePct,
+    avgQuizScore: perfById[s.id]?.avgQuizScore,
+  }))
+
+  const handleAssignTrainers = async (newTrainerIds) => {
     const errMsg = validateBatchDates(batch.startDate, batch.endDate, batch.course?.duration)
     if (errMsg) {
       toast.error(errMsg)
@@ -71,14 +114,14 @@ export default function BatchDetailPage() {
       await adminApi.updateBatch(id, {
         name: batch.name,
         courseId: batch.course?.id ?? batch.courseId,
-        trainerId: newTrainerId ? Number(newTrainerId) : null,
+        trainerIds: newTrainerIds.map(Number),
         startDate: batch.startDate,
         endDate: batch.endDate,
         timing: batch.timing,
         mode: batch.mode,
         maxStudents: batch.maxStudents,
       })
-      toast.success(newTrainerId ? 'Trainer assigned to batch' : 'Trainer unassigned from batch')
+      toast.success('Trainer assignment updated')
       load()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update trainer')
@@ -113,7 +156,7 @@ export default function BatchDetailPage() {
       await adminApi.updateBatch(id, {
         name: editForm.name,
         courseId: Number(editForm.courseId),
-        trainerId: batch.trainerId || batch.trainer?.id || null,
+        trainerIds: (batch.trainers || []).map(t => t.id),
         startDate: editForm.startDate,
         endDate: editForm.endDate,
         timing: editForm.timing,
@@ -149,6 +192,7 @@ export default function BatchDetailPage() {
       }
       const students = studentsRes.status === 'fulfilled' ? (studentsRes.value.data?.students || []) : []
       const perfById = perfRes.status === 'fulfilled' ? Object.fromEntries((perfRes.value.data?.students || []).map(p => [p.studentId, p])) : {}
+      setPerfById(perfById)
 
       setRoster(students.map(s => ({
         id: s.id,
@@ -359,7 +403,7 @@ export default function BatchDetailPage() {
               </div>
             ))}
           </div>
-          {/* Assigned Trainer Card */}
+          {/* Assigned Trainers Card */}
           <div className="glass-card p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -367,21 +411,25 @@ export default function BatchDetailPage() {
                   <UserCheck size={22} />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Lead Trainer</p>
-                  {batch.trainer ? (
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-gray-900 dark:text-white text-base">{batch.trainer.name}</p>
-                        {batch.trainer.active === false && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                            Inactive
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{batch.trainer.email}</p>
+                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Trainers</p>
+                  {batch.trainers && batch.trainers.length > 0 ? (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {batch.trainers.map(t => (
+                        <div key={t.id}>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-gray-900 dark:text-white text-base">{t.name}</p>
+                            {t.active === false && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t.email}</p>
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-400 font-medium italic">No trainer assigned to this batch yet</p>
+                    <p className="text-sm text-gray-400 font-medium italic">No trainers assigned to this batch yet</p>
                   )}
                 </div>
               </div>
@@ -389,14 +437,14 @@ export default function BatchDetailPage() {
               {['SUPERADMIN', 'ADMIN'].includes(user?.role) && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 whitespace-nowrap">Assign:</span>
-                  <CustomSelect
-                    value={trainers.some(t => t.id === (batch.trainer?.id || batch.trainerId)) ? (batch.trainer?.id || batch.trainerId) : ''}
-                    onChange={(val) => handleAssignTrainer(val)}
+                  <MultiSelect
+                    value={(batch.trainers || []).map(t => String(t.id))}
+                    onChange={(vals) => handleAssignTrainers(vals)}
                     options={trainers.filter(t => t.active === true).map(t => ({
-                      value: t.id,
+                      value: String(t.id),
                       label: `${t.name}${t.designation ? ` · ${t.designation}` : ''}`
                     }))}
-                    placeholder="-- No Trainer Assigned --"
+                    placeholder="-- No Trainers Assigned --"
                     searchable={trainers.length >= 10}
                     compact
                   />
@@ -428,14 +476,14 @@ export default function BatchDetailPage() {
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                value={studentRosterQuery}
-                onChange={e => setStudentRosterQuery(e.target.value)}
+                value={studentRosterInput}
+                onChange={e => setStudentRosterInput(e.target.value)}
                 placeholder="Search enrolled students..."
                 className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm"
               />
-              {studentRosterQuery && (
+              {studentRosterInput && (
                 <button
-                  onClick={() => setStudentRosterQuery('')}
+                  onClick={() => setStudentRosterInput('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                 >
                   ✕
@@ -458,7 +506,7 @@ export default function BatchDetailPage() {
           <div className="glass-card overflow-hidden">
             <div className="px-5 py-4 border-b border-purple-100 dark:border-gray-800 flex items-center justify-between">
               <p className="font-semibold text-gray-700 dark:text-gray-300">
-                {filteredRoster.length} {filteredRoster.length === 1 ? 'Student' : 'Students'}
+                {displayedRosterTotal} {displayedRosterTotal === 1 ? 'Student' : 'Students'}
                 {studentRosterQuery.trim() && ` (filtered from ${roster.length})`}
               </p>
             </div>
@@ -472,14 +520,14 @@ export default function BatchDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRoster.length === 0 ? (
+                  {!rosterSearching && displayedRoster.length === 0 ? (
                     <tr>
                       <td colSpan={isAdmin ? 6 : 5} className="px-4 py-8 text-center text-gray-400">
                         {studentRosterQuery.trim() ? `No students found matching "${studentRosterQuery}"` : 'No students enrolled'}
                       </td>
                     </tr>
                   ) : (
-                    filteredRoster.map(s => (
+                    displayedRoster.map(s => (
                       <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -527,6 +575,14 @@ export default function BatchDetailPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              total={displayedRosterTotal}
+              page={rosterPage}
+              pageSize={rosterPageSize}
+              onPageChange={setRosterPage}
+              onPageSizeChange={(v) => { setRosterPageSize(v); setRosterPage(1) }}
+              label="students"
+            />
           </div>
 
           <SlidePanel open={addStudentPanel} onClose={() => setAddStudentPanel(false)} title="Add Student to Batch">

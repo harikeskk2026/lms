@@ -608,7 +608,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             a.getId(),
                             a.getDailyClass().getId(),
                             a.getDailyClass().getTitle(),
-                            a.getDailyClass().getBatch() != null ? a.getDailyClass().getBatch().getTrainerId() : null,
+                            primaryTrainerId(a.getDailyClass().getBatch()),
                             a.getDailyClass().getDate(),
                             a.getDailyClass().getStatus(),
                             a.getStatus(),
@@ -640,7 +640,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .filter(c -> !markedClassIds.contains(c.getId()))
                 .map(c -> new AttendanceCalendarDayResponse(
                         null, c.getId(), c.getTitle(),
-                        c.getBatch() != null ? c.getBatch().getTrainerId() : null,
+                        primaryTrainerId(c.getBatch()),
                         c.getDate(), c.getStatus(), null, null,
                         c.getMeetLink(), c.getRecordingUrl(), null, false, null, c.getNotes()))
                 .toList();
@@ -896,38 +896,29 @@ public class AttendanceServiceImpl implements AttendanceService {
         );
 
 
-        // 2. Trainer Performance
+        // 2. Trainer Performance - a class's batch can now have several
+        // trainers (co-teaching), so each class's stats count toward every
+        // trainer assigned to its batch rather than just one.
         Map<String, int[]> trainerStats = new HashMap<>(); // [conducted, present, total]
         Map<String, Long> trainerIdsByName = new HashMap<>();
 
-        Set<Long> trainerIdSet = new HashSet<>();
         for (DailyClass cls : classes) {
-            if (cls.getBatch() != null && cls.getBatch().getTrainerId() != null) {
-                trainerIdSet.add(cls.getBatch().getTrainerId());
+            if (cls.getBatch() == null || cls.getBatch().getTrainers().isEmpty()) {
+                continue;
             }
-        }
-        Map<Long, String> trainerNames = trainerIdSet.isEmpty() ? Map.of() : userRepository.findAllById(trainerIdSet).stream()
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toMap(User::getId, User::getName, (e1, e2) -> e1));
-
-        for (DailyClass cls : classes) {
-            String trainerName = null;
-            Long tId = null;
-            if (cls.getBatch() != null && cls.getBatch().getTrainerId() != null) {
-                tId = cls.getBatch().getTrainerId();
-                trainerName = trainerNames.get(tId);
-            }
-            if (trainerName == null || trainerName.isBlank()) {
-                trainerName = "Assigned Trainer";
-            }
-            if (tId != null) trainerIdsByName.put(trainerName, tId);
-
-            int[] stats = trainerStats.computeIfAbsent(trainerName, k -> new int[3]);
-            stats[0]++; // conducted
             List<Attendance> classAtt = attByClass.getOrDefault(cls.getId(), List.of());
             int p = (int) classAtt.stream().filter(a -> a.getStatus() == AttendStatus.PRESENT).count();
-            stats[1] += p;
-            stats[2] += classAtt.size();
+
+            for (User trainer : cls.getBatch().getTrainers()) {
+                String trainerName = (trainer.getName() != null && !trainer.getName().isBlank())
+                        ? trainer.getName() : "Assigned Trainer";
+                trainerIdsByName.put(trainerName, trainer.getId());
+
+                int[] stats = trainerStats.computeIfAbsent(trainerName, k -> new int[3]);
+                stats[0]++; // conducted
+                stats[1] += p;
+                stats[2] += classAtt.size();
+            }
         }
 
         List<AttendanceAnalyticsResponse.TrainerPerformancePoint> trainerPerformance = trainerStats.entrySet().stream()
@@ -1545,6 +1536,16 @@ public class AttendanceServiceImpl implements AttendanceService {
                     reqStatus
             );
         }).toList();
+    }
+
+    /**
+     * A batch can have several trainers now, but the student-facing attendance
+     * calendar only ever displayed one trainerId per class. Pick a stable,
+     * deterministic one (lowest id) rather than an arbitrary Set iteration order.
+     */
+    private Long primaryTrainerId(Batch batch) {
+        if (batch == null) return null;
+        return batch.getTrainers().stream().map(User::getId).min(Long::compare).orElse(null);
     }
 
     private Student resolveStudent(Long userId) {

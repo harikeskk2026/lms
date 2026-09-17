@@ -23,6 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -128,7 +129,7 @@ class TrainerServiceBatchValidationTest {
         TrainerResponse res = trainerService.updateTrainer(1L, createUpdateRequest(100L, "active@trainer.com"));
 
         assertNotNull(res);
-        assertEquals(1L, batch1.getTrainerId());
+        assertTrue(batch1.hasTrainer(1L));
         verify(batchRepository).save(batch1);
     }
 
@@ -136,7 +137,7 @@ class TrainerServiceBatchValidationTest {
     @DisplayName("Active trainer + overlapping TrainerService assignment -> FAIL with ConflictException")
     void updateTrainer_activeTrainer_overlappingBatch_throwsConflictException() {
         // activeTrainer is already assigned to batch1
-        batch1.setTrainerId(1L);
+        batch1.setTrainers(Set.of(activeTrainer));
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(activeTrainer));
         when(userRepository.save(any(User.class))).thenReturn(activeTrainer);

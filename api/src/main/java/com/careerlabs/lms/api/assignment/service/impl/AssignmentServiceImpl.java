@@ -96,8 +96,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         if (principal == null || principal.role() == null) return;
         String role = principal.role().toUpperCase();
         if ("TRAINER".equals(role) || "ROLE_TRAINER".equals(role)) {
-            if (assignment.getBatch() == null || assignment.getBatch().getTrainerId() == null
-                    || !assignment.getBatch().getTrainerId().equals(principal.id())) {
+            if (assignment.getBatch() == null || !assignment.getBatch().hasTrainer(principal.id())) {
                 throw new ForbiddenException("You are not authorized to access or modify assignments for this batch");
             }
         }
@@ -109,7 +108,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         if ("TRAINER".equals(role) || "ROLE_TRAINER".equals(role)) {
             Batch batch = batchRepository.findById(batchId)
                     .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
-            if (batch.getTrainerId() == null || !batch.getTrainerId().equals(principal.id())) {
+            if (!batch.hasTrainer(principal.id())) {
                 throw new ForbiddenException("You can only create assignments for your assigned batches");
             }
         }
@@ -203,20 +202,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                 : submissionRepository.findByAssignmentIdInAndStudentId(assignmentIds, student.getId()).stream()
                         .collect(Collectors.toMap(s -> s.getAssignment().getId(), s -> s));
 
-        Set<Long> trainerIds = assignments.stream()
-                .map(a -> a.getBatch() != null ? a.getBatch().getTrainerId() : null)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> trainerNamesById = trainerIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(trainerIds).stream()
-                        .collect(Collectors.toMap(User::getId, User::getName));
-
         return assignments.stream()
                 .map(assignment -> {
-                    String trainerName = (assignment.getBatch() != null && assignment.getBatch().getTrainerId() != null)
-                            ? trainerNamesById.get(assignment.getBatch().getTrainerId())
-                            : null;
+                    String trainerName = null;
+                    if (assignment.getBatch() != null && !assignment.getBatch().getTrainers().isEmpty()) {
+                        trainerName = assignment.getBatch().getTrainers().stream()
+                                .map(User::getName)
+                                .sorted()
+                                .collect(Collectors.joining(", "));
+                    }
                     return toStudentResponse(assignment, submissionsByAssignmentId.get(assignment.getId()), trainerName);
                 })
                 .toList();

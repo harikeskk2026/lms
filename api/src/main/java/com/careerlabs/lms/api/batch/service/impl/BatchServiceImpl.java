@@ -28,11 +28,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -74,6 +74,12 @@ public class BatchServiceImpl implements BatchService {
     @Override
     @Transactional(readOnly = true)
     public List<BatchResponse> list(JwtUserPrincipal principal) {
+        return list(principal, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BatchResponse> list(JwtUserPrincipal principal, String search) {
         List<Batch> batches;
         if (principal != null && "TRAINER".equalsIgnoreCase(principal.role())) {
             batches = batchRepository.findPublishedByTrainerIdOrderByCreatedAtDesc(principal.id());
@@ -96,22 +102,28 @@ public class BatchServiceImpl implements BatchService {
                 .filter(e -> e.getBatch() != null)
                 .collect(Collectors.groupingBy(e -> e.getBatch().getId(), Collectors.counting()));
 
-        Set<Long> trainerIds = batches.stream()
-                .map(Batch::getTrainerId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        List<BatchResponse> responses = batches.stream()
+                .map(b -> BatchResponse.from(b, countsByBatchId.getOrDefault(b.getId(), 0L).intValue(), toTrainerSummaries(b)))
+                .toList();
 
-        Map<Long, User> trainersById = trainerIds.isEmpty() ? Map.of() : userRepository.findAllById(trainerIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
+        String normalized = search == null ? null : search.trim();
+        if (normalized == null || normalized.isEmpty()) {
+            return responses;
+        }
+        String needle = normalized.toLowerCase(Locale.ROOT);
+        return responses.stream()
+                .filter(r -> containsIgnoreCase(r.name(), needle)
+                        || (r.course() != null && containsIgnoreCase(r.course().title(), needle)))
+                .toList();
+    }
 
-        return batches.stream()
-                .map(b -> {
-                    User tr = b.getTrainerId() != null ? trainersById.get(b.getTrainerId()) : null;
-                    BatchResponse.TrainerSummary trainerSummary = tr != null
-                            ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail(), tr.isActive())
-                            : null;
-                    return BatchResponse.from(b, countsByBatchId.getOrDefault(b.getId(), 0L).intValue(), trainerSummary);
-                })
+    private boolean containsIgnoreCase(String value, String lowerCaseNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerCaseNeedle);
+    }
+
+    private List<BatchResponse.TrainerSummary> toTrainerSummaries(Batch batch) {
+        return batch.getTrainers().stream()
+                .map(t -> new BatchResponse.TrainerSummary(t.getId(), t.getName(), t.getEmail(), t.isActive()))
                 .toList();
     }
 
@@ -127,7 +139,7 @@ public class BatchServiceImpl implements BatchService {
         Batch batch = findOrThrow(id);
         if (principal != null) {
             if ("TRAINER".equalsIgnoreCase(principal.role())) {
-                boolean assigned = batch.getTrainerId() != null && batch.getTrainerId().equals(principal.id());
+                boolean assigned = batch.hasTrainer(principal.id());
                 boolean readable = batch.getCourse() != null
                         && accessGuard.isReadableCourseStatus(batch.getCourse().getStatus());
                 if (!assigned || !readable) {
@@ -143,45 +155,43 @@ public class BatchServiceImpl implements BatchService {
                 }
             }
         }
-        User tr = batch.getTrainerId() != null ? userRepository.findById(batch.getTrainerId()).orElse(null) : null;
-        BatchResponse.TrainerSummary trainerSummary = tr != null
-                ? new BatchResponse.TrainerSummary(tr.getId(), tr.getName(), tr.getEmail(), tr.isActive())
-                : null;
-        return BatchResponse.from(batch, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id), trainerSummary);
+        return BatchResponse.from(batch, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id), toTrainerSummaries(batch));
     }
 
     @Override
     @Transactional
     public BatchResponse create(BatchRequest request) {
-        validateTrainerAvailability(null, request.getTrainerId(), request.getStartDate(), request.getEndDate(), request.getTiming());
+        validateTrainerAvailability(null, request.getTrainerIds(), request.getStartDate(), request.getEndDate(), request.getTiming());
         Batch batch = new Batch();
         applyRequest(batch, request);
 
-        return BatchResponse.from(batchRepository.save(batch), 0);
+        Batch saved = batchRepository.save(batch);
+        return BatchResponse.from(saved, 0, toTrainerSummaries(saved));
     }
 
     @Override
     @Transactional
     public BatchResponse update(Long id, BatchRequest request) {
         Batch batch = findOrThrow(id);
-        validateTrainerAvailability(id, request.getTrainerId(), request.getStartDate(), request.getEndDate(), request.getTiming());
+        validateTrainerAvailability(id, request.getTrainerIds(), request.getStartDate(), request.getEndDate(), request.getTiming());
         applyRequest(batch, request);
 
         Batch saved = batchRepository.save(batch);
-        return BatchResponse.from(saved, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id));
+        return BatchResponse.from(saved, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id), toTrainerSummaries(saved));
     }
 
     @Override
     @Transactional
     public BatchResponse toggleActive(Long id) {
         Batch batch = findOrThrow(id);
-        if (!batch.isActive() && batch.getTrainerId() != null) {
-            validateTrainerAvailability(id, batch.getTrainerId(), batch.getStartDate(), batch.getEndDate(), batch.getTiming());
+        if (!batch.isActive() && !batch.getTrainers().isEmpty()) {
+            List<Long> trainerIds = batch.getTrainers().stream().map(User::getId).toList();
+            validateTrainerAvailability(id, trainerIds, batch.getStartDate(), batch.getEndDate(), batch.getTiming());
         }
         batch.setActive(!batch.isActive());
 
         Batch saved = batchRepository.save(batch);
-        return BatchResponse.from(saved, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id));
+        return BatchResponse.from(saved, (int) enrollmentRepository.countByBatchIdAndActiveTrue(id), toTrainerSummaries(saved));
     }
 
     @Override
@@ -222,7 +232,7 @@ public class BatchServiceImpl implements BatchService {
 
         batch.setName(request.getName());
         batch.setCourse(course);
-        batch.setTrainerId(request.getTrainerId());
+        batch.setTrainers(resolveTrainers(request.getTrainerIds()));
         batch.setStartDate(request.getStartDate());
         batch.setEndDate(request.getEndDate());
         batch.setTiming(request.getTiming());
@@ -245,11 +255,22 @@ public class BatchServiceImpl implements BatchService {
         }
     }
 
-    private void validateTrainerAvailability(Long currentBatchId, Long trainerId, LocalDate startDate, LocalDate endDate, String timing) {
-        if (trainerId == null) {
+    /**
+     * A batch can now have several trainers, so each one is validated
+     * independently: co-teaching the same batch is fine (they share this
+     * batch's own schedule), but every trainer's OTHER active batches still
+     * must not overlap with it.
+     */
+    private void validateTrainerAvailability(Long currentBatchId, List<Long> trainerIds, LocalDate startDate, LocalDate endDate, String timing) {
+        if (trainerIds == null || trainerIds.isEmpty()) {
             return;
         }
+        for (Long trainerId : new HashSet<>(trainerIds)) {
+            validateSingleTrainerAvailability(currentBatchId, trainerId, startDate, endDate, timing);
+        }
+    }
 
+    private void validateSingleTrainerAvailability(Long currentBatchId, Long trainerId, LocalDate startDate, LocalDate endDate, String timing) {
         User trainer = userRepository.findById(trainerId)
                 .filter(u -> u.getRole() == Role.TRAINER)
                 .orElseThrow(() -> new ResourceNotFoundException("Trainer not found with ID: " + trainerId));
@@ -273,7 +294,8 @@ public class BatchServiceImpl implements BatchService {
                             ? existing.getTiming()
                             : "full day";
                     throw new ConflictException(String.format(
-                            "Trainer is already assigned to batch '%s' which runs concurrently from %s to %s at %s. Batch timings must not overlap.",
+                            "Trainer '%s' is already assigned to batch '%s' which runs concurrently from %s to %s at %s. Batch timings must not overlap.",
+                            trainer.getName(),
                             existing.getName(),
                             existing.getStartDate(),
                             existing.getEndDate(),
@@ -282,5 +304,12 @@ public class BatchServiceImpl implements BatchService {
                 }
             }
         }
+    }
+
+    private Set<User> resolveTrainers(List<Long> trainerIds) {
+        if (trainerIds == null || trainerIds.isEmpty()) {
+            return new HashSet<>();
+        }
+        return new HashSet<>(userRepository.findAllById(new HashSet<>(trainerIds)));
     }
 }

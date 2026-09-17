@@ -34,6 +34,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -75,6 +76,12 @@ class TrainerStudentAccessModelTest {
         ReflectionTestUtils.setField(target, "id", id);
     }
 
+    private User userWithId(Long id) {
+        User u = new User();
+        setId(u, id);
+        return u;
+    }
+
     @BeforeEach
     void setUp() {
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
@@ -101,7 +108,7 @@ class TrainerStudentAccessModelTest {
         batchA = new Batch();
         setId(batchA, 201L);
         batchA.setName("Batch A");
-        batchA.setTrainerId(trainerAPrincipal.id());
+        batchA.setTrainers(Set.of(userWithId(trainerAPrincipal.id())));
         batchA.setCourse(courseA);
         batchA.setStartDate(LocalDate.now());
         batchA.setEndDate(LocalDate.now().plusMonths(3));
@@ -110,7 +117,7 @@ class TrainerStudentAccessModelTest {
         batchB = new Batch();
         setId(batchB, 202L);
         batchB.setName("Batch B");
-        batchB.setTrainerId(trainerBPrincipal.id());
+        batchB.setTrainers(Set.of(userWithId(trainerBPrincipal.id())));
         batchB.setCourse(courseB);
         batchB.setStartDate(LocalDate.now());
         batchB.setEndDate(LocalDate.now().plusMonths(3));

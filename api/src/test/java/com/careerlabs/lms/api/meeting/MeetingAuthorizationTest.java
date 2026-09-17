@@ -24,6 +24,7 @@ import com.careerlabs.lms.api.attendance.repository.DailyClassRepository;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -72,6 +74,12 @@ class MeetingAuthorizationTest {
 
     void setId(Object o, Long id) { ReflectionTestUtils.setField(o, "id", id); }
 
+    User userWithId(Long id) {
+        User u = new User();
+        setId(u, id);
+        return u;
+    }
+
     @BeforeEach
     void setUp() {
         batchAuthGuard = new BatchAuthorizationGuard(batchRepository);
@@ -89,7 +97,7 @@ class MeetingAuthorizationTest {
         trainerABatch = new Batch();
         setId(trainerABatch, 100L);
         trainerABatch.setName("Batch A");
-        trainerABatch.setTrainerId(10L);
+        trainerABatch.setTrainers(Set.of(userWithId(10L)));
         trainerABatch.setCourse(course1);
         trainerABatch.setMode(BatchMode.ONLINE);
         trainerABatch.setActive(true);
@@ -97,7 +105,7 @@ class MeetingAuthorizationTest {
         trainerBBatch = new Batch();
         setId(trainerBBatch, 200L);
         trainerBBatch.setName("Batch B");
-        trainerBBatch.setTrainerId(20L);
+        trainerBBatch.setTrainers(Set.of(userWithId(20L)));
         trainerBBatch.setCourse(course1);
         trainerBBatch.setMode(BatchMode.ONLINE);
         trainerBBatch.setActive(true);

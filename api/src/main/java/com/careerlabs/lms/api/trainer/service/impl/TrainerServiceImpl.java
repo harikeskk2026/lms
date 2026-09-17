@@ -6,6 +6,7 @@ import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
+import com.careerlabs.lms.api.trainer.dto.request.CourseBatchAssignment;
 import com.careerlabs.lms.api.trainer.dto.request.TrainerCreateRequest;
 import com.careerlabs.lms.api.trainer.dto.request.TrainerUpdateRequest;
 import com.careerlabs.lms.api.trainer.dto.response.TrainerPageResponse;
@@ -25,8 +26,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -73,10 +78,18 @@ public class TrainerServiceImpl implements TrainerService {
         List<User> users = userPage.getContent();
         List<Long> trainerIds = users.stream().map(User::getId).toList();
 
-        Map<Long, List<Batch>> batchesByTrainerId = trainerIds.isEmpty() ? Map.of() :
-                batchRepository.findByTrainerIdInOrderByCreatedAtDesc(trainerIds).stream()
-                        .filter(b -> b.getTrainerId() != null)
-                        .collect(Collectors.groupingBy(Batch::getTrainerId));
+        // A batch can now have several trainers, so it may need to appear
+        // under more than one trainer's key here - not a simple groupingBy.
+        Map<Long, List<Batch>> batchesByTrainerId = new HashMap<>();
+        if (!trainerIds.isEmpty()) {
+            for (Batch batch : batchRepository.findByTrainerIdInOrderByCreatedAtDesc(trainerIds)) {
+                for (User t : batch.getTrainers()) {
+                    if (trainerIds.contains(t.getId())) {
+                        batchesByTrainerId.computeIfAbsent(t.getId(), k -> new ArrayList<>()).add(batch);
+                    }
+                }
+            }
+        }
 
         List<TrainerResponse> trainerResponses = users.stream()
                 .map(u -> TrainerResponse.from(u, batchesByTrainerId.getOrDefault(u.getId(), List.of())))
@@ -124,15 +137,12 @@ public class TrainerServiceImpl implements TrainerService {
 
         User saved = userRepository.save(user);
 
-        if (request.getBatchId() != null) {
-            Batch batch = batchRepository.findById(request.getBatchId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.getBatchId()));
-            validateTrainerAssignment(saved, batch);
-            batch.setTrainerId(saved.getId());
-            batchRepository.save(batch);
-        } else if (request.getBatchIds() != null && !request.getBatchIds().isEmpty()) {
+        List<Long> desiredBatchIds = resolveDesiredBatchIds(
+                request.getCourseBatchAssignments(), request.getBatchIds(), request.getBatchId());
+
+        if (desiredBatchIds != null && !desiredBatchIds.isEmpty()) {
             List<Batch> batchesToAssign = new ArrayList<>();
-            for (Long bId : request.getBatchIds()) {
+            for (Long bId : new LinkedHashSet<>(desiredBatchIds)) {
                 Batch b = batchRepository.findById(bId)
                         .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + bId));
                 validateTrainerAssignment(saved, b);
@@ -147,7 +157,7 @@ public class TrainerServiceImpl implements TrainerService {
                 batchesToAssign.add(b);
             }
             for (Batch b : batchesToAssign) {
-                b.setTrainerId(saved.getId());
+                b.getTrainers().add(saved);
                 batchRepository.save(b);
             }
         }
@@ -176,16 +186,86 @@ public class TrainerServiceImpl implements TrainerService {
 
         User saved = userRepository.save(user);
 
-        if (request.getBatchId() != null) {
-            Batch batch = batchRepository.findById(request.getBatchId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + request.getBatchId()));
-            validateTrainerAssignment(saved, batch);
-            batch.setTrainerId(saved.getId());
-            batchRepository.save(batch);
+        List<Long> desiredBatchIds = resolveDesiredBatchIds(
+                request.getCourseBatchAssignments(), request.getBatchIds(), request.getBatchId());
+
+        if (desiredBatchIds != null) {
+            List<Batch> currentBatches = batchRepository.findByTrainerId(id);
+            Set<Long> desiredIdSet = new HashSet<>(desiredBatchIds);
+
+            // Unassign first, so a batch being dropped doesn't block validation
+            // of a newly desired batch that would otherwise conflict with it.
+            for (Batch existing : currentBatches) {
+                if (!desiredIdSet.contains(existing.getId())) {
+                    existing.getTrainers().remove(saved);
+                    batchRepository.save(existing);
+                }
+            }
+
+            Set<Long> currentIds = currentBatches.stream().map(Batch::getId).collect(Collectors.toSet());
+            List<Batch> batchesToAssign = new ArrayList<>();
+            for (Long bId : desiredIdSet) {
+                if (currentIds.contains(bId)) {
+                    continue;
+                }
+                Batch b = batchRepository.findById(bId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + bId));
+                validateTrainerAssignment(saved, b);
+                for (Batch other : batchesToAssign) {
+                    if (ScheduleOverlapUtil.isScheduleOverlap(b, other)) {
+                        throw new ConflictException(String.format(
+                                "Batch '%s' overlaps with batch '%s' in the assignment list. Batch timings must not overlap.",
+                                b.getName(), other.getName()
+                        ));
+                    }
+                }
+                batchesToAssign.add(b);
+            }
+            for (Batch b : batchesToAssign) {
+                b.getTrainers().add(saved);
+                batchRepository.save(b);
+            }
         }
 
         List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(id);
         return TrainerResponse.from(saved, batches);
+    }
+
+    /**
+     * Resolves the trainer's desired batch set from whichever shape the
+     * request used, in priority order: explicit course groups (validated -
+     * each batch must actually belong to the course it was grouped under),
+     * then a flat batchIds list, then the legacy singular batchId.
+     * Returns null only when none of the three were provided at all (caller
+     * should treat that as "no change requested" - distinct from an empty
+     * list, which means "unassign everything").
+     */
+    private List<Long> resolveDesiredBatchIds(List<CourseBatchAssignment> assignments, List<Long> batchIds, Long batchId) {
+        if (assignments != null) {
+            List<Long> resolved = new ArrayList<>();
+            for (CourseBatchAssignment assignment : assignments) {
+                if (assignment.getCourseId() == null || assignment.getBatchIds() == null) {
+                    continue;
+                }
+                for (Long bId : assignment.getBatchIds()) {
+                    Batch b = batchRepository.findById(bId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Batch not found with ID: " + bId));
+                    if (b.getCourse() == null || !b.getCourse().getId().equals(assignment.getCourseId())) {
+                        throw new BadRequestException(String.format(
+                                "Batch '%s' does not belong to the selected course.", b.getName()));
+                    }
+                    resolved.add(bId);
+                }
+            }
+            return resolved;
+        }
+        if (batchIds != null) {
+            return batchIds;
+        }
+        if (batchId != null) {
+            return List.of(batchId);
+        }
+        return null;
     }
 
     private void validateTrainerAssignment(User trainer, Batch targetBatch) {

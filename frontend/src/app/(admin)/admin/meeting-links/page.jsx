@@ -121,6 +121,7 @@ export default function AdminMeetingLinksPage() {
   const [filterBatch, setFilterBatch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const meetingsAbortRef = useRef(null)
 
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -145,7 +146,7 @@ export default function AdminMeetingLinksPage() {
     if (m.createdBy && user?.id && String(m.createdBy) === String(user.id)) return true
     if (m.batchId) {
       const b = batches.find(batch => String(batch.id) === String(m.batchId))
-      if (b && (String(b.trainerId) === String(user?.id) || String(b.trainer?.id) === String(user?.id))) {
+      if (b && (b.trainers || []).some(t => String(t.id) === String(user?.id))) {
         return true
       }
     }
@@ -164,22 +165,26 @@ export default function AdminMeetingLinksPage() {
   const getBatchCourseId = (b) => b?.course?.id ?? b?.courseId ?? ''
   const getBatchCourseTitle = (b) => b?.course?.title ?? b?.courseName ?? b?.courseTitle ?? ''
 
-  const loadMeetings = async () => {
-    setLoading(true)
+  const loadMeetings = async (silent = false) => {
+    meetingsAbortRef.current?.abort()
+    const controller = new AbortController()
+    meetingsAbortRef.current = controller
+    if (!silent) setLoading(true)
     try {
       const mRes = await adminApi.getMeetings({
         courseId: filterCourse || undefined,
         batchId: filterBatch || undefined,
         status: filterStatus || undefined,
         search: searchQuery.trim() || undefined
-      })
+      }, { signal: controller.signal })
       const mList = extractList(mRes?.data) || extractList(mRes) || []
       const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
       setMeetings(unique)
-    } catch {
-      toast.error('Failed to load scheduled classes')
+    } catch (err) {
+      if (err.code === 'ERR_CANCELED') return
+      if (!silent) toast.error('Failed to load scheduled classes')
     } finally {
-      setLoading(false)
+      if (!silent && meetingsAbortRef.current === controller) setLoading(false)
     }
   }
 
@@ -217,21 +222,10 @@ export default function AdminMeetingLinksPage() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       loadMeetings()
-    }, 200)
+    }, 400)
 
     const interval = setInterval(() => {
-      adminApi.getMeetings({
-        courseId: filterCourse || undefined,
-        batchId: filterBatch || undefined,
-        status: filterStatus || undefined,
-        search: searchQuery.trim() || undefined
-      })
-        .then(mRes => {
-          const mList = extractList(mRes?.data) || extractList(mRes) || []
-          const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
-          setMeetings(unique)
-        })
-        .catch(() => { })
+      loadMeetings(true)
     }, 15000)
 
     return () => {
@@ -255,18 +249,11 @@ export default function AdminMeetingLinksPage() {
   const availableTrainersForForm = (() => {
     if (form.batchId) {
       const selectedBatch = batches.find(b => String(b.id) === String(form.batchId))
-      const trainerId = selectedBatch?.trainerId || selectedBatch?.trainer?.id
-      const trainerName = selectedBatch?.trainer?.name || selectedBatch?.trainerName || selectedBatch?.trainer?.fullName
 
       const list = []
-      if (trainerId) {
-        const match = trainers.find(t => String(t.id) === String(trainerId))
-        if (match) list.push(match)
-      }
-      if (trainerName && !list.some(t => (t.name || t.fullName) === trainerName)) {
-        const match = trainers.find(t => (t.name || t.fullName) === trainerName)
-        if (match) list.push(match)
-        else list.push({ id: `b-tr-${trainerId || '0'}`, name: trainerName, fullName: trainerName, email: '' })
+      for (const bt of (selectedBatch?.trainers || [])) {
+        const match = trainers.find(t => String(t.id) === String(bt.id))
+        list.push(match || { id: bt.id, name: bt.name, fullName: bt.name, email: bt.email || '' })
       }
 
       for (const t of trainers) {
@@ -283,8 +270,8 @@ export default function AdminMeetingLinksPage() {
       const selectedCourse = courses.find(c => String(c.id) === String(form.courseId))
       const courseTitle = selectedCourse?.title || selectedCourse?.name
       const courseBatches = batches.filter(b => String(getBatchCourseId(b)) === String(form.courseId))
-      const trainerIds = new Set(courseBatches.map(b => b.trainerId || b.trainer?.id).filter(Boolean).map(String))
-      const trainerNames = new Set(courseBatches.map(b => b.trainer?.name || b.trainerName || b.trainer?.fullName).filter(Boolean))
+      const trainerIds = new Set(courseBatches.flatMap(b => (b.trainers || []).map(t => String(t.id))))
+      const trainerNames = new Set(courseBatches.flatMap(b => (b.trainers || []).map(t => t.name)).filter(Boolean))
 
       const matched = trainers.filter(t => {
         if (trainerIds.has(String(t.id)) || trainerNames.has(t.name || t.fullName)) return true
@@ -811,7 +798,7 @@ export default function AdminMeetingLinksPage() {
                   setForm(f => {
                     const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(val))
                     const selectedBatch = stillValid ? batches.find(b => String(b.id) === String(f.batchId)) : null
-                    const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName || selectedBatch?.trainer?.fullName
+                    const batchTrainer = (selectedBatch?.trainers || []).map(t => t.name).join(', ')
                     return {
                       ...f,
                       courseId: val,
@@ -841,7 +828,7 @@ export default function AdminMeetingLinksPage() {
                   if (val) {
                     const selectedBatch = batches.find(b => String(b.id) === String(val))
                     const bCourseId = getBatchCourseId(selectedBatch)
-                    const batchTrainer = selectedBatch?.trainer?.name || selectedBatch?.trainerName || selectedBatch?.trainer?.fullName
+                    const batchTrainer = (selectedBatch?.trainers || []).map(t => t.name).join(', ')
                     setForm(f => ({
                       ...f,
                       batchId: val,
