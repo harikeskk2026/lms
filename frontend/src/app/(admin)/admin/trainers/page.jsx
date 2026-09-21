@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound, Eye, FileDown, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, UserCheck, Mail, Phone, Building2, Briefcase, RefreshCw, X, Lock, KeyRound, FileDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
@@ -603,19 +603,22 @@ export default function TrainersPage() {
             {trainers.map(trainer => (
               <div
                 key={trainer.id}
-                className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900/60 p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50 transition-all"
+                onClick={() => router.push(`/admin/trainers/${trainer.id}`)}
+                className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900/60 p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50 cursor-pointer transition-all group"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/60 transition-colors">
                       {trainer.name[0]?.toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-slate-900 dark:text-white truncate">{trainer.name}</p>
+                      <p className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors truncate">{trainer.name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500 font-mono truncate">{trainer.email}</p>
                     </div>
                   </div>
-                  <LoginAccessToggle active={trainer.active} name={trainer.name} onToggle={() => handleToggleStatus(trainer)} />
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <LoginAccessToggle active={trainer.active} name={trainer.name} onToggle={() => handleToggleStatus(trainer)} />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -643,7 +646,7 @@ export default function TrainersPage() {
                 <div>
                   <p className="text-slate-400 dark:text-slate-500 uppercase text-[10px] font-semibold mb-1">Assigned Batches</p>
                   {trainer.batches && trainer.batches.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
                       {trainer.batches.map(b => (
                         <Link
                           key={b.id}
@@ -661,14 +664,7 @@ export default function TrainersPage() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-slate-100 dark:border-gray-800">
-                  <button
-                    onClick={() => router.push(`/admin/trainers/${trainer.id}`)}
-                    className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors"
-                    title="View Details"
-                  >
-                    <Eye size={14} />
-                  </button>
+                <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-slate-100 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => setResetTarget({ ...trainer, role: 'TRAINER' })}
                     className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors"
@@ -711,17 +707,21 @@ export default function TrainersPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-gray-800/60">
                 {trainers.map((trainer, index) => (
-                  <tr key={trainer.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors">
+                  <tr
+                    key={trainer.id}
+                    onClick={() => router.push(`/admin/trainers/${trainer.id}`)}
+                    className="hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors cursor-pointer group"
+                  >
                     <td className="py-4 px-4 text-center font-semibold text-slate-500 dark:text-slate-400 text-xs">
                       {(page - 1) * pageSize + index + 1}
                     </td>
                     <td className="py-4 px-6 font-medium">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/60 transition-colors">
                           {trainer.name[0]?.toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{trainer.name}</p>
+                          <p className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{trainer.name}</p>
                           <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{trainer.email}</p>
                         </div>
                       </div>
@@ -754,7 +754,7 @@ export default function TrainersPage() {
                       )}
                     </td>
 
-                    <td className="py-4 px-4">
+                    <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
                       {trainer.batches && trainer.batches.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5 max-w-xs">
                           {trainer.batches.map(b => (
@@ -774,19 +774,12 @@ export default function TrainersPage() {
                       )}
                     </td>
 
-                    <td className="py-4 px-4">
+                    <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
                       <LoginAccessToggle active={trainer.active} name={trainer.name} onToggle={() => handleToggleStatus(trainer)} />
                     </td>
 
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-6 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => router.push(`/admin/trainers/${trainer.id}`)}
-                          className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors"
-                          title="View Details"
-                        >
-                          <Eye size={14} />
-                        </button>
                         <button
                           onClick={() => setResetTarget({ ...trainer, role: 'TRAINER' })}
                           className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors"

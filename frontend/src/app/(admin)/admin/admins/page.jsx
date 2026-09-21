@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase, Eye, Pencil, Trash2, FileDown, Loader2 } from 'lucide-react'
+import { Search, Plus, ShieldCheck, KeyRound, RefreshCw, Mail, Phone, Building2, Briefcase, Pencil, Trash2, FileDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -366,25 +366,28 @@ export default function AdminsPage() {
             {admins.map(admin => (
               <div
                 key={admin.id}
-                className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 transition-all"
+                onClick={() => router.push(`/admin/admins/${admin.id}`)}
+                className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-3 hover:shadow-md hover:border-purple-200 cursor-pointer transition-all group"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-purple-200 transition-colors">
                       {admin.name[0]?.toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{admin.name}</p>
+                      <p className="font-bold text-slate-900 group-hover:text-purple-600 transition-colors truncate">{admin.name}</p>
                       <p className="text-xs text-slate-400 font-mono truncate">{admin.email}</p>
                     </div>
                   </div>
-                  <LoginAccessToggle
-                    active={admin.active}
-                    name={admin.name}
-                    onToggle={() => handleToggle(admin)}
-                    disabled={admin.id === user?.id}
-                    disabledReason="You cannot deactivate your own account"
-                  />
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <LoginAccessToggle
+                      active={admin.active}
+                      name={admin.name}
+                      onToggle={() => handleToggle(admin)}
+                      disabled={admin.id === user?.id}
+                      disabledReason="You cannot deactivate your own account"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -406,11 +409,7 @@ export default function AdminsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-slate-100">
-                  <button onClick={() => router.push(`/admin/admins/${admin.id}`)}
-                    className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
-                    <Eye size={14} />
-                  </button>
+                <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => setResetTarget(admin)}
                     className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
                     <KeyRound size={14} />
@@ -450,14 +449,18 @@ export default function AdminsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {admins.map((admin, index) => (
-                  <tr key={admin.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={admin.id}
+                    onClick={() => router.push(`/admin/admins/${admin.id}`)}
+                    className="hover:bg-purple-50/30 dark:hover:bg-purple-900/20 transition-colors cursor-pointer group"
+                  >
                     <td className="py-4 px-4 text-center font-semibold text-slate-500 text-xs">
                       {(page - 1) * pageSize + index + 1}
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-sm flex-shrink-0">{admin.name[0]?.toUpperCase()}</div>
-                        <div><p className="font-bold text-slate-900">{admin.name}</p><p className="text-xs text-slate-400 font-mono">{admin.email}</p></div>
+                        <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-purple-200 transition-colors">{admin.name[0]?.toUpperCase()}</div>
+                        <div><p className="font-bold text-slate-900 group-hover:text-purple-600 transition-colors">{admin.name}</p><p className="text-xs text-slate-400 font-mono">{admin.email}</p></div>
                       </div>
                     </td>
                     <td className="py-4 px-4 text-xs text-slate-600">{admin.phone || <span className="text-slate-400 italic">—</span>}</td>
@@ -466,7 +469,7 @@ export default function AdminsPage() {
                         <div><p className="text-xs font-semibold text-slate-800">{admin.designation || '—'}</p><p className="text-[11px] text-slate-400">{admin.department || ''}</p></div>
                       ) : <span className="text-xs text-slate-400 italic">—</span>}
                     </td>
-                    <td className="py-4 px-4">
+                    <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
                       <LoginAccessToggle
                         active={admin.active}
                         name={admin.name}
@@ -476,12 +479,8 @@ export default function AdminsPage() {
                       />
                     </td>
                     <td className="py-4 px-4 text-xs text-slate-500">{admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : '—'}</td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-6 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => router.push(`/admin/admins/${admin.id}`)}
-                          className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
-                          <Eye size={14} />
-                        </button>
                         <button onClick={() => setResetTarget(admin)}
                           className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
                           <KeyRound size={14} />

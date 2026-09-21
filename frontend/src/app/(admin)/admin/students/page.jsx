@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Eye, Users } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
@@ -653,10 +653,6 @@ export default function StudentsPage() {
                   </div>
 
                   <div className="flex items-center justify-end gap-1 pt-2 mt-auto border-t border-gray-100 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => router.push(`/admin/students/${s.id}`)}
-                      className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
-                      <Eye size={14} />
-                    </button>
                     <button onClick={() => setResetTarget(s)}
                       className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
                       <KeyRound size={14} />
@@ -692,16 +688,16 @@ export default function StudentsPage() {
                     <tr
                       key={s.id}
                       onClick={() => router.push(`/admin/students/${s.id}`)}
-                      className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/30 dark:hover:bg-purple-900/20 cursor-pointer transition-colors"
+                      className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/30 dark:hover:bg-purple-900/20 cursor-pointer transition-colors group"
                     >
                       <td className="px-4 py-3 text-gray-400 text-xs">{(page - 1) * pageSize + i + 1}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 group-hover:shadow-sm transition-shadow">
                             {s.name[0].toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-800 dark:text-white">{s.name}</p>
+                            <p className="font-semibold text-gray-800 dark:text-white group-hover:text-purple-600 transition-colors">{s.name}</p>
                             <p className="text-xs text-gray-400">{s.email}</p>
                           </div>
                         </div>
@@ -739,10 +735,6 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); router.push(`/admin/students/${s.id}`); }}
-                            className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition-colors" title="View Details">
-                            <Eye size={14} />
-                          </button>
                           <button onClick={(e) => { e.stopPropagation(); setResetTarget(s); }}
                             className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center justify-center transition-colors" title="Reset Password">
                             <KeyRound size={14} />
