@@ -15,9 +15,8 @@ dist/
 build/
 
 # Uploaded / imported media (recordings, thumbnails)
-backend/storage/
-backend/uploads/
 api/uploads/
+scratch/
 
 # Logs
 *.log
