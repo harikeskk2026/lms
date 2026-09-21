@@ -457,7 +457,7 @@ export default function BatchDetailPage() {
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Batch Timeline</p>
             <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
               <span>{format(new Date(batch.startDate), 'dd MMM yyyy')}</span>
-              <span>Today</span>
+              <span>{format(new Date(), 'dd MMM yyyy')}</span>
               <span>{format(new Date(batch.endDate), 'dd MMM yyyy')}</span>
             </div>
             <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -809,7 +809,7 @@ export default function BatchDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Max Students</label>
-                  <input type="number" min="1" max="500" value={editForm.maxStudents} onChange={e => setEditForm(f => ({ ...f, maxStudents: e.target.value }))}
+                  <input type="number" min="1" max="500" value={editForm.maxStudents} onChange={e => setEditForm(f => ({ ...f, maxStudents: e.target.value }))} placeholder="e.g. 30 or 40"
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
                   {editForm.maxStudents && (Number(editForm.maxStudents) < 1 || Number(editForm.maxStudents) > 500) && (
                     <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 500</p>

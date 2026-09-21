@@ -125,14 +125,9 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
   }
 
   // Load candidate students when enroll modal opens
-  const openEnrollModal = () => {
-    setSelectedStudentIds([])
-    setSelectedBatchId('')
-    setCandidateSearch('')
-    setEnrollModalOpen(true)
+  const loadCandidateStudents = () => {
     setLoadingCandidates(true)
-
-    Promise.all([
+    return Promise.all([
       studentService.list({ limit: 500, status: 'active' }),
       courseService.getEnrollments(courseId, { status: 'active', limit: 10000 }),
     ])
@@ -149,6 +144,14 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
         toast.error('Failed to load students list: ' + err.message)
       })
       .finally(() => setLoadingCandidates(false))
+  }
+
+  const openEnrollModal = () => {
+    setSelectedStudentIds([])
+    setSelectedBatchId('')
+    setCandidateSearch('')
+    setEnrollModalOpen(true)
+    loadCandidateStudents()
   }
 
   // Toggle student selection
@@ -375,6 +378,7 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
           options={[{ value: '', label: 'All Batches' }, ...batches.map(b => ({ value: b.id, label: b.name }))]}
           placeholder="All Batches"
           compact
+          clearable
         />
 
         <CustomSelect
@@ -531,9 +535,11 @@ export default function EnrolledStudentsTab({ courseId, courseTitle, courseStatu
                           ) : (
                             <button
                               onClick={() => {
-                                setSelectedStudentId(String(item.studentId))
+                                setSelectedStudentIds([String(item.studentId)])
                                 setSelectedBatchId(item.batch?.id ? String(item.batch.id) : '')
+                                setCandidateSearch('')
                                 setEnrollModalOpen(true)
+                                loadCandidateStudents()
                               }}
                               title="Re-enroll student"
                               className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"

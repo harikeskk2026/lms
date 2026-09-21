@@ -165,7 +165,6 @@ function CourseBatchGroups({ groups, onChange, courseOptions, batches, conflicts
 
   return (
     <div>
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CareerLabs Enrollment</p>
       <div className="space-y-2.5">
         {groups.map((group, idx) => {
           const availableCourseOptions = courseOptions.filter(
@@ -196,7 +195,7 @@ function CourseBatchGroups({ groups, onChange, courseOptions, batches, conflicts
                     options={batchOptionsForGroup}
                     value={group.batchId}
                     onChange={(val) => updateGroup(idx, { batchId: val })}
-                    placeholder={group.courseId ? 'No batch (assign later)' : 'Select a course first'}
+                    placeholder="Select a batch"
                     searchPlaceholder="Search batch..."
                     disabled={!group.courseId}
                     emptyLabel="No batches created for this course yet"
@@ -333,7 +332,7 @@ function StudentForm({
                   }}
                   placeholder="Enter email address"
                   className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
-                    (touched.email || submitted) && !isEmailValid
+                    emailError || ((touched.email || submitted) && !isEmailValid)
                       ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
                       : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
                   }`}
@@ -343,6 +342,12 @@ function StudentForm({
                   <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
                     {!form.email.trim() ? 'Email is required' : EMAIL_ERROR_MESSAGE}
+                  </p>
+                )}
+                {emailError && (
+                  <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                    {emailError}
                   </p>
                 )}
               </div>
@@ -689,6 +694,9 @@ export default function StudentsPage() {
       setSubmitted(false)
       load()
     } catch (err) {
+      if (!editStudent && err.status === 409) {
+        setEmailError(err.message || 'This email is already registered with an existing account. Please use a different email.')
+      }
       toast.error(err.message || `Failed to ${editStudent ? 'update' : 'create'} student`)
     } finally { setSaving(false) }
   }
@@ -805,23 +813,23 @@ export default function StudentsPage() {
       ) : (
         <>
           {/* Header Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-6 border border-purple-100 dark:border-purple-900/30">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-              <Users size={22} />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-purple-100 text-purple-700">
+                <Users size={22} />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Students Management</h1>
+                <p className="text-sm text-slate-500 mt-1">Manage student profiles, course enrollments, batches, and placement status.</p>
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Students Management</h1>
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 shadow-md shadow-purple-500/20 active:scale-95"
+            >
+              <Plus size={18} /> Add Student
+            </button>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage student profiles, course enrollments, batches, and placement status.</p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 shadow-md shadow-purple-500/20 active:scale-95"
-        >
-          <Plus size={18} /> Add Student
-        </button>
-      </div>
 
       {/* Filters */}
       <div className="glass-card p-4 flex flex-col sm:flex-row flex-wrap gap-3">
@@ -886,7 +894,8 @@ export default function StudentsPage() {
 
       {/* Table */}
       <div className="glass-card overflow-hidden">
-        {loading ? (
+        <div className="relative">
+        {loading && students.length === 0 ? (
           <div className="p-6 space-y-3">
             {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />)}
           </div>
@@ -936,10 +945,7 @@ export default function StudentsPage() {
                       {s.batches && s.batches.length > 0 ? (
                         <div className="flex flex-col gap-1">
                           {s.batches.map(b => (
-                            <div key={b.id}>
-                              <p className="font-semibold text-gray-700 dark:text-gray-300">{b.name}</p>
-                              <p className="text-[10px] text-gray-400">{b.course?.title}</p>
-                            </div>
+                            <p key={b.id} className="font-semibold text-gray-700 dark:text-gray-300">{b.name}</p>
                           ))}
                         </div>
                       ) : <span className="text-gray-400">Not enrolled</span>}
@@ -975,14 +981,14 @@ export default function StudentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30">
-                  {['SNO', 'Student', 'Enrollment', 'College', 'Course', 'Batch', 'Placement', 'Login Access', 'Actions'].map(h => (
+                  {['SNO', 'Student', 'Enrollment', 'College', 'Joining Date', 'Course', 'Batch', 'Placement', 'Login Access', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {students.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400">No students found</td></tr>
                 ) : (
                   students.map((s, i) => (
                     <tr
@@ -1010,6 +1016,11 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-xs text-gray-500">
+                          {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-gray-500">
                           {(s.courses && s.courses.length > 0) ? s.courses.map(c => c.title).join(', ') : '—'}
                         </p>
                       </td>
@@ -1017,10 +1028,7 @@ export default function StudentsPage() {
                         {s.batches && s.batches.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             {s.batches.map(b => (
-                              <div key={b.id}>
-                                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{b.name}</p>
-                                <p className="text-[10px] text-gray-400">{b.course?.title}</p>
-                              </div>
+                              <span key={b.id} className="text-xs font-semibold text-gray-700 dark:text-gray-300">{b.name}</span>
                             ))}
                           </div>
                         ) : <span className="text-gray-400 text-xs">Not enrolled</span>}
@@ -1066,6 +1074,15 @@ export default function StudentsPage() {
           onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
           label="students"
         />
+
+        {loading && students.length > 0 && (
+          <div className="absolute inset-0 z-10 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 py-2 px-4 rounded-full shadow-md border border-gray-200/60 dark:border-gray-700">
+              <RefreshCw size={14} className="animate-spin" /> Refreshing students...
+            </div>
+          </div>
+        )}
+        </div>
       </div>
     </>
   )}

@@ -16,6 +16,10 @@ import {
   sanitizePhone,
   isValidPhone,
   PHONE_ERROR_MESSAGE,
+  isValidText,
+  TEXT_ERROR_MESSAGE,
+  filterTextKey,
+  sanitizeText,
   isValidPassword,
   PASSWORD_ERROR_MESSAGE
 } from '@/utilities/validators'
@@ -39,7 +43,7 @@ function genPassword() {
   const all = upper + lower + digits + special
   const pick = (pool) => pool[Math.floor(Math.random() * pool.length)]
   const required = [pick(upper), pick(lower), pick(digits), pick(special)]
-  const rest = Array.from({ length: 6 }, () => pick(all))
+  const rest = Array.from({ length: 8 }, () => pick(all))
   const combined = [...required, ...rest]
   for (let i = combined.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -136,9 +140,15 @@ export default function AdminsPage() {
     phone: form.phone && form.phone.trim() && !isValidPhone(form.phone.trim())
       ? PHONE_ERROR_MESSAGE
       : null,
+    designation: form.designation && form.designation.trim() && !isValidText(form.designation.trim())
+      ? TEXT_ERROR_MESSAGE
+      : null,
+    department: form.department && form.department.trim() && !isValidText(form.department.trim())
+      ? TEXT_ERROR_MESSAGE
+      : null,
   }
 
-  const isFormValid = !errors.name && !errors.email && !errors.password && !errors.phone && Boolean(form.name.trim() && form.email.trim() && form.password)
+  const isFormValid = !errors.name && !errors.email && !errors.password && !errors.phone && !errors.designation && !errors.department && Boolean(form.name.trim() && form.email.trim() && form.password)
 
   const editErrors = {
     name: !editForm.name.trim()
@@ -154,9 +164,15 @@ export default function AdminsPage() {
     phone: editForm.phone && editForm.phone.trim() && !isValidPhone(editForm.phone.trim())
       ? PHONE_ERROR_MESSAGE
       : null,
+    designation: editForm.designation && editForm.designation.trim() && !isValidText(editForm.designation.trim())
+      ? TEXT_ERROR_MESSAGE
+      : null,
+    department: editForm.department && editForm.department.trim() && !isValidText(editForm.department.trim())
+      ? TEXT_ERROR_MESSAGE
+      : null,
   }
 
-  const isEditValid = !editErrors.name && !editErrors.email && !editErrors.phone && Boolean(editForm.name.trim() && editForm.email.trim())
+  const isEditValid = !editErrors.name && !editErrors.email && !editErrors.phone && !editErrors.designation && !editErrors.department && Boolean(editForm.name.trim() && editForm.email.trim())
 
   const isEditDirty = Boolean(editingAdmin && (
     editForm.name !== (editingAdmin.name || '') ||
@@ -319,7 +335,7 @@ export default function AdminsPage() {
                   Create New Admin
                 </h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Create an administrator account with platform management access.
+                  Create an admin account with platform management access.
                 </p>
               </div>
             </div>
@@ -434,10 +450,18 @@ export default function AdminsPage() {
                   <input
                     type="text"
                     value={form.department}
-                    onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+                    onKeyDown={filterTextKey}
+                    onChange={e => setForm(f => ({ ...f, department: sanitizeText(e.target.value) }))}
+                    onBlur={() => setTouched(t => ({ ...t, department: true }))}
                     placeholder="e.g. Operations, Academics, Management"
-                    className="input-field text-sm"
+                    className={clsx(
+                      'input-field text-sm',
+                      (touched.department || formSubmitted) && errors.department && 'border-red-500 focus:ring-red-400'
+                    )}
                   />
+                  {(touched.department || formSubmitted) && errors.department && (
+                    <p className="text-xs text-red-500 mt-1 font-medium">{errors.department}</p>
+                  )}
                 </div>
 
                 <div>
@@ -445,10 +469,18 @@ export default function AdminsPage() {
                   <input
                     type="text"
                     value={form.designation}
-                    onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
+                    onKeyDown={filterTextKey}
+                    onChange={e => setForm(f => ({ ...f, designation: sanitizeText(e.target.value) }))}
+                    onBlur={() => setTouched(t => ({ ...t, designation: true }))}
                     placeholder="e.g. Operations Lead, Academic Director"
-                    className="input-field text-sm"
+                    className={clsx(
+                      'input-field text-sm',
+                      (touched.designation || formSubmitted) && errors.designation && 'border-red-500 focus:ring-red-400'
+                    )}
                   />
+                  {(touched.designation || formSubmitted) && errors.designation && (
+                    <p className="text-xs text-red-500 mt-1 font-medium">{errors.designation}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -535,7 +567,7 @@ export default function AdminsPage() {
                   Edit Admin Profile
                 </h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Update administrator account details and department permissions.
+                  Update admin account details and department permissions.
                 </p>
               </div>
             </div>
@@ -645,10 +677,18 @@ export default function AdminsPage() {
                   <input
                     type="text"
                     value={editForm.department}
-                    onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))}
+                    onKeyDown={filterTextKey}
+                    onChange={e => setEditForm(f => ({ ...f, department: sanitizeText(e.target.value) }))}
+                    onBlur={() => setEditTouched(t => ({ ...t, department: true }))}
                     placeholder="e.g. Operations, Academics, Management"
-                    className="input-field text-sm"
+                    className={clsx(
+                      'input-field text-sm',
+                      (editTouched.department || editFormSubmitted) && editErrors.department && 'border-red-500 focus:ring-red-400'
+                    )}
                   />
+                  {(editTouched.department || editFormSubmitted) && editErrors.department && (
+                    <p className="text-xs text-red-500 mt-1 font-medium">{editErrors.department}</p>
+                  )}
                 </div>
 
                 <div>
@@ -656,10 +696,18 @@ export default function AdminsPage() {
                   <input
                     type="text"
                     value={editForm.designation}
-                    onChange={e => setEditForm(f => ({ ...f, designation: e.target.value }))}
+                    onKeyDown={filterTextKey}
+                    onChange={e => setEditForm(f => ({ ...f, designation: sanitizeText(e.target.value) }))}
+                    onBlur={() => setEditTouched(t => ({ ...t, designation: true }))}
                     placeholder="e.g. Operations Lead, Academic Director"
-                    className="input-field text-sm"
+                    className={clsx(
+                      'input-field text-sm',
+                      (editTouched.designation || editFormSubmitted) && editErrors.designation && 'border-red-500 focus:ring-red-400'
+                    )}
                   />
+                  {(editTouched.designation || editFormSubmitted) && editErrors.designation && (
+                    <p className="text-xs text-red-500 mt-1 font-medium">{editErrors.designation}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -738,8 +786,8 @@ export default function AdminsPage() {
             </div>
           </div>
 
-          <div className="glass-card overflow-hidden">
-            {loading ? (
+          <div className="glass-card overflow-hidden relative">
+            {loading && admins.length === 0 ? (
               <div className="p-12 text-center text-slate-400">
                 <svg className="animate-spin h-8 w-8 mx-auto text-brand-600 mb-3" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -830,7 +878,9 @@ export default function AdminsPage() {
                 <table className="w-full min-w-[800px] text-left text-sm">
                   <thead className="bg-purple-50/60 dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
                     <tr>
-                      <th className="py-3.5 px-4">Admin</th>
+                      <th className="py-3.5 px-4">S.No.</th>
+                      <th className="py-3.5 px-4">Name</th>
+                      <th className="py-3.5 px-4">Email</th>
                       <th className="py-3.5 px-4">Contact</th>
                       <th className="py-3.5 px-4">Role</th>
                       <th className="py-3.5 px-4">Department</th>
@@ -839,22 +889,25 @@ export default function AdminsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-gray-800/60">
-                    {admins.map(admin => (
+                    {admins.map((admin, index) => (
                       <tr
                         key={admin.id}
                         onClick={() => router.push(`/admin/admins/${admin.id}`)}
                         className="hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors cursor-pointer group"
                       >
+                        <td className="py-4 px-4 text-xs font-medium text-slate-400 dark:text-slate-500">
+                          {(page - 1) * pageSize + index + 1}
+                        </td>
                         <td className="py-4 px-4 font-medium">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/60 transition-colors">
                               {admin.name[0]?.toUpperCase()}
                             </div>
-                            <div>
-                              <p className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{admin.name}</p>
-                              <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{admin.email}</p>
-                            </div>
+                            <p className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{admin.name}</p>
                           </div>
+                        </td>
+                        <td className="py-4 px-4">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{admin.email}</p>
                         </td>
                         <td className="py-4 px-4">
                           {admin.phone ? (
@@ -926,6 +979,16 @@ export default function AdminsPage() {
                 </table>
               </div>
             )}
+
+            {loading && admins.length > 0 && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-gray-900/60">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-gray-800 shadow-lg border border-slate-200 dark:border-gray-700 text-sm text-slate-600 dark:text-slate-300 font-medium">
+                  <RefreshCw size={16} className="animate-spin text-brand-600" />
+                  Refreshing...
+                </div>
+              </div>
+            )}
+
             <Pagination
               total={totalElements}
               totalPages={totalPages}
@@ -954,7 +1017,7 @@ export default function AdminsPage() {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         title="Import Admins"
-        subtitle="Bulk-create administrator accounts from a CSV file"
+        subtitle="Bulk-create admin accounts from a CSV file"
         entityLabel="admin"
         templateFilename="admins-import-template.csv"
         templateHeaders={['Name', 'Email', 'Password', 'Phone', 'Designation', 'Department']}

@@ -45,6 +45,38 @@ export function sanitizeName(val) {
   return val.replace(/[^a-zA-Z\s.'-]/g, '')
 }
 
+// Text validation for free-text fields like Designation / Department: letters,
+// spaces, dots, commas, ampersands, parentheses, slashes, hyphens and apostrophes
+// are allowed; numbers and other symbols are rejected.
+export const TEXT_REGEX = /^[a-zA-Z\s.,&()\/'-]+$/
+export const TEXT_ERROR_MESSAGE = 'Cannot contain numbers or unsupported special characters'
+
+// Blank is treated as valid — designation/department are optional everywhere.
+export function isValidText(val) {
+  if (!val) return true
+  return TEXT_REGEX.test(val)
+}
+
+/**
+ * Filter out digits and unsupported characters on keydown for free-text fields.
+ * Note: onChange remains authoritative for paste, autofill, and mobile input.
+ */
+export function filterTextKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Home', 'End'].includes(e.key)) return
+  if (!/^[a-zA-Z\s.,&()\/'-]$/.test(e.key)) {
+    e.preventDefault()
+  }
+}
+
+/**
+ * Sanitizes free-text fields (e.g. on paste or input) while keeping allowed characters.
+ */
+export function sanitizeText(val) {
+  if (!val) return ''
+  return val.replace(/[^a-zA-Z\s.,&()\/'-]/g, '')
+}
+
 /**
  * Filter out non-digit keystrokes on keydown for phone fields.
  */

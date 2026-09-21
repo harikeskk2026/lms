@@ -203,7 +203,10 @@ public class StudentServiceImpl implements StudentService {
     @Transactional
     public StudentResponse create(StudentCreateRequest request) {
         if (userRepository.existsByEmailIgnoreCase(request.getEmail())) {
-            throw new ConflictException("Email already in use");
+            String conflictDetail = userRepository.findByEmailIgnoreCase(request.getEmail())
+                    .map(existing -> "registered with " + registeredWithLabel(existing.getRole()))
+                    .orElse("registered with an existing account");
+            throw new ConflictException("This email is already " + conflictDetail + ". Please use a different email.");
         }
 
         User user = new User();
@@ -565,6 +568,15 @@ public class StudentServiceImpl implements StudentService {
 
     private String generateEnrollmentNo(Long userId) {
         return "CL-%d-%04d".formatted(Year.now().getValue(), userId);
+    }
+
+    private String registeredWithLabel(Role role) {
+        return switch (role) {
+            case SUPERADMIN -> "a Super Admin account";
+            case ADMIN -> "an Admin account";
+            case TRAINER -> "a Trainer account";
+            case STUDENT -> "a Student account";
+        };
     }
 
     private Specification<Student> buildSpecification(String search, Long batchId, String status,

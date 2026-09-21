@@ -2,10 +2,8 @@ package com.careerlabs.lms.api.common.util;
 
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,8 +82,10 @@ public class CsvParser {
             throw new BadRequestException("CSV file input stream is null");
         }
 
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
-        List<List<String>> allTokens = parseTokens(reader);
+        byte[] rawBytes = inputStream.readAllBytes();
+        String content = new String(rawBytes, StandardCharsets.UTF_8);
+        char delimiter = sniffDelimiter(content);
+        List<List<String>> allTokens = parseTokens(content, delimiter);
 
         if (allTokens.isEmpty()) {
             throw new BadRequestException("Uploaded CSV file is empty");
@@ -154,42 +154,84 @@ public class CsvParser {
         return new ParseResult(cleanHeaders, parsedRows);
     }
 
-    private static List<List<String>> parseTokens(BufferedReader reader) throws IOException {
+    /**
+     * Sniffs the delimiter from the first non-blank line of the CSV content.
+     * Supports comma, semicolon, tab and pipe so files exported from various
+     * locales (e.g. Excel "CSV (semicolon)") are handled correctly.
+     */
+    private static char sniffDelimiter(String content) {
+        String firstLine = null;
+        int start = 0;
+        while (start < content.length()) {
+            int nl = content.indexOf('\n', start);
+            String line = nl < 0 ? content.substring(start) : content.substring(start, nl);
+            if (!line.isBlank()) {
+                firstLine = line;
+                break;
+            }
+            if (nl < 0) {
+                break;
+            }
+            start = nl + 1;
+        }
+
+        if (firstLine == null || firstLine.isBlank()) {
+            return ',';
+        }
+
+        char best = ',';
+        int bestCount = -1;
+        for (char candidate : new char[]{',', ';', '\t', '|'}) {
+            int count = countOutsideQuotes(firstLine, candidate);
+            if (count > bestCount) {
+                best = candidate;
+                bestCount = count;
+            }
+        }
+        return best;
+    }
+
+    private static int countOutsideQuotes(String line, char delimiter) {
+        int count = 0;
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == delimiter && !inQuotes) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static List<List<String>> parseTokens(String content, char delimiter) {
         List<List<String>> rows = new ArrayList<>();
         List<String> currentRow = new ArrayList<>();
         StringBuilder currentField = new StringBuilder();
         boolean inQuotes = false;
 
-        int ch;
-        while ((ch = reader.read()) != -1) {
-            char c = (char) ch;
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
 
             if (c == '"') {
                 if (inQuotes) {
-                    // Peek next char to see if it's an escaped quote ("")
-                    reader.mark(1);
-                    int next = reader.read();
-                    if (next == '"') {
+                    if (i + 1 < content.length() && content.charAt(i + 1) == '"') {
                         currentField.append('"');
+                        i++;
                     } else {
                         inQuotes = false;
-                        if (next != -1) {
-                            reader.reset();
-                        }
                     }
                 } else {
                     inQuotes = true;
                 }
-            } else if (c == ',' && !inQuotes) {
+            } else if (c == delimiter && !inQuotes) {
                 currentRow.add(currentField.toString());
                 currentField.setLength(0);
             } else if ((c == '\n' || c == '\r') && !inQuotes) {
                 if (c == '\r') {
-                    // Handle \r\n
-                    reader.mark(1);
-                    int next = reader.read();
-                    if (next != '\n' && next != -1) {
-                        reader.reset();
+                    if (i + 1 < content.length() && content.charAt(i + 1) == '\n') {
+                        i++;
                     }
                 }
                 currentRow.add(currentField.toString());
@@ -201,7 +243,6 @@ public class CsvParser {
             }
         }
 
-        // Add trailing field and row if any
         if (currentField.length() > 0 || !currentRow.isEmpty()) {
             currentRow.add(currentField.toString());
             rows.add(currentRow);

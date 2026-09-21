@@ -1145,7 +1145,8 @@ export default function TrainersPage() {
               <thead className="bg-purple-50/60 dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="py-3.5 px-4 text-center w-16">S.No.</th>
-                  <th className="py-3.5 px-6">Trainer</th>
+                  <th className="py-3.5 px-6">Trainer Name</th>
+                  <th className="py-3.5 px-4">Email</th>
                   <th className="py-3.5 px-4">Contact</th>
                   <th className="py-3.5 px-4">Department</th>
                   <th className="py-3.5 px-4">Designation / Role</th>
@@ -1170,11 +1171,14 @@ export default function TrainersPage() {
                           {trainer.name[0]?.toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{trainer.name}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{trainer.email}</p>
+                          <p className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors truncate">{trainer.name}</p>
                         </div>
                       </div>
                     </td>
+                    <td className="py-4 px-4">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-300 font-mono truncate max-w-[180px]">{trainer.email}</p>
+                    </td>
+
 
                     <td className="py-4 px-4">
                       {trainer.phone ? (

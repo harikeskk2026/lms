@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Search } from 'lucide-react'
+import { ChevronDown, Search, X } from 'lucide-react'
 
 /**
  * Polished, keyboard-accessible custom single-select dropdown.
@@ -26,6 +26,7 @@ export default function CustomSelect({
   className = '',
   align = 'start',
   error = false,
+  clearable = false,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -136,6 +137,8 @@ export default function CustomSelect({
     ? 'border-red-500 ring-1 ring-red-500'
     : 'border-gray-200 dark:border-gray-700'
 
+  const showClear = clearable && selected && !disabled && !loading
+
   const triggerCls = compact
     ? `rounded-xl border ${borderCls} bg-white dark:bg-gray-800 text-xs`
     : `rounded-xl border ${borderCls} bg-gray-50 dark:bg-gray-800 dark:text-gray-200 text-sm`
@@ -205,7 +208,7 @@ export default function CustomSelect({
         type="button"
         disabled={disabled || loading}
         onClick={toggleOpen}
-        className={`w-full flex items-center justify-between gap-2 ${triggerCls} px-3.5 py-2 text-left outline-none focus:ring-2 focus:ring-purple-500 transition-colors min-w-0 ${
+        className={`w-full flex items-center justify-between gap-2 ${triggerCls} ${showClear ? 'pl-3.5 pr-9 py-2' : 'px-3.5 py-2'} text-left outline-none focus:ring-2 focus:ring-purple-500 transition-colors min-w-0 ${
           disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-gray-800/50' : 'cursor-pointer hover:border-purple-300'
         } ${className}`}
       >
@@ -219,6 +222,22 @@ export default function CustomSelect({
           <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>
+      {showClear && (
+        <button
+          type="button"
+          aria-label="Clear selection"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onChange('')
+            closeMenu()
+            setQuery('')
+          }}
+          className="absolute right-8 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 z-[1]"
+        >
+          <X size={13} />
+        </button>
+      )}
       {menu}
     </div>
   )

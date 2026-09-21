@@ -65,7 +65,7 @@ export default function CourseCatalogPage() {
     reset,
     watch,
     setValue,
-    formState: { errors, isSubmitting, isDirty, isValid },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm({ resolver: zodResolver(courseSchema), defaultValues: EMPTY_FORM, mode: 'onChange' })
 
   const thumbnailValue = watch('thumbnail')
@@ -282,8 +282,6 @@ export default function CourseCatalogPage() {
   const isTrainer = user?.role === 'TRAINER'
 
   if (panelOpen) {
-    const isFormValid = isValid && Boolean(watch('title')?.trim() && watch('description')?.trim() && watch('durationValue'))
-
     return (
       <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
         {/* Header */}
@@ -367,7 +365,6 @@ export default function CourseCatalogPage() {
                   <input
                     {...register('durationValue', {
                       required: 'Duration is required',
-                      setValueAs: v => v === '' ? '' : String(v).replace(/[^0-9]/g, ''),
                       validate: v => {
                         if (!v || v === '') return 'Duration is required'
                         const n = parseInt(v, 10)
@@ -380,7 +377,7 @@ export default function CourseCatalogPage() {
                     step="1"
                     placeholder="e.g. 6"
                     onKeyDown={e => {
-                      if (['e', 'E', '-', '+', '.'].includes(e.key)) e.preventDefault()
+                      if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault()
                     }}
                     className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 transition-all"
                   />
@@ -468,6 +465,11 @@ export default function CourseCatalogPage() {
                     onChange={async (e) => {
                       const file = e.target.files?.[0]
                       if (!file) return
+                      if (!file.type || !file.type.startsWith('image/')) {
+                        toast.error('Thumbnail must be an image file (JPG, PNG, WebP, or GIF)')
+                        if (thumbFileInputRef.current) thumbFileInputRef.current.value = ''
+                        return
+                      }
                       setUploadingThumb(true)
                       try {
                         const res = await courseContentService.uploadMaterial(file, 'OTHER')
@@ -529,7 +531,7 @@ export default function CourseCatalogPage() {
             </button>
             <button
               type="submit"
-              disabled={saving || isSubmitting || !isFormValid}
+              disabled={saving || isSubmitting}
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20 flex items-center gap-2"
             >
               {(saving || isSubmitting) ? (

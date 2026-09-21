@@ -57,7 +57,7 @@ export default function CourseManagePage({ params }) {
     reset: resetCourseForm,
     watch: watchCourse,
     setValue: setCourseValue,
-    formState: { errors: courseErrors, isSubmitting: isSubmittingCourse, isDirty: isCourseDirty, isValid: isCourseFormValid },
+    formState: { errors: courseErrors, isSubmitting: isSubmittingCourse, isDirty: isCourseDirty },
   } = useForm({
     resolver: zodResolver(courseSchema),
     mode: 'onChange',
@@ -169,6 +169,7 @@ export default function CourseManagePage({ params }) {
 
   const handleStatusChange = async (newStatus) => {
     if (user?.role === 'TRAINER') return
+    if (!newStatus) return
     try {
       await courseService.updateStatus(courseId, newStatus)
       setCourse(c => ({ ...c, status: newStatus }))
@@ -290,7 +291,6 @@ export default function CourseManagePage({ params }) {
                 <input
                   {...registerCourse('durationValue', {
                     required: 'Duration is required',
-                    setValueAs: v => v === '' ? '' : String(v).replace(/[^0-9]/g, ''),
                     validate: v => {
                       if (!v || v === '') return 'Duration is required'
                       const n = parseInt(v, 10)
@@ -303,7 +303,7 @@ export default function CourseManagePage({ params }) {
                   step="1"
                   placeholder="Enter duration"
                   onKeyDown={e => {
-                    if (['e', 'E', '-', '+', '.'].includes(e.key)) e.preventDefault()
+                    if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault()
                   }}
                   className="w-1/2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
                 />
@@ -388,6 +388,11 @@ export default function CourseManagePage({ params }) {
                   onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
+                    if (!file.type || !file.type.startsWith('image/')) {
+                      toast.error('Thumbnail must be an image file (JPG, PNG, WebP, or GIF)')
+                      e.target.value = ''
+                      return
+                    }
                     setUploadingThumb(true)
                     try {
                       const res = await courseContentService.uploadMaterial(file, 'OTHER')
@@ -428,22 +433,13 @@ export default function CourseManagePage({ params }) {
             >
               Cancel
             </button>
-            {(() => {
-              const isEditCourseValid = isCourseFormValid && Boolean(
-                watchCourse('title')?.trim() &&
-                watchCourse('description')?.trim() &&
-                watchCourse('durationValue')
-              )
-              return (
-                <button
-                  type="submit"
-                  disabled={savingCourse || isSubmittingCourse || !isEditCourseValid}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {savingCourse ? 'Saving...' : 'Save Changes'}
-                </button>
-              )
-            })()}
+            <button
+              type="submit"
+              disabled={savingCourse || isSubmittingCourse}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {savingCourse ? 'Saving...' : 'Save Changes'}
+            </button>
           </div>
         </form>
       </SlidePanel>
@@ -848,7 +844,7 @@ function SyllabusTab({ courseId }) {
   }
 
   async function updateModuleStatus(module, newStatus) {
-    if (!module || module.status === newStatus) return
+    if (!module || !newStatus || module.status === newStatus) return
     setModules(prev => prev.map(m => m.id === module.id ? { ...m, status: newStatus } : m))
     try {
       await courseContentService.updateModule(module.id, {
@@ -866,7 +862,7 @@ function SyllabusTab({ courseId }) {
   }
 
   async function updateTopicStatus(topic, newStatus) {
-    if (!topic || topic.status === newStatus) return
+    if (!topic || !newStatus || topic.status === newStatus) return
     setModules(prev => prev.map(m => ({
       ...m,
       topics: (m.topics || []).map(t => t.id === topic.id ? { ...t, status: newStatus } : t)
@@ -1043,6 +1039,10 @@ function SyllabusTab({ courseId }) {
     }
 
     const topicHours = topicForm.durationHours ? Number(topicForm.durationHours) : 0
+    if (topicHours < 0) {
+      toast.error('Topic duration cannot be negative')
+      return
+    }
     if (topicHours > 0) {
       const module = modules.find(m => m.id === moduleId)
       const moduleHours = getModuleHours(module?.durationValue, module?.durationUnit)
@@ -1089,6 +1089,10 @@ function SyllabusTab({ courseId }) {
       return
     }
     const topicHours = editingTopic.durationHours ? Number(editingTopic.durationHours) : 0
+    if (topicHours < 0) {
+      toast.error('Topic duration cannot be negative')
+      return
+    }
     if (topicHours > 0) {
       const module = modules.find(m => (m.topics || []).some(t => t.id === editingTopic.id))
       const moduleHours = getModuleHours(module?.durationValue, module?.durationUnit)
@@ -1813,6 +1817,7 @@ function MaterialsTab({ courseId }) {
             onChange={(val) => { setModuleId(val); setTopicId('') }}
             options={modules.map(m => ({ value: m.id, label: m.title }))}
             placeholder="Select module..."
+            clearable
           />
         )}
         {scope === 'TOPIC' && (
@@ -1822,6 +1827,7 @@ function MaterialsTab({ courseId }) {
             disabled={!moduleId}
             options={topics.map(t => ({ value: t.id, label: t.title }))}
             placeholder="Select topic..."
+            clearable
           />
         )}
       </div>

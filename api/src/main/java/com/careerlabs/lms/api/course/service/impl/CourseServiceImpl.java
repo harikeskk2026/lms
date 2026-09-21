@@ -121,8 +121,7 @@ public class CourseServiceImpl implements CourseService {
         String needle = normalized.toLowerCase(Locale.ROOT);
         return responses.stream()
                 .filter(c -> containsIgnoreCase(c.title(), needle)
-                        || containsIgnoreCase(c.courseCode(), needle)
-                        || (c.level() != null && containsIgnoreCase(c.level().name(), needle)))
+                        || containsIgnoreCase(c.courseCode(), needle))
                 .toList();
     }
 
@@ -327,6 +326,14 @@ public class CourseServiceImpl implements CourseService {
         Course course = findOrThrow(id);
         if (status == course.getStatus()) {
             return CourseResponse.from(course);
+        }
+        if (status == CourseStatus.ARCHIVED) {
+            long activeStudents = enrollmentRepository.countByCourseIdAndActiveTrue(id);
+            if (activeStudents > 0) {
+                throw new ConflictException(String.format(
+                        "Cannot archive course: %d active student(s) are still enrolled in '%s'. Reassign or remove them before archiving.",
+                        activeStudents, course.getTitle()));
+            }
         }
         validateTransition(course.getStatus(), status);
         course.setStatus(status);
