@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
@@ -17,6 +17,7 @@ import courseService from '@/services/courseService'
 import assignmentService from '@/services/assignmentService'
 import DateTimePicker from '@/components/ui/DateTimePicker'
 import CustomSelect from '@/components/ui/CustomSelect'
+import MultiSelect from '@/components/ui/MultiSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
@@ -64,13 +65,17 @@ function addDaysToDateStr(dateStr, days) {
   return `${yr}-${mo}-${da}`
 }
 
+
 function formatSafe(val, fmtStr) {
   if (!val) return null
   try {
-    const d = typeof val === 'string' && val.length === 10 && !val.includes('T')
-      ? new Date(val + 'T00:00:00')
-      : new Date(val)
-    return isNaN(d.getTime()) ? null : format(d, fmtStr)
+    const isDateOnly = typeof val === 'string' && val.length === 10 && !val.includes('T')
+    const d = isDateOnly ? new Date(val + 'T00:00:00') : new Date(val)
+    if (isNaN(d.getTime())) return null
+    if (isDateOnly && fmtStr.includes('HH:mm')) {
+      return format(d, fmtStr.replace(', HH:mm', '').replace(' HH:mm', ''))
+    }
+    return format(d, fmtStr)
   } catch {
     return null
   }
@@ -78,6 +83,7 @@ function formatSafe(val, fmtStr) {
 
 const emptyForm = {
   title: '', body: '',
+  batchIds: [], courseIds: [],
   batchId: '', courseId: '', collegeId: '',
   isPinned: false, expiresAt: '', category: 'GENERAL', priority: 'NORMAL',
   requiresAcknowledgment: false, allowComments: false,
@@ -126,21 +132,27 @@ export default function AnnouncementsPage() {
   const buildPayload = (status) => ({
     title: form.title,
     body: form.body,
-    batchId: form.batchId || null,
+    batchId: form.batchIds?.[0] ? Number(form.batchIds[0]) : (form.batchId ? Number(form.batchId) : null),
+    batchIds: form.batchIds?.map(Number) || [],
+    courseId: form.courseIds?.[0] ? Number(form.courseIds[0]) : (form.courseId ? Number(form.courseId) : null),
+    courseIds: form.courseIds?.map(Number) || [],
+    collegeId: form.collegeId || null,
     isPinned: form.isPinned,
-    expiresAt: form.expiresAt || null,
+    expiresAt: form.expiresAt
+      ? new Date(form.expiresAt.includes('T') ? form.expiresAt : `${form.expiresAt}T23:59:59`).toISOString()
+      : null,
     category: form.category,
     status,
     priority: form.priority,
-    scheduledAt: status === 'SCHEDULED' && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
+    scheduledAt: (status === 'SCHEDULED' || status === 'DRAFT') && form.scheduledAt
+      ? new Date(form.scheduledAt.includes('T') ? form.scheduledAt : `${form.scheduledAt}T09:00:00`).toISOString()
+      : null,
     requiresAcknowledgment: form.requiresAcknowledgment,
     allowComments: form.allowComments,
     actionType: form.actionType || null,
     actionReferenceId: form.actionReferenceId ? Number(form.actionReferenceId) : null,
     actionLabel: form.actionLabel || null,
     actionUrl: form.actionUrl || null,
-    collegeId: form.collegeId || null,
-    courseId: form.courseId || null,
     audienceRuleType: form.audienceRuleType || 'NONE',
     audienceRuleValue: form.audienceRuleValue !== '' && form.audienceRuleValue !== null && form.audienceRuleValue !== undefined ? Number(form.audienceRuleValue) : null,
     audienceRuleReferenceId: form.audienceRuleReferenceId ? Number(form.audienceRuleReferenceId) : null,
@@ -148,7 +160,7 @@ export default function AnnouncementsPage() {
     attachmentName: form.attachmentName || null,
   })
 
-  const handleSave = async (e, status) => {
+  const handleSave = async (e, requestedStatus) => {
     e.preventDefault()
     if (!form.title?.trim()) {
       toast.error('Please enter an announcement title')
@@ -162,62 +174,72 @@ export default function AnnouncementsPage() {
       toast.error('Please select a category')
       return
     }
-    if (status === 'SCHEDULED') {
-      if (!form.scheduledAt) {
-        toast.error('Pick a schedule date/time first')
-        return
-      }
+
+    const isDraft = requestedStatus === 'DRAFT'
+    const isScheduled = !isDraft && Boolean(form.scheduledAt)
+    const effectiveStatus = isDraft ? 'DRAFT' : (isScheduled ? 'SCHEDULED' : 'PUBLISHED')
+
+    if (isScheduled) {
       const scheduledDate = new Date(form.scheduledAt)
       if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
         toast.error('Scheduled time must be in the future')
         return
       }
     }
-    if (status === 'PUBLISHED' && form.scheduledAt) {
-      const scheduledDate = new Date(form.scheduledAt)
-      if (!isNaN(scheduledDate.getTime()) && scheduledDate > new Date()) {
-        const confirmed = await ask({
-          title: 'Publish Now Instead?',
-          message: `You have set a schedule time (${format(scheduledDate, 'MMM d, yyyy h:mm a')}), but "Publish" will send the announcement immediately. Do you want to publish now?`,
-          confirmLabel: 'Publish Now',
-          tone: 'warning',
-        })
-        if (!confirmed) return
-      }
-    }
+
     if (form.expiresAt) {
-      const publishDate = (status === 'SCHEDULED' && form.scheduledAt)
-        ? form.scheduledAt.split('T')[0]
-        : getTodayString()
-      if (form.expiresAt < publishDate) {
-        toast.error(
-          (status === 'SCHEDULED' && form.scheduledAt)
-            ? `Expiry date cannot be before the scheduled publishing date (${publishDate})`
-            : `Expiry date cannot be before the published date (${publishDate})`
-        )
+      const expDateStr = form.expiresAt.includes('T') ? form.expiresAt : `${form.expiresAt}T23:59:59`
+      const expiryTime = new Date(expDateStr).getTime()
+      if (isNaN(expiryTime)) {
+        toast.error('Please enter a valid expiry date & time')
         return
       }
+      if (isScheduled && form.scheduledAt) {
+        const schedDateStr = form.scheduledAt.includes('T') ? form.scheduledAt : `${form.scheduledAt}T00:00:00`
+        const scheduledTime = new Date(schedDateStr).getTime()
+        if (expiryTime <= scheduledTime) {
+          toast.error(`Expiry date & time must be after the scheduled publishing date & time (${formatSafe(form.scheduledAt, 'dd MMM yyyy, HH:mm') || form.scheduledAt})`)
+          return
+        }
+      } else {
+        if (expiryTime <= Date.now()) {
+          toast.error('Expiry date & time must be in the future')
+          return
+        }
+      }
     }
+
     setSaving(true)
     try {
-      const payload = buildPayload(status)
+      const payload = buildPayload(effectiveStatus)
       if (editId) {
         await adminApi.updateAnnouncement(editId, payload)
-        toast.success('Updated')
+        toast.success(
+          isDraft
+            ? 'Draft updated'
+            : isScheduled
+              ? `Announcement updated and scheduled for ${format(new Date(form.scheduledAt), 'dd MMM yyyy, HH:mm')}`
+              : 'Announcement updated and published!'
+        )
       } else {
         await adminApi.createAnnouncement(payload)
         toast.success(
-          status === 'DRAFT' ? 'Saved as draft'
-            : status === 'SCHEDULED' ? 'Scheduled'
-            : status === 'PENDING_APPROVAL' ? 'Submitted for approval'
-            : 'Announcement sent!'
+          isDraft
+            ? 'Saved as draft'
+            : isScheduled
+              ? `Announcement scheduled for ${format(new Date(form.scheduledAt), 'dd MMM yyyy, HH:mm')}`
+              : 'Announcement published successfully!'
         )
       }
       setFormOpen(false)
       setEditId(null)
       setForm(emptyForm)
       load()
-    } catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to save announcement') } finally { setSaving(false) }
+    } catch (err) {
+      toast.error(err.response?.data?.message || err?.message || 'Failed to save announcement')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handlePublish = async (id) => {
@@ -261,14 +283,23 @@ export default function AnnouncementsPage() {
 
   const handleEdit = (a) => {
     setEditId(a.id)
+    const bIds = a.batchIds && a.batchIds.length > 0
+      ? a.batchIds.map(String)
+      : (a.batchId ? [String(a.batchId)] : [])
+    const cIds = a.courseIds && a.courseIds.length > 0
+      ? a.courseIds.map(String)
+      : (a.courseId ? [String(a.courseId)] : [])
+
     setForm({
       title: a.title || '',
       body: a.body || '',
-      batchId: a.batchId ? String(a.batchId) : '',
+      batchIds: bIds,
+      courseIds: cIds,
+      batchId: bIds[0] || '',
+      courseId: cIds[0] || '',
       collegeId: a.collegeId ? String(a.collegeId) : '',
-      courseId: a.courseId ? String(a.courseId) : '',
       isPinned: !!a.isPinned,
-      expiresAt: a.expiresAt ? a.expiresAt.split('T')[0] : '',
+      expiresAt: a.expiresAt ? a.expiresAt.slice(0, 16) : '',
       category: a.category || 'GENERAL',
       priority: a.priority || 'NORMAL',
       scheduledAt: a.scheduledAt ? a.scheduledAt.slice(0, 16) : '',
@@ -452,15 +483,54 @@ export default function AnnouncementsPage() {
   )
 }
 
-const PLACEHOLDER_TOKENS = ['{{studentName}}', '{{batchName}}', '{{courseName}}', '{{attendancePercentage}}', '{{date}}']
-
-function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches, courses, assignments = [], onPreviewAttachment }) {
+function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, batches = [], courses = [], assignments = [], onPreviewAttachment }) {
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
   const toggle = (key) => () => setForm(f => ({ ...f, [key]: !f[key] }))
   const bodyRef = useRef(null)
-  const [preview, setPreview] = useState(null)
-  const [audienceCount, setAudienceCount] = useState(null)
+
   const [uploading, setUploading] = useState(false)
+
+  // Shortlist batches according to selected courses
+  const filteredBatches = useMemo(() => {
+    if (!form.courseIds || form.courseIds.length === 0) {
+      return batches
+    }
+    const selectedCourseIdStrs = new Set(form.courseIds.map(String))
+    return batches.filter(b => {
+      const bCourseId = b.course?.id ?? b.courseId ?? (typeof b.course === 'object' ? b.course?.id : b.course)
+      return bCourseId != null && selectedCourseIdStrs.has(String(bCourseId))
+    })
+  }, [batches, form.courseIds])
+
+  const handleCoursesChange = (newCourseIds) => {
+    setForm(f => {
+      let nextBatchIds = f.batchIds || []
+      if (newCourseIds.length > 0) {
+        const validCourseIdStrs = new Set(newCourseIds.map(String))
+        nextBatchIds = nextBatchIds.filter(bId => {
+          const b = batches.find(item => String(item.id) === String(bId))
+          if (!b) return false
+          const bCourseId = b.course?.id ?? b.courseId ?? (typeof b.course === 'object' ? b.course?.id : b.course)
+          return bCourseId != null && validCourseIdStrs.has(String(bCourseId))
+        })
+      }
+      return {
+        ...f,
+        courseIds: newCourseIds,
+        courseId: newCourseIds[0] || '',
+        batchIds: nextBatchIds,
+        batchId: nextBatchIds[0] || '',
+      }
+    })
+  }
+
+  const handleBatchesChange = (newBatchIds) => {
+    setForm(f => ({
+      ...f,
+      batchIds: newBatchIds,
+      batchId: newBatchIds[0] || '',
+    }))
+  }
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -492,49 +562,22 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
   const todayStr = getTodayString()
   const publishDate = form.scheduledAt ? form.scheduledAt.split('T')[0] : todayStr
   const minExpiryDate = publishDate
-  const isExpiryInvalid = !!(form.expiresAt && form.expiresAt < publishDate)
 
-  const usesPlaceholders = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(`${form.title} ${form.body}`)
+  const isExpiryInvalid = useMemo(() => {
+    if (!form.expiresAt) return false
+    const expDateStr = form.expiresAt.includes('T') ? form.expiresAt : `${form.expiresAt}T23:59:59`
+    const expTime = new Date(expDateStr).getTime()
+    if (isNaN(expTime)) return true
+    if (form.scheduledAt) {
+      const schedDateStr = form.scheduledAt.includes('T') ? form.scheduledAt : `${form.scheduledAt}T00:00:00`
+      const schedTime = new Date(schedDateStr).getTime()
+      if (!isNaN(schedTime)) {
+        return expTime <= schedTime
+      }
+    }
+    return expTime <= Date.now()
+  }, [form.expiresAt, form.scheduledAt])
 
-  useEffect(() => {
-    if (!usesPlaceholders) { setPreview(null); return }
-    const timer = setTimeout(() => {
-      adminApi.previewAnnouncementPlaceholders(form.title, form.body, form.courseId, form.batchId)
-        .then(r => setPreview(r.data.data))
-        .catch(() => setPreview(null))
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [form.title, form.body, form.courseId, form.batchId, usesPlaceholders])
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      adminApi.getAnnouncementAudienceCount({
-        batchId: form.batchId || null,
-        collegeId: form.collegeId || null,
-        courseId: form.courseId || null,
-        audienceRuleType: form.audienceRuleType || 'NONE',
-        audienceRuleValue: form.audienceRuleValue ? Number(form.audienceRuleValue) : null,
-        audienceRuleReferenceId: form.audienceRuleReferenceId ? Number(form.audienceRuleReferenceId) : null,
-      })
-        .then(r => setAudienceCount(r.data.data?.count ?? null))
-        .catch(() => setAudienceCount(null))
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [form.batchId, form.courseId, form.collegeId, form.audienceRuleType, form.audienceRuleValue, form.audienceRuleReferenceId])
-
-  const insertPlaceholder = (token) => {
-    const el = bodyRef.current
-    const start = el ? (el.selectionStart ?? form.body.length) : form.body.length
-    const end = el ? (el.selectionEnd ?? form.body.length) : form.body.length
-    const newBody = form.body.slice(0, start) + token + form.body.slice(end)
-    setForm(f => ({ ...f, body: newBody }))
-    requestAnimationFrame(() => {
-      if (!el) return
-      el.focus()
-      const pos = start + token.length
-      el.setSelectionRange(pos, pos)
-    })
-  }
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0">
@@ -594,60 +637,9 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
               value={form.body}
               onChange={set('body')}
               rows={5}
-              placeholder="Enter announcement message details here. Click any token below to personalize the message per student..."
+              placeholder="Enter announcement message details here..."
               className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/60 p-4 text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 outline-none focus:bg-white dark:focus:bg-gray-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 resize-none transition-all shadow-2xs leading-relaxed"
             />
-
-            {/* Token helper bar */}
-            <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 mt-2">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Sparkles size={13} className="text-purple-600 dark:text-purple-400" />
-                <span className="text-xs font-bold text-purple-900 dark:text-purple-300">Personalization Tokens</span>
-                <span className="text-[10px] text-purple-600/80 dark:text-purple-400/80">(click to insert at cursor position)</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {PLACEHOLDER_TOKENS.map(token => (
-                  <button
-                    key={token}
-                    type="button"
-                    onClick={() => insertPlaceholder(token)}
-                    title={`Insert ${token}`}
-                    className="inline-flex items-center gap-1 text-[11px] font-mono font-medium bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/80 rounded-lg px-2.5 py-1 hover:bg-purple-100 dark:hover:bg-purple-900/50 hover:border-purple-300 transition-all shadow-2xs active:scale-95"
-                  >
-                    <Plus size={10} className="text-purple-500" /> {token}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Live Preview */}
-            {usesPlaceholders && (
-              <div className="mt-3 border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-800/60 rounded-xl p-4 bg-gradient-to-r from-purple-50/60 to-violet-50/40 dark:from-purple-950/30 dark:to-violet-950/20 shadow-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Eye size={14} className="text-purple-600 dark:text-purple-400" />
-                    <span className="text-xs font-bold text-purple-900 dark:text-purple-300 uppercase tracking-wide">
-                      Live Student Preview (Sample Profile)
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-semibold bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full">
-                    Auto-Resolved
-                  </span>
-                </div>
-                {preview ? (
-                  <div className="space-y-1 bg-white/80 dark:bg-gray-900/80 p-3 rounded-lg border border-purple-100 dark:border-purple-900/40">
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">{preview.title || 'Untitled'}</p>
-                    <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{preview.body || 'No message content'}</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">Generating preview with student data...</p>
-                )}
-                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 flex items-center gap-1">
-                  <Info size={11} className="text-purple-500 flex-shrink-0" />
-                  Real students will see tokens dynamically replaced with their own name, batch, course, and attendance rate.
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -660,7 +652,7 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white">Audience Targeting</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Select which cohorts or courses should receive this notice</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Select which courses or cohorts should receive this notice</p>
               </div>
             </div>
             <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs">
@@ -669,40 +661,82 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Target Batch"
-              value={form.batchId}
-              onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
-              options={batches.map(b => [b.id, b.name])}
-              allLabel="All Batches (Anyone in any batch)"
-            />
-            <Select
-              label="Target Course"
-              value={form.courseId}
-              onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
-              options={courses.map(c => [c.id, c.title])}
-              allLabel="All Courses (Anyone in any course)"
-            />
+            {/* Position 1: Target Course */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                  Target Course
+                </label>
+                {form.courseIds?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleCoursesChange([])}
+                    className="text-[11px] font-medium text-purple-600 dark:text-purple-400 hover:underline"
+                  >
+                    Clear all ({form.courseIds.length})
+                  </button>
+                )}
+              </div>
+              <MultiSelect
+                options={courses.map(c => ({ value: String(c.id), label: c.title }))}
+                value={form.courseIds ? form.courseIds.map(String) : []}
+                onChange={handleCoursesChange}
+                placeholder="All Courses (Anyone in any course)"
+                searchPlaceholder="Search courses..."
+                emptyLabel="No courses found"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                {form.courseIds?.length
+                  ? `${form.courseIds.length} course(s) selected. Batches below are shortlisted.`
+                  : 'Leave unselected to target all courses.'}
+              </p>
+            </div>
+
+            {/* Position 2: Target Batch */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                  Target Batch
+                </label>
+                {form.batchIds?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleBatchesChange([])}
+                    className="text-[11px] font-medium text-purple-600 dark:text-purple-400 hover:underline"
+                  >
+                    Clear all ({form.batchIds.length})
+                  </button>
+                )}
+              </div>
+              <MultiSelect
+                options={filteredBatches.map(b => ({
+                  value: String(b.id),
+                  label: b.course?.title ? `${b.name} (${b.course.title})` : b.name
+                }))}
+                value={form.batchIds ? form.batchIds.map(String) : []}
+                onChange={handleBatchesChange}
+                placeholder={
+                  filteredBatches.length === 0
+                    ? 'No batches found for selected course(s)'
+                    : 'All Batches (Anyone in selected/all batches)'
+                }
+                searchPlaceholder="Search batches..."
+                emptyLabel={
+                  form.courseIds?.length > 0
+                    ? 'No batches in selected course(s)'
+                    : 'No batches found'
+                }
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                {form.batchIds?.length
+                  ? `${form.batchIds.length} batch(es) selected.`
+                  : form.courseIds?.length > 0
+                  ? `Showing ${filteredBatches.length} batch(es) matching selected course(s). Leave unselected for all batches in those courses.`
+                  : 'Leave unselected to target all batches.'}
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/40 text-xs">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse" />
-              <div>
-                <span className="font-bold text-emerald-900 dark:text-emerald-200">
-                  Estimated Recipients: {audienceCount !== null ? `${audienceCount} student(s)` : 'Calculating...'}
-                </span>
-                <p className="text-[11px] text-emerald-700/90 dark:text-emerald-400/90 mt-0.5">
-                  Confirmed for all students matching the selected criteria.
-                </p>
-              </div>
-            </div>
-            {form.batchId && form.courseId && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-100/80 dark:bg-purple-900/40 px-2.5 py-1 rounded-lg self-start sm:self-auto">
-                Intersection Filter Active
-              </span>
-            )}
-          </div>
         </div>
 
         {/* Section 3: Delivery & Settings */}
@@ -713,129 +747,41 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-800 dark:text-white">Delivery & Categorization</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Specify notice type, expiration date, and automated scheduling</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Specify notice type, automated scheduling, and expiration date & time</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Row 1: Category & Schedule for Automated Publishing */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">
                 Category <span className="text-purple-600">*</span>
               </label>
               <CustomSelect
-                  value={form.category}
-                  onChange={(val) => setForm(f => ({ ...f, category: val }))}
-                  options={CATEGORIES.map(c => ({ value: c, label: c.charAt(0) + c.slice(1).toLowerCase() }))}
-                />
+                value={form.category}
+                onChange={(val) => setForm(f => ({ ...f, category: val }))}
+                options={CATEGORIES.map(c => ({ value: c, label: c.charAt(0) + c.slice(1).toLowerCase() }))}
+              />
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Classify this notice to help students quickly identify its context.
+              </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
-                  Expires On (Optional)
-                </label>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                  !form.expiresAt
-                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                    : isExpiryInvalid
-                    ? 'bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400'
-                    : 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300'
-                }`}>
-                  {!form.expiresAt ? 'No Expiration' : isExpiryInvalid ? 'Invalid Expiration' : `Expires: ${formatSafe(form.expiresAt, 'MMM d, yyyy')}`}
-                </span>
-              </div>
-
-              {/* Input container with calendar icon and clear button */}
-              <div className="relative flex items-center">
-                <div className="absolute left-3.5 pointer-events-none text-gray-400 dark:text-gray-500">
-                  <Calendar size={15} />
+                <div className="flex items-center gap-1.5">
+                  <Clock size={14} className="text-sky-500" />
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                    Schedule for Automated Publishing (Optional)
+                  </label>
                 </div>
-                <input
-                  type="date"
-                  min={minExpiryDate}
-                  value={form.expiresAt}
-                  onChange={set('expiresAt')}
-                  className={`w-full h-11 pl-10 pr-10 rounded-xl border ${
-                    isExpiryInvalid
-                      ? 'border-rose-400 dark:border-rose-600 focus:border-rose-500 focus:ring-rose-500/20'
-                      : 'border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-purple-500/20'
-                  } bg-white dark:bg-gray-800 text-sm font-medium outline-none focus:ring-2 text-gray-800 dark:text-gray-200 shadow-2xs transition-all`}
-                />
-                {form.expiresAt && (
-                  <button
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, expiresAt: '' }))}
-                    title="Clear expiration (make permanent)"
-                    className="absolute right-3 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                  >
-                    <XIcon size={14} />
-                  </button>
+                {form.scheduledAt && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300">
+                    {formatSafe(form.scheduledAt, 'MMM d, yyyy, HH:mm') ? `Scheduled: ${formatSafe(form.scheduledAt, 'MMM d, yyyy, HH:mm')}` : 'Scheduled'}
+                  </span>
                 )}
               </div>
 
-              {/* Quick preset chips */}
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-0.5">Presets:</span>
-                {[
-                  { label: 'Today', val: publishDate },
-                  { label: 'Tomorrow', val: addDaysToDateStr(publishDate, 1) },
-                  { label: '1 Week', val: addDaysToDateStr(publishDate, 7) },
-                  { label: '1 Month', val: addDaysToDateStr(publishDate, 30) },
-                ].map(({ label, val }) => {
-                  const isSelected = form.expiresAt === val
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, expiresAt: isSelected ? '' : val }))}
-                      className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all border ${
-                        isSelected
-                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 hover:text-purple-600 dark:hover:text-purple-400 shadow-2xs'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  )
-                })}
-                {form.expiresAt && (
-                  <button
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, expiresAt: '' }))}
-                    className="text-[11px] font-medium px-2 py-1 text-gray-400 hover:text-rose-500 transition-colors"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {/* Helper text */}
-              {isExpiryInvalid ? (
-                <p className="text-[11px] text-rose-500 font-medium mt-1.5 flex items-center gap-1">
-                  <span>⚠ Expiry date cannot be before {formatSafe(publishDate, 'MMM d, yyyy') || publishDate}.</span>
-                </p>
-              ) : (
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  {form.expiresAt
-                    ? `Notice will remain visible through ${formatSafe(form.expiresAt, 'MMMM d, yyyy')}.`
-                    : `No expiration set. Notice will remain visible permanently.`}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Schedule for Later & Pin to Top */}
-          <div className="pt-3.5 border-t border-gray-200/60 dark:border-gray-700/60 grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
-            <div>
-              <div className="flex items-center gap-1.5 mb-1">
-                <Clock size={14} className="text-sky-500" />
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
-                  Schedule for Automated Publishing (Optional)
-                </label>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2.5">
-                Leave blank to publish immediately, or choose a future date & time for hands-free publishing.
-              </p>
               <div className="w-full min-w-0">
                 <DateTimePicker
                   disablePast
@@ -844,6 +790,66 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
                   onChange={val => setForm(f => ({ ...f, scheduledAt: val }))}
                 />
               </div>
+
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                {form.scheduledAt
+                  ? `Will automatically publish on ${formatSafe(form.scheduledAt, 'MMMM d, yyyy, HH:mm') || form.scheduledAt}.`
+                  : 'Leave blank to publish immediately, or choose a future date & time for hands-free publishing.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Row 2: Expires On & Pin to Top */}
+          <div className="pt-3.5 border-t border-gray-200/60 dark:border-gray-700/60 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div>
+              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                <div className="flex items-center gap-1.5">
+                  <Calendar size={14} className="text-purple-500" />
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                    Expires On (Optional)
+                  </label>
+                </div>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  !form.expiresAt
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                    : isExpiryInvalid
+                    ? 'bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400'
+                    : 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300'
+                }`}>
+                  {!form.expiresAt
+                    ? 'No Expiration'
+                    : isExpiryInvalid
+                    ? 'Invalid Expiration'
+                    : `Expires: ${formatSafe(form.expiresAt, 'MMM d, yyyy, HH:mm') || formatSafe(form.expiresAt, 'MMM d, yyyy')}`}
+                </span>
+              </div>
+
+              <div className="w-full min-w-0">
+                <DateTimePicker
+                  disablePast
+                  minDate={minExpiryDate}
+                  value={form.expiresAt}
+                  onChange={val => setForm(f => ({ ...f, expiresAt: val }))}
+                  hasError={isExpiryInvalid}
+                />
+              </div>
+
+              {/* Helper text */}
+              {isExpiryInvalid ? (
+                <p className="text-[11px] text-rose-500 font-medium mt-1.5 flex items-center gap-1">
+                  <span>
+                    {form.scheduledAt
+                      ? `⚠ Expiry date & time must be after the scheduled publishing time (${formatSafe(form.scheduledAt, 'dd MMM yyyy, HH:mm') || form.scheduledAt}).`
+                      : '⚠ Expiry date & time must be in the future.'}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  {form.expiresAt
+                    ? `Notice will remain visible through ${formatSafe(form.expiresAt, 'MMMM d, yyyy, HH:mm') || formatSafe(form.expiresAt, 'MMMM d, yyyy')}.`
+                    : 'No expiration set. Notice will remain visible permanently.'}
+                </p>
+              )}
             </div>
 
             <div>
@@ -942,7 +948,6 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
 
           {(() => {
             const isAnnouncementValid = Boolean(form.title?.trim() && form.body?.trim() && !isExpiryInvalid)
-            const isScheduleValid = Boolean(isAnnouncementValid && form.scheduledAt)
             return (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                 <button
@@ -956,21 +961,14 @@ function AnnouncementForm({ form, setForm, editId, saving, onSave, onCancel, bat
 
                 <button
                   type="button"
-                  disabled={saving || !isScheduleValid}
-                  onClick={e => onSave(e, 'SCHEDULED')}
-                  className="px-4 py-2.5 rounded-xl border border-sky-300 dark:border-sky-700 bg-sky-50/50 dark:bg-sky-950/20 text-sm font-semibold text-sky-700 dark:text-sky-300 hover:bg-sky-100/70 dark:hover:bg-sky-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all inline-flex items-center justify-center gap-1.5 shadow-2xs active:scale-98"
-                >
-                  <Clock size={14} /> Schedule
-                </button>
-
-                <button
-                  type="button"
                   disabled={saving || !isAnnouncementValid}
                   onClick={e => onSave(e, 'PUBLISHED')}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-600 hover:from-purple-700 hover:via-purple-800 hover:to-indigo-700 text-white text-sm font-bold shadow-md shadow-purple-500/25 hover:shadow-lg hover:shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all inline-flex items-center justify-center gap-2 active:scale-98"
                 >
                   <Send size={14} />
-                  {saving ? 'Publishing...' : (editId ? 'Update & Publish' : 'Publish Announcement')}
+                  {saving
+                    ? (form.scheduledAt ? 'Scheduling...' : 'Publishing...')
+                    : (editId ? 'Update & Publish' : 'Publish Announcement')}
                 </button>
               </div>
             )
@@ -1149,15 +1147,12 @@ function AnnouncementSection({
 }
 
 function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onEdit, onDelete, onPublish, onApprove, onReject, onDuplicate, onSubmitForApproval, onDetails, onView, onPreviewAttachment }) {
-  const batch = batches.find(b => b.id === a.batchId)
-  const course = courses.find(c => c.id === a.courseId)
   const isDraft = a.status === 'DRAFT'
   const isScheduled = a.status === 'SCHEDULED'
   const isPending = a.status === 'PENDING_APPROVAL'
   const todayStr = getTodayString()
-  const isPastExpiry = !!(a.expiresAt && a.expiresAt < todayStr)
+  const isPastExpiry = !!(a.expiresAt && new Date(a.expiresAt).getTime() < Date.now())
   const isExpired = a.status === 'EXPIRED' || isPastExpiry
-  const usesPlaceholders = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(`${a.title} ${a.body}`)
 
   return (
     <div className={`glass-card p-5 ${a.isPinned ? 'border-purple-300 dark:border-purple-700' : ''} ${isDraft || isExpired ? 'opacity-70' : ''}`}>
@@ -1185,14 +1180,10 @@ function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onE
                 {a.category.charAt(0) + a.category.slice(1).toLowerCase()}
               </span>
             )}
-            {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-            {course && <Badge color="cyan">{course.title}</Badge>}
+            <TargetAudienceBadges a={a} batches={batches} courses={courses} />
             {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-300">{a.body}</p>
-          {usesPlaceholders && (
-            <p className="text-[10px] text-purple-400 mt-1 italic">Contains placeholders — each student sees this resolved with their own name, batch, course and attendance.</p>
-          )}
           {a.actionLabel && (
             <span className="inline-block mt-2 text-xs font-semibold text-purple-600 border border-purple-200 rounded-lg px-2 py-1">
               {a.actionLabel}
@@ -1215,7 +1206,7 @@ function AnnouncementCard({ a, serialNo, batches, courses, assignments = [], onE
             {a.expiresAt && (
               <span className={`flex items-center gap-1 font-medium ${isExpired ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
                 <Calendar size={12} className="flex-shrink-0" />
-                {isExpired ? `Expired on ${formatSafe(a.expiresAt, 'dd MMM yyyy')}` : `Expires on ${formatSafe(a.expiresAt, 'dd MMM yyyy')}`}
+                {isExpired ? `Expired on ${formatSafe(a.expiresAt, 'dd MMM yyyy, HH:mm')}` : `Expires on ${formatSafe(a.expiresAt, 'dd MMM yyyy, HH:mm')}`}
               </span>
             )}
           </div>
@@ -1274,6 +1265,35 @@ const BADGE_COLORS = {
 
 function Badge({ color, children }) {
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${BADGE_COLORS[color] || BADGE_COLORS.gray}`}>{children}</span>
+}
+
+function TargetAudienceBadges({ a, batches = [], courses = [] }) {
+  if (!a) return null
+
+  const bIds = (a.batchIds && a.batchIds.length > 0)
+    ? a.batchIds.map(String)
+    : (a.batchId ? [String(a.batchId)] : [])
+  const cIds = (a.courseIds && a.courseIds.length > 0)
+    ? a.courseIds.map(String)
+    : (a.courseId ? [String(a.courseId)] : [])
+
+  const targetCourses = (courses || []).filter(c => c && cIds.includes(String(c.id)))
+  const targetBatches = (batches || []).filter(b => b && bIds.includes(String(b.id)))
+
+  if (targetCourses.length === 0 && targetBatches.length === 0) {
+    return <Badge color="blue">All Students</Badge>
+  }
+
+  return (
+    <>
+      {targetCourses.map(c => (
+        <Badge key={`c-${c.id}`} color="cyan">{c.title}</Badge>
+      ))}
+      {targetBatches.map(b => (
+        <Badge key={`b-${b.id}`} color="purple">{b.name}</Badge>
+      ))}
+    </>
+  )
 }
 
 function Modal({ title, onClose, children }) {
@@ -1355,12 +1375,9 @@ function DetailsModal({ announcementId, initialTab, onClose }) {
 function ViewAnnouncementModal({ a, batches = [], courses = [], assignments = [], onClose, onPreviewAttachment }) {
   if (!a) return null
 
-  const batch = (batches || []).find(b => b && a && String(b.id) === String(a.batchId))
-  const course = (courses || []).find(c => c && a && String(c.id) === String(a.courseId))
-
   const createdStr = formatSafe(a.createdAt, 'dd MMM yyyy, HH:mm')
   const scheduledStr = formatSafe(a.scheduledAt, 'dd MMM yyyy, HH:mm')
-  const expiresStr = formatSafe(a.expiresAt, 'dd MMM yyyy')
+  const expiresStr = formatSafe(a.expiresAt, 'dd MMM yyyy, HH:mm')
   const statusStr = a.status ? String(a.status).replace(/_/g, ' ') : ''
   const actionTypeStr = a.actionType ? String(a.actionType).replace(/_/g, ' ') : ''
 
@@ -1381,8 +1398,7 @@ function ViewAnnouncementModal({ a, batches = [], courses = [], assignments = []
               {a.category.charAt(0) + a.category.slice(1).toLowerCase()}
             </span>
           )}
-          {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-          {course && <Badge color="cyan">{course.title}</Badge>}
+          <TargetAudienceBadges a={a} batches={batches} courses={courses} />
           {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
         </div>
 
@@ -1752,8 +1768,6 @@ function CalendarView({
           >
             {displayItems.map((item, idx) => {
               const a = item.a
-              const batch = (batches || []).find(b => b && a && String(b.id) === String(a.batchId))
-              const course = (courses || []).find(c => c && a && String(c.id) === String(a.courseId))
 
               return (
                 <div
@@ -1797,8 +1811,7 @@ function CalendarView({
                         {a.category.charAt(0) + a.category.slice(1).toLowerCase()}
                       </span>
                     )}
-                    {batch ? <Badge color="purple">{batch.name}</Badge> : <Badge color="blue">All Students</Badge>}
-                    {course && <Badge color="cyan">{course.title}</Badge>}
+                    <TargetAudienceBadges a={a} batches={batches} courses={courses} />
                     {a.requiresAcknowledgment && <Badge color="red">Ack Required</Badge>}
                   </div>
 

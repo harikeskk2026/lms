@@ -64,8 +64,14 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long>, J
     @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.batch.id IN :batchIds AND e.active = true")
     List<Student> findActiveStudentsByBatchIdIn(@Param("batchIds") List<Long> batchIds);
 
+    @Query("SELECT DISTINCT e.student.id FROM Enrollment e WHERE e.batch.id IN :batchIds AND e.active = true")
+    List<Long> findActiveStudentIdsByBatchIdIn(@Param("batchIds") List<Long> batchIds);
+
     @Query("SELECT DISTINCT e.student FROM Enrollment e WHERE e.course.id IN :courseIds AND e.active = true")
     List<Student> findActiveStudentsByCourseIdIn(@Param("courseIds") List<Long> courseIds);
+
+    @Query("SELECT DISTINCT e.student.id FROM Enrollment e WHERE e.course.id IN :courseIds AND e.active = true")
+    List<Long> findActiveStudentIdsByCourseIdIn(@Param("courseIds") List<Long> courseIds);
 
     @Query("SELECT DISTINCT e.batch FROM Enrollment e WHERE e.student.id = :studentId AND e.active = true AND e.batch IS NOT NULL")
     List<Batch> findActiveBatchesByStudentId(@Param("studentId") Long studentId);

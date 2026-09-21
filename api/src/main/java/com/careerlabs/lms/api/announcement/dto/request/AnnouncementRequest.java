@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public record AnnouncementRequest(
         @NotBlank(message = "title is required")
@@ -19,10 +20,11 @@ public record AnnouncementRequest(
 
         /** Null means "all students" (subject to the other targeting filters below). */
         Long batchId,
+        List<Long> batchIds,
 
         boolean isPinned,
 
-        LocalDate expiresAt,
+        Instant expiresAt,
 
         /** Null defaults to GENERAL. */
         AnnouncementCategory category,
@@ -47,6 +49,7 @@ public record AnnouncementRequest(
 
         Long collegeId,
         Long courseId,
+        List<Long> courseIds,
 
         /** Null defaults to NONE. */
         AudienceRuleType audienceRuleType,
@@ -54,4 +57,33 @@ public record AnnouncementRequest(
         Long audienceRuleReferenceId,
         String attachmentUrl,
         String attachmentName
-) {}
+) {
+    public AnnouncementRequest(
+            String title, String body, Long batchId, boolean isPinned, Instant expiresAt,
+            AnnouncementCategory category, AnnouncementStatus status, AnnouncementPriority priority,
+            Instant scheduledAt, boolean requiresAcknowledgment, boolean allowComments,
+            AnnouncementActionType actionType, Long actionReferenceId, String actionLabel, String actionUrl,
+            Long collegeId, Long courseId, AudienceRuleType audienceRuleType, Double audienceRuleValue,
+            Long audienceRuleReferenceId, String attachmentUrl, String attachmentName
+    ) {
+        this(title, body, batchId, batchId != null ? List.of(batchId) : List.of(),
+                isPinned, expiresAt, category, status, priority, scheduledAt,
+                requiresAcknowledgment, allowComments, actionType, actionReferenceId, actionLabel, actionUrl,
+                collegeId, courseId, courseId != null ? List.of(courseId) : List.of(),
+                audienceRuleType, audienceRuleValue, audienceRuleReferenceId, attachmentUrl, attachmentName);
+    }
+
+    public List<Long> resolveBatchIds() {
+        if (batchIds != null && !batchIds.isEmpty()) {
+            return batchIds;
+        }
+        return batchId != null ? List.of(batchId) : List.of();
+    }
+
+    public List<Long> resolveCourseIds() {
+        if (courseIds != null && !courseIds.isEmpty()) {
+            return courseIds;
+        }
+        return courseId != null ? List.of(courseId) : List.of();
+    }
+}

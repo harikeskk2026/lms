@@ -56,6 +56,7 @@ public class AdminAccountSeeder implements CommandLineRunner {
             jdbcTemplate.execute("ALTER TABLE assignment_submissions DROP CONSTRAINT IF EXISTS assignment_submissions_status_check");
             jdbcTemplate.execute("ALTER TABLE assignment_submissions ALTER COLUMN notes TYPE text");
             jdbcTemplate.execute("ALTER TABLE assignment_submissions ALTER COLUMN rejection_reason TYPE text");
+            jdbcTemplate.execute("ALTER TABLE announcements ALTER COLUMN expires_at TYPE TIMESTAMP WITH TIME ZONE USING expires_at::timestamp with time zone");
         } catch (Exception e) {
             log.warn("Could not execute table constraint/column adjustments: {}", e.getMessage());
         }

@@ -9,10 +9,13 @@ function parseIso(val) {
   const clean = String(val).replace(' ', 'T')
   const [d, t] = clean.split('T')
   const date = d || ''
-  if (!t) {
-    return { hasValue: Boolean(date), date, hour: '10', minute: '00' }
+  if (!t || t.trim() === '') {
+    return { hasValue: Boolean(date), date, hour: '', minute: '' }
   }
   const [hStr, mStr] = t.split(':')
+  if (hStr === undefined || hStr === '') {
+    return { hasValue: Boolean(date), date, hour: '', minute: '' }
+  }
   const hour = String(parseInt(hStr || '0', 10)).padStart(2, '0')
   const minute = (mStr || '00').slice(0, 2).padStart(2, '0')
 
@@ -43,18 +46,14 @@ export default function DateTimePicker({
   disabled = false,
   hasError = false,
   className = '',
-  // When true, picking a date does NOT auto-fill a default time (e.g. 10:00) -
-  // the time stays empty until the admin explicitly picks one. Off by default
-  // so every existing caller keeps its current behavior unchanged.
   requireExplicitTime = false,
 }) {
   const parsed = useMemo(() => parseIso(value), [value])
-  const [pendingDate, setPendingDate] = useState('')
 
-  const hasValue = parsed.hasValue || Boolean(pendingDate)
-  const date = parsed.hasValue ? parsed.date : pendingDate
-  const hour = parsed.hasValue ? parsed.hour : ''
-  const minute = parsed.hasValue ? parsed.minute : ''
+  const hasValue = parsed.hasValue
+  const date = parsed.date
+  const hour = parsed.hour
+  const minute = parsed.minute
 
   const todayStr = useMemo(() => getTodayString(), [])
   const effectiveMinDate = minDate || (disablePast ? todayStr : undefined)
@@ -62,35 +61,40 @@ export default function DateTimePicker({
   const handleDateChange = (e) => {
     const newDate = e.target.value
     if (!newDate) {
-      setPendingDate('')
       onChange?.('')
       return
     }
-    if (requireExplicitTime && !(hour && minute)) {
-      // Hold the date locally until a time is explicitly chosen, instead of
-      // silently combining it with a fabricated default time.
-      setPendingDate(newDate)
-      return
+    // If a time was already explicitly selected, keep it with the new date
+    if (hour && minute) {
+      onChange?.(toIso(newDate, hour, minute))
+    } else {
+      // Do NOT auto-set a fabricated time! Keep time empty.
+      onChange?.(newDate)
     }
-    const h = hour || '10'
-    const m = minute || '00'
-    onChange?.(toIso(newDate, h, m))
   }
 
   const handleTimeChange = (e) => {
     const val = e.target.value
-    if (!val) return
+    if (!val) {
+      // Time was cleared, keep the existing date
+      onChange?.(date || '')
+      return
+    }
     const [newH, newM] = val.split(':')
     const curDate = date || (effectiveMinDate || todayStr)
     onChange?.(toIso(curDate, newH, newM))
-    if (pendingDate) setPendingDate('')
   }
 
   const handleClear = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    setPendingDate('')
-    onChange?.('')
+    // If time is set, clear only the time so the user's date is NOT removed
+    if (hour || minute) {
+      onChange?.(date || '')
+    } else {
+      // If time is already empty, clear the whole field (date)
+      onChange?.('')
+    }
   }
 
   return (
@@ -138,7 +142,7 @@ export default function DateTimePicker({
             <button
               type="button"
               onClick={handleClear}
-              title="Clear date and time"
+              title={hour || minute ? 'Clear time' : 'Clear date'}
               className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors shrink-0"
             >
               <X size={14} />

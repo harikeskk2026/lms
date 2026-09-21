@@ -13,6 +13,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -21,6 +23,10 @@ import org.hibernate.annotations.ColumnDefault;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 @Entity
 @Table(name = "announcements")
@@ -41,11 +47,19 @@ public class Announcement {
     @JoinColumn(name = "batch_id")
     private Batch batch;
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "announcement_batches",
+            joinColumns = @JoinColumn(name = "announcement_id"),
+            inverseJoinColumns = @JoinColumn(name = "batch_id")
+    )
+    private Set<Batch> batches = new HashSet<>();
+
     @Column(name = "is_pinned", nullable = false)
     private boolean pinned = false;
 
     @Column(name = "expires_at")
-    private LocalDate expiresAt;
+    private Instant expiresAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -103,6 +117,14 @@ public class Announcement {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id")
     private Course course;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "announcement_courses",
+            joinColumns = @JoinColumn(name = "announcement_id"),
+            inverseJoinColumns = @JoinColumn(name = "course_id")
+    )
+    private Set<Course> courses = new HashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "audience_rule_type", nullable = false)
@@ -182,11 +204,11 @@ public class Announcement {
         this.pinned = pinned;
     }
 
-    public LocalDate getExpiresAt() {
+    public Instant getExpiresAt() {
         return expiresAt;
     }
 
-    public void setExpiresAt(LocalDate expiresAt) {
+    public void setExpiresAt(Instant expiresAt) {
         this.expiresAt = expiresAt;
     }
 
@@ -301,6 +323,36 @@ public class Announcement {
 
     public void setCourse(Course course) {
         this.course = course;
+    }
+
+    public Set<Batch> getBatches() {
+        return batches;
+    }
+
+    public void setBatches(Set<Batch> batches) {
+        this.batches = batches != null ? batches : new HashSet<>();
+    }
+
+    public Set<Course> getCourses() {
+        return courses;
+    }
+
+    public void setCourses(Set<Course> courses) {
+        this.courses = courses != null ? courses : new HashSet<>();
+    }
+
+    public List<Long> getBatchIds() {
+        if (batches != null && !batches.isEmpty()) {
+            return batches.stream().map(Batch::getId).filter(Objects::nonNull).toList();
+        }
+        return batch != null && batch.getId() != null ? List.of(batch.getId()) : List.of();
+    }
+
+    public List<Long> getCourseIds() {
+        if (courses != null && !courses.isEmpty()) {
+            return courses.stream().map(Course::getId).filter(Objects::nonNull).toList();
+        }
+        return course != null && course.getId() != null ? List.of(course.getId()) : List.of();
     }
 
     public AudienceRuleType getAudienceRuleType() {

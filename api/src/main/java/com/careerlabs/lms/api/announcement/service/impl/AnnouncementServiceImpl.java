@@ -50,8 +50,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 
@@ -130,7 +132,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     @Override
     @Transactional(readOnly = true)
     public List<AnnouncementResponse> listForStudent(Long userId) {
-        LocalDate today = LocalDate.now();
+        Instant now = Instant.now();
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user " + userId));
         Map<String, String> vars = placeholderResolver.variablesFor(student);
@@ -143,7 +145,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                 : java.util.Collections.emptySet();
 
         List<AnnouncementResponse> result = new ArrayList<>();
-        List<Announcement> published = announcementRepository.findActiveByStatus(AnnouncementStatus.PUBLISHED, today);
+        List<Announcement> published = announcementRepository.findActiveByStatus(AnnouncementStatus.PUBLISHED, now);
 
         for (Announcement a : published) {
             if (!audienceService.isEligible(a, student)) {
@@ -168,7 +170,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if (announcement.getStatus() != AnnouncementStatus.PUBLISHED) {
             throw new ForbiddenException("Announcement is not available to students");
         }
-        if (announcement.getExpiresAt() != null && announcement.getExpiresAt().isBefore(LocalDate.now())) {
+        if (announcement.getExpiresAt() != null && announcement.getExpiresAt().isBefore(Instant.now())) {
             throw new ForbiddenException("Announcement has expired");
         }
         Student student = studentRepository.findByUserId(userId)
@@ -182,9 +184,28 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     @Transactional(readOnly = true)
     public long estimateAudience(AudiencePreviewRequest request) {
         Announcement preview = new Announcement();
-        preview.setBatch(request.batchId() != null ? findBatch(request.batchId()) : null);
+        List<Long> bIds = request.resolveBatchIds();
+        if (!bIds.isEmpty()) {
+            Set<Batch> batches = new HashSet<>(batchRepository.findAllById(bIds));
+            preview.setBatches(batches);
+            preview.setBatch(batches.isEmpty() ? null : batches.iterator().next());
+        } else {
+            preview.setBatches(new HashSet<>());
+            preview.setBatch(null);
+        }
+
         preview.setCollege(request.collegeId() != null ? findCollege(request.collegeId()) : null);
-        preview.setCourse(request.courseId() != null ? findCourse(request.courseId()) : null);
+
+        List<Long> cIds = request.resolveCourseIds();
+        if (!cIds.isEmpty()) {
+            Set<Course> courses = new HashSet<>(courseRepository.findAllById(cIds));
+            preview.setCourses(courses);
+            preview.setCourse(courses.isEmpty() ? null : courses.iterator().next());
+        } else {
+            preview.setCourses(new HashSet<>());
+            preview.setCourse(null);
+        }
+
         preview.setAudienceRuleType(request.audienceRuleType() != null ? request.audienceRuleType() : AudienceRuleType.NONE);
         preview.setAudienceRuleValue(request.audienceRuleValue());
         preview.setAudienceRuleReferenceId(request.audienceRuleReferenceId());
@@ -192,7 +213,9 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     }
 
     private boolean isPureGlobal(Announcement a) {
-        return a.getBatch() == null && a.getCollege() == null && a.getCourse() == null
+        return (a.getBatchIds() == null || a.getBatchIds().isEmpty())
+                && a.getCollege() == null
+                && (a.getCourseIds() == null || a.getCourseIds().isEmpty())
                 && (a.getAudienceRuleType() == null || a.getAudienceRuleType() == AudienceRuleType.NONE);
     }
 
@@ -257,20 +280,17 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         }
     }
 
-    private void validateExpiry(AnnouncementStatus status, Instant scheduledAt, LocalDate expiresAt) {
+    private void validateExpiry(AnnouncementStatus status, Instant scheduledAt, Instant expiresAt) {
         if (expiresAt == null) {
             return;
         }
-        LocalDate publishDate;
         if (status == AnnouncementStatus.SCHEDULED && scheduledAt != null) {
-            publishDate = scheduledAt.atZone(ZoneId.systemDefault()).toLocalDate();
-            if (expiresAt.isBefore(publishDate)) {
-                throw new BadRequestException("Expiry date cannot be before the scheduled publishing date (" + publishDate + ")");
+            if (!expiresAt.isAfter(scheduledAt)) {
+                throw new BadRequestException("Expiry date & time must be after the scheduled publishing date & time");
             }
         } else {
-            publishDate = LocalDate.now();
-            if (expiresAt.isBefore(publishDate)) {
-                throw new BadRequestException("Expiry date cannot be before the published date");
+            if (expiresAt.isBefore(Instant.now().minusSeconds(60))) {
+                throw new BadRequestException("Expiry date & time cannot be in the past");
             }
         }
     }
@@ -369,7 +389,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         copy.setBody(source.getBody());
         copy.setBatch(source.getBatch());
         copy.setPinned(false);
-        copy.setExpiresAt(source.getExpiresAt() != null && source.getExpiresAt().isAfter(LocalDate.now())
+        copy.setExpiresAt(source.getExpiresAt() != null && source.getExpiresAt().isAfter(Instant.now())
                 ? source.getExpiresAt() : null);
         copy.setCategory(source.getCategory());
         copy.setPriority(source.getPriority());
@@ -570,12 +590,28 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         announcement.setAudienceRuleValue(request.audienceRuleValue());
         announcement.setAudienceRuleReferenceId(request.audienceRuleReferenceId());
 
-        announcement.setBatch(request.batchId() != null
-                ? findBatch(request.batchId()) : null);
+        List<Long> bIds = request.resolveBatchIds();
+        if (!bIds.isEmpty()) {
+            Set<Batch> batches = new HashSet<>(batchRepository.findAllById(bIds));
+            announcement.setBatches(batches);
+            announcement.setBatch(batches.isEmpty() ? null : batches.iterator().next());
+        } else {
+            announcement.setBatches(new HashSet<>());
+            announcement.setBatch(null);
+        }
+
         announcement.setCollege(request.collegeId() != null
                 ? findCollege(request.collegeId()) : null);
-        announcement.setCourse(request.courseId() != null
-                ? findCourse(request.courseId()) : null);
+
+        List<Long> cIds = request.resolveCourseIds();
+        if (!cIds.isEmpty()) {
+            Set<Course> courses = new HashSet<>(courseRepository.findAllById(cIds));
+            announcement.setCourses(courses);
+            announcement.setCourse(courses.isEmpty() ? null : courses.iterator().next());
+        } else {
+            announcement.setCourses(new HashSet<>());
+            announcement.setCourse(null);
+        }
     }
 
     private void saveVersionSnapshot(Announcement announcement, User changedBy) {

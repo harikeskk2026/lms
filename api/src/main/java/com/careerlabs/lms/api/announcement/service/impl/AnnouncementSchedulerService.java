@@ -53,7 +53,7 @@ public class AnnouncementSchedulerService {
     @Transactional
     public void expireStale() {
         List<Announcement> stale = announcementRepository
-                .findByStatusAndExpiresAtLessThan(AnnouncementStatus.PUBLISHED, LocalDate.now());
+                .findByStatusAndExpiresAtLessThan(AnnouncementStatus.PUBLISHED, Instant.now());
         for (Announcement announcement : stale) {
             announcement.setStatus(AnnouncementStatus.EXPIRED);
             announcementRepository.save(announcement);

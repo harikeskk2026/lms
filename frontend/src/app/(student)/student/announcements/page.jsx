@@ -374,7 +374,7 @@ function AnnouncementCard({ a, serialNo, onAcknowledge, onViewDetail, onPreviewA
             <span>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</span>
             {a.expiresAt && (
               <span className="text-amber-600 dark:text-amber-400 font-medium">
-                Expires {format(new Date(a.expiresAt.includes('T') ? a.expiresAt : a.expiresAt + 'T00:00:00'), 'dd MMM yyyy')}
+                Expires {format(new Date(a.expiresAt.includes('T') ? a.expiresAt : a.expiresAt + 'T00:00:00'), 'dd MMM yyyy, HH:mm')}
               </span>
             )}
           </div>

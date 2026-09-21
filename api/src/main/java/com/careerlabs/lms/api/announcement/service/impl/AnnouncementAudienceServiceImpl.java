@@ -66,9 +66,10 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
     @Transactional(readOnly = true)
     public boolean isEligible(Announcement announcement, Student student) {
         try {
-            if (announcement.getBatch() != null) {
+            List<Long> targetBatchIds = announcement.getBatchIds();
+            if (targetBatchIds != null && !targetBatchIds.isEmpty()) {
                 boolean batchEnrolled = enrollmentRepository != null && student.getId() != null
-                        && enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), announcement.getBatch().getId());
+                        && targetBatchIds.stream().anyMatch(bId -> enrollmentRepository.existsByStudentIdAndBatchIdAndActiveTrue(student.getId(), bId));
                 if (!batchEnrolled) {
                     return false;
                 }
@@ -78,11 +79,11 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
                     return false;
                 }
             }
-            if (announcement.getCourse() != null) {
-                Long targetCourseId = announcement.getCourse().getId();
-                boolean directMatch = student.getCourse() != null && targetCourseId.equals(student.getCourse().getId());
+            List<Long> targetCourseIds = announcement.getCourseIds();
+            if (targetCourseIds != null && !targetCourseIds.isEmpty()) {
+                boolean directMatch = student.getCourse() != null && targetCourseIds.contains(student.getCourse().getId());
                 boolean enrollmentMatch = enrollmentRepository != null && student.getId() != null
-                        && enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), targetCourseId);
+                        && targetCourseIds.stream().anyMatch(cId -> enrollmentRepository.existsByStudentIdAndCourseIdAndActiveTrue(student.getId(), cId));
                 if (!directMatch && !enrollmentMatch) {
                     return false;
                 }
@@ -130,37 +131,31 @@ public class AnnouncementAudienceServiceImpl implements AnnouncementAudienceServ
     private Specification<Student> buildStructuralSpec(Announcement a) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (a.getBatch() != null) {
-                Long targetBatchId = a.getBatch().getId();
-                Predicate directBatch = cb.equal(root.get("batch").get("id"), targetBatchId);
-                Predicate batchPredicate = directBatch;
-                if (enrollmentRepository != null) {
-                    List<Long> enrolledStudentIds = enrollmentRepository.findActiveStudentIdsByBatchId(targetBatchId);
-                    if (enrolledStudentIds != null && !enrolledStudentIds.isEmpty()) {
-                        batchPredicate = cb.or(directBatch, root.get("id").in(enrolledStudentIds));
-                    }
+            List<Long> targetBatchIds = a.getBatchIds();
+            if (targetBatchIds != null && !targetBatchIds.isEmpty()) {
+                List<Long> enrolledStudentIds = enrollmentRepository != null
+                        ? enrollmentRepository.findActiveStudentIdsByBatchIdIn(targetBatchIds)
+                        : List.of();
+                if (enrolledStudentIds != null && !enrolledStudentIds.isEmpty()) {
+                    predicates.add(root.get("id").in(enrolledStudentIds));
+                } else {
+                    predicates.add(cb.disjunction());
                 }
-                predicates.add(batchPredicate);
             }
             if (a.getCollege() != null) {
                 predicates.add(cb.equal(root.get("college").get("id"), a.getCollege().getId()));
             }
-            if (a.getCourse() != null) {
-                Long targetCourseId = a.getCourse().getId();
-                Predicate directCourse = cb.equal(root.get("course").get("id"), targetCourseId);
-                Predicate batchCourse = cb.and(
-                        cb.isNotNull(root.get("batch")),
-                        cb.isNotNull(root.get("batch").get("course")),
-                        cb.equal(root.get("batch").get("course").get("id"), targetCourseId)
-                );
-                Predicate coursePredicate = cb.or(directCourse, batchCourse);
-                if (enrollmentRepository != null) {
-                    List<Long> enrolledStudentIds = enrollmentRepository.findActiveStudentIdsByCourseId(targetCourseId);
-                    if (enrolledStudentIds != null && !enrolledStudentIds.isEmpty()) {
-                        coursePredicate = cb.or(coursePredicate, root.get("id").in(enrolledStudentIds));
-                    }
+            List<Long> targetCourseIds = a.getCourseIds();
+            if (targetCourseIds != null && !targetCourseIds.isEmpty()) {
+                Predicate directCourse = root.get("course").get("id").in(targetCourseIds);
+                List<Long> enrolledStudentIds = enrollmentRepository != null
+                        ? enrollmentRepository.findActiveStudentIdsByCourseIdIn(targetCourseIds)
+                        : List.of();
+                if (enrolledStudentIds != null && !enrolledStudentIds.isEmpty()) {
+                    predicates.add(cb.or(directCourse, root.get("id").in(enrolledStudentIds)));
+                } else {
+                    predicates.add(directCourse);
                 }
-                predicates.add(coursePredicate);
             }
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };
