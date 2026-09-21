@@ -7,7 +7,9 @@ import {
   Award, Gem, Gauge
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { studentApi } from '@/lib/api'
 import quizService from '@/services/quizService'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import QuizPlayer from '@/components/student/QuizPlayer'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import AchievementBadges from '@/components/student/AchievementBadges'
@@ -346,14 +348,15 @@ export default function QuizzesPage() {
   const [viewResultAttemptId, setViewResultAttemptId] = useState(null)
   const [activeTab, setActiveTab] = useState('quizzes')
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebouncedValue(searchQuery, 400)
 
   const load = useCallback(() => {
     setLoading(true)
-    quizService.listStudentQuizzes()
-      .then(r => setQuizzes(r.data || []))
+    studentApi.getQuizzes(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {})
+      .then(r => setQuizzes(r.data.data || []))
       .catch(err => toast.error(err.message || 'Failed to load quizzes'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [debouncedSearch])
 
   useEffect(() => { load() }, [load])
 
@@ -381,14 +384,6 @@ export default function QuizzesPage() {
     setActiveQuiz(null)
     setViewResultAttemptId(null)
   }
-
-  const filtered = (quizzes || []).filter(q => {
-    const matchesSearch = !searchQuery ||
-      q.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      q.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      q.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesSearch
-  })
 
   return (
     <div className="page-wrapper space-y-6">
@@ -442,9 +437,9 @@ export default function QuizzesPage() {
             <div className="space-y-4">
               {[0, 1, 2, 3].map(i => <SkeletonCard key={i} lines={3} />)}
             </div>
-          ) : filtered.length > 0 ? (
+          ) : (quizzes || []).length > 0 ? (
             <div className="space-y-4">
-              {filtered.map(q => (
+              {(quizzes || []).map(q => (
                 <QuizCard key={q.id} quiz={q} onStart={setActiveQuiz} onViewResult={handleViewResult} />
               ))}
             </div>

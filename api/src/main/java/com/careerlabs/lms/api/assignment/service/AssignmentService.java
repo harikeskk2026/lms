@@ -24,6 +24,13 @@ public interface AssignmentService {
 
     List<StudentAssignmentResponse> listForStudent(Long userId);
 
+    /**
+     * Student assignment list with an optional {@code status} filter using the same tab
+     * values the student UI shows (ALL/PENDING/PENDING_APPROVAL/SUBMITTED/GRADED/OVERDUE/CLOSED).
+     * Null/blank/ALL (or unknown values) return the full list.
+     */
+    List<StudentAssignmentResponse> listForStudent(Long userId, String status);
+
     AssignmentResponse get(Long id, JwtUserPrincipal principal);
     default AssignmentResponse get(Long id) { return get(id, null); }
 

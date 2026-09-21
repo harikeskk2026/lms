@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Video, Plus, Copy, ExternalLink, Calendar, Clock, Users,
   CheckCircle, PlayCircle, XCircle, Edit3, Trash2, Search, Filter, Shield, RefreshCw, AlertCircle,
-  Eye, EyeOff, Lock
+  Eye, EyeOff, Lock, ArrowLeft, Loader2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -457,6 +457,322 @@ export default function AdminMeetingLinksPage() {
   const ongoingCount = meetings.filter(m => getDisplayStatus(m) === 'ONGOING').length
   const upcomingCount = meetings.filter(m => getDisplayStatus(m) === 'UPCOMING').length
 
+  if (panelOpen) {
+    const isUrlValid = Boolean(form.meetUrl?.trim() && /^(https?:\/\/)?([\w.-]+\.[a-z]{2,})(:[0-9]+)?(\/.*)?$/i.test(form.meetUrl.trim()))
+    const isEndValid = !form.scheduledEnd || !form.scheduledStart || new Date(form.scheduledEnd) > new Date(form.scheduledStart)
+    const isMeetingFormValid = Boolean(
+      form.title?.trim() &&
+      isUrlValid &&
+      form.scheduledStart &&
+      isEndValid &&
+      !errors.scheduledStart &&
+      !errors.scheduledEnd &&
+      !errors.meetUrl &&
+      !errors.title
+    )
+
+    return (
+      <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
+              <Video className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                {editingId ? 'Edit Scheduled Class' : 'Schedule New Class'}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {editingId ? 'Update meeting details, date/time or batch targeting.' : 'Set up and publish a new live class meeting session for student cohorts.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPanelOpen(false)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition shadow-xs self-start sm:self-auto"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Scheduled Classes
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+          {/* Section 1: Class Information */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">1</div>
+              <span>Class Information</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Session Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Full Stack Microservices & Spring Cloud Architecture"
+                value={form.title}
+                onChange={e => {
+                  setForm(f => ({ ...f, title: e.target.value }))
+                  if (errors.title) setErrors(err => ({ ...err, title: undefined }))
+                }}
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none transition-colors ${
+                  errors.title
+                    ? 'border-red-500 focus:ring-2 focus:ring-red-500/20'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
+                }`}
+              />
+              {errors.title && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Description / Agenda
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Key topics, setup instructions, prerequisites or required IDE tools..."
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 resize-none transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Section 2: Target Course & Cohort */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">2</div>
+              <span>Target Course &amp; Cohort</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Course <span className="text-red-500">*</span>
+                </label>
+                <CustomSelect
+                  value={form.courseId}
+                  hasError={Boolean(errors.courseId)}
+                  onChange={(val) => {
+                    setForm(f => {
+                      const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(val))
+                      const selectedBatch = stillValid ? batches.find(b => String(b.id) === String(f.batchId)) : null
+                      const batchTrainer = (selectedBatch?.trainers || []).map(t => t.name).join(', ')
+                      return {
+                        ...f,
+                        courseId: val,
+                        batchId: stillValid ? f.batchId : '',
+                        hostName: batchTrainer || (stillValid ? f.hostName : '')
+                      }
+                    })
+                    if (errors.courseId) setErrors(err => ({ ...err, courseId: undefined }))
+                  }}
+                  options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+                  placeholder="Select Course"
+                  searchable={courses.length >= 10}
+                />
+                {errors.courseId && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Target Batch <span className="text-red-500">*</span>
+                </label>
+                <CustomSelect
+                  value={form.batchId}
+                  hasError={Boolean(errors.batchId)}
+                  onChange={(val) => {
+                    if (val) {
+                      const selectedBatch = batches.find(b => String(b.id) === String(val))
+                      const bCourseId = getBatchCourseId(selectedBatch)
+                      const batchTrainer = (selectedBatch?.trainers || []).map(t => t.name).join(', ')
+                      setForm(f => ({
+                        ...f,
+                        batchId: val,
+                        ...(bCourseId && !f.courseId ? { courseId: String(bCourseId) } : {}),
+                        hostName: batchTrainer || f.hostName
+                      }))
+                      if (errors.batchId) setErrors(err => ({ ...err, batchId: undefined }))
+                      if (errors.courseId && bCourseId) setErrors(err => ({ ...err, courseId: undefined }))
+                      return
+                    }
+                    setForm(f => ({ ...f, batchId: val }))
+                  }}
+                  options={batchOptionsForForm.map(b => ({
+                    value: b.id,
+                    label: `${b.name || b.title} ${b.mode ? `· ${b.mode}` : ''} ${!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}`
+                  }))}
+                  placeholder={form.courseId ? 'Select Batch' : 'Select Batch'}
+                  searchable={batchOptionsForForm.length >= 10}
+                />
+                {errors.batchId && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.batchId}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Trainer / Host Name
+                </label>
+                {availableTrainersForForm.length > 0 && (
+                  <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">
+                    {form.batchId ? 'Assigned Batch Trainer' : 'Course Trainers'}
+                  </span>
+                )}
+              </div>
+
+              {availableTrainersForForm.length > 0 ? (
+                <CustomSelect
+                  value={form.hostName}
+                  onChange={(val) => setForm(f => ({ ...f, hostName: val || '' }))}
+                  options={availableTrainersForForm.map(t => ({
+                    value: t.name || t.fullName,
+                    label: `${t.name || t.fullName}${t.email ? ` (${t.email})` : ''}`
+                  }))}
+                  placeholder={form.batchId ? '-- Select Trainer --' : '-- Select Course Trainer --'}
+                  searchable={availableTrainersForForm.length >= 10}
+                  clearable
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder={!form.courseId && !form.batchId ? "Select Course & Target Batch first" : "Enter host / instructor name"}
+                  value={form.hostName}
+                  onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Section 3: Meeting Link & Access */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">3</div>
+              <span>Meeting Link &amp; Access</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Meeting URL <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. https://meet.google.com/abc-defg-hij"
+                  value={form.meetUrl}
+                  onChange={e => {
+                    setForm(f => ({ ...f, meetUrl: e.target.value }))
+                    if (errors.meetUrl) setErrors(err => ({ ...err, meetUrl: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none transition-colors ${
+                    errors.meetUrl
+                      ? 'border-red-500 focus:ring-2 focus:ring-red-500/20'
+                      : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
+                  }`}
+                />
+                {errors.meetUrl && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.meetUrl}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Passcode (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 123456"
+                  value={form.passcode}
+                  onChange={e => setForm(f => ({ ...f, passcode: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Schedule & Timing */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">4</div>
+              <span>Schedule &amp; Timing</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Scheduled Start <span className="text-red-500">*</span>
+                </label>
+                <DateTimePicker
+                  value={form.scheduledStart}
+                  hasError={Boolean(errors.scheduledStart)}
+                  onChange={val => {
+                    setForm(f => ({ ...f, scheduledStart: val }))
+                    if (errors.scheduledStart) setErrors(err => ({ ...err, scheduledStart: undefined }))
+                  }}
+                />
+                {errors.scheduledStart && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.scheduledStart}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Scheduled End (Optional)
+                </label>
+                <DateTimePicker
+                  value={form.scheduledEnd}
+                  hasError={Boolean(errors.scheduledEnd)}
+                  onChange={val => {
+                    setForm(f => ({ ...f, scheduledEnd: val }))
+                    if (errors.scheduledEnd) setErrors(err => ({ ...err, scheduledEnd: undefined }))
+                  }}
+                />
+                {errors.scheduledEnd && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.scheduledEnd}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !isMeetingFormValid}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs sm:text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving Changes...</span>
+                </>
+              ) : (
+                editingId ? 'Save Changes' : 'Schedule Class'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -753,266 +1069,7 @@ export default function AdminMeetingLinksPage() {
         </div>
       )}
 
-      {/* Schedule / Edit Class SlidePanel */}
-      <SlidePanel
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        title={editingId ? 'Edit Scheduled Class' : 'Schedule Class'}
-        subtitle={editingId ? 'Update meeting details, date/time or batch targeting' : 'Publish a new live class meeting link'}
-        width="w-full max-w-lg md:max-w-xl"
-        isDirty={Boolean(form.title || form.meetingUrl || form.courseId || form.batchId || form.hostName || form.scheduledStart || form.description)}
-      >
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Enter meeting title"
-              value={form.title}
-              onChange={e => {
-                setForm(f => ({ ...f, title: e.target.value }))
-                if (errors.title) setErrors(err => ({ ...err, title: undefined }))
-              }}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${errors.title
-                  ? 'border-red-500 dark:border-red-500 focus:ring-2 focus:ring-red-500/20'
-                  : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
-                }`}
-            />
-            {errors.title && (
-              <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
-            )}
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Course <span className="text-red-500">*</span>
-              </label>
-              <CustomSelect
-                value={form.courseId}
-                hasError={Boolean(errors.courseId)}
-                onChange={(val) => {
-                  setForm(f => {
-                    const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(getBatchCourseId(b)) === String(val))
-                    const selectedBatch = stillValid ? batches.find(b => String(b.id) === String(f.batchId)) : null
-                    const batchTrainer = (selectedBatch?.trainers || []).map(t => t.name).join(', ')
-                    return {
-                      ...f,
-                      courseId: val,
-                      batchId: stillValid ? f.batchId : '',
-                      hostName: batchTrainer || (stillValid ? f.hostName : '')
-                    }
-                  })
-                  if (errors.courseId) setErrors(err => ({ ...err, courseId: undefined }))
-                }}
-                options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
-                placeholder="Select Course"
-                searchable={courses.length >= 10}
-              />
-              {errors.courseId && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Target Batch <span className="text-red-500">*</span>
-              </label>
-              <CustomSelect
-                value={form.batchId}
-                hasError={Boolean(errors.batchId)}
-                onChange={(val) => {
-                  if (val) {
-                    const selectedBatch = batches.find(b => String(b.id) === String(val))
-                    const bCourseId = getBatchCourseId(selectedBatch)
-                    const batchTrainer = (selectedBatch?.trainers || []).map(t => t.name).join(', ')
-                    setForm(f => ({
-                      ...f,
-                      batchId: val,
-                      ...(bCourseId && !f.courseId ? { courseId: String(bCourseId) } : {}),
-                      hostName: batchTrainer || f.hostName
-                    }))
-                    if (errors.batchId) setErrors(err => ({ ...err, batchId: undefined }))
-                    if (errors.courseId && bCourseId) setErrors(err => ({ ...err, courseId: undefined }))
-                    return
-                  }
-                  setForm(f => ({ ...f, batchId: val }))
-                }}
-                options={batchOptionsForForm.map(b => ({
-                  value: b.id,
-                  label: `${b.name || b.title} ${b.mode ? `· ${b.mode}` : ''} ${!form.courseId && getBatchCourseTitle(b) ? `(${getBatchCourseTitle(b)})` : ''}`
-                }))}
-                placeholder={form.courseId ? 'Select Batch' : 'Select Batch'}
-                searchable={batchOptionsForForm.length >= 10}
-              />
-              {errors.batchId && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.batchId}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Meeting URL <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. https://meet.google.com/abc-defg-hij"
-              value={form.meetUrl}
-              onChange={e => {
-                setForm(f => ({ ...f, meetUrl: e.target.value }))
-                if (errors.meetUrl) setErrors(err => ({ ...err, meetUrl: undefined }))
-              }}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none transition-colors ${errors.meetUrl
-                  ? 'border-red-500 dark:border-red-500 focus:ring-2 focus:ring-red-500/20'
-                  : 'border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500'
-                }`}
-            />
-            {errors.meetUrl && (
-              <p className="text-xs text-red-500 font-medium mt-1">{errors.meetUrl}</p>
-            )}
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Trainer / Host Name
-              </label>
-              {availableTrainersForForm.length > 0 && (
-                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
-                  {form.batchId ? 'Assigned Batch Trainer' : 'Course Trainers'}
-                </span>
-              )}
-            </div>
-
-            {availableTrainersForForm.length > 0 ? (
-              <CustomSelect
-                value={form.hostName}
-                onChange={(val) => setForm(f => ({ ...f, hostName: val || '' }))}
-                options={availableTrainersForForm.map(t => ({
-                  value: t.name || t.fullName,
-                  label: `${t.name || t.fullName}${t.email ? ` (${t.email})` : ''}`
-                }))}
-                placeholder={form.batchId ? '-- Select Trainer --' : '-- Select Course Trainer --'}
-                searchable={availableTrainersForForm.length >= 10}
-                clearable
-              />
-            ) : (
-              <input
-                type="text"
-                placeholder={!form.courseId && !form.batchId ? "Select Course & Target Batch first" : "Enter host / instructor name"}
-                value={form.hostName}
-                onChange={e => setForm(f => ({ ...f, hostName: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Scheduled Start <span className="text-red-500">*</span>
-              </label>
-              <DateTimePicker
-                value={form.scheduledStart}
-                hasError={Boolean(errors.scheduledStart)}
-                onChange={val => {
-                  setForm(f => ({ ...f, scheduledStart: val }))
-                  if (errors.scheduledStart) setErrors(err => ({ ...err, scheduledStart: undefined }))
-                }}
-              />
-              {errors.scheduledStart && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.scheduledStart}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                Scheduled End (Optional)
-              </label>
-              <DateTimePicker
-                value={form.scheduledEnd}
-                hasError={Boolean(errors.scheduledEnd)}
-                onChange={val => {
-                  setForm(f => ({ ...f, scheduledEnd: val }))
-                  if (errors.scheduledEnd) setErrors(err => ({ ...err, scheduledEnd: undefined }))
-                }}
-              />
-              {errors.scheduledEnd && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.scheduledEnd}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Passcode (Optional)
-            </label>
-            <input
-              type="text"
-              placeholder="Enter meeting passcode (optional)"
-              value={form.passcode}
-              onChange={e => setForm(f => ({ ...f, passcode: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              Description / Agenda
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Enter session agenda or description (optional)..."
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-            />
-          </div>
-
-          {(() => {
-            const isUrlValid = Boolean(form.meetUrl?.trim() && /^(https?:\/\/)?([\w.-]+\.[a-z]{2,})(:[0-9]+)?(\/.*)?$/i.test(form.meetUrl.trim()))
-            const isEndValid = !form.scheduledEnd || !form.scheduledStart || new Date(form.scheduledEnd) > new Date(form.scheduledStart)
-            const isMeetingFormValid = Boolean(
-              form.title?.trim() &&
-              isUrlValid &&
-              form.scheduledStart &&
-              isEndValid &&
-              !errors.scheduledStart &&
-              !errors.scheduledEnd &&
-              !errors.meetUrl &&
-              !errors.title
-            )
-            return (
-              <div className="flex gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setPanelOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving || !isMeetingFormValid}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw size={15} className="animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    editingId ? 'Save Changes' : 'Schedule Class'
-                  )}
-                </button>
-              </div>
-            )
-          })()}
-        </form>
-      </SlidePanel>
 
       {/* Attendees Panel */}
       <SlidePanel

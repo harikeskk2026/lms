@@ -2,13 +2,15 @@ package com.careerlabs.lms.api.quiz.repository;
 
 import com.careerlabs.lms.api.quiz.entity.AptitudeTip;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-public interface AptitudeTipRepository extends JpaRepository<AptitudeTip, Long> {
+public interface AptitudeTipRepository
+        extends JpaRepository<AptitudeTip, Long>, JpaSpecificationExecutor<AptitudeTip> {
 
     List<AptitudeTip> findByActiveTrueOrderByIdAsc();
 

@@ -3,6 +3,8 @@ package com.careerlabs.lms.api.announcement.controller;
 import com.careerlabs.lms.api.announcement.dto.request.AnnouncementCommentRequest;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementCommentResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
+import com.careerlabs.lms.api.announcement.dto.response.StudentAnnouncementPageResponse;
+import com.careerlabs.lms.api.announcement.entity.AnnouncementCategory;
 import com.careerlabs.lms.api.announcement.service.AnnouncementCommentService;
 import com.careerlabs.lms.api.announcement.service.AnnouncementService;
 import com.careerlabs.lms.api.common.response.ApiResponse;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -36,9 +39,16 @@ public class StudentAnnouncementController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<AnnouncementResponse>>> list(
-            @AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(announcementService.listForStudent(principal.id())));
+    public ResponseEntity<ApiResponse<StudentAnnouncementPageResponse>> list(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "category", required = false) AnnouncementCategory category,
+            @RequestParam(value = "unread", required = false) Boolean unread,
+            @RequestParam(value = "sort", required = false, defaultValue = "newest") String sort,
+            @RequestParam(value = "page", required = false, defaultValue = "1") int page,
+            @RequestParam(value = "limit", required = false, defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(
+                announcementService.listForStudentPaged(principal.id(), search, category, unread, sort, page, limit)));
     }
 
     @PostMapping("/{id}/view")

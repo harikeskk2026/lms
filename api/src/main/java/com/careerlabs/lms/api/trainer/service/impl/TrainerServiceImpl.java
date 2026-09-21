@@ -2,9 +2,13 @@ package com.careerlabs.lms.api.trainer.service.impl;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.dto.response.BulkImportResponse;
+import com.careerlabs.lms.api.common.dto.response.ImportRowError;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.common.util.CsvParser;
+import com.careerlabs.lms.api.common.util.ImportValidators;
 import com.careerlabs.lms.api.common.util.ScheduleOverlapUtil;
 import com.careerlabs.lms.api.trainer.dto.request.CourseBatchAssignment;
 import com.careerlabs.lms.api.trainer.dto.request.TrainerCreateRequest;
@@ -25,13 +29,18 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -42,13 +51,16 @@ public class TrainerServiceImpl implements TrainerService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final BatchRepository batchRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public TrainerServiceImpl(UserRepository userRepository,
                               PasswordEncoder passwordEncoder,
-                              BatchRepository batchRepository) {
+                              BatchRepository batchRepository,
+                              PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.batchRepository = batchRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
@@ -174,6 +186,134 @@ public class TrainerServiceImpl implements TrainerService {
 
         List<Batch> batches = batchRepository.findByTrainerIdOrderByCreatedAtDesc(saved.getId());
         return TrainerResponse.from(saved, batches);
+    }
+
+    @Override
+    public BulkImportResponse<TrainerResponse> bulkImportTrainers(MultipartFile file, String defaultPassword) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Uploaded CSV file is empty");
+        }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BadRequestException("CSV file size exceeds the 5MB limit");
+        }
+
+        CsvParser.ParseResult parseResult;
+        try {
+            parseResult = CsvParser.parse(file.getInputStream());
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+        }
+
+        List<CsvParser.ParsedRow> rows = parseResult.getRows();
+        if (rows.isEmpty()) {
+            throw new BadRequestException("CSV file contains no trainer data rows");
+        }
+        if (rows.size() > 1000) {
+            throw new BadRequestException("CSV file exceeds maximum limit of 1000 rows");
+        }
+
+        boolean hasNameHeader = parseResult.getHeaders().stream()
+                .map(CsvParser::normalizeHeaderKey)
+                .anyMatch(h -> h.contains("name"));
+        boolean hasEmailHeader = parseResult.getHeaders().stream()
+                .map(CsvParser::normalizeHeaderKey)
+                .anyMatch(h -> h.contains("email"));
+        if (!hasNameHeader || !hasEmailHeader) {
+            throw new BadRequestException("CSV file must contain 'Name' and 'Email' columns");
+        }
+
+        String resolvedDefaultPassword = (defaultPassword == null || defaultPassword.isBlank())
+                ? "Trainer@123"
+                : defaultPassword.trim();
+        if (resolvedDefaultPassword.length() < 6) {
+            throw new BadRequestException("Default password must be at least 6 characters");
+        }
+
+        Set<String> seenEmailsInCsv = new HashSet<>();
+        List<TrainerResponse> importedTrainers = new ArrayList<>();
+        List<ImportRowError> errors = new ArrayList<>();
+
+        for (CsvParser.ParsedRow row : rows) {
+            int rowNum = row.getRowNumber();
+
+            String name = row.get("name", "trainername", "fullname", "trainer_name");
+            if (name == null || name.trim().length() < 2 || name.trim().length() > 150) {
+                errors.add(new ImportRowError(rowNum, name != null ? name : "", "Name is required (2 to 150 characters)"));
+                continue;
+            }
+            name = name.trim();
+
+            String rawEmail = row.get("email", "traineremail", "emailaddress", "trainer_email");
+            if (rawEmail == null || rawEmail.trim().isEmpty()) {
+                errors.add(new ImportRowError(rowNum, name, "Email is required"));
+                continue;
+            }
+            String email = rawEmail.trim().toLowerCase(Locale.ROOT);
+            if (!ImportValidators.isValidEmail(email)) {
+                errors.add(new ImportRowError(rowNum, name, "Invalid email address format"));
+                continue;
+            }
+            if (!seenEmailsInCsv.add(email)) {
+                errors.add(new ImportRowError(rowNum, name, "Duplicate email '" + email + "' found within this CSV sheet"));
+                continue;
+            }
+            if (userRepository.existsByEmailIgnoreCase(email)) {
+                errors.add(new ImportRowError(rowNum, name, "Email '" + email + "' is already registered in the system"));
+                continue;
+            }
+
+            String phone = row.get("phone", "phonenumber", "mobile", "contact", "mobile_number");
+            if (phone != null) {
+                phone = phone.replaceAll("\\D", "").trim();
+                if (phone.isEmpty()) {
+                    phone = null;
+                } else if (!ImportValidators.isValidPhone(phone)) {
+                    errors.add(new ImportRowError(rowNum, name, "Phone number must be a valid 10-digit number starting with 6-9"));
+                    continue;
+                }
+            }
+
+            String password = row.get("password");
+            if (password == null || password.trim().isEmpty()) {
+                password = resolvedDefaultPassword;
+            } else {
+                password = password.trim();
+                if (password.length() < 6) {
+                    errors.add(new ImportRowError(rowNum, name, "Password must be at least 6 characters"));
+                    continue;
+                }
+            }
+
+            final String fName = name;
+            final String fEmail = email;
+            final String fPhone = phone;
+            final String fPassword = password;
+            final String designation = row.get("designation", "designationtitle", "role");
+            final String department = row.get("department", "dept", "departmentname");
+
+            try {
+                TrainerResponse created = transactionTemplate.execute(status -> {
+                    User user = new User();
+                    user.setName(fName);
+                    user.setEmail(fEmail);
+                    user.setPasswordHash(passwordEncoder.encode(fPassword));
+                    user.setRole(Role.TRAINER);
+                    user.setActive(true);
+                    user.setPhone(fPhone);
+                    user.setDesignation(designation);
+                    user.setDepartment(department);
+                    User saved = userRepository.save(user);
+                    return TrainerResponse.from(saved);
+                });
+                if (created != null) {
+                    importedTrainers.add(created);
+                }
+            } catch (Exception ex) {
+                errors.add(new ImportRowError(rowNum, fName, "Failed to create trainer: " + ex.getMessage()));
+            }
+        }
+
+        return new BulkImportResponse<>(rows.size(), importedTrainers.size(), errors.size(), importedTrainers, errors);
     }
 
     @Override

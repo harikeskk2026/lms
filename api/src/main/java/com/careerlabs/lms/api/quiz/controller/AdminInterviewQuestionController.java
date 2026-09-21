@@ -3,8 +3,8 @@ package com.careerlabs.lms.api.quiz.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.quiz.dto.request.CreateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateInterviewQuestionRequest;
+import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionResponse;
-import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.service.InterviewQuestionService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
@@ -19,8 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 /**
  * Admin management of the standalone interview Q&A bank shown on the student
@@ -37,13 +35,15 @@ public class AdminInterviewQuestionController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<InterviewQuestionResponse>>> list(
+    public ResponseEntity<ApiResponse<InterviewQuestionPageResponse>> list(
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) QuizDifficulty difficulty,
+            @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) Long courseId) {
-        return ResponseEntity.ok(ApiResponse.of(interviewQuestionService.listAll(category, difficulty, search, active, courseId)));
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(interviewQuestionService.pageAll(category, difficulty, search, active, courseId, page, limit)));
     }
 
     @GetMapping("/{id}")

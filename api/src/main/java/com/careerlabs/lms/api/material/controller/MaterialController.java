@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.material.dto.request.MaterialRequest;
 import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
 import com.careerlabs.lms.api.material.dto.response.UploadResponse;
+import com.careerlabs.lms.api.material.entity.MaterialType;
 import com.careerlabs.lms.api.material.service.MaterialService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.common.dto.request.ReorderRequest;
@@ -43,14 +44,27 @@ public class MaterialController {
             @RequestParam(required = false) Long topicId,
             @RequestParam(required = false) Long sessionId,
             @RequestParam(required = false, defaultValue = "false") boolean all,
+            @RequestParam(required = false) String type,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
         if (all) {
             if (courseId == null) {
                 throw new BadRequestException("courseId is required when all=true");
             }
-            return ResponseEntity.ok(ApiResponse.of(materialService.listAllForCourse(courseId, principal)));
+            return ResponseEntity.ok(ApiResponse.of(materialService.listAllForCourse(courseId, principal, parseType(type))));
         }
         return ResponseEntity.ok(ApiResponse.of(materialService.list(courseId, moduleId, topicId, sessionId, principal)));
+    }
+
+    private MaterialType parseType(String type) {
+        if (type == null || type.isBlank() || type.equalsIgnoreCase("ALL")) {
+            return null;
+        }
+        try {
+            return MaterialType.valueOf(type.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(
+                    "Invalid material type: " + type + ". Allowed values: PDF, DOCUMENT, PRESENTATION, VIDEO, LINK, OTHER");
+        }
     }
 
     @PostMapping

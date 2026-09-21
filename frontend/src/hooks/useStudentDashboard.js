@@ -66,7 +66,7 @@ export function useAttendance(month) {
   return { data, loading, error, refetch: () => setTick(t => t + 1) }
 }
 
-export function useAssignments() {
+export function useAssignments(status) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
@@ -74,11 +74,11 @@ export function useAssignments() {
 
   useEffect(() => {
     setLoading(true)
-    studentApi.getAssignments()
+    studentApi.getAssignments(status ? { status } : {})
       .then(r => setData(r.data.data))
       .catch(e => setError(e?.response?.data?.message || 'Failed to load assignments'))
       .finally(() => setLoading(false))
-  }, [refetchTick])
+  }, [status, refetchTick])
 
   return { data, loading, error, refetch: () => setTick(t => t + 1) }
 }

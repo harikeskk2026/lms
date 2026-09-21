@@ -7,6 +7,7 @@ import com.careerlabs.lms.api.placement.dto.request.CreateInterviewRoundRequest;
 import com.careerlabs.lms.api.placement.dto.request.ScheduleInterviewRequest;
 import com.careerlabs.lms.api.placement.dto.response.InterviewEvaluationResponse;
 import com.careerlabs.lms.api.placement.dto.response.InterviewRoundResponse;
+import com.careerlabs.lms.api.placement.dto.response.PlacementInterviewPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.PlacementInterviewResponse;
 import com.careerlabs.lms.api.placement.service.PlacementInterviewService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -60,8 +62,13 @@ public class AdminPlacementInterviewController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<PlacementInterviewResponse>>> list(@PathVariable Long driveId) {
-        return ResponseEntity.ok(ApiResponse.of(interviewService.listForDrive(driveId)));
+    public ResponseEntity<ApiResponse<PlacementInterviewPageResponse>> list(
+            @PathVariable Long driveId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(interviewService.pageForDrive(driveId, search, status, page, limit)));
     }
 
     @PostMapping

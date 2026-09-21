@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.quiz.service;
 
 import com.careerlabs.lms.api.quiz.dto.request.CreateInterviewResourceRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateInterviewResourceRequest;
+import com.careerlabs.lms.api.quiz.dto.response.InterviewResourcePageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewResourceResponse;
 
 import java.util.List;
@@ -11,6 +12,8 @@ public interface InterviewResourceService {
     List<InterviewResourceResponse> listActive();
 
     List<InterviewResourceResponse> listAll(Boolean active);
+
+    InterviewResourcePageResponse page(String search, String tag, Boolean active, int page, int limit);
 
     InterviewResourceResponse get(Long id);
 

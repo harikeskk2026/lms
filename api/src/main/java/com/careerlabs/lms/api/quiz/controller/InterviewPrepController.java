@@ -1,8 +1,10 @@
 package com.careerlabs.lms.api.quiz.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
+import com.careerlabs.lms.api.quiz.dto.response.AptitudeTipPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.AptitudeTipResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewPrepPageResponse;
+import com.careerlabs.lms.api.quiz.dto.response.InterviewResourcePageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewResourceResponse;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 import com.careerlabs.lms.api.quiz.service.AptitudeTipService;
@@ -59,12 +61,19 @@ public class InterviewPrepController {
     }
 
     @GetMapping("/aptitude-tips")
-    public ResponseEntity<ApiResponse<List<AptitudeTipResponse>>> aptitudeTips() {
-        return ResponseEntity.ok(ApiResponse.of(aptitudeTipService.listActive()));
+    public ResponseEntity<ApiResponse<AptitudeTipPageResponse>> aptitudeTips(
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(aptitudeTipService.page(search, true, page, limit)));
     }
 
     @GetMapping("/resources")
-    public ResponseEntity<ApiResponse<List<InterviewResourceResponse>>> resources() {
-        return ResponseEntity.ok(ApiResponse.of(interviewResourceService.listActive()));
+    public ResponseEntity<ApiResponse<InterviewResourcePageResponse>> resources(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String tag,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(interviewResourceService.page(search, tag, true, page, limit)));
     }
 }

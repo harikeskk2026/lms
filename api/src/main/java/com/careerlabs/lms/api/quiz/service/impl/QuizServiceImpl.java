@@ -17,6 +17,7 @@ import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAnalyticsResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuestionResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizAssignmentResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuizPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StudentQuizResponse;
 import com.careerlabs.lms.api.quiz.entity.AssignmentTargetType;
@@ -26,7 +27,9 @@ import com.careerlabs.lms.api.quiz.entity.Quiz;
 import com.careerlabs.lms.api.quiz.entity.QuizAssignment;
 import com.careerlabs.lms.api.quiz.entity.QuizAttempt;
 import com.careerlabs.lms.api.quiz.entity.QuizQuestion;
+import com.careerlabs.lms.api.quiz.entity.QuizSourcePdf;
 import com.careerlabs.lms.api.quiz.entity.QuizStatus;
+import com.careerlabs.lms.api.quiz.entity.QuizType;
 import com.careerlabs.lms.api.quiz.entity.ResultVisibility;
 import com.careerlabs.lms.api.quiz.repository.QuestionRepository;
 import com.careerlabs.lms.api.quiz.repository.QuizAssignmentRepository;
@@ -38,6 +41,15 @@ import com.careerlabs.lms.api.quiz.service.QuizAvailabilityService;
 import com.careerlabs.lms.api.quiz.service.QuizService;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +57,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -83,25 +96,86 @@ public class QuizServiceImpl implements QuizService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<QuizResponse> list() {
-        return list(null);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<QuizResponse> list(String search) {
-        List<QuizResponse> responses = quizRepository.findAllByOrderByCreatedAtDesc().stream()
+    public QuizPageResponse list(String search, QuizType type, Long courseId, Long batchId, String status,
+                                 Boolean sourcePdf, int page, int limit) {
+        int pageNumber = Math.max(1, page);
+        int pageSize = limit > 0 ? limit : 20;
+        Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Specification<Quiz> spec = buildSpec(search, type, courseId, batchId, status, sourcePdf);
+        Page<Quiz> result = quizRepository.findAll(spec, pageable);
+        List<QuizResponse> quizzes = result.getContent().stream()
                 .map(this::toResponse)
                 .toList();
+        return new QuizPageResponse(quizzes, result.getTotalElements(), result.getTotalPages(), pageNumber);
+    }
 
-        String normalized = search == null ? null : search.trim();
-        if (normalized == null || normalized.isEmpty()) {
-            return responses;
+    private Specification<Quiz> buildSpec(String search, QuizType type, Long courseId, Long batchId,
+                                          String status, Boolean sourcePdf) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), pattern),
+                        cb.like(cb.lower(root.get("description")), pattern)
+                ));
+            }
+            if (type != null) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
+            if (courseId != null) {
+                predicates.add(cb.equal(root.get("courseId"), courseId));
+            }
+            if (batchId != null) {
+                predicates.add(cb.equal(root.get("batchId"), batchId));
+            }
+            applyStatusFilter(predicates, root, cb, status);
+            if (sourcePdf != null) {
+                Subquery<QuizSourcePdf> subquery = query.subquery(QuizSourcePdf.class);
+                Root<QuizSourcePdf> pdfRoot = subquery.from(QuizSourcePdf.class);
+                subquery.select(pdfRoot).where(cb.equal(pdfRoot.get("quiz"), root));
+                predicates.add(Boolean.TRUE.equals(sourcePdf) ? cb.exists(subquery) : cb.not(cb.exists(subquery)));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Translates the effective-status values the admin UI already computes from a quiz's
+     * {@code status} + schedule window into SQL predicates. Mirrors
+     * {@code QuizAvailabilityServiceImpl.effectiveStatus} exactly, so the list filter and the
+     * per-row badge always agree.
+     */
+    private void applyStatusFilter(List<Predicate> predicates, Root<Quiz> root, CriteriaBuilder cb, String status) {
+        if (status == null || status.isBlank()) {
+            return;
         }
-        String needle = normalized.toLowerCase(java.util.Locale.ROOT);
-        return responses.stream()
-                .filter(q -> q.title() != null && q.title().toLowerCase(java.util.Locale.ROOT).contains(needle))
-                .toList();
+        String value = status.trim().toUpperCase(Locale.ROOT);
+        LocalDateTime now = LocalDateTime.now();
+        switch (value) {
+            case "DRAFT" -> predicates.add(cb.equal(root.get("status"), QuizStatus.DRAFT));
+            case "ARCHIVED" -> predicates.add(cb.equal(root.get("status"), QuizStatus.ARCHIVED));
+            case "PUBLISHED" -> predicates.add(cb.equal(root.get("status"), QuizStatus.PUBLISHED));
+            case "SCHEDULED" -> predicates.add(cb.and(
+                    cb.equal(root.get("status"), QuizStatus.PUBLISHED),
+                    cb.isNotNull(root.get("scheduledStart")),
+                    cb.greaterThan(root.get("scheduledStart"), now)));
+            case "COMPLETED", "EXPIRED" -> predicates.add(cb.and(
+                    cb.equal(root.get("status"), QuizStatus.PUBLISHED),
+                    cb.isNotNull(root.get("scheduledEnd")),
+                    cb.lessThan(root.get("scheduledEnd"), now),
+                    cb.or(cb.isNull(root.get("scheduledStart")),
+                            cb.lessThanOrEqualTo(root.get("scheduledStart"), now))));
+            case "LIVE" -> predicates.add(cb.and(
+                    cb.equal(root.get("status"), QuizStatus.PUBLISHED),
+                    cb.or(cb.isNull(root.get("scheduledStart")),
+                            cb.lessThanOrEqualTo(root.get("scheduledStart"), now)),
+                    cb.or(cb.isNull(root.get("scheduledEnd")),
+                            cb.greaterThanOrEqualTo(root.get("scheduledEnd"), now))));
+            default -> {
+                // Unknown values behave like no filter.
+            }
+        }
     }
 
     @Override
@@ -218,6 +292,12 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional(readOnly = true)
     public List<StudentQuizResponse> listPublished(Long studentId) {
+        return listPublished(studentId, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudentQuizResponse> listPublished(Long studentId, String search) {
         // Use a LinkedHashMap to deduplicate by key (ID for standard quizzes, title for practice quizzes)
         // while preserving creation-time order. This prevents duplicate practice quizzes (e.g. "Weak Area Practice" ids 8 & 12)
         // from polluting the student quiz list and Analytics' improvementHistory.
@@ -236,7 +316,18 @@ public class QuizServiceImpl implements QuizService {
                 seen.put(dedupeKey, toStudentResponse(quiz, studentId));
             }
         }
-        return new java.util.ArrayList<>(seen.values());
+        List<StudentQuizResponse> result = new java.util.ArrayList<>(seen.values());
+        // Optional search mirrors what the student UI previously filtered client-side:
+        // case-insensitive contains over title/description (Quiz has no category field).
+        if (search != null && !search.isBlank()) {
+            String q = search.trim().toLowerCase(Locale.ROOT);
+            result.removeIf(r -> !containsIgnoreCase(r.title(), q) && !containsIgnoreCase(r.description(), q));
+        }
+        return result;
+    }
+
+    private static boolean containsIgnoreCase(String text, String query) {
+        return text != null && text.toLowerCase(Locale.ROOT).contains(query);
     }
 
     @Override

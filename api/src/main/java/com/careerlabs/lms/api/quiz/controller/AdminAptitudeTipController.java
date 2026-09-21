@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.quiz.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.quiz.dto.request.CreateAptitudeTipRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateAptitudeTipRequest;
+import com.careerlabs.lms.api.quiz.dto.response.AptitudeTipPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.AptitudeTipResponse;
 import com.careerlabs.lms.api.quiz.service.AptitudeTipService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -19,8 +20,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
  * Admin management of aptitude tips shown on the student Interview Prep tab.
  */
@@ -35,9 +34,12 @@ public class AdminAptitudeTipController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<AptitudeTipResponse>>> list(
-            @RequestParam(required = false) Boolean active) {
-        return ResponseEntity.ok(ApiResponse.of(aptitudeTipService.listAll(active)));
+    public ResponseEntity<ApiResponse<AptitudeTipPageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(aptitudeTipService.page(search, active, page, limit)));
     }
 
     @GetMapping("/{id}")

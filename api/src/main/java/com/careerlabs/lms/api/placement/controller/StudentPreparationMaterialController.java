@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.placement.controller;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialDetailResponse;
+import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialResponse;
 import com.careerlabs.lms.api.placement.service.DocumentDownload;
 import com.careerlabs.lms.api.placement.service.PreparationMaterialService;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
@@ -36,9 +38,13 @@ public class StudentPreparationMaterialController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<PreparationMaterialResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal) {
+    public ResponseEntity<ApiResponse<PreparationMaterialPageResponse>> list(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
         Student student = getStudent(principal.id());
-        return ResponseEntity.ok(ApiResponse.of(preparationMaterialService.listForStudent(student.getId())));
+        return ResponseEntity.ok(ApiResponse.of(preparationMaterialService.pageForStudent(student.getId(), search, page, limit)));
     }
 
     @GetMapping("/{id}")

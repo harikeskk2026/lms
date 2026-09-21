@@ -15,6 +15,12 @@ public interface MaterialService {
 
     List<MaterialResponse> listAllForCourse(Long courseId, JwtUserPrincipal principal);
 
+    /**
+     * Aggregated course materials optionally narrowed to one {@link com.careerlabs.lms.api.material.entity.MaterialType}.
+     * Null type returns everything (same as {@link #listAllForCourse(Long, JwtUserPrincipal)}).
+     */
+    List<MaterialResponse> listAllForCourse(Long courseId, JwtUserPrincipal principal, com.careerlabs.lms.api.material.entity.MaterialType type);
+
     MaterialResponse create(MaterialRequest request);
 
     MaterialResponse update(Long id, MaterialRequest request);

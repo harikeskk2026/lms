@@ -2,13 +2,15 @@ package com.careerlabs.lms.api.quiz.repository;
 
 import com.careerlabs.lms.api.quiz.entity.InterviewResource;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-public interface InterviewResourceRepository extends JpaRepository<InterviewResource, Long> {
+public interface InterviewResourceRepository
+        extends JpaRepository<InterviewResource, Long>, JpaSpecificationExecutor<InterviewResource> {
 
     List<InterviewResource> findByActiveTrueOrderByIdAsc();
 

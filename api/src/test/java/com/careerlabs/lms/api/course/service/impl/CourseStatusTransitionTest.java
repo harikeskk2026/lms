@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -46,6 +47,7 @@ class CourseStatusTransitionTest {
     @Mock private com.careerlabs.lms.api.assignment.repository.AssignmentRepository assignmentRepository;
     @Mock private com.careerlabs.lms.api.attendance.repository.DailyClassRepository dailyClassRepository;
     @Mock private com.careerlabs.lms.api.user.repository.UserRepository userRepository;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private CourseServiceImpl courseService;
     private BatchServiceImpl batchService;
@@ -77,8 +79,8 @@ class CourseStatusTransitionTest {
 
     @BeforeEach
     void setUp() {
-        courseService = new CourseServiceImpl(courseRepository, courseCodeGenerator, accessGuard, studentRepository, enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository);
-        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard, enrollmentRepository);
+        courseService = new CourseServiceImpl(courseRepository, courseCodeGenerator, accessGuard, studentRepository, enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository, transactionManager);
+        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard, enrollmentRepository, transactionManager);
     }
 
     @Test

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import courseService from '@/services/courseService'
 import courseContentService from '@/services/courseContentService'
+import { studentApi } from '@/lib/api'
 import SkeletonCard from '@/components/student/SkeletonCard'
 import MaterialPreviewModal from '@/components/ui/MaterialPreviewModal'
 
@@ -137,7 +138,19 @@ export default function MyCourseDetailPage({ params }) {
   const [syllabus, setSyllabus] = useState(null)
   const [materials, setMaterials] = useState(null)
   const [typeFilter, setTypeFilter] = useState('ALL')
+  const [availableTypes, setAvailableTypes] = useState([])
   const [previewMaterial, setPreviewMaterial] = useState(null)
+
+  const loadMaterials = useCallback((type) => {
+    const params = type && type !== 'ALL' ? { type } : undefined
+    return studentApi.getMaterials(id, params)
+      .then(res => {
+        const list = res.data?.data || []
+        setMaterials(list)
+        setAvailableTypes(prev => Array.from(new Set([...(prev || []), ...list.map(m => m.type)])))
+      })
+      .catch(() => setMaterials([]))
+  }, [id])
 
   const loadData = useCallback(() => {
     courseService.get(id)
@@ -150,11 +163,9 @@ export default function MyCourseDetailPage({ params }) {
       .then(r => setSyllabus(r.data || []))
       .catch(() => setSyllabus([]))
 
-    // Preload all course materials via aggregation endpoint
-    courseContentService.getAllCourseMaterials(id)
-      .then(r => setMaterials(r.data || []))
-      .catch(() => setMaterials([]))
-  }, [id])
+    // Preload all course materials (server-driven; the Materials tab filters by type)
+    loadMaterials('ALL')
+  }, [id, loadMaterials])
 
   useEffect(() => {
     loadData()
@@ -164,9 +175,14 @@ export default function MyCourseDetailPage({ params }) {
   useEffect(() => {
     if (tab === 'Syllabus' || tab === 'Materials') {
       courseContentService.getModules(id).then(r => setSyllabus(r.data || [])).catch(() => { })
-      courseContentService.getAllCourseMaterials(id).then(r => setMaterials(r.data || [])).catch(() => { })
     }
   }, [tab, id])
+
+  useEffect(() => {
+    if (tab === 'Syllabus' || tab === 'Materials') {
+      loadMaterials(typeFilter)
+    }
+  }, [tab, id, typeFilter, loadMaterials])
 
   if (loading) return <div className="page-wrapper"><SkeletonCard lines={6} /></div>
   if (notFound || !course) {
@@ -180,8 +196,8 @@ export default function MyCourseDetailPage({ params }) {
   }
 
   const courseMaterials = (materials || []).filter(m => !m.moduleId && !m.topicId)
-  const matTypes = materials ? [...new Set(materials.map(m => m.type))] : []
-  const filteredMats = materials ? (typeFilter === 'ALL' ? materials : materials.filter(m => m.type === typeFilter)) : []
+  const matTypes = availableTypes.length ? availableTypes : [...new Set((materials || []).map(m => m.type))]
+  const filteredMats = materials || []
 
   return (
     <div className="page-wrapper">

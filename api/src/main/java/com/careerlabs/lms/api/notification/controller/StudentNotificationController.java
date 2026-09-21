@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -25,8 +26,12 @@ public class StudentNotificationController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<NotificationResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(notificationService.list(principal.id())));
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> list(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean unreadOnly) {
+        return ResponseEntity.ok(ApiResponse.of(notificationService.list(principal.id(), category, search, unreadOnly)));
     }
 
     @PatchMapping("/{id}/read")

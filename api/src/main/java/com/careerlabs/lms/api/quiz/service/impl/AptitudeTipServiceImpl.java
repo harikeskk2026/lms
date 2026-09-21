@@ -3,13 +3,20 @@ package com.careerlabs.lms.api.quiz.service.impl;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.quiz.dto.request.CreateAptitudeTipRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateAptitudeTipRequest;
+import com.careerlabs.lms.api.quiz.dto.response.AptitudeTipPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.AptitudeTipResponse;
 import com.careerlabs.lms.api.quiz.entity.AptitudeTip;
 import com.careerlabs.lms.api.quiz.repository.AptitudeTipRepository;
 import com.careerlabs.lms.api.quiz.service.AptitudeTipService;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -39,6 +46,37 @@ public class AptitudeTipServiceImpl implements AptitudeTipService {
                 .sorted((a, b) -> a.getId().compareTo(b.getId()))
                 .map(AptitudeTipResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AptitudeTipPageResponse page(String search, Boolean active, int page, int limit) {
+        int safePage = Math.max(page, 1) - 1;
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        Page<AptitudeTip> result = repository.findAll(buildSpecification(search, active),
+                PageRequest.of(safePage, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt")));
+        return new AptitudeTipPageResponse(
+                result.getContent().stream().map(AptitudeTipResponse::from).toList(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.getNumber() + 1);
+    }
+
+    private Specification<AptitudeTip> buildSpecification(String search, Boolean active) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (active != null) {
+                predicates.add(cb.equal(root.get("active"), active));
+            }
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("topic")), like),
+                        cb.like(cb.lower(root.get("formula")), like),
+                        cb.like(cb.lower(root.get("example")), like)));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Override

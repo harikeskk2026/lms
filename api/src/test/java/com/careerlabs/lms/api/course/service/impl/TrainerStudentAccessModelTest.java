@@ -30,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -53,6 +54,7 @@ class TrainerStudentAccessModelTest {
     @Mock private SyllabusModuleRepository moduleRepository;
     @Mock private SyllabusService syllabusService;
     @Mock private MaterialRepository materialRepository;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private CourseAccessGuard accessGuard;
     private BatchServiceImpl batchService;
@@ -85,11 +87,11 @@ class TrainerStudentAccessModelTest {
     @BeforeEach
     void setUp() {
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
-        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard, enrollmentRepository);
+        batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository, dailyClassRepository, userRepository, accessGuard, enrollmentRepository, transactionManager);
         courseService = new CourseServiceImpl(
                 courseRepository, courseCodeGenerator, accessGuard,
                 studentRepository, enrollmentRepository,
-                moduleRepository, syllabusService, materialRepository, batchRepository
+                moduleRepository, syllabusService, materialRepository, batchRepository, transactionManager
         );
 
         // Course A

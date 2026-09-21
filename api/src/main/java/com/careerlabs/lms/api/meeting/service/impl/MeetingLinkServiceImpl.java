@@ -33,7 +33,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -495,6 +497,11 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
 
     @Override
     public List<MeetingLinkResponse> getStudentMeetings(Long currentUserId) {
+        return getStudentMeetings(currentUserId, null);
+    }
+
+    @Override
+    public List<MeetingLinkResponse> getStudentMeetings(Long currentUserId, String status) {
         schedulerService.autoTransitionStatuses(LocalDateTime.now());
         StudentScope scope = resolveStudentScope(currentUserId);
         List<MeetingLink> list;
@@ -507,7 +514,74 @@ public class MeetingLinkServiceImpl implements MeetingLinkService {
         } else {
             list = meetingLinkRepository.findVisibleByCourseIds(scope.courseIds());
         }
-        return deduplicateById(list).stream().map(MeetingLinkResponse::from).toList();
+        List<MeetingLink> scoped = deduplicateById(list);
+        if (status == null || status.isBlank()) {
+            return scoped.stream().map(MeetingLinkResponse::from).toList();
+        }
+        String bucket = normalizeMeetingBucket(status);
+        LocalDateTime now = LocalDateTime.now();
+        return scoped.stream()
+                .filter(m -> matchesBucket(displayStatus(m, now), bucket))
+                .map(MeetingLinkResponse::from)
+                .toList();
+    }
+
+    /**
+     * Display bucket derived server-side with the same time-window logic the
+     * student meeting-links page's {@code getDisplayStatus} uses: CANCELLED stays
+     * CANCELLED; a null start falls back to UPCOMING (or COMPLETED when the
+     * persisted status is COMPLETED); otherwise the date is compared first, then
+     * the time-of-day window, defaulting the end to start + 1h when absent.
+     */
+    static String displayStatus(MeetingLink meeting, LocalDateTime now) {
+        if (meeting.getStatus() == MeetingStatus.CANCELLED) {
+            return "CANCELLED";
+        }
+        LocalDateTime start = meeting.getScheduledStart();
+        if (start == null) {
+            return meeting.getStatus() == MeetingStatus.COMPLETED ? "COMPLETED" : "UPCOMING";
+        }
+        LocalDateTime end = meeting.getScheduledEnd();
+        LocalDate today = now.toLocalDate();
+        LocalTime currentTime = now.toLocalTime();
+        LocalDate startDate = start.toLocalDate();
+        LocalTime startTime = start.toLocalTime();
+        LocalDate endDate = end != null ? end.toLocalDate() : startDate;
+        LocalTime endTime = end != null ? end.toLocalTime() : startTime.plusHours(1);
+        if (today.isBefore(startDate)) {
+            return "UPCOMING";
+        }
+        if (today.isAfter(endDate)) {
+            return "COMPLETED";
+        }
+        if (currentTime.isBefore(startTime)) {
+            return "UPCOMING";
+        }
+        if (!currentTime.isAfter(endTime)) {
+            return "ONGOING";
+        }
+        return "COMPLETED";
+    }
+
+    private static String normalizeMeetingBucket(String status) {
+        return switch (status.trim().toUpperCase()) {
+            case "LIVE", "ONGOING" -> "ONGOING";
+            case "UPCOMING", "SCHEDULED" -> "UPCOMING";
+            case "PAST" -> "PAST";
+            case "COMPLETED" -> "COMPLETED";
+            case "CANCELLED" -> "CANCELLED";
+            default -> throw new BadRequestException(
+                    "Invalid meeting status: " + status
+                            + ". Allowed values: LIVE, UPCOMING, PAST, COMPLETED, CANCELLED (aliases: ONGOING, SCHEDULED)");
+        };
+    }
+
+    /** PAST mirrors the page's past bucket (COMPLETED plus CANCELLED). */
+    private static boolean matchesBucket(String display, String bucket) {
+        if ("PAST".equals(bucket)) {
+            return "COMPLETED".equals(display) || "CANCELLED".equals(display);
+        }
+        return bucket.equals(display);
     }
 
     @Override

@@ -1,11 +1,13 @@
 package com.careerlabs.lms.api.student.controller;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.enrollment.service.CourseAccessGuard;
 import com.careerlabs.lms.api.material.dto.response.MaterialResponse;
+import com.careerlabs.lms.api.material.entity.MaterialType;
 import com.careerlabs.lms.api.material.service.MaterialService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.student.dto.response.StudentCourseResponse;
@@ -19,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -88,7 +91,20 @@ public class StudentCourseController {
     @GetMapping("/{id}/materials")
     public ResponseEntity<ApiResponse<List<MaterialResponse>>> getCourseMaterials(
             @PathVariable Long id,
+            @RequestParam(required = false) String type,
             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        if (type != null && !type.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.of(materialService.listAllForCourse(id, principal,
+                    parseMaterialType(type))));
+        }
         return ResponseEntity.ok(ApiResponse.of(materialService.listAllForCourse(id, principal)));
+    }
+
+    private static MaterialType parseMaterialType(String type) {
+        try {
+            return MaterialType.valueOf(type.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Invalid material type: " + type);
+        }
     }
 }

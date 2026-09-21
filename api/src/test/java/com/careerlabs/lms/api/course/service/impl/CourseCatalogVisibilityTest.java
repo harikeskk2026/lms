@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -44,6 +45,7 @@ class CourseCatalogVisibilityTest {
     @Mock private SyllabusService syllabusService;
     @Mock private MaterialRepository materialRepository;
     @Mock private BatchRepository batchRepository;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private CourseServiceImpl courseService;
 
@@ -81,7 +83,8 @@ class CourseCatalogVisibilityTest {
     @BeforeEach
     void setUp() {
         courseService = new CourseServiceImpl(courseRepository, courseCodeGenerator, accessGuard, studentRepository,
-                enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository);
+                enrollmentRepository, moduleRepository, syllabusService, materialRepository, batchRepository,
+                transactionManager);
     }
 
     @Test

@@ -2,7 +2,7 @@ import apiCall from '@/utilities/apiCall'
 
 const recordedSessionService = {
   // Admin
-  listSessions: () => apiCall({ method: 'GET', url: '/admin/recorded-sessions' }),
+  listSessions: (params, config) => apiCall({ method: 'GET', url: '/admin/recorded-sessions', params, ...config }),
   getSession: (id) => apiCall({ method: 'GET', url: `/admin/recorded-sessions/${id}` }),
   createSession: (data) => apiCall({ method: 'POST', url: '/admin/recorded-sessions', data }),
   updateSession: (id, data) => apiCall({ method: 'PUT', url: `/admin/recorded-sessions/${id}`, data }),

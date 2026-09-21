@@ -12,6 +12,15 @@ import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
 import FormDrawer from '@/components/ui/FormDrawer'
 
 const FILTERS = ['All', 'Pending', 'Pending Approval', 'Submitted', 'Graded', 'Overdue', 'Closed']
+const FILTER_STATUS = {
+  'All': null,
+  'Pending': 'PENDING',
+  'Pending Approval': 'PENDING_APPROVAL',
+  'Submitted': 'SUBMITTED',
+  'Graded': 'GRADED',
+  'Overdue': 'OVERDUE',
+  'Closed': 'CLOSED',
+}
 const ALLOWED_SUBMISSION_EXTENSIONS = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.txt', '.csv', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.zip']
 
 export function parseAssignmentDueDate(dueDate, closeTime) {
@@ -559,10 +568,22 @@ function AssignmentCard({ a, onSubmit }) {
 }
 
 export default function AssignmentsPage() {
-  const { data: assignments, loading, error, refetch } = useAssignments()
   const [filter, setFilter] = useState('All')
   const [submitTarget, setSubmitTarget] = useState(null)
   const [, setTick] = useState(0)
+
+  const statusParam = FILTER_STATUS[filter]
+
+  // One unfiltered fetch drives the count badges (and the All tab), plus a
+  // status-filtered fetch for the currently selected specific tab — both
+  // server-driven so no list filtering happens in the browser.
+  const allFetch = useAssignments()
+  const tabFetch = useAssignments(statusParam)
+
+  const assignments = statusParam ? tabFetch.data : allFetch.data
+  const loading = statusParam ? tabFetch.loading : (allFetch.loading || tabFetch.loading)
+  const refetch = () => { allFetch.refetch(); tabFetch.refetch() }
+  const allData = allFetch.data
 
   // Live dynamic timer: refresh relative time displays every 30 seconds
   useEffect(() => {
@@ -570,24 +591,13 @@ export default function AssignmentsPage() {
     return () => clearInterval(timer)
   }, [])
 
-  const filtered = !assignments ? [] : assignments.filter(a => {
-    if (filter === 'All') return true
-    if (filter === 'Pending') return (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED'
-    if (filter === 'Pending Approval') return a.submission?.status === 'PENDING_APPROVAL'
-    if (filter === 'Submitted') return a.submission?.status === 'SUBMITTED'
-    if (filter === 'Graded') return a.submission?.status === 'GRADED'
-    if (filter === 'Overdue') return a.isOverdue && a.status !== 'CLOSED'
-    if (filter === 'Closed') return a.status === 'CLOSED'
-    return true
-  })
-
   return (
     <div className="page-wrapper">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-800 dark:text-white">Assignments</h1>
-          <p className="text-sm text-gray-500">{assignments?.length || 0} total assignments</p>
+          <p className="text-sm text-gray-500">{allData?.length || 0} total assignments</p>
         </div>
 
         <button
@@ -604,13 +614,13 @@ export default function AssignmentsPage() {
       {/* Filter tabs */}
       <div className="flex gap-1.5 flex-wrap mb-4">
         {FILTERS.map(f => {
-          const count = !assignments ? 0 : f === 'All' ? assignments.length :
-            f === 'Pending' ? assignments.filter(a => (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED').length :
-              f === 'Pending Approval' ? assignments.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
-                f === 'Submitted' ? assignments.filter(a => a.submission?.status === 'SUBMITTED').length :
-                  f === 'Graded' ? assignments.filter(a => a.submission?.status === 'GRADED').length :
-                    f === 'Overdue' ? assignments.filter(a => a.isOverdue && a.status !== 'CLOSED').length :
-                      f === 'Closed' ? assignments.filter(a => a.status === 'CLOSED').length : 0
+          const count = !allData ? 0 : f === 'All' ? allData.length :
+            f === 'Pending' ? allData.filter(a => (!a.submission || a.submission.status === 'PENDING') && a.status !== 'CLOSED').length :
+              f === 'Pending Approval' ? allData.filter(a => a.submission?.status === 'PENDING_APPROVAL').length :
+                f === 'Submitted' ? allData.filter(a => a.submission?.status === 'SUBMITTED').length :
+                  f === 'Graded' ? allData.filter(a => a.submission?.status === 'GRADED').length :
+                    f === 'Overdue' ? allData.filter(a => a.isOverdue && a.status !== 'CLOSED').length :
+                      f === 'Closed' ? allData.filter(a => a.status === 'CLOSED').length : 0
           return (
             <button key={f} onClick={() => setFilter(f)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === f ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-purple-100 dark:border-purple-800 hover:bg-brand-50 dark:hover:bg-brand-900/20'
@@ -629,14 +639,14 @@ export default function AssignmentsPage() {
       {/* Assignments List */}
       {loading ? (
         <div className="space-y-3">{[0, 1, 2, 3].map(i => <SkeletonCard key={i} lines={3} />)}</div>
-      ) : filtered.length === 0 ? (
+      ) : !assignments || assignments.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <ClipboardList size={32} className="mx-auto text-gray-300 mb-3" />
           <p className="text-gray-500">No assignments in this category</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(a => (
+          {assignments.map(a => (
             <AssignmentCard key={a.id} a={a} onSubmit={setSubmitTarget} />
           ))}
         </div>

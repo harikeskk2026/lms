@@ -26,5 +26,12 @@ public interface MeetingLinkService {
 
     List<MeetingLinkResponse> getStudentMeetings(Long currentUserId);
 
+    /**
+     * Student-scoped meetings optionally narrowed to one display bucket
+     * (LIVE/UPCOMING/PAST plus COMPLETED/CANCELLED and ONGOING/SCHEDULED aliases).
+     * Null/blank status returns everything (same as {@link #getStudentMeetings(Long)}).
+     */
+    List<MeetingLinkResponse> getStudentMeetings(Long currentUserId, String status);
+
     List<MeetingLinkResponse> getStudentLiveMeetings(Long currentUserId);
 }

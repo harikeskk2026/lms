@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { Pin, Megaphone, Search, CalendarDays, ChevronLeft, ChevronRight, X as XIcon, Paperclip, RefreshCw } from 'lucide-react'
@@ -8,6 +8,8 @@ import toast from 'react-hot-toast'
 import { studentApi, resolveFileUrl } from '@/lib/api'
 import CustomSelect from '@/components/ui/CustomSelect'
 import ViewAttachmentModal from '@/components/shared/ViewAttachmentModal'
+import Pagination from '@/components/ui/Pagination'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 
 const FILTERS = ['All', 'Unread', 'URGENT', 'PLACEMENT', 'EXAM', 'HOLIDAY', 'ATTENDANCE']
 
@@ -37,28 +39,94 @@ export default function StudentAnnouncementsPage() {
   const [view, setView] = useState('list') // 'list' | 'calendar'
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, 400)
   const [sortBy, setSortBy] = useState('newest')
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null)
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [previewAttachment, setPreviewAttachment] = useState(null)
+  const [pagination, setPagination] = useState({ totalElements: 0, totalPages: 1 })
+  const [counts, setCounts] = useState(() => Object.fromEntries(FILTERS.map(k => [k, 0])))
+  const [countTick, setCountTick] = useState(0)
+  const [calendarAnnouncements, setCalendarAnnouncements] = useState(null)
 
-  const load = () => {
+  const effectiveLimit = pageSize === 'all' ? 1000 : Number(pageSize)
+
+  const load = useCallback(() => {
     setLoading(true)
-    studentApi.getAnnouncements()
-      .then(r => setAnnouncements(r.data.data || []))
+    const params = {
+      search: debouncedSearch.trim() || undefined,
+      category: filter !== 'All' && filter !== 'Unread' ? filter : undefined,
+      unread: filter === 'Unread' ? true : undefined,
+      sort: sortBy === 'oldest' ? 'oldest' : undefined,
+      page,
+      limit: effectiveLimit,
+    }
+    studentApi.getAnnouncements(params)
+      .then(r => {
+        const d = r.data.data || { items: [], totalElements: 0, totalPages: 1, page: 1 }
+        setAnnouncements(d.items || [])
+        setPagination({ totalElements: d.totalElements, totalPages: d.totalPages })
+        if (d.page && d.page !== page) setPage(d.page)
+      })
       .catch(() => toast.error('Failed to load announcements'))
       .finally(() => setLoading(false))
-  }
+  }, [debouncedSearch, filter, sortBy, page, effectiveLimit])
 
+  useEffect(() => { load() }, [load])
+
+  // Tab count badges come from lightweight server queries (limit 1 → totalElements),
+  // never by filtering a fully-loaded list in the browser.
   useEffect(() => {
-    load()
-  }, [])
+    const queries = [
+      { key: 'All', params: { limit: 1 } },
+      { key: 'Unread', params: { unread: true, limit: 1 } },
+      ...FILTERS.filter(k => k !== 'All' && k !== 'Unread').map(key => ({ key, params: { category: key, limit: 1 } })),
+    ]
+    Promise.all(queries.map(q =>
+      studentApi.getAnnouncements(q.params)
+        .then(r => ({ key: q.key, total: r.data.data?.totalElements || 0 }))
+        .catch(() => ({ key: q.key, total: 0 }))
+    ))
+      .then(results => {
+        const map = {}
+        results.forEach(r => { map[r.key] = r.total })
+        setCounts(map)
+      })
+  }, [countTick])
+
+  const bumpCounts = () => setCountTick(t => t + 1)
+
+  // Calendar dots need the full dataset (server-side, capped at the 1000 limit) —
+  // fetched lazily the first time the calendar view is opened.
+  useEffect(() => {
+    if (view !== 'calendar' || calendarAnnouncements !== null) return
+    studentApi.getAnnouncements({ limit: 1000 })
+      .then(r => setCalendarAnnouncements(r.data.data?.items || []))
+      .catch(() => {})
+  }, [view, calendarAnnouncements])
+
+  const tabs = FILTERS.map(key => ({
+    key,
+    label: key === 'Unread' ? 'Unread' : key.charAt(0) + key.slice(1).toLowerCase(),
+    count: counts[key] || 0,
+    color: key === 'All' ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+      : key === 'Unread' ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+        : key === 'URGENT' ? 'border-red-600 text-red-600 dark:text-red-400'
+          : key === 'PLACEMENT' ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
+            : key === 'EXAM' ? 'border-amber-600 text-amber-600 dark:text-amber-400'
+              : key === 'HOLIDAY' ? 'border-sky-600 text-sky-600 dark:text-sky-400'
+                : 'border-indigo-600 text-indigo-600 dark:text-indigo-400',
+  }))
+
+  const serialNoFor = (idx) => (pageSize === 'all' ? 0 : (page - 1) * effectiveLimit) + idx + 1
 
   const handleOpenDetail = (a) => {
     setViewingAnnouncement(a)
     if (!a.viewed) {
-      studentApi.markAnnouncementViewed(a.id).catch(() => {})
+      studentApi.markAnnouncementViewed(a.id)
+        .then(bumpCounts)
+        .catch(() => {})
       setAnnouncements(list => list.map(item => item.id === a.id ? { ...item, viewed: true } : item))
     }
   }
@@ -71,40 +139,6 @@ export default function StudentAnnouncementsPage() {
       toast.success('Acknowledged')
     } catch (err) { toast.error(err.response?.data?.message || err?.message || 'Failed to acknowledge') }
   }
-
-  const tabs = useMemo(() => [
-    { key: 'All', label: 'All', count: announcements.length, color: 'border-purple-600 text-purple-600 dark:text-purple-400' },
-    { key: 'Unread', label: 'Unread', count: announcements.filter(a => !a.viewed).length, color: 'border-purple-600 text-purple-600 dark:text-purple-400' },
-    { key: 'URGENT', label: 'Urgent', count: announcements.filter(a => a.category === 'URGENT').length, color: 'border-red-600 text-red-600 dark:text-red-400' },
-    { key: 'PLACEMENT', label: 'Placement', count: announcements.filter(a => a.category === 'PLACEMENT').length, color: 'border-emerald-600 text-emerald-600 dark:text-emerald-400' },
-    { key: 'EXAM', label: 'Exam', count: announcements.filter(a => a.category === 'EXAM').length, color: 'border-amber-600 text-amber-600 dark:text-amber-400' },
-    { key: 'HOLIDAY', label: 'Holiday', count: announcements.filter(a => a.category === 'HOLIDAY').length, color: 'border-sky-600 text-sky-600 dark:text-sky-400' },
-    { key: 'ATTENDANCE', label: 'Attendance', count: announcements.filter(a => a.category === 'ATTENDANCE').length, color: 'border-indigo-600 text-indigo-600 dark:text-indigo-400' },
-  ], [announcements])
-
-  const visible = useMemo(() => {
-    let list = [...announcements]
-    if (filter === 'Unread') list = list.filter(a => !a.viewed)
-    else if (filter !== 'All') list = list.filter(a => a.category === filter)
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter(a => a.title.toLowerCase().includes(q) || a.body.toLowerCase().includes(q))
-    }
-    list.sort((a, b) => {
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
-      const diff = new Date(b.createdAt) - new Date(a.createdAt)
-      return sortBy === 'oldest' ? -diff : diff
-    })
-    return list
-  }, [announcements, filter, search, sortBy])
-
-  const totalItems = visible.length
-  const effectivePageSize = pageSize === 'all' ? (totalItems || 1) : Number(pageSize)
-  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize === 'all' ? (totalItems || 1) : effectivePageSize)))
-  const validPage = Math.min(page, totalPages)
-  const startIdx = pageSize === 'all' ? 0 : (validPage - 1) * effectivePageSize
-  const endIdx = pageSize === 'all' ? totalItems : Math.min(startIdx + effectivePageSize, totalItems)
-  const paginatedVisible = visible.slice(startIdx, endIdx)
 
   return (
     <div className="page-wrapper max-w-7xl mx-auto space-y-5">
@@ -132,7 +166,7 @@ export default function StudentAnnouncementsPage() {
       </div>
 
       {view === 'calendar' ? (
-        <StudentCalendarView announcements={announcements} onViewDetail={handleOpenDetail} />
+        <StudentCalendarView announcements={calendarAnnouncements ?? announcements} onViewDetail={handleOpenDetail} />
       ) : (
         <>
           {/* Clean Navigation Tabs matching Admin Style */}
@@ -189,17 +223,17 @@ export default function StudentAnnouncementsPage() {
           <div className="space-y-3">
             {loading ? (
               [...Array(3)].map((_, i) => <div key={i} className="h-28 glass-card animate-pulse rounded-2xl" />)
-            ) : visible.length === 0 ? (
+            ) : announcements.length === 0 ? (
               <div className="glass-card p-10 sm:p-14 text-center rounded-2xl">
                 <Megaphone size={36} className="text-purple-300 dark:text-purple-600 mx-auto mb-3 opacity-60" />
                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">No announcements match this view.</p>
               </div>
             ) : (
-              paginatedVisible.map((a, idx) => (
+              announcements.map((a, idx) => (
                 <AnnouncementCard
                   key={a.id}
                   a={a}
-                  serialNo={startIdx + idx + 1}
+                  serialNo={serialNoFor(idx)}
                   onAcknowledge={acknowledge}
                   onViewDetail={handleOpenDetail}
                   onPreviewAttachment={setPreviewAttachment}
@@ -208,75 +242,17 @@ export default function StudentAnnouncementsPage() {
             )}
           </div>
 
-          {/* Bottom Rows Selector & Pagination (Short Box) */}
-          {totalItems > 0 && (
-            <div className="flex justify-end pt-1">
-              <div className="glass-card px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 inline-flex items-center gap-2.5 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Rows:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => { setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value)); setPage(1); }}
-                    className="text-xs font-semibold px-2 py-0.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value="all">All</option>
-                  </select>
-                </div>
-
-                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
-                  {totalItems === 0 ? '0 of 0' : `${startIdx + 1}–${endIdx} of ${totalItems}`}
-                </span>
-
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-1 ml-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-                    <button
-                      type="button"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={validPage === 1}
-                      className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Prev
-                    </button>
-                    {[...Array(totalPages)].map((_, i) => {
-                      const p = i + 1
-                      if (totalPages > 6 && Math.abs(p - validPage) > 2 && p !== 1 && p !== totalPages) {
-                        if (p === 2 || p === totalPages - 1) {
-                          return <span key={p} className="text-xs text-gray-400 px-0.5">...</span>
-                        }
-                        return null
-                      }
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setPage(p)}
-                          className={`w-6 h-6 text-xs font-bold rounded-lg transition-colors ${
-                            p === validPage
-                              ? 'bg-purple-600 text-white shadow-sm'
-                              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      )
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={validPage === totalPages}
-                      className="px-2 py-0.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-40 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <Pagination
+            total={pagination.totalElements}
+            totalPages={pagination.totalPages}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(v) => { setPageSize(v); setPage(1) }}
+            pageSizeOptions={[5, 10, 20, 50]}
+            showAllOption
+            label="announcements"
+          />
         </>
       )}
 

@@ -166,6 +166,12 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Override
     @Transactional(readOnly = true)
     public List<StudentAssignmentResponse> listForStudent(Long userId) {
+        return listForStudent(userId, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudentAssignmentResponse> listForStudent(Long userId, String status) {
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found"));
 
@@ -213,7 +219,47 @@ public class AssignmentServiceImpl implements AssignmentService {
                     }
                     return toStudentResponse(assignment, submissionsByAssignmentId.get(assignment.getId()), trainerName);
                 })
+                .filter(response -> matchesStudentStatusFilter(response, normalizeStudentStatusFilter(status)))
                 .toList();
+    }
+
+    /**
+     * Normalizes the student UI tab labels to the filter keys used by
+     * {@link #matchesStudentStatusFilter}. Null/blank/ALL (and unknown values, like the
+     * admin quiz-list status filter) mean "no filter".
+     */
+    private static String normalizeStudentStatusFilter(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        String value = status.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+        return switch (value) {
+            case "PENDING", "PENDING_APPROVAL", "SUBMITTED", "GRADED", "OVERDUE", "CLOSED" -> value;
+            default -> null;
+        };
+    }
+
+    /**
+     * Mirrors exactly how the student assignments page derives each tab from a
+     * {@link StudentAssignmentResponse}: submission status string, {@code isOverdue},
+     * and the assignment-level {@code CLOSED} status — so the server filter and the
+     * per-row badge always agree.
+     */
+    private static boolean matchesStudentStatusFilter(StudentAssignmentResponse response, String filter) {
+        if (filter == null) {
+            return true;
+        }
+        String submissionStatus = response.submission() != null ? response.submission().status() : null;
+        boolean isClosed = response.status() == AssignmentStatus.CLOSED;
+        return switch (filter) {
+            case "PENDING" -> (submissionStatus == null || "PENDING".equals(submissionStatus)) && !isClosed;
+            case "PENDING_APPROVAL" -> "PENDING_APPROVAL".equals(submissionStatus);
+            case "SUBMITTED" -> "SUBMITTED".equals(submissionStatus);
+            case "GRADED" -> "GRADED".equals(submissionStatus);
+            case "OVERDUE" -> response.isOverdue() && !isClosed;
+            case "CLOSED" -> isClosed;
+            default -> true;
+        };
     }
 
     private StudentAssignmentResponse toStudentResponse(Assignment assignment, AssignmentSubmission submissionEntity, String trainerName) {

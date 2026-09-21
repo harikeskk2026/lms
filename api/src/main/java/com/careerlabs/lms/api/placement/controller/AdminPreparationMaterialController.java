@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.placement.dto.request.CreatePreparationMaterialReq
 import com.careerlabs.lms.api.placement.dto.request.PreparationQuestionRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdatePreparationMaterialRequest;
 import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialDetailResponse;
+import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialResponse;
 import com.careerlabs.lms.api.placement.service.PreparationMaterialService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -28,8 +29,12 @@ public class AdminPreparationMaterialController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<PreparationMaterialResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(preparationMaterialService.listForAdmin()));
+    public ResponseEntity<ApiResponse<PreparationMaterialPageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(preparationMaterialService.pageForAdmin(search, status, page, limit)));
     }
 
     @GetMapping("/{id}")

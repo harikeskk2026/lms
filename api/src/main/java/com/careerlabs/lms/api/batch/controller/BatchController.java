@@ -3,9 +3,11 @@ package com.careerlabs.lms.api.batch.controller;
 import com.careerlabs.lms.api.batch.dto.request.BatchRequest;
 import com.careerlabs.lms.api.batch.dto.response.BatchResponse;
 import com.careerlabs.lms.api.batch.service.BatchService;
+import com.careerlabs.lms.api.common.dto.response.BulkImportResponse;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -33,8 +36,9 @@ public class BatchController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<BatchResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal,
-                                                                   @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(ApiResponse.of(batchService.list(principal, search)));
+                                                                   @RequestParam(required = false) String search,
+                                                                   @RequestParam(required = false) String mode) {
+        return ResponseEntity.ok(ApiResponse.of(batchService.list(principal, search, mode)));
     }
 
     @GetMapping("/{id}")
@@ -47,6 +51,13 @@ public class BatchController {
     public ResponseEntity<ApiResponse<BatchResponse>> create(@Valid @RequestBody BatchRequest request) {
         BatchResponse response = batchService.create(request);
         return ResponseEntity.status(201).body(ApiResponse.of("Batch created", response));
+    }
+
+    @PostMapping(value = "/bulk-import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<BulkImportResponse<BatchResponse>>> bulkImport(
+            @RequestParam("file") MultipartFile file) {
+        BulkImportResponse<BatchResponse> response = batchService.bulkImportBatches(file);
+        return ResponseEntity.ok(ApiResponse.of("Bulk import completed", response));
     }
 
     @PutMapping("/{id}")

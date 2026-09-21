@@ -29,3 +29,13 @@ logs/
 .idea/
 
 package-lock.json
+
+# Local agent skills, rules & workspace context (do not commit or push)
+.agents/
+_agents/
+GEMINI.md
+AGENTS.md
+**/GEMINI.md
+**/AGENTS.md
+docs/memory/
+

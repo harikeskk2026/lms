@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.placement.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.response.DriveApplicationResponse;
+import com.careerlabs.lms.api.placement.dto.response.StudentDrivePageResponse;
 import com.careerlabs.lms.api.placement.dto.response.StudentDriveResponse;
 import com.careerlabs.lms.api.placement.service.DriveApplicationService;
 import com.careerlabs.lms.api.placement.service.DriveService;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -35,8 +37,13 @@ public class StudentDriveController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<StudentDriveResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(driveService.listForStudent(principal.id())));
+    public ResponseEntity<ApiResponse<StudentDrivePageResponse>> list(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(driveService.pageForStudent(principal.id(), search, status, page, limit)));
     }
 
     @PostMapping("/{id}/interest")

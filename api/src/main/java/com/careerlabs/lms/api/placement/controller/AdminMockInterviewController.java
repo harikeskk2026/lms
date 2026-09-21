@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.placement.dto.request.CreateMockInterviewRequest;
 import com.careerlabs.lms.api.placement.dto.request.MockCandidateFeedbackRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateMockInterviewRequest;
+import com.careerlabs.lms.api.placement.dto.response.MockInterviewPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.MockInterviewResponse;
 import com.careerlabs.lms.api.placement.entity.MockInterview;
 import com.careerlabs.lms.api.placement.repository.MockInterviewRepository;
@@ -12,8 +13,6 @@ import com.careerlabs.lms.api.placement.service.MockInterviewService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/mock-interviews")
@@ -28,8 +27,12 @@ public class AdminMockInterviewController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<MockInterviewResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(mockInterviewService.listAll()));
+    public ResponseEntity<ApiResponse<MockInterviewPageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(mockInterviewService.page(search, status, page, limit)));
     }
 
     @GetMapping("/{id}")

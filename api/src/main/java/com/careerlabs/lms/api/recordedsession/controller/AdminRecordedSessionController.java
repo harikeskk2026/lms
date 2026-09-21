@@ -8,6 +8,7 @@ import com.careerlabs.lms.api.recordedsession.dto.response.BlockedStudentRespons
 import com.careerlabs.lms.api.recordedsession.dto.response.PlaybackSessionAdminResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.ProcessingStatusResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionAnalyticsResponse;
+import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionPageResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionResponse;
 import com.careerlabs.lms.api.recordedsession.service.PlaybackAuthorizationService;
 import com.careerlabs.lms.api.recordedsession.service.RecordedSessionService;
@@ -42,8 +43,12 @@ public class AdminRecordedSessionController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<RecordedSessionResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(recordedSessionService.list()));
+    public ResponseEntity<ApiResponse<RecordedSessionPageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(recordedSessionService.list(search, status, page, limit)));
     }
 
     @GetMapping("/{id}")

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -30,10 +31,11 @@ public class StudentMeetingLinkController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<MeetingLinkResponse>>> getMyMeetings(
-            @AuthenticationPrincipal JwtUserPrincipal principal
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String status
     ) {
         Long currentUserId = principal != null ? principal.id() : null;
-        List<MeetingLinkResponse> list = meetingLinkService.getStudentMeetings(currentUserId);
+        List<MeetingLinkResponse> list = meetingLinkService.getStudentMeetings(currentUserId, status);
         return ResponseEntity.ok(ApiResponse.of(list));
     }
 

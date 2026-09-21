@@ -30,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -62,6 +63,9 @@ class StudentMultiBatchEnrollmentTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private BatchScheduleConflictValidator scheduleConflictValidator;
     private CourseAccessGuard accessGuard;
     private BatchServiceImpl batchService;
@@ -86,7 +90,7 @@ class StudentMultiBatchEnrollmentTest {
         scheduleConflictValidator = new BatchScheduleConflictValidator(enrollmentRepository);
         accessGuard = new CourseAccessGuard(studentRepository, enrollmentRepository, batchRepository, courseRepository);
         batchService = new BatchServiceImpl(batchRepository, courseRepository, studentRepository, assignmentRepository,
-                dailyClassRepository, userRepository, accessGuard, enrollmentRepository);
+                dailyClassRepository, userRepository, accessGuard, enrollmentRepository, transactionManager);
 
         User user = new User();
         setId(user, 10L);

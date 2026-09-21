@@ -11,6 +11,7 @@ import com.careerlabs.lms.api.placement.dto.request.CreateInterviewRoundRequest;
 import com.careerlabs.lms.api.placement.dto.request.ScheduleInterviewRequest;
 import com.careerlabs.lms.api.placement.dto.response.InterviewEvaluationResponse;
 import com.careerlabs.lms.api.placement.dto.response.InterviewRoundResponse;
+import com.careerlabs.lms.api.placement.dto.response.PlacementInterviewPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.PlacementInterviewResponse;
 import com.careerlabs.lms.api.placement.entity.Drive;
 import com.careerlabs.lms.api.placement.entity.DriveApplication;
@@ -31,9 +32,17 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -188,12 +197,85 @@ public class PlacementInterviewServiceImpl implements PlacementInterviewService 
 
     @Override
     @Transactional(readOnly = true)
+    public PlacementInterviewPageResponse pageForDrive(Long driveId, String search, String status, int page, int limit) {
+        requireDrive(driveId);
+        int safePage = Math.max(page, 1) - 1;
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        Page<PlacementInterview> result = interviewRepository.findAll(buildSpecification(driveId, search, status),
+                PageRequest.of(safePage, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<PlacementInterviewResponse> items = result.getContent().stream()
+                .map(PlacementInterviewResponse::from)
+                .toList();
+        return new PlacementInterviewPageResponse(items, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber() + 1);
+    }
+
+    private Specification<PlacementInterview> buildSpecification(Long driveId, String search, String status) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("drive").get("id"), driveId));
+            if (status != null && !status.isBlank()) {
+                try {
+                    predicates.add(cb.equal(root.get("status"), InterviewStatus.valueOf(status.trim().toUpperCase())));
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException("Invalid interview status: " + status.trim()
+                            + ". Valid values: SCHEDULED, RESCHEDULED, COMPLETED, CANCELLED, ABSENT");
+                }
+            }
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                Join<PlacementInterview, Student> student = root.join("student", JoinType.LEFT);
+                Join<Student, User> user = student.join("user", JoinType.LEFT);
+                Join<PlacementInterview, InterviewRound> round = root.join("round", JoinType.LEFT);
+                predicates.add(cb.or(
+                        cb.like(cb.lower(user.get("name")), like),
+                        cb.like(cb.lower(user.get("email")), like),
+                        cb.like(cb.lower(round.get("name")), like)));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<PlacementInterviewResponse> listForStudent(Long studentUserId) {
         Student student = studentRepository.findByUserId(studentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
         return interviewRepository.findByStudent_IdOrderByScheduledAtDesc(student.getId()).stream()
                 .map(PlacementInterviewResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PlacementInterviewPageResponse pageForStudent(Long studentUserId, String search, int page, int limit) {
+        Student student = studentRepository.findByUserId(studentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
+        String q = search == null ? "" : search.trim().toLowerCase();
+        List<PlacementInterview> filtered = interviewRepository.findByStudent_IdOrderByScheduledAtDesc(student.getId()).stream()
+                .filter(iv -> {
+                    if (q.isEmpty()) {
+                        return true;
+                    }
+                    String round = iv.getRound() != null && iv.getRound().getName() != null
+                            ? iv.getRound().getName().toLowerCase() : "";
+                    String company = iv.getDrive() != null && iv.getDrive().getCompanyName() != null
+                            ? iv.getDrive().getCompanyName().toLowerCase() : "";
+                    String role = iv.getDrive() != null && iv.getDrive().getRole() != null
+                            ? iv.getDrive().getRole().toLowerCase() : "";
+                    return (round + " " + company + " " + role).contains(q);
+                })
+                .toList();
+        int safePage = Math.max(page, 1);
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        long total = filtered.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / safeLimit);
+        int from = Math.min((safePage - 1) * safeLimit, filtered.size());
+        int to = Math.min(from + safeLimit, filtered.size());
+        List<PlacementInterviewResponse> items = filtered.subList(from, to).stream()
+                .map(PlacementInterviewResponse::from)
+                .toList();
+        return new PlacementInterviewPageResponse(items, total, totalPages, safePage);
     }
 
     @Override

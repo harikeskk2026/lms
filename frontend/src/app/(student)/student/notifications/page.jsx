@@ -1,13 +1,19 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns'
-import { Bell, Check } from 'lucide-react'
-import { useNotifications } from '@/hooks/useStudentDashboard'
-import { studentApi } from '@/lib/api'
+import { Check } from 'lucide-react'
+import api, { studentApi } from '@/lib/api'
 import toast from 'react-hot-toast'
 import SkeletonCard from '@/components/student/SkeletonCard'
 
 const FILTERS = ['All', 'Unread', 'Assignments', 'Quizzes', 'Placement', 'Announcements']
+
+const FILTER_CATEGORY = {
+  Assignments: 'ASSIGNMENTS',
+  Quizzes: 'QUIZZES',
+  Placement: 'PLACEMENT',
+  Announcements: 'ANNOUNCEMENTS',
+}
 
 const TYPE_STYLE = {
   INFO:    { bg: 'bg-brand-100', text: 'text-brand-700', dot: 'bg-brand-600' },
@@ -32,24 +38,39 @@ function groupByDate(notifs) {
   return groups
 }
 
-function filterByCategory(notifs, filter) {
-  if (filter === 'All')         return notifs
-  if (filter === 'Unread')      return notifs.filter(n => !n.isRead)
-  if (filter === 'Assignments') return notifs.filter(n => n.title.toLowerCase().includes('assignment'))
-  if (filter === 'Quizzes')     return notifs.filter(n => n.title.toLowerCase().includes('quiz'))
-  if (filter === 'Placement')   return notifs.filter(n => n.title.toLowerCase().includes('placement') || n.title.toLowerCase().includes('interview') || n.title.toLowerCase().includes('mock'))
-  if (filter === 'Announcements') return notifs.filter(n => n.title.toLowerCase().includes('announcement') || n.title.toLowerCase().includes('batch') || n.title.toLowerCase().includes('class'))
-  return notifs
-}
-
 export default function NotificationsPage() {
-  const { data, loading, error, refetch } = useNotifications()
   const [filter, setFilter] = useState('All')
+  const [notifs, setNotifs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const loadUnreadCount = useCallback(() => {
+    api.get('/student/notifications/unread-count')
+      .then(res => setUnreadCount(res.data?.data ?? 0))
+      .catch(() => {})
+  }, [])
+
+  const loadNotifications = useCallback((f) => {
+    setLoading(true)
+    const params = {}
+    if (f === 'Unread') params.unreadOnly = true
+    if (FILTER_CATEGORY[f]) params.category = FILTER_CATEGORY[f]
+    studentApi.getNotifications(params)
+      .then(res => setNotifs(res.data?.data || []))
+      .catch(() => toast.error('Failed to load notifications'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    loadNotifications(filter)
+    loadUnreadCount()
+  }, [loadNotifications, loadUnreadCount])
 
   const markRead = async (id) => {
     try {
       await studentApi.markRead(id)
-      refetch()
+      loadNotifications(filter)
+      loadUnreadCount()
     } catch {}
   }
 
@@ -57,16 +78,14 @@ export default function NotificationsPage() {
     try {
       await studentApi.markAllRead()
       toast.success('All notifications marked as read')
-      refetch()
+      loadNotifications(filter)
+      loadUnreadCount()
     } catch {
       toast.error('Failed to mark all as read')
     }
   }
 
-  const all        = data || []
-  const unreadCount = all.filter(n => !n.isRead).length
-  const filtered   = filterByCategory(all, filter)
-  const grouped    = groupByDate(filtered)
+  const grouped = groupByDate(notifs)
 
   return (
     <div className="page-wrapper">
@@ -87,7 +106,7 @@ export default function NotificationsPage() {
       {/* Filter chips */}
       <div className="flex gap-1.5 flex-wrap">
         {FILTERS.map(f => (
-          <button key={f} onClick={() => setFilter(f)}
+          <button key={f} onClick={() => { setFilter(f); loadNotifications(f) }}
             className={`chip cursor-pointer text-xs px-3 py-1.5 transition-all ${
               filter === f ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-purple-100 dark:border-purple-800 hover:bg-brand-50 dark:hover:bg-brand-900/20'
             }`}>
@@ -98,7 +117,7 @@ export default function NotificationsPage() {
 
       {loading ? (
         <div className="space-y-3">{[0,1,2].map(i => <SkeletonCard key={i} lines={2} />)}</div>
-      ) : filtered.length === 0 ? (
+      ) : notifs.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-4xl mb-3">🎉</div>
           <h3 className="font-display font-bold text-gray-700 dark:text-gray-200 mb-1">You're all caught up!</h3>

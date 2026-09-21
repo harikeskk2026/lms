@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { Plus, Upload, Eye, BarChart3, Trash2, Archive, CheckCircle, Shield, Ban } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Plus, Upload, Eye, BarChart3, Trash2, Archive, CheckCircle, Shield, Ban, Video, ArrowLeft, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import recordedSessionService from '@/services/recordedSessionService'
 import courseService from '@/services/courseService'
@@ -10,6 +10,8 @@ import DateTimePicker from '@/components/ui/DateTimePicker'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import { useConfirmModal } from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
+import SearchInput from '@/components/ui/SearchInput'
+import useDebouncedValue from '@/hooks/useDebouncedValue'
 import Pagination from '@/components/ui/Pagination'
 
 const STATUS_STYLES = {
@@ -53,8 +55,14 @@ export default function RecordedSessionsPage() {
   const [securityLoading, setSecurityLoading] = useState(false)
   const [deletingSession, setDeletingSession] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [searchInput, setSearchInput] = useState('')
+  const search = useDebouncedValue(searchInput, 400)
+  const [statusFilter, setStatusFilter] = useState('')
+  const abortRef = useRef(null)
 
   const isValidUrl = (url) => {
     if (!url || !url.trim()) return true
@@ -97,40 +105,70 @@ export default function RecordedSessionsPage() {
     form.availableFrom || form.availableUntil
   )
 
-  const load = () => {
+  const fetchSessions = useCallback(async () => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
-    Promise.all([
-      recordedSessionService.listSessions(),
-      courseService.list(),
-      batchService.list(),
-    ]).then(([sRes, cRes, bRes]) => {
-      setSessions(sRes.data || [])
-      setCourses(cRes.data || [])
-      setBatches(bRes.data || [])
-    }).catch(err => {
-      toast.error(err.message || 'Failed to load data')
-    }).finally(() => setLoading(false))
-  }
+    try {
+      const res = await recordedSessionService.listSessions(
+        { search: search.trim() || undefined, status: statusFilter || undefined, page, limit: pageSize },
+        { signal: controller.signal }
+      )
+      const data = res.data || {}
+      setSessions(data.sessions || [])
+      setTotal(data.totalElements ?? 0)
+      setTotalPages(data.totalPages ?? 1)
+      if (data.totalPages && page > data.totalPages) {
+        setPage(Math.max(1, data.totalPages))
+      }
+    } catch (err) {
+      if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError') return
+      toast.error(err.message || 'Failed to load recorded sessions')
+    } finally {
+      if (abortRef.current === controller) setLoading(false)
+    }
+  }, [search, statusFilter, page, pageSize])
 
   useEffect(() => {
-    load()
+    fetchSessions()
+  }, [fetchSessions])
+
+  useEffect(() => {
+    Promise.all([
+      courseService.list(),
+      batchService.list(),
+    ]).then(([cRes, bRes]) => {
+      setCourses(cRes.data || [])
+      setBatches(bRes.data || [])
+    }).catch(() => {})
   }, [])
 
   // Poll processing status for any session stuck in PROCESSING. Runs silently
-  // (no toast per tick) and stops on the first failure instead of retrying
-  // every 5s forever - a stale token would otherwise toast "authorization
-  // error" repeatedly until the tab is closed.
+  // (no toast per tick), re-polls only the current page + active filters, and
+  // stops on the first failure or when nothing on the current page is still
+  // PROCESSING - a stale token would otherwise toast "authorization error"
+  // repeatedly until the tab is closed.
   useEffect(() => {
     const processing = sessions.filter(s => s.status === 'PROCESSING')
     if (processing.length === 0) return
+    let active = true
     const timer = setInterval(async () => {
-      const ok = await recordedSessionService.listSessions()
-        .then(r => { setSessions(r.data || []); return true })
-        .catch(() => false)
-      if (!ok) clearInterval(timer)
+      try {
+        const res = await recordedSessionService.listSessions(
+          { search: search.trim() || undefined, status: statusFilter || undefined, page, limit: pageSize }
+        )
+        if (!active) return
+        const data = res.data || {}
+        setSessions(data.sessions || [])
+        setTotal(data.totalElements ?? 0)
+        setTotalPages(data.totalPages ?? 1)
+      } catch {
+        if (active) clearInterval(timer)
+      }
     }, 5000)
-    return () => clearInterval(timer)
-  }, [sessions])
+    return () => { active = false; clearInterval(timer) }
+  }, [sessions, search, statusFilter, page, pageSize])
 
   const openCreate = () => {
     setForm(EMPTY_FORM)
@@ -163,7 +201,7 @@ export default function RecordedSessionsPage() {
         toast.success('Session created — upload a video next')
       }
       setPanelOpen(false)
-      load()
+      fetchSessions()
     } catch (err) {
       toast.error(err.message || 'Failed to save session')
     } finally {
@@ -178,7 +216,7 @@ export default function RecordedSessionsPage() {
       await recordedSessionService.deleteSession(deletingSession.id)
       toast.success('Session deleted')
       setDeletingSession(null)
-      load()
+      fetchSessions()
     } catch (err) {
       toast.error(err.message || 'Failed to delete')
     } finally {
@@ -190,7 +228,7 @@ export default function RecordedSessionsPage() {
     try {
       await recordedSessionService.publishSession(session.id)
       toast.success('Session published')
-      load()
+      fetchSessions()
     } catch (err) { toast.error(err.message || 'Failed to publish') }
   }
 
@@ -198,13 +236,9 @@ export default function RecordedSessionsPage() {
     try {
       await recordedSessionService.archiveSession(session.id)
       toast.success('Session archived')
-      load()
+      fetchSessions()
     } catch (err) { toast.error(err.message || 'Failed to archive') }
   }
-
-  const validPage = Math.min(page, Math.max(1, Math.ceil(sessions.length / pageSize)))
-  const pageStart = (validPage - 1) * pageSize
-  const pagedSessions = sessions.slice(pageStart, pageStart + pageSize)
 
   const MAX_FILE_SIZE_BYTES = 400 * 1024 * 1024 // 400MB
 
@@ -223,7 +257,7 @@ export default function RecordedSessionsPage() {
       toast.success('Upload complete — processing in the background')
       setUploadTarget(null)
       setUploadFile(null)
-      load()
+      fetchSessions()
     } catch (err) {
       toast.error(err.message || 'Upload failed')
     } finally {
@@ -309,6 +343,223 @@ export default function RecordedSessionsPage() {
     } catch (err) { toast.error(err.message || 'Failed to unblock student') }
   }
 
+  if (panelOpen) {
+    return (
+      <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
+              <Video className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                {editingId ? 'Edit Session' : 'Create New Session'}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {editingId ? 'Update session details, availability windows, and cohort mapping.' : 'Record and configure a lecture or webinar recording for student access.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPanelOpen(false)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition shadow-xs self-start sm:self-auto"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Sessions
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Section 1: Session Details */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">1</div>
+              <span>Session Details</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                value={form.title}
+                onBlur={() => setTouched(t => ({ ...t, title: true }))}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="e.g. Advanced Spring Boot Security Deep Dive"
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none transition-colors focus:ring-2 ${
+                  touched.title && getSessionFieldError('title', form.title)
+                    ? 'border-red-500 focus:ring-red-400'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+              />
+              {touched.title && getSessionFieldError('title', form.title) && (
+                <p className="text-xs text-red-500 mt-1">{getSessionFieldError('title', form.title)}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
+              <textarea
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                rows={3}
+                placeholder="Key concepts discussed, timestamps, and prerequisite requirements..."
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 resize-none transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Section 2: Course & Batch Mapping */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">2</div>
+              <span>Course &amp; Cohort Mapping</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Course <span className="text-red-500">*</span>
+                </label>
+                <CustomSelect
+                  value={form.courseId}
+                  onChange={(val) => {
+                    setForm(f => ({ ...f, courseId: val }))
+                    setTouched(t => ({ ...t, courseId: true }))
+                  }}
+                  options={courses.map(c => ({ value: c.id, label: c.title }))}
+                  placeholder="Select course"
+                  searchable={courses.length >= 10}
+                />
+                {touched.courseId && !form.courseId && (
+                  <p className="text-xs text-red-500 mt-1">Course is required</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Batch (optional)</label>
+                <CustomSelect
+                  value={form.batchId}
+                  onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
+                  options={batches.filter(b => !form.courseId || String(b.course?.id) === String(form.courseId)).map(b => ({
+                    value: b.id,
+                    label: b.name
+                  }))}
+                  placeholder="All batches"
+                  searchable={batches.length >= 10}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Instructor</label>
+              <input
+                value={form.instructorName}
+                onChange={e => setForm(f => ({ ...f, instructorName: e.target.value }))}
+                placeholder="e.g. John Doe"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Section 3: Schedule & Availability */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">3</div>
+              <span>Schedule &amp; Availability</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Session Date</label>
+                <input
+                  type="date"
+                  value={form.sessionDate}
+                  onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Thumbnail URL</label>
+                <input
+                  value={form.thumbnailUrl}
+                  onBlur={() => setTouched(t => ({ ...t, thumbnailUrl: true }))}
+                  onChange={e => setForm(f => ({ ...f, thumbnailUrl: e.target.value }))}
+                  placeholder="https://..."
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white outline-none transition-colors focus:ring-2 ${
+                    touched.thumbnailUrl && getSessionFieldError('thumbnailUrl', form.thumbnailUrl)
+                      ? 'border-red-500 focus:ring-red-400'
+                      : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
+                />
+                {touched.thumbnailUrl && getSessionFieldError('thumbnailUrl', form.thumbnailUrl) && (
+                  <p className="text-xs text-red-500 mt-1">{getSessionFieldError('thumbnailUrl', form.thumbnailUrl)}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Available From</label>
+                <DateTimePicker
+                  value={form.availableFrom}
+                  onChange={val => setForm(f => ({ ...f, availableFrom: val }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Available Until</label>
+                <DateTimePicker
+                  value={form.availableUntil}
+                  onChange={val => setForm(f => ({ ...f, availableUntil: val }))}
+                />
+                {form.availableFrom && form.availableUntil && new Date(form.availableFrom) >= new Date(form.availableUntil) && (
+                  <p className="text-xs text-red-500 mt-1">Available until must be after available from</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Tags (comma-separated)</label>
+              <input
+                value={form.tags}
+                onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
+                placeholder="e.g. spring-boot, security, rest-api"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !isSessionValid}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs sm:text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {editingId ? 'Saving Changes...' : 'Creating Session...'}
+                </>
+              ) : (
+                editingId ? 'Save Changes' : 'Create Session'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -320,6 +571,21 @@ export default function RecordedSessionsPage() {
           className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
           <Plus size={16} /> Create Session
         </button>
+      </div>
+
+      <div className="glass-card p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <SearchInput
+          value={searchInput}
+          onChange={(v) => { setSearchInput(v); setPage(1) }}
+          placeholder="Search by title or description..."
+        />
+        <CustomSelect
+          value={statusFilter}
+          onChange={(val) => { setStatusFilter(val); setPage(1) }}
+          options={Object.keys(STATUS_STYLES).map(s => ({ value: s, label: s }))}
+          placeholder="All Statuses"
+          compact
+        />
       </div>
 
       <div className="glass-card overflow-hidden">
@@ -338,7 +604,7 @@ export default function RecordedSessionsPage() {
               <tbody>
                 {sessions.length === 0 ? (
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No recorded sessions yet</td></tr>
-                ) : pagedSessions.map(s => (
+                ) : sessions.map(s => (
                   <tr key={s.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-purple-50/20 dark:hover:bg-purple-900/10">
                     <td className="px-3 py-3 font-semibold text-gray-800 dark:text-white break-words">{s.title}</td>
                     <td className="px-3 py-3 text-xs text-gray-500">{s.courseName}</td>
@@ -388,7 +654,8 @@ export default function RecordedSessionsPage() {
         )}
 
         <Pagination
-          data={sessions}
+          total={total}
+          totalPages={totalPages}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
@@ -397,146 +664,7 @@ export default function RecordedSessionsPage() {
         />
       </div>
 
-      {/* Create/Edit panel */}
-      <SlidePanel open={panelOpen} isDirty={isSessionFormDirty} onClose={() => setPanelOpen(false)} title={editingId ? 'Edit Session' : 'Create Session'} width="w-[520px]">
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={form.title}
-              onBlur={() => setTouched(t => ({ ...t, title: true }))}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              placeholder="Enter session title"
-              className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
-                touched.title && getSessionFieldError('title', form.title)
-                  ? 'border-red-500 focus:ring-red-400'
-                  : 'border-gray-200 focus:ring-purple-500'
-              }`}
-            />
-            {touched.title && getSessionFieldError('title', form.title) && (
-              <p className="text-xs text-red-500 mt-1">{getSessionFieldError('title', form.title)}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              rows={2}
-              placeholder="Enter session description"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Course <span className="text-red-500">*</span>
-              </label>
-              <CustomSelect
-                value={form.courseId}
-                onChange={(val) => {
-                  setForm(f => ({ ...f, courseId: val }))
-                  setTouched(t => ({ ...t, courseId: true }))
-                }}
-                options={courses.map(c => ({ value: c.id, label: c.title }))}
-                placeholder="Select course"
-                searchable={courses.length >= 10}
-              />
-              {touched.courseId && !form.courseId && (
-                <p className="text-xs text-red-500 mt-1">Course is required</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Batch (optional)</label>
-              <CustomSelect
-                value={form.batchId}
-                onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
-                options={batches.filter(b => !form.courseId || String(b.course?.id) === String(form.courseId)).map(b => ({
-                  value: b.id,
-                  label: b.name
-                }))}
-                placeholder="All batches"
-                searchable={batches.length >= 10}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Instructor</label>
-            <input
-              value={form.instructorName}
-              onChange={e => setForm(f => ({ ...f, instructorName: e.target.value }))}
-              placeholder="Enter instructor name"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Session Date</label>
-              <input
-                type="date"
-                value={form.sessionDate}
-                onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Thumbnail URL</label>
-              <input
-                value={form.thumbnailUrl}
-                onBlur={() => setTouched(t => ({ ...t, thumbnailUrl: true }))}
-                onChange={e => setForm(f => ({ ...f, thumbnailUrl: e.target.value }))}
-                placeholder="Enter thumbnail image URL"
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
-                  touched.thumbnailUrl && getSessionFieldError('thumbnailUrl', form.thumbnailUrl)
-                    ? 'border-red-500 focus:ring-red-400'
-                    : 'border-gray-200 focus:ring-purple-500'
-                }`}
-              />
-              {touched.thumbnailUrl && getSessionFieldError('thumbnailUrl', form.thumbnailUrl) && (
-                <p className="text-xs text-red-500 mt-1">{getSessionFieldError('thumbnailUrl', form.thumbnailUrl)}</p>
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Tags (comma-separated)</label>
-            <input
-              value={form.tags}
-              onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
-              placeholder="Enter comma-separated tags"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Available From</label>
-              <DateTimePicker
-                value={form.availableFrom}
-                onChange={val => setForm(f => ({ ...f, availableFrom: val }))}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Available Until</label>
-              <DateTimePicker
-                value={form.availableUntil}
-                onChange={val => setForm(f => ({ ...f, availableUntil: val }))}
-              />
-              {form.availableFrom && form.availableUntil && new Date(form.availableFrom) >= new Date(form.availableUntil) && (
-                <p className="text-xs text-red-500 mt-1">Available until must be after available from</p>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !isSessionValid}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Session'}
-          </button>
-        </div>
-      </SlidePanel>
+
 
       {/* Upload panel */}
       <SlidePanel open={!!uploadTarget} onClose={() => { if (!uploading) { setUploadTarget(null); setUploadFile(null) } }} title="Upload Video" width="w-[420px]">

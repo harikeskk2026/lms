@@ -10,6 +10,12 @@ const batchService = {
   update: (id, batch) => apiCall({ method: 'PUT', url: `/batches/${id}`, data: batch }),
 
   remove: (id) => apiCall({ method: 'DELETE', url: `/batches/${id}` }),
+
+  bulkImport: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiCall({ method: 'POST', url: '/batches/bulk-import', data: formData })
+  },
 }
 
 export default batchService

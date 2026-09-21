@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.user.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
+import com.careerlabs.lms.api.common.dto.response.BulkImportResponse;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import com.careerlabs.lms.api.user.dto.request.AdminCreateRequest;
 import com.careerlabs.lms.api.user.dto.request.AdminResetPasswordRequest;
@@ -9,6 +10,7 @@ import com.careerlabs.lms.api.user.dto.response.AdminPageResponse;
 import com.careerlabs.lms.api.user.dto.response.AdminResponse;
 import com.careerlabs.lms.api.user.service.UserAdminService;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -82,5 +85,13 @@ public class AdminManagementController {
             @AuthenticationPrincipal JwtUserPrincipal principal) {
         userAdminService.resetPassword(principal, userId, request.getNewPassword());
         return ResponseEntity.ok(ApiResponse.of("Password reset successfully", null));
+    }
+
+    @PostMapping(value = "/admins/bulk-import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<BulkImportResponse<AdminResponse>>> bulkImportAdmins(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "defaultPassword", required = false) String defaultPassword) {
+        BulkImportResponse<AdminResponse> response = userAdminService.bulkImportAdmins(file, defaultPassword);
+        return ResponseEntity.ok(ApiResponse.of("Bulk import completed", response));
     }
 }

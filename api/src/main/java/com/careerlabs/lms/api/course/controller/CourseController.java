@@ -1,13 +1,19 @@
 package com.careerlabs.lms.api.course.controller;
 
+import com.careerlabs.lms.api.common.dto.response.BulkImportResponse;
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.course.dto.request.CourseRequest;
 import com.careerlabs.lms.api.course.dto.request.CourseStatusRequest;
 import com.careerlabs.lms.api.course.dto.response.CourseResponse;
+import com.careerlabs.lms.api.course.dto.response.CourseStatusCountsResponse;
+import com.careerlabs.lms.api.course.entity.CourseStatus;
 import com.careerlabs.lms.api.course.service.CourseService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -37,8 +44,27 @@ public class CourseController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<CourseResponse>>> list(@AuthenticationPrincipal JwtUserPrincipal principal,
-                                                                     @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(ApiResponse.of(courseService.list(principal, search)));
+                                                                     @RequestParam(required = false) String search,
+                                                                     @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(ApiResponse.of(courseService.list(principal, search, parseStatus(status))));
+    }
+
+    @GetMapping("/status-counts")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<ApiResponse<CourseStatusCountsResponse>> statusCounts() {
+        return ResponseEntity.ok(ApiResponse.of(courseService.statusCounts()));
+    }
+
+    private CourseStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return CourseStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(
+                    "Invalid course status: " + status + ". Allowed values: PUBLISHED, DRAFT, ARCHIVED");
+        }
     }
 
     @GetMapping("/{id}")
@@ -58,6 +84,13 @@ public class CourseController {
     public ResponseEntity<ApiResponse<CourseResponse>> create(@Valid @RequestBody CourseRequest request) {
         CourseResponse response = courseService.create(request);
         return ResponseEntity.status(201).body(ApiResponse.of("Course created", response));
+    }
+
+    @PostMapping(value = "/bulk-import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<BulkImportResponse<CourseResponse>>> bulkImport(
+            @RequestParam("file") MultipartFile file) {
+        BulkImportResponse<CourseResponse> response = courseService.bulkImportCourses(file);
+        return ResponseEntity.ok(ApiResponse.of("Bulk import completed", response));
     }
 
     @PutMapping("/{id}")

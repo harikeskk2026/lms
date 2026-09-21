@@ -12,6 +12,7 @@ import com.careerlabs.lms.api.recordedsession.dto.request.CreateRecordedSessionR
 import com.careerlabs.lms.api.recordedsession.dto.request.UpdateRecordedSessionRequest;
 import com.careerlabs.lms.api.recordedsession.dto.response.ProcessingStatusResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionAnalyticsResponse;
+import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionPageResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.StudentRecordedSessionResponse;
 import com.careerlabs.lms.api.recordedsession.entity.PlaybackSession;
@@ -28,14 +29,23 @@ import com.careerlabs.lms.api.recordedsession.service.VideoStorageService;
 import com.careerlabs.lms.api.recordedsession.service.VideoTranscodingService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -81,10 +91,58 @@ public class RecordedSessionServiceImpl implements RecordedSessionService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<RecordedSessionResponse> list() {
-        return recordedSessionRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toResponse)
-                .toList();
+    public RecordedSessionPageResponse list(String search, String status, int page, int limit) {
+        Pageable pageable = PageRequest.of(Math.max(0, page - 1), limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Specification<RecordedSession> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (search != null && !search.trim().isEmpty()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), pattern),
+                        cb.like(cb.lower(root.get("description")), pattern)
+                ));
+            }
+            if (status != null && !status.trim().isEmpty()) {
+                predicates.add(statusPredicate(status, root, cb));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        Page<RecordedSession> sessionPage = recordedSessionRepository.findAll(spec, pageable);
+        List<RecordedSessionResponse> sessions = sessionPage.getContent().stream().map(this::toResponse).toList();
+        return new RecordedSessionPageResponse(sessions, sessionPage.getTotalElements(), sessionPage.getTotalPages(), sessionPage.getNumber() + 1);
+    }
+
+    /**
+     * Accepts both stored {@link com.careerlabs.lms.api.recordedsession.entity.RecordedSessionStatus}
+     * values (DRAFT, PROCESSING, READY, PUBLISHED, ARCHIVED, FAILED) and derived effective-status
+     * values (SCHEDULED, LIVE, EXPIRED, mirroring the PUBLISHED → SCHEDULED/LIVE/EXPIRED split in
+     * {@link RecordedSessionAvailabilityServiceImpl#effectiveStatus} against
+     * {@code availableFrom}/{@code availableUntil}). Rejects anything else with a 400.
+     */
+    private Predicate statusPredicate(String status, Root<RecordedSession> root, CriteriaBuilder cb) {
+        String value = status.trim().toUpperCase();
+        jakarta.persistence.criteria.Path<RecordedSessionStatus> storedStatus = root.get("status");
+        jakarta.persistence.criteria.Path<LocalDateTime> availableFrom = root.get("availableFrom");
+        jakarta.persistence.criteria.Path<LocalDateTime> availableUntil = root.get("availableUntil");
+        LocalDateTime now = LocalDateTime.now();
+
+        Predicate published = cb.equal(storedStatus, RecordedSessionStatus.PUBLISHED);
+        Predicate scheduled = cb.and(cb.isNotNull(availableFrom), cb.greaterThan(availableFrom, now));
+        Predicate expired = cb.and(cb.isNotNull(availableUntil), cb.lessThan(availableUntil, now));
+
+        return switch (value) {
+            case "DRAFT" -> cb.equal(storedStatus, RecordedSessionStatus.DRAFT);
+            case "PROCESSING" -> cb.equal(storedStatus, RecordedSessionStatus.PROCESSING);
+            case "READY" -> cb.equal(storedStatus, RecordedSessionStatus.READY);
+            case "PUBLISHED" -> published;
+            case "ARCHIVED" -> cb.equal(storedStatus, RecordedSessionStatus.ARCHIVED);
+            case "FAILED" -> cb.equal(storedStatus, RecordedSessionStatus.FAILED);
+            case "SCHEDULED" -> cb.and(published, scheduled);
+            case "LIVE" -> cb.and(published, cb.not(scheduled), cb.not(expired));
+            case "EXPIRED" -> cb.and(published, cb.not(scheduled), expired);
+            default -> throw new BadRequestException(
+                    "Invalid status filter: " + status + ". Expected one of DRAFT, PROCESSING, READY, PUBLISHED, SCHEDULED, LIVE, EXPIRED, ARCHIVED, FAILED");
+        };
     }
 
     @Override

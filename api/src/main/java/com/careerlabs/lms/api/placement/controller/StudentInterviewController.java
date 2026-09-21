@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.placement.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.response.InterviewEvaluationResponse;
 import com.careerlabs.lms.api.placement.dto.response.InterviewRoundResponse;
+import com.careerlabs.lms.api.placement.dto.response.PlacementInterviewPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.PlacementInterviewResponse;
 import com.careerlabs.lms.api.placement.service.PlacementInterviewService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -26,9 +28,12 @@ public class StudentInterviewController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<PlacementInterviewResponse>>> myInterviews(
-            @AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(interviewService.listForStudent(principal.id())));
+    public ResponseEntity<ApiResponse<PlacementInterviewPageResponse>> myInterviews(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(interviewService.pageForStudent(principal.id(), search, page, limit)));
     }
 
     @GetMapping("/evaluations")

@@ -103,9 +103,6 @@ export default function PlacementPage() {
   const [hub, setHub] = useState(null)
   const [analytics, setAnalytics] = useState(null)
   const [mocks, setMocks] = useState([])
-  const [offers, setOffers] = useState([])
-  const [interviews, setInterviews] = useState([])
-  const [prepList, setPrepList] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Dashboard')
 
@@ -142,18 +139,6 @@ export default function PlacementPage() {
     studentApi.getPlacementHub().then(h => setHub(h.data.data)).catch(() => {})
   }
 
-  useEffect(() => {
-    if (tab === 'My Offers') {
-      studentApi.getMyOffers().then(r => setOffers(r.data.data || [])).catch(() => {})
-    }
-    if (tab === 'Interviews') {
-      studentApi.getMyInterviews().then(r => setInterviews(r.data.data || [])).catch(() => {})
-    }
-    if (tab === 'Prep Materials') {
-      studentApi.getPreparationMaterials().then(r => setPrepList(r.data.data || [])).catch(() => toast.error('Failed to load preparation materials'))
-    }
-  }, [tab])
-
   if (loading) return <LoadingState />
 
   return (
@@ -187,9 +172,9 @@ export default function PlacementPage() {
         {tab === 'Dashboard' && <DashboardTab hub={hub} analytics={analytics} mocks={mocks} />}
         {tab === 'Resume Builder' && <ResumeBuilderTab hub={hub} refreshHub={refreshHub} />}
         {tab === 'Company Drives' && <CompanyDrivesTab />}
-        {tab === 'Prep Materials' && <PrepMaterialsTab list={prepList} reload={() => studentApi.getPreparationMaterials().then(r => setPrepList(r.data.data || []))} />}
-        {tab === 'My Offers' && <MyOffersTab offers={offers} reload={() => studentApi.getMyOffers().then(r => setOffers(r.data.data || [])).catch(err => toast.error('Failed to load offers'))} setOffers={setOffers} />}
-        {tab === 'Interviews' && <InterviewsTab interviews={interviews} reload={() => studentApi.getMyInterviews().then(r => setInterviews(r.data.data || [])).catch(err => toast.error('Failed to load interviews'))} />}
+        {tab === 'Prep Materials' && <PrepMaterialsTab />}
+        {tab === 'My Offers' && <MyOffersTab />}
+        {tab === 'Interviews' && <InterviewsTab />}
         {tab === 'Interview Prep' && <InterviewPrepTab hub={hub} />}
       </div>
     </div>
@@ -797,9 +782,12 @@ function ArraySection({ items, onAdd, onRemove, renderItem }) {
 // ─── COMPANY DRIVES TAB ───────────────────────────────────────────────────────
 function CompanyDrivesTab() {
   const [drives, setDrives] = useState([])
+  const [totalDrives, setTotalDrives] = useState(0)
+  const [totalDrivePages, setTotalDrivePages] = useState(0)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [drivePage, setDrivePage] = useState(1)
   const [drivePageSize, setDrivePageSize] = useState(6)
   const [expanded, setExpanded] = useState(null)
@@ -808,14 +796,28 @@ function CompanyDrivesTab() {
   const [ask, confirmModal] = useConfirmModal()
 
   useEffect(() => {
-    studentApi.getDrives().then(r => setDrives(r.data.data || [])).catch(() => toast.error('Failed to load drives')).finally(() => setLoading(false))
-  }, [])
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
 
-  const filtered = drives.filter(d => {
-    const matchFilter = filter === 'All' || (filter === 'Interested' ? !!d.applicationStatus : filter === 'Open' ? isOpenDrive(d) : !isOpenDrive(d))
-    const matchSearch = !search || d.companyName.toLowerCase().includes(search.toLowerCase()) || d.role.toLowerCase().includes(search.toLowerCase())
-    return matchFilter && matchSearch
-  })
+  useEffect(() => {
+    setLoading(true)
+    studentApi.getDrives({ search: debouncedSearch || undefined, status: filter, page: drivePage, limit: drivePageSize })
+      .then(r => {
+        const d = r.data.data
+        if (Array.isArray(d)) {
+          setDrives(d)
+          setTotalDrives(d.length)
+          setTotalDrivePages(Math.max(d.length > 0 ? 1 : 0, Math.ceil(d.length / drivePageSize)))
+        } else {
+          setDrives(d?.items || [])
+          setTotalDrives(d?.totalElements ?? 0)
+          setTotalDrivePages(d?.totalPages ?? 0)
+        }
+      })
+      .catch(() => toast.error('Failed to load drives'))
+      .finally(() => setLoading(false))
+  }, [debouncedSearch, filter, drivePage, drivePageSize])
 
   const handleExpressInterest = async (drive) => {
     setApplying(drive.id)
@@ -867,9 +869,6 @@ function CompanyDrivesTab() {
 
   const anyProfileIncomplete = drives.some(d => d.profileIncomplete)
 
-  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
-  const drivePageEff = clampPage(filtered, drivePage, drivePageSize)
-
   return (
     <div className="space-y-5">
       {/* Profile-completion nudge — eligibility can't be fully checked without it */}
@@ -887,11 +886,11 @@ function CompanyDrivesTab() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search company or role..."
+        <input value={search} onChange={e => { setSearch(e.target.value); setDrivePage(1) }} placeholder="Search company or role..."
           className="flex-1 text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500" />
         <div className="flex gap-2">
           {['All', 'Open', 'Closed', 'Interested'].map(f => (
-            <button key={f} onClick={() => setFilter(f)}
+            <button key={f} onClick={() => { setFilter(f); setDrivePage(1) }}
               className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                 filter === f ? 'bg-purple-600 text-white shadow' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
               }`}>
@@ -906,7 +905,7 @@ function CompanyDrivesTab() {
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : drives.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <Briefcase size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
           <p className="text-sm font-medium">No drives available</p>
@@ -914,7 +913,7 @@ function CompanyDrivesTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filtered.slice((drivePageEff - 1) * drivePageSize, drivePageEff * drivePageSize).map(drive => (
+          {drives.map(drive => (
             <div key={drive.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm hover:shadow-lg transition-all overflow-hidden">
               {/* Card header */}
               <div className="p-4">
@@ -1022,7 +1021,8 @@ function CompanyDrivesTab() {
         </div>
       )}
       <Pagination
-        data={filtered}
+        total={totalDrives}
+        totalPages={totalDrivePages}
         page={drivePage}
         pageSize={drivePageSize}
         onPageChange={setDrivePage}
@@ -1043,12 +1043,43 @@ const OFFER_STATUS_STYLES = {
   WITHDRAWN: 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400',
 }
 
-function MyOffersTab({ offers, reload, setOffers }) {
+function MyOffersTab() {
+  const [offers, setOffers] = useState([])
+  const [totalOffers, setTotalOffers] = useState(0)
+  const [totalOfferPages, setTotalOfferPages] = useState(0)
+  const [loadingOffers, setLoadingOffers] = useState(true)
   const [acting, setActing] = useState(null)
   const [offerSearch, setOfferSearch] = useState('')
+  const [debouncedOfferSearch, setDebouncedOfferSearch] = useState('')
   const [offerPage, setOfferPage] = useState(1)
   const [offerPageSize, setOfferPageSize] = useState(5)
   const [ask, confirmModal] = useConfirmModal()
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedOfferSearch(offerSearch), 350)
+    return () => clearTimeout(t)
+  }, [offerSearch])
+
+  const fetchOffers = useCallback(() => {
+    setLoadingOffers(true)
+    studentApi.getMyOffers({ search: debouncedOfferSearch || undefined, page: offerPage, limit: offerPageSize })
+      .then(r => {
+        const d = r.data.data
+        if (Array.isArray(d)) {
+          setOffers(d)
+          setTotalOffers(d.length)
+          setTotalOfferPages(Math.max(d.length > 0 ? 1 : 0, Math.ceil(d.length / offerPageSize)))
+        } else {
+          setOffers(d?.items || [])
+          setTotalOffers(d?.totalElements ?? 0)
+          setTotalOfferPages(d?.totalPages ?? 0)
+        }
+      })
+      .catch(() => toast.error('Failed to load offers'))
+      .finally(() => setLoadingOffers(false))
+  }, [debouncedOfferSearch, offerPage, offerPageSize])
+
+  useEffect(() => { fetchOffers() }, [fetchOffers])
 
   const respond = async (offer, action) => {
     const isAccept = action === 'accept'
@@ -1063,7 +1094,7 @@ function MyOffersTab({ offers, reload, setOffers }) {
     try {
       await (action === 'accept' ? studentApi.acceptOffer(offer.id) : studentApi.rejectOffer(offer.id))
       toast.success(action === 'accept' ? 'Offer accepted — congratulations!' : 'Offer declined')
-      reload()
+      fetchOffers()
     } catch (e) {
       toast.error(e?.response?.data?.message || `Failed to ${action} offer`)
     } finally {
@@ -1071,7 +1102,15 @@ function MyOffersTab({ offers, reload, setOffers }) {
     }
   }
 
-  if (offers.length === 0) {
+  if (loadingOffers) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
+      </div>
+    )
+  }
+
+  if (totalOffers === 0 && !debouncedOfferSearch) {
     return (
       <div className="glass-card p-10 text-center space-y-2">
         <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">No offers yet</p>
@@ -1079,13 +1118,6 @@ function MyOffersTab({ offers, reload, setOffers }) {
       </div>
     )
   }
-
-  const filtered = offers.filter(o =>
-    !offerSearch || `${o.companyName} ${o.role}`.toLowerCase().includes(offerSearch.toLowerCase())
-  )
-
-  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
-  const offerPageEff = clampPage(filtered, offerPage, offerPageSize)
 
   return (
     <div className="space-y-4">
@@ -1096,12 +1128,12 @@ function MyOffersTab({ offers, reload, setOffers }) {
           placeholder="Search company or role..."
           className="w-full sm:max-w-xs"
         />
-        <span className="text-xs text-gray-500 dark:text-gray-400">{offers.length} offer{offers.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{totalOffers} offer{totalOffers !== 1 ? 's' : ''}</span>
       </div>
-      {filtered.length === 0 ? (
+      {offers.length === 0 ? (
         <div className="glass-card p-10 text-center text-gray-400">No offers match your search.</div>
       ) : (
-        filtered.slice((offerPageEff - 1) * offerPageSize, offerPageEff * offerPageSize).map(o => (
+        offers.map(o => (
         <div key={o.id} className="glass-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -1138,7 +1170,8 @@ function MyOffersTab({ offers, reload, setOffers }) {
         ))
       )}
       <Pagination
-        data={filtered}
+        total={totalOffers}
+        totalPages={totalOfferPages}
         page={offerPage}
         pageSize={offerPageSize}
         onPageChange={setOfferPage}
@@ -1151,12 +1184,49 @@ function MyOffersTab({ offers, reload, setOffers }) {
 }
 
 // ─── INTERVIEWS TAB ───────────────────────────────────────────────────────────
-function InterviewsTab({ interviews, reload }) {
+function InterviewsTab() {
+  const [interviews, setInterviews] = useState([])
+  const [totalInterviews, setTotalInterviews] = useState(0)
+  const [totalInterviewPages, setTotalInterviewPages] = useState(0)
+  const [loadingInterviews, setLoadingInterviews] = useState(true)
   const [intSearch, setIntSearch] = useState('')
+  const [debouncedIntSearch, setDebouncedIntSearch] = useState('')
   const [intPage, setIntPage] = useState(1)
   const [intPageSize, setIntPageSize] = useState(6)
 
-  if (interviews.length === 0) {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedIntSearch(intSearch), 350)
+    return () => clearTimeout(t)
+  }, [intSearch])
+
+  useEffect(() => {
+    setLoadingInterviews(true)
+    studentApi.getMyInterviews({ search: debouncedIntSearch || undefined, page: intPage, limit: intPageSize })
+      .then(r => {
+        const d = r.data.data
+        if (Array.isArray(d)) {
+          setInterviews(d)
+          setTotalInterviews(d.length)
+          setTotalInterviewPages(Math.max(d.length > 0 ? 1 : 0, Math.ceil(d.length / intPageSize)))
+        } else {
+          setInterviews(d?.items || [])
+          setTotalInterviews(d?.totalElements ?? 0)
+          setTotalInterviewPages(d?.totalPages ?? 0)
+        }
+      })
+      .catch(() => toast.error('Failed to load interviews'))
+      .finally(() => setLoadingInterviews(false))
+  }, [debouncedIntSearch, intPage, intPageSize])
+
+  if (loadingInterviews) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
+      </div>
+    )
+  }
+
+  if (totalInterviews === 0 && !debouncedIntSearch) {
     return (
       <div className="glass-card p-10 text-center space-y-2">
         <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">No interviews scheduled</p>
@@ -1164,13 +1234,6 @@ function InterviewsTab({ interviews, reload }) {
       </div>
     )
   }
-
-  const filtered = interviews.filter(iv =>
-    !intSearch || `${iv.roundName} ${iv.companyName || ''} ${iv.driveRole || ''}`.toLowerCase().includes(intSearch.toLowerCase())
-  )
-
-  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
-  const intPageEff = clampPage(filtered, intPage, intPageSize)
 
   return (
     <div className="space-y-4">
@@ -1181,13 +1244,13 @@ function InterviewsTab({ interviews, reload }) {
           placeholder="Search round or company..."
           className="w-full sm:max-w-xs"
         />
-        <span className="text-xs text-gray-500 dark:text-gray-400">{interviews.length} interview{interviews.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{totalInterviews} interview{totalInterviews !== 1 ? 's' : ''}</span>
       </div>
-      {filtered.length === 0 ? (
+      {interviews.length === 0 ? (
         <div className="glass-card p-10 text-center text-gray-400">No interviews match your search.</div>
       ) : (
         <div className="space-y-3">
-          {filtered.slice((intPageEff - 1) * intPageSize, intPageEff * intPageSize).map(iv => (
+          {interviews.map(iv => (
             <div key={iv.id} className="glass-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1220,7 +1283,8 @@ function InterviewsTab({ interviews, reload }) {
         </div>
       )}
       <Pagination
-        data={filtered}
+        total={totalInterviews}
+        totalPages={totalInterviewPages}
         page={intPage}
         pageSize={intPageSize}
         onPageChange={setIntPage}
@@ -1233,14 +1297,43 @@ function InterviewsTab({ interviews, reload }) {
 
 // ─── INTERVIEW PREP TAB ───────────────────────────────────────────────────────
 // ─── PREP MATERIALS TAB ───────────────────────────────────────────────────────
-function PrepMaterialsTab({ list, reload }) {
+function PrepMaterialsTab() {
+  const [list, setList] = useState([])
+  const [totalPrep, setTotalPrep] = useState(0)
+  const [totalPrepPages, setTotalPrepPages] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [downloading, setDownloading] = useState(null)
   const [openQ, setOpenQ] = useState(null)
   const [prepSearch, setPrepSearch] = useState('')
+  const [debouncedPrepSearch, setDebouncedPrepSearch] = useState('')
   const [prepPage, setPrepPage] = useState(1)
   const [prepPageSize, setPrepPageSize] = useState(6)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPrepSearch(prepSearch), 350)
+    return () => clearTimeout(t)
+  }, [prepSearch])
+
+  useEffect(() => {
+    setLoading(true)
+    studentApi.getPreparationMaterials({ search: debouncedPrepSearch || undefined, page: prepPage, limit: prepPageSize })
+      .then(r => {
+        const d = r.data.data
+        if (Array.isArray(d)) {
+          setList(d)
+          setTotalPrep(d.length)
+          setTotalPrepPages(Math.max(d.length > 0 ? 1 : 0, Math.ceil(d.length / prepPageSize)))
+        } else {
+          setList(d?.items || [])
+          setTotalPrep(d?.totalElements ?? 0)
+          setTotalPrepPages(d?.totalPages ?? 0)
+        }
+      })
+      .catch(() => toast.error('Failed to load preparation materials'))
+      .finally(() => setLoading(false))
+  }, [debouncedPrepSearch, prepPage, prepPageSize])
 
   const openDetail = async (id) => {
     setLoadingDetail(true)
@@ -1345,13 +1438,6 @@ function PrepMaterialsTab({ list, reload }) {
     )
   }
 
-  const filteredPrep = list.filter(p =>
-    !prepSearch || `${p.title} ${p.interviewType || ''} ${p.course?.title || ''}`.toLowerCase().includes(prepSearch.toLowerCase())
-  )
-
-  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
-  const prepPageEff = clampPage(filteredPrep, prepPage, prepPageSize)
-
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -1361,21 +1447,25 @@ function PrepMaterialsTab({ list, reload }) {
           placeholder="Search materials..."
           className="w-full sm:max-w-xs"
         />
-        <span className="text-xs text-gray-500 dark:text-gray-400">{list.length} material{list.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{totalPrep} material{totalPrep !== 1 ? 's' : ''}</span>
       </div>
-      {loadingDetail ? (
+      {loading ? (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => <div key={i} className="h-44 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
+        </div>
+      ) : loadingDetail ? (
         <div className="py-16 text-center text-gray-400">Loading...</div>
-      ) : filteredPrep.length === 0 ? (
+      ) : list.length === 0 ? (
         <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-12 text-center text-gray-400">
           <BookOpen size={32} className="mx-auto mb-3 text-purple-200" />
-          {list.length === 0
+          {totalPrep === 0 && !debouncedPrepSearch
             ? <p className="text-sm">No preparation materials available for you yet.</p>
             : <p className="text-sm">No materials match your search.</p>}
         </div>
       ) : (
         <>
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredPrep.slice((prepPageEff - 1) * prepPageSize, prepPageEff * prepPageSize).map(p => (
+            {list.map(p => (
             <div key={p.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-xl p-5 space-y-3 flex flex-col">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -1397,7 +1487,8 @@ function PrepMaterialsTab({ list, reload }) {
           ))}
           </div>
           <Pagination
-            data={filteredPrep}
+            total={totalPrep}
+            totalPages={totalPrepPages}
             page={prepPage}
             pageSize={prepPageSize}
             onPageChange={setPrepPage}
@@ -1415,61 +1506,103 @@ function InterviewPrepTab({ hub }) {
   const [questions, setQuestions] = useState([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [aptTips, setAptTips] = useState([])
-  const [aptLoading, setAptLoading] = useState(false)
+  const [aptTotal, setAptTotal] = useState(0)
+  const [aptTotalPages, setAptTotalPages] = useState(0)
+  const [aptLoading, setAptLoading] = useState(true)
   const [resList, setResList] = useState([])
-  const [resLoading, setResLoading] = useState(false)
+  const [resTotal, setResTotal] = useState(0)
+  const [resTotalPages, setResTotalPages] = useState(0)
+  const [resLoading, setResLoading] = useState(true)
   const [expanded, setExpanded] = useState(null)
 
   const [qSearch, setQSearch] = useState('')
+  const [debouncedQSearch, setDebouncedQSearch] = useState('')
   const [qPage, setQPage] = useState(1)
   const [qPageSize, setQPageSize] = useState(8)
+  const [qTotal, setQTotal] = useState(0)
+  const [qTotalPages, setQTotalPages] = useState(0)
   const [aptSearch, setAptSearch] = useState('')
+  const [debouncedAptSearch, setDebouncedAptSearch] = useState('')
   const [aptPage, setAptPage] = useState(1)
   const [aptPageSize, setAptPageSize] = useState(6)
   const [resSearch, setResSearch] = useState('')
+  const [debouncedResSearch, setDebouncedResSearch] = useState('')
   const [resPage, setResPage] = useState(1)
   const [resPageSize, setResPageSize] = useState(6)
 
   const SUB_TABS = ['Interview Questions', 'Aptitude Tips', 'Resources']
 
-  const filteredQuestions = questions.filter(q =>
-    !qSearch || `${q.question} ${q.answer}`.toLowerCase().includes(qSearch.toLowerCase())
-  )
-  const filteredAptTips = aptTips.filter(t =>
-    !aptSearch || `${t.topic} ${t.formula} ${t.example}`.toLowerCase().includes(aptSearch.toLowerCase())
-  )
-  const filteredResList = resList.filter(r =>
-    !resSearch || `${r.title} ${r.description} ${r.tag}`.toLowerCase().includes(resSearch.toLowerCase())
-  )
-
-  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
-  const qPageEff = clampPage(filteredQuestions, qPage, qPageSize)
-  const aptPageEff = clampPage(filteredAptTips, aptPage, aptPageSize)
-  const resPageEff = clampPage(filteredResList, resPage, resPageSize)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQSearch(qSearch), 350)
+    return () => clearTimeout(t)
+  }, [qSearch])
 
   useEffect(() => {
-    if (subTab === 'Interview Questions' && questions.length === 0) {
-      setQuestionsLoading(true)
-      studentApi.getInterviewPrep({ limit: 50 })
-        .then(r => setQuestions(r.data.data?.questions || []))
-        .catch(() => toast.error('Failed to load questions'))
-        .finally(() => setQuestionsLoading(false))
-    }
-    if (subTab === 'Aptitude Tips' && aptTips.length === 0) {
-      setAptLoading(true)
-      studentApi.getAptitudeTips()
-        .then(r => setAptTips(r.data.data || []))
-        .catch(() => toast.error('Failed to load aptitude tips'))
-        .finally(() => setAptLoading(false))
-    }
-    if (subTab === 'Resources' && resList.length === 0) {
-      setResLoading(true)
-      studentApi.getInterviewResources()
-        .then(r => setResList(r.data.data || []))
-        .catch(() => toast.error('Failed to load resources'))
-        .finally(() => setResLoading(false))
-    }
-  }, [subTab])
+    const t = setTimeout(() => setDebouncedAptSearch(aptSearch), 350)
+    return () => clearTimeout(t)
+  }, [aptSearch])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedResSearch(resSearch), 350)
+    return () => clearTimeout(t)
+  }, [resSearch])
+
+  const fetchAptTips = useCallback(() => {
+    setAptLoading(true)
+    studentApi.getAptitudeTips({ search: debouncedAptSearch || undefined, page: aptPage, limit: aptPageSize })
+      .then(r => {
+        const d = r.data.data
+        if (Array.isArray(d)) {
+          setAptTips(d)
+          setAptTotal(d.length)
+          setAptTotalPages(Math.max(d.length > 0 ? 1 : 0, Math.ceil(d.length / aptPageSize)))
+        } else {
+          setAptTips(d?.items || [])
+          setAptTotal(d?.totalElements ?? 0)
+          setAptTotalPages(d?.totalPages ?? 0)
+        }
+      })
+      .catch(() => toast.error('Failed to load aptitude tips'))
+      .finally(() => setAptLoading(false))
+  }, [debouncedAptSearch, aptPage, aptPageSize])
+
+  const fetchResList = useCallback(() => {
+    setResLoading(true)
+    studentApi.getInterviewResources({ search: debouncedResSearch || undefined, page: resPage, limit: resPageSize })
+      .then(r => {
+        const d = r.data.data
+        if (Array.isArray(d)) {
+          setResList(d)
+          setResTotal(d.length)
+          setResTotalPages(Math.max(d.length > 0 ? 1 : 0, Math.ceil(d.length / resPageSize)))
+        } else {
+          setResList(d?.items || [])
+          setResTotal(d?.totalElements ?? 0)
+          setResTotalPages(d?.totalPages ?? 0)
+        }
+      })
+      .catch(() => toast.error('Failed to load resources'))
+      .finally(() => setResLoading(false))
+  }, [debouncedResSearch, resPage, resPageSize])
+
+  const fetchQuestions = useCallback(() => {
+    setQuestionsLoading(true)
+    studentApi.getInterviewPrep({ search: debouncedQSearch || undefined, page: qPage, limit: qPageSize })
+      .then(r => {
+        const d = r.data.data
+        setQuestions(d?.questions || [])
+        setQTotal(d?.total ?? 0)
+        setQTotalPages(d?.totalPages ?? 0)
+      })
+      .catch(() => toast.error('Failed to load questions'))
+      .finally(() => setQuestionsLoading(false))
+  }, [debouncedQSearch, qPage, qPageSize])
+
+  useEffect(() => {
+    if (subTab === 'Interview Questions') fetchQuestions()
+    if (subTab === 'Aptitude Tips') fetchAptTips()
+    if (subTab === 'Resources') fetchResList()
+  }, [subTab, fetchQuestions, fetchAptTips, fetchResList])
 
   const DIFF_COLORS = {
     EASY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -1504,29 +1637,29 @@ function InterviewPrepTab({ hub }) {
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
             </div>
-          ) : filteredQuestions.length === 0 ? (
+          ) : questions.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <Brain size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
-              <p className="text-sm">{questions.length === 0 ? 'No interview questions available yet' : 'No questions match your search'}</p>
+              <p className="text-sm">{qTotal === 0 ? 'No interview questions available yet' : 'No questions match your search'}</p>
             </div>
           ) : (
             <>
-              {filteredQuestions.slice((qPageEff - 1) * qPageSize, qPageEff * qPageSize).map((q, i) => (
+              {questions.map((q, i) => (
                 <div key={q.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
-                  <button onClick={() => setExpanded(expanded === `q-${qPageEff}-${i}` ? null : `q-${qPageEff}-${i}`)}
+                  <button onClick={() => setExpanded(expanded === `q-${qPage}-${i}` ? null : `q-${qPage}-${i}`)}
                     className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <div className="flex items-center gap-3">
                       <span className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold shrink-0">
-                        {(qPageEff - 1) * qPageSize + i + 1}
+                        {(qPage - 1) * qPageSize + i + 1}
                       </span>
                       <span className="text-sm font-medium text-gray-800 dark:text-white">{q.question}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${DIFF_COLORS[q.difficulty]}`}>{q.difficulty}</span>
-                      {expanded === `q-${qPageEff}-${i}` ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                      {expanded === `q-${qPage}-${i}` ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                     </div>
                   </button>
-                  {expanded === `q-${qPageEff}-${i}` && (
+                  {expanded === `q-${qPage}-${i}` && (
                     <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-gray-800">
                       <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 mt-3">
                         <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 mb-1.5">Answer</p>
@@ -1537,7 +1670,8 @@ function InterviewPrepTab({ hub }) {
                 </div>
               ))}
               <Pagination
-                data={filteredQuestions}
+                total={qTotal}
+                totalPages={qTotalPages}
                 page={qPage}
                 pageSize={qPageSize}
                 onPageChange={setQPage}
@@ -1562,18 +1696,18 @@ function InterviewPrepTab({ hub }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...Array(4)].map((_, i) => <div key={i} className="h-40 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
             </div>
-          ) : filteredAptTips.length === 0 ? (
+          ) : aptTips.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <Brain size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
-              <p className="text-sm">{aptTips.length === 0 ? 'No aptitude tips available yet' : 'No tips match your search'}</p>
+              <p className="text-sm">{aptTotal === 0 && !debouncedAptSearch ? 'No aptitude tips available yet' : 'No tips match your search'}</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredAptTips.slice((aptPageEff - 1) * aptPageSize, aptPageEff * aptPageSize).map((tip, i) => (
+                {aptTips.map((tip, i) => (
                   <div key={tip.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-sm p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-[10px] font-bold">{(aptPageEff - 1) * aptPageSize + i + 1}</div>
+                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white text-[10px] font-bold">{(aptPage - 1) * aptPageSize + i + 1}</div>
                       <h3 className="font-bold text-gray-800 dark:text-white text-sm">{tip.topic}</h3>
                     </div>
                     <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-2.5 mb-2">
@@ -1588,7 +1722,8 @@ function InterviewPrepTab({ hub }) {
                 ))}
               </div>
               <Pagination
-                data={filteredAptTips}
+                total={aptTotal}
+                totalPages={aptTotalPages}
                 page={aptPage}
                 pageSize={aptPageSize}
                 onPageChange={setAptPage}
@@ -1613,15 +1748,15 @@ function InterviewPrepTab({ hub }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}
             </div>
-          ) : filteredResList.length === 0 ? (
+          ) : resList.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <BookOpen size={40} className="mx-auto mb-3 text-gray-200 dark:text-gray-700" />
-              <p className="text-sm">{resList.length === 0 ? 'No resources available yet' : 'No resources match your search'}</p>
+              <p className="text-sm">{resTotal === 0 && !debouncedResSearch ? 'No resources available yet' : 'No resources match your search'}</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredResList.slice((resPageEff - 1) * resPageSize, resPageEff * resPageSize).map(res => {
+                {resList.map(res => {
                   const ResIcon = RESOURCE_ICONS[res.tag] || BookOpen
                   return (
                     <div key={res.id} className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-4 flex gap-3">
@@ -1644,7 +1779,8 @@ function InterviewPrepTab({ hub }) {
                 })}
               </div>
               <Pagination
-                data={filteredResList}
+                total={resTotal}
+                totalPages={resTotalPages}
                 page={resPage}
                 pageSize={resPageSize}
                 onPageChange={setResPage}

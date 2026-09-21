@@ -9,8 +9,10 @@ import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAnalyticsResponse;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAttemptResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizAssignmentResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuizPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResultResponse;
+import com.careerlabs.lms.api.quiz.entity.QuizType;
 import com.careerlabs.lms.api.quiz.service.QuizAttemptAdminService;
 import com.careerlabs.lms.api.quiz.service.QuizService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -47,8 +49,17 @@ public class QuizController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<QuizResponse>>> list(@RequestParam(required = false) String search) {
-        return ResponseEntity.ok(ApiResponse.of(quizService.list(search)));
+    public ResponseEntity<ApiResponse<QuizPageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) QuizType type,
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Boolean sourcePdf,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(
+                quizService.list(search, type, courseId, batchId, status, sourcePdf, page, limit)));
     }
 
     @GetMapping("/{id}")

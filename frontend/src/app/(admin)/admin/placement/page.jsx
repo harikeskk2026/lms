@@ -193,6 +193,41 @@ export default function PlacementPage() {
   const [intPage, setIntPage] = useState(1)
   const [intPageSize, setIntPageSize] = useState(10)
 
+  // Server-driven debounced searches (300ms, same pattern as the IQ tab)
+  const [debouncedStdSearch, setDebouncedStdSearch] = useState('')
+  const [debouncedMockSearch, setDebouncedMockSearch] = useState('')
+  const [debouncedAptSearch, setDebouncedAptSearch] = useState('')
+  const [debouncedResSearch, setDebouncedResSearch] = useState('')
+  const [debouncedPrepSearch, setDebouncedPrepSearch] = useState('')
+  const [debouncedDriveSearch, setDebouncedDriveSearch] = useState('')
+  const [debouncedOfferSearch, setDebouncedOfferSearch] = useState('')
+  const [debouncedIntSearch, setDebouncedIntSearch] = useState('')
+
+  // Server pagination totals per tab (from page DTOs)
+  const [students, setStudents] = useState([])
+  const [stdTotal, setStdTotal] = useState(0)
+  const [stdTotalPages, setStdTotalPages] = useState(1)
+  const [mockTotal, setMockTotal] = useState(0)
+  const [mockTotalPages, setMockTotalPages] = useState(1)
+  const [iqTotal, setIqTotal] = useState(0)
+  const [iqTotalPages, setIqTotalPages] = useState(1)
+  const [aptTotal, setAptTotal] = useState(0)
+  const [aptTotalPages, setAptTotalPages] = useState(1)
+  const [resTotal, setResTotal] = useState(0)
+  const [resTotalPages, setResTotalPages] = useState(1)
+  const [prepTotal, setPrepTotal] = useState(0)
+  const [prepTotalPages, setPrepTotalPages] = useState(1)
+  const [driveTotal, setDriveTotal] = useState(0)
+  const [driveTotalPages, setDriveTotalPages] = useState(1)
+  const [offerTotal, setOfferTotal] = useState(0)
+  const [offerTotalPages, setOfferTotalPages] = useState(1)
+  const [intTotal, setIntTotal] = useState(0)
+  const [intTotalPages, setIntTotalPages] = useState(1)
+
+  // Full lists for selectors only (never used for tab tables)
+  const [allDrives, setAllDrives] = useState([])
+  const [publishedPreps, setPublishedPreps] = useState([])
+
   // Offers tab
   const [offers, setOffers] = useState([])
   const [offerDriveId, setOfferDriveId] = useState('')
@@ -212,100 +247,350 @@ export default function PlacementPage() {
   const [intForm, setIntForm] = useState({ roundId: '', studentId: '', scheduledAt: '', meetingLink: '', location: '', online: true, notes: '' })
   const [completeForm, setCompleteForm] = useState({ status: 'COMPLETED', result: 'PASS', score: '', feedback: '' })
 
-  // Each section loads independently - one tab's backend not being ready yet
-  // (rolled out phase by phase) must never blank out an already-working tab.
-  const loadData = () => {
-    setLoading(true)
-    Promise.allSettled([
-      adminApi.getPlacement().catch(() => adminApi.getStudents()),
-      adminApi.getMockInterviews(),
-      adminApi.getInterviewQuestions({ difficulty: iqDiff, search: iqSearch, courseId: iqCourse || undefined }),
-      adminApi.getDrives(),
-      adminApi.getAptitudeTips(),
-      adminApi.getInterviewResources(),
-    ]).then(([p, m, iq, d, apt, res]) => {
-      if (p.status === 'fulfilled') {
-        const rawData = p.value.data?.data || p.value.data
-        const studentList = rawData?.students || rawData?.items || (Array.isArray(rawData) ? rawData : [])
-
-        const statusCounts = rawData?.statusCounts || {
-          SEEKING: studentList.filter(s => (s.placementStatus || 'SEEKING') === 'SEEKING').length,
-          INTERVIEWING: studentList.filter(s => s.placementStatus === 'INTERVIEWING').length,
-          PLACED: studentList.filter(s => s.placementStatus === 'PLACED').length,
-          NOT_SEEKING: studentList.filter(s => s.placementStatus === 'NOT_SEEKING').length,
-        }
-        const total = studentList.length
-        const placed = statusCounts.PLACED || 0
-        const conversionRate = rawData?.conversionRate ?? (total > 0 ? Math.round((placed / total) * 100) : 0)
-
-        setOverview({
-          statusCounts,
-          conversionRate,
-          students: studentList.map(s => ({
-            id: s.id,
-            name: s.name || s.user?.name || `Student #${s.id}`,
-            email: s.email || s.user?.email || '',
-            phone: s.phone || '',
-            placementStatus: s.placementStatus || 'SEEKING',
-            mockCount: s.mockCount || 0,
-            avgMockRating: s.avgMockRating || 0,
-            updatedAt: s.updatedAt || ''
-          }))
-        })
-      }
-
-      if (m.status === 'fulfilled') setMocks(m.value.data.data || [])
-      else setMocks([])
-
-      if (iq.status === 'fulfilled') setIqList(Array.isArray(iq.value.data.data) ? iq.value.data.data : iq.value.data.data?.items || [])
-
-      if (d.status === 'fulfilled') setDrives(d.value.data.data || [])
-
-      if (apt.status === 'fulfilled') setAptList(Array.isArray(apt.value.data.data) ? apt.value.data.data : apt.value.data.data?.items || [])
-
-      if (res.status === 'fulfilled') setResList(Array.isArray(res.value.data.data) ? res.value.data.data : res.value.data.data?.items || [])
-    }).finally(() => setLoading(false))
+  // ---- Server-driven loaders (every tab hits the backend with search/filter/page/limit) ----
+  const loadOverview = async () => {
+    try {
+      const res = await adminApi.getPlacementOverview()
+      const raw = res.data?.data || res.data
+      const studentList = raw?.students || raw?.items || (Array.isArray(raw) ? raw : [])
+      setOverview({
+        statusCounts: raw?.statusCounts || { SEEKING: 0, INTERVIEWING: 0, PLACED: 0, NOT_SEEKING: 0 },
+        conversionRate: raw?.conversionRate || 0,
+        students: (Array.isArray(studentList) ? studentList : []).map(s => ({
+          id: s.id,
+          name: s.name || s.user?.name || `Student #${s.id}`,
+          email: s.email || s.user?.email || '',
+          phone: s.phone || '',
+          placementStatus: s.placementStatus || 'SEEKING',
+          mockCount: s.mockCount || 0,
+          avgMockRating: s.avgMockRating || 0,
+          updatedAt: s.updatedAt || ''
+        }))
+      })
+    } catch { /* silent, KPI cards stay empty */ }
   }
 
-  useEffect(() => { loadData() }, [])
+  const loadStudentsTab = async () => {
+    setLoading(true)
+    try {
+      const res = await adminApi.getPlacement({
+        search: debouncedStdSearch || undefined,
+        placementStatus: stdStatusFilter || undefined,
+        page: stdPage,
+        limit: stdPageSize,
+      })
+      const raw = res.data?.data || res.data
+      const list = raw?.students || raw?.items || (Array.isArray(raw) ? raw : [])
+      const arr = Array.isArray(list) ? list : []
+      setStudents(arr.map(s => ({
+        id: s.id,
+        name: s.name || s.user?.name || `Student #${s.id}`,
+        email: s.email || s.user?.email || '',
+        phone: s.phone || '',
+        placementStatus: s.placementStatus || 'SEEKING',
+        mockCount: s.mockCount || 0,
+        avgMockRating: s.avgMockRating || 0,
+        updatedAt: s.updatedAt || '',
+        latestUpdate: s.latestUpdate || null,
+      })))
+      // NOTE: StudentPageResponse uses `total` (not `totalElements`) + `totalPages` — follow the code.
+      setStdTotal(raw?.total ?? raw?.totalElements ?? arr.length)
+      setStdTotalPages(raw?.totalPages || 1)
+    } catch {
+      setStudents([])
+      setStdTotal(0)
+      setStdTotalPages(1)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadMocksTab = async () => {
+    try {
+      const res = await adminApi.getMockInterviews({
+        search: debouncedMockSearch || undefined,
+        status: mockStatusFilter || undefined,
+        page: mockPage,
+        limit: mockPageSize,
+      })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setMocks(Array.isArray(items) ? items : [])
+      setMockTotal(raw?.totalElements ?? raw?.total ?? (Array.isArray(items) ? items.length : 0))
+      setMockTotalPages(raw?.totalPages || 1)
+    } catch {
+      setMocks([])
+      setMockTotal(0)
+      setMockTotalPages(1)
+    }
+  }
+
+  const iqAbortRef = useRef(null)
+  const loadIqTab = (opts) => {
+    iqAbortRef.current?.abort()
+    const controller = new AbortController()
+    iqAbortRef.current = controller
+    const params = {
+      difficulty: opts?.difficulty ?? (iqDiff || undefined),
+      search: opts?.search ?? (debouncedIqSearch || undefined),
+      courseId: opts?.courseId ?? (iqCourse || undefined),
+      page: opts?.page ?? iqPage,
+      limit: opts?.limit ?? iqPageSize,
+    }
+    return adminApi.getInterviewQuestions(params, { signal: controller.signal })
+      .then(res => {
+        const raw = res.data?.data || res.data
+        const items = raw?.items || (Array.isArray(raw) ? raw : [])
+        setIqList(Array.isArray(items) ? items : [])
+        setIqTotal(raw?.totalElements ?? raw?.total ?? (Array.isArray(items) ? items.length : 0))
+        setIqTotalPages(raw?.totalPages || 1)
+      })
+      .catch(err => { if (err.code !== 'ERR_CANCELED') { /* silent, matches prior behavior */ } })
+  }
+
+  const loadAptTab = async () => {
+    try {
+      const res = await adminApi.getAptitudeTips({
+        search: debouncedAptSearch || undefined,
+        page: aptPage,
+        limit: aptPageSize,
+      })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setAptList(Array.isArray(items) ? items : [])
+      setAptTotal(raw?.totalElements ?? raw?.total ?? (Array.isArray(items) ? items.length : 0))
+      setAptTotalPages(raw?.totalPages || 1)
+    } catch {
+      setAptList([])
+      setAptTotal(0)
+      setAptTotalPages(1)
+    }
+  }
+
+  const loadResTab = async () => {
+    try {
+      const res = await adminApi.getInterviewResources({
+        search: debouncedResSearch || undefined,
+        tag: resTagFilter || undefined,
+        page: resPage,
+        limit: resPageSize,
+      })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setResList(Array.isArray(items) ? items : [])
+      setResTotal(raw?.totalElements ?? raw?.total ?? (Array.isArray(items) ? items.length : 0))
+      setResTotalPages(raw?.totalPages || 1)
+    } catch {
+      setResList([])
+      setResTotal(0)
+      setResTotalPages(1)
+    }
+  }
+
+  const loadPrepTab = async () => {
+    try {
+      const res = await adminApi.getPreparationMaterials({
+        search: debouncedPrepSearch || undefined,
+        status: prepStatusFilter !== 'ALL' ? prepStatusFilter : undefined,
+        page: prepPage,
+        limit: prepPageSize,
+      })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setPrepMaterials(Array.isArray(items) ? items : [])
+      setPrepTotal(raw?.totalElements ?? raw?.total ?? (Array.isArray(items) ? items.length : 0))
+      setPrepTotalPages(raw?.totalPages || 1)
+    } catch {
+      setPrepMaterials([])
+      setPrepTotal(0)
+      setPrepTotalPages(1)
+    }
+  }
+
+  // Back-compat alias — existing prep mutation handlers call loadPrepList().
+  const loadPrepList = () => loadPrepTab()
+
+  const loadDrivesTab = async () => {
+    try {
+      const res = await adminApi.getDrives({
+        search: debouncedDriveSearch || undefined,
+        status: driveStatusFilter || undefined,
+        page: drivePage,
+        limit: drivePageSize,
+      })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      const arr = Array.isArray(items) ? items : []
+      // Presentation-only sort of the single fetched page: backend now returns
+      // createdAt DESC but this tab previously rendered driveDate ASC.
+      const ordered = [...arr].sort((a, b) => new Date(a.driveDate) - new Date(b.driveDate))
+      setDrives(ordered)
+      setDriveTotal(raw?.totalElements ?? raw?.total ?? arr.length)
+      setDriveTotalPages(raw?.totalPages || 1)
+    } catch {
+      setDrives([])
+      setDriveTotal(0)
+      setDriveTotalPages(1)
+    }
+  }
+
+  const loadAllDrives = async () => {
+    try {
+      const res = await adminApi.getDrives({ page: 1, limit: 100 })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setAllDrives(Array.isArray(items) ? items : [])
+    } catch {
+      setAllDrives([])
+    }
+  }
+
+  const loadPublishedPreps = async () => {
+    try {
+      const res = await adminApi.getPreparationMaterials({ status: 'PUBLISHED', page: 1, limit: 100 })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setPublishedPreps(Array.isArray(items) ? items : [])
+    } catch {
+      setPublishedPreps([])
+    }
+  }
+
+  const loadOffers = async (driveIdOrOpts) => {
+    try {
+      const driveId = typeof driveIdOrOpts === 'object' && driveIdOrOpts !== null
+        ? driveIdOrOpts.driveId
+        : (driveIdOrOpts ?? offerDriveId)
+      const params = {
+        driveId: driveId ? Number(driveId) : undefined,
+        search: debouncedOfferSearch || undefined,
+        page: (typeof driveIdOrOpts === 'object' && driveIdOrOpts?.page) || offerPage,
+        limit: (typeof driveIdOrOpts === 'object' && driveIdOrOpts?.limit) || offerPageSize,
+      }
+      const res = await adminApi.getOffers(params)
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      setOffers(Array.isArray(items) ? items : [])
+      setOfferTotal(raw?.totalElements ?? raw?.total ?? (Array.isArray(items) ? items.length : 0))
+      setOfferTotalPages(raw?.totalPages || 1)
+    } catch {
+      setOffers([])
+      setOfferTotal(0)
+      setOfferTotalPages(1)
+    }
+  }
+
+  const loadOffersTab = () => loadOffers()
+
+  const loadInterviewsTab = async (driveIdParam) => {
+    const driveId = driveIdParam ?? intDriveId
+    if (!driveId) { setRounds([]); setInterviews([]); setIntApps([]); setIntTotal(0); setIntTotalPages(1); return }
+    const [r, a] = await Promise.allSettled([
+      adminApi.getInterviewRounds(driveId),
+      adminApi.getDriveApplications(driveId),
+    ])
+    setRounds(r.status === 'fulfilled' ? r.value.data.data || [] : [])
+    setIntApps(a.status === 'fulfilled' ? a.value.data.data || [] : [])
+    try {
+      const res = await adminApi.getInterviews(driveId, {
+        search: debouncedIntSearch || undefined,
+        status: intStatusFilter || undefined,
+        page: intPage,
+        limit: intPageSize,
+      })
+      const raw = res.data?.data || res.data
+      const items = raw?.items || (Array.isArray(raw) ? raw : [])
+      const arr = Array.isArray(items) ? items : []
+      // Presentation-only sort of the single fetched page: backend now returns
+      // createdAt DESC but this tab previously rendered scheduledAt ASC.
+      const ordered = [...arr].sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+      setInterviews(ordered)
+      setIntTotal(raw?.totalElements ?? raw?.total ?? arr.length)
+      setIntTotalPages(raw?.totalPages || 1)
+    } catch {
+      setInterviews([])
+      setIntTotal(0)
+      setIntTotalPages(1)
+    }
+    if (r.status === 'rejected') {
+      toast.error('Failed to load interview data for this drive')
+    }
+  }
+
+  useEffect(() => { loadOverview() }, [])
 
   useEffect(() => {
     Promise.allSettled([
       adminApi.getBatches().catch(() => null),
       adminApi.getCourses().catch(() => null),
-      adminApi.getPreparationMaterials().catch(() => null),
       adminApi.getTrainers({ limit: 200, status: 'active' }).catch(() => null),
-    ]).then(([b, c, p, t]) => {
+    ]).then(([b, c, t]) => {
       if (b?.status === 'fulfilled') setBatches(Array.isArray(b.value.data.data) ? b.value.data.data : [])
       if (c?.status === 'fulfilled') setCourses(Array.isArray(c.value.data.data) ? c.value.data.data : [])
-      if (p?.status === 'fulfilled') setPrepMaterials(Array.isArray(p.value.data.data) ? p.value.data.data : [])
       if (t?.status === 'fulfilled') {
         const tList = t.value?.data?.data?.trainers || t.value?.data?.data || []
         setTrainers(Array.isArray(tList) ? tList.filter(t => t.active === true) : [])
       }
     })
+    loadAllDrives()
+    loadPublishedPreps()
   }, [])
 
+  // 300ms debounces for every tab search (same pattern the IQ tab already used)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedStdSearch(stdSearch), 300)
+    return () => clearTimeout(t)
+  }, [stdSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMockSearch(mockSearch), 300)
+    return () => clearTimeout(t)
+  }, [mockSearch])
   useEffect(() => {
     const t = setTimeout(() => setDebouncedIqSearch(iqSearch), 300)
     return () => clearTimeout(t)
   }, [iqSearch])
-
-  const iqAbortRef = useRef(null)
   useEffect(() => {
-    iqAbortRef.current?.abort()
-    const controller = new AbortController()
-    iqAbortRef.current = controller
-    adminApi.getInterviewQuestions({ difficulty: iqDiff, search: debouncedIqSearch, courseId: iqCourse || undefined }, { signal: controller.signal })
-      .then(res => setIqList(res.data.data?.items || res.data.data || []))
-      .catch(err => { if (err.code !== 'ERR_CANCELED') { /* silent, matches prior behavior */ } })
-  }, [iqDiff, debouncedIqSearch, iqCourse])
+    const t = setTimeout(() => setDebouncedAptSearch(aptSearch), 300)
+    return () => clearTimeout(t)
+  }, [aptSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedResSearch(resSearch), 300)
+    return () => clearTimeout(t)
+  }, [resSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPrepSearch(prepSearch), 300)
+    return () => clearTimeout(t)
+  }, [prepSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDriveSearch(driveSearch), 300)
+    return () => clearTimeout(t)
+  }, [driveSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedOfferSearch(offerSearch), 300)
+    return () => clearTimeout(t)
+  }, [offerSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedIntSearch(intSearch), 300)
+    return () => clearTimeout(t)
+  }, [intSearch])
+
+  // Per-tab server fetches
+  useEffect(() => { loadStudentsTab() }, [debouncedStdSearch, stdStatusFilter, stdPage, stdPageSize])
+  useEffect(() => { loadMocksTab() }, [debouncedMockSearch, mockStatusFilter, mockPage, mockPageSize])
+  useEffect(() => { loadIqTab() }, [iqDiff, debouncedIqSearch, iqCourse, iqPage, iqPageSize])
+  useEffect(() => { loadAptTab() }, [debouncedAptSearch, aptPage, aptPageSize])
+  useEffect(() => { loadResTab() }, [debouncedResSearch, resTagFilter, resPage, resPageSize])
+  useEffect(() => { loadPrepTab() }, [debouncedPrepSearch, prepStatusFilter, prepPage, prepPageSize])
+  useEffect(() => { loadDrivesTab() }, [debouncedDriveSearch, driveStatusFilter, drivePage, drivePageSize])
+  useEffect(() => { loadOffersTab() }, [offerDriveId, debouncedOfferSearch, offerPage, offerPageSize])
+  useEffect(() => { loadInterviewsTab() }, [intDriveId, debouncedIntSearch, intStatusFilter, intPage, intPageSize])
 
   const handlePlacementStatus = async (studentId, status) => {
     try {
       await adminApi.updatePlacementStatus(studentId, status)
       toast.success('Status updated')
-      loadData()
+      loadStudentsTab()
+      loadOverview()
     } catch { toast.error('Failed') }
   }
 
@@ -381,7 +666,8 @@ export default function PlacementPage() {
       toast.success('Mock interview scheduled')
       setMockPanel(false)
       setMockForm(INITIAL_MOCK_FORM)
-      loadData()
+      loadMocksTab()
+      loadOverview()
     } catch (err) {
       const errors = err?.response?.data?.errors
       const msg = errors?.[0]?.message || err?.response?.data?.message || 'Failed to schedule mock interview'
@@ -401,7 +687,8 @@ export default function PlacementPage() {
       })
       toast.success('Feedback saved')
       setFeedbackPanel(null)
-      loadData()
+      loadMocksTab()
+      loadOverview()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to save feedback')
     } finally { setSaving(false) }
@@ -422,14 +709,14 @@ export default function PlacementPage() {
       setIqPanel(false)
       setEditIq(null)
       setIqForm({ question: '', answer: '', difficulty: 'EASY', courseId: '' })
-      loadData()
+      loadIqTab()
     } catch (err) { toast.error(err?.response?.data?.message || 'Failed') } finally { setSaving(false) }
   }
 
   const handleDeleteIq = async (id) => {
     const ok = await ask({ title: 'Delete Question?', message: 'Are you sure you want to delete this interview question?', confirmLabel: 'Delete' })
     if (!ok) return
-    try { await adminApi.deleteInterviewQuestion(id); toast.success('Deleted'); loadData() }
+    try { await adminApi.deleteInterviewQuestion(id); toast.success('Deleted'); loadIqTab() }
     catch { toast.error('Failed') }
   }
 
@@ -442,14 +729,14 @@ export default function PlacementPage() {
       setAptPanel(false)
       setEditApt(null)
       setAptForm({ topic: '', formula: '', example: '' })
-      loadData()
+      loadAptTab()
     } catch (err) { toast.error(err?.response?.data?.message || 'Failed') } finally { setSaving(false) }
   }
 
   const handleDeleteApt = async (id) => {
     const ok = await ask({ title: 'Delete Aptitude Tip?', message: 'Are you sure you want to delete this aptitude tip?', confirmLabel: 'Delete' })
     if (!ok) return
-    try { await adminApi.deleteAptitudeTip(id); toast.success('Deleted'); loadData() }
+    try { await adminApi.deleteAptitudeTip(id); toast.success('Deleted'); loadAptTab() }
     catch { toast.error('Failed') }
   }
 
@@ -462,14 +749,14 @@ export default function PlacementPage() {
       setResPanel(false)
       setEditRes(null)
       setResForm({ title: '', description: '', url: '', tag: '' })
-      loadData()
+      loadResTab()
     } catch (err) { toast.error(err?.response?.data?.message || 'Failed') } finally { setSaving(false) }
   }
 
   const handleDeleteRes = async (id) => {
     const ok = await ask({ title: 'Delete Resource?', message: 'Are you sure you want to delete this resource?', confirmLabel: 'Delete' })
     if (!ok) return
-    try { await adminApi.deleteInterviewResource(id); toast.success('Deleted'); loadData() }
+    try { await adminApi.deleteInterviewResource(id); toast.success('Deleted'); loadResTab() }
     catch { toast.error('Failed') }
   }
 
@@ -496,36 +783,29 @@ export default function PlacementPage() {
       setPrepPanel(false)
       setEditPrep(null)
       setPrepForm({ title: '', interviewType: 'TECHNICAL', instructions: '', courseId: '' })
-      loadPrepList()
-      loadData()
+      loadPrepTab()
+      loadPublishedPreps()
     } catch (err) {
       toast.error(err?.response?.data?.message || (editPrep ? 'Failed to update' : 'Failed to create'))
     } finally { setSaving(false) }
   }
 
-  const loadPrepList = async () => {
-    try {
-      const res = await adminApi.getPreparationMaterials()
-      setPrepMaterials(Array.isArray(res.data.data) ? res.data.data : [])
-    } catch { /* silent */ }
-  }
-
   const handlePublishPrep = async (id) => {
-    try { await adminApi.publishPreparationMaterial(id); toast.success('Published'); setPrepDetail(null); loadPrepList(); loadData() }
+    try { await adminApi.publishPreparationMaterial(id); toast.success('Published'); setPrepDetail(null); loadPrepTab(); loadPublishedPreps() }
     catch (err) { toast.error(err?.response?.data?.message || 'Failed') }
   }
 
   const handleArchivePrep = async (id) => {
     const ok = await ask({ title: 'Archive Material?', message: 'Archive this material? Students will lose access.', confirmLabel: 'Archive', tone: 'warning' })
     if (!ok) return
-    try { await adminApi.archivePreparationMaterial(id); toast.success('Archived'); setPrepDetail(null); loadPrepList(); loadData() }
+    try { await adminApi.archivePreparationMaterial(id); toast.success('Archived'); setPrepDetail(null); loadPrepTab(); loadPublishedPreps() }
     catch (err) { toast.error(err?.response?.data?.message || 'Failed') }
   }
 
   const handleDeletePrep = async (id) => {
     const ok = await ask({ title: 'Delete Material?', message: 'Delete this material permanently? This cannot be undone.', confirmLabel: 'Delete' })
     if (!ok) return
-    try { await adminApi.deletePreparationMaterial(id); toast.success('Deleted'); setPrepDetail(null); loadPrepList() }
+    try { await adminApi.deletePreparationMaterial(id); toast.success('Deleted'); setPrepDetail(null); loadPrepTab(); loadPublishedPreps() }
     catch (err) { toast.error(err?.response?.data?.message || 'Failed') }
   }
 
@@ -614,7 +894,8 @@ export default function PlacementPage() {
       setDriveGeneral(false)
       setEditingDrive(null)
       setDriveForm(EMPTY_DRIVE_FORM)
-      loadData()
+      loadDrivesTab()
+      loadAllDrives()
     } catch (err) {
       const errors = err?.response?.data?.errors
       if (Array.isArray(errors) && errors.length) {
@@ -669,7 +950,8 @@ export default function PlacementPage() {
     try {
       await adminApi.deleteDrive(d.id)
       toast.success('Drive deleted')
-      loadData()
+      loadDrivesTab()
+      loadAllDrives()
     } catch { toast.error('Failed to delete drive') }
   }
 
@@ -693,34 +975,6 @@ export default function PlacementPage() {
       toast.success('Status updated')
     } catch { toast.error('Failed') }
   }
-
-  const loadOffers = async (driveId) => {
-    try {
-      const res = await adminApi.getOffers(driveId)
-      setOffers(res.data.data || [])
-    } catch { toast.error('Failed to load offers') }
-  }
-
-  const loadInterviewsTab = async (driveId) => {
-    if (!driveId) { setRounds([]); setInterviews([]); setIntApps([]); return }
-    const [r, i, a] = await Promise.allSettled([
-      adminApi.getInterviewRounds(driveId),
-      adminApi.getInterviews(driveId),
-      adminApi.getDriveApplications(driveId),
-    ])
-    setRounds(r.status === 'fulfilled' ? r.value.data.data || [] : [])
-    setInterviews(i.status === 'fulfilled' ? i.value.data.data || [] : [])
-    setIntApps(a.status === 'fulfilled' ? a.value.data.data || [] : [])
-    if (r.status === 'rejected' || i.status === 'rejected') {
-      toast.error('Failed to load interview data for this drive')
-    }
-  }
-
-  useEffect(() => {
-    if (tab === 'Offers') loadOffers(offerDriveId)
-    if (tab === 'Interviews') loadInterviewsTab(intDriveId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab])
 
   const handleOpenOfferPanel = async (driveId) => {
     setOfferPanel(true)
@@ -826,56 +1080,21 @@ export default function PlacementPage() {
   const sc = overview?.statusCounts || {}
   const total = Object.values(sc).reduce((a, b) => a + b, 0)
 
-  // Client-side search + filter derivations for each listing (page-agnostic).
-  const allStudents = overview?.students || []
-  const filteredStudents = allStudents.filter(s => {
-    const matchSearch = !stdSearch || `${s.name} ${s.email}`.toLowerCase().includes(stdSearch.toLowerCase())
-    const matchStatus = !stdStatusFilter || s.placementStatus === stdStatusFilter
-    return matchSearch && matchStatus
-  })
-
-  const filteredMocks = mocks.filter(m => {
-    const matchSearch = !mockSearch ||
-      `${m.interviewerName || ''} ${(m.candidates || []).map(c => c.student?.user?.name || '').join(' ')}`.toLowerCase().includes(mockSearch.toLowerCase())
-    const matchStatus = !mockStatusFilter || m.status === mockStatusFilter
-    return matchSearch && matchStatus
-  })
-
-  const filteredIq = iqList
-
-  const filteredApt = aptList.filter(tip =>
-    !aptSearch || `${tip.topic} ${tip.formula} ${tip.example}`.toLowerCase().includes(aptSearch.toLowerCase())
-  )
-
-  const resTags = Array.from(new Set(resList.map(r => r.tag).filter(Boolean)))
-  const filteredRes = resList.filter(r => {
-    const matchSearch = !resSearch || `${r.title} ${r.description} ${r.tag}`.toLowerCase().includes(resSearch.toLowerCase())
-    const matchTag = !resTagFilter || r.tag === resTagFilter
-    return matchSearch && matchTag
-  })
-
-  const filteredPrep = prepMaterials.filter(p => {
-    const matchStatus = prepStatusFilter === 'ALL' || p.status === prepStatusFilter
-    const matchSearch = !prepSearch || `${p.title} ${p.interviewType || ''}`.toLowerCase().includes(prepSearch.toLowerCase())
-    return matchStatus && matchSearch
-  })
-
-  const filteredDrives = drives.filter(d => {
-    const matchSearch = !driveSearch || `${d.companyName} ${d.role}`.toLowerCase().includes(driveSearch.toLowerCase())
-    const open = !!d.applyDeadline && !isPast(new Date(d.applyDeadline))
-    const matchStatus = !driveStatusFilter || (driveStatusFilter === 'OPEN' ? open : driveStatusFilter === 'CLOSED' ? !open : d.driveType === driveStatusFilter)
-    return matchSearch && matchStatus
-  })
-
-  const filteredOffers = offers.filter(o =>
-    !offerSearch || `${o.studentName || ''} ${o.companyName} ${o.role}`.toLowerCase().includes(offerSearch.toLowerCase())
-  )
-
-  const filteredInterviews = interviews.filter(iv => {
-    const matchSearch = !intSearch || `${iv.studentName || ''} ${iv.roundName}`.toLowerCase().includes(intSearch.toLowerCase())
-    const matchStatus = !intStatusFilter || iv.status === intStatusFilter
-    return matchSearch && matchStatus
-  })
+  // All tabs are server-driven: search/filter/pagination are applied by the
+  // backend via per-tab loaders above. These arrays already hold only the
+  // current page's items — never filter/slice/sort them here.
+  // Tag options for the Resources filter, collected from the current page
+  // (presentation only; the actual tag filter is applied server-side).
+  const resTags = []
+  {
+    const seen = new Set()
+    for (const r of resList) {
+      if (r.tag && !seen.has(r.tag)) {
+        seen.add(r.tag)
+        resTags.push(r.tag)
+      }
+    }
+  }
 
   const resetStdPage = () => setStdPage(1)
   const resetMockPage = () => setMockPage(1)
@@ -885,18 +1104,6 @@ export default function PlacementPage() {
   const resetDrivePage = () => setDrivePage(1)
   const resetOfferPage = () => setOfferPage(1)
   const resetIntPage = () => setIntPage(1)
-
-  // Clamp to a valid page whenever the underlying dataset shrinks.
-  const clampPage = (d, p, s) => Math.min(p, Math.max(1, Math.ceil(d.length / s)))
-  const stdPageEff = clampPage(filteredStudents, stdPage, stdPageSize)
-  const mockPageEff = clampPage(filteredMocks, mockPage, mockPageSize)
-  const iqPageEff = clampPage(filteredIq, iqPage, iqPageSize)
-  const aptPageEff = clampPage(filteredApt, aptPage, aptPageSize)
-  const resPageEff = clampPage(filteredRes, resPage, resPageSize)
-  const prepPageEff = clampPage(filteredPrep, prepPage, prepPageSize)
-  const drivePageEff = clampPage(filteredDrives, drivePage, drivePageSize)
-  const offerPageEff = clampPage(filteredOffers, offerPage, offerPageSize)
-  const intPageEff = clampPage(filteredInterviews, intPage, intPageSize)
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -968,10 +1175,10 @@ export default function PlacementPage() {
                   [...Array(5)].map((_, i) => (
                     <tr key={i}><td colSpan={6} className="px-4 py-2"><div className="h-8 bg-gray-100 rounded-lg animate-pulse" /></td></tr>
                   ))
-                ) : filteredStudents.length === 0 ? (
+                ) : students.length === 0 ? (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No students match your filters</td></tr>
                 ) : (
-                  filteredStudents.slice((stdPageEff - 1) * stdPageSize, stdPageEff * stdPageSize).map(s => (
+                  students.map(s => (
                     <tr key={s.id} className="border-b border-gray-50 hover:bg-purple-50/20">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-gray-800 dark:text-white">{s.name}</p>
@@ -1023,7 +1230,8 @@ export default function PlacementPage() {
             </table>
           </div>
           <Pagination
-            data={filteredStudents}
+            total={stdTotal}
+            totalPages={stdTotalPages}
             page={stdPage}
             pageSize={stdPageSize}
             onPageChange={setStdPage}
@@ -1072,10 +1280,10 @@ export default function PlacementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMocks.length === 0 ? (
+                  {mocks.length === 0 ? (
                     <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No mock interviews match your filters</td></tr>
                   ) : (
-                    filteredMocks.slice((mockPageEff - 1) * mockPageSize, mockPageEff * mockPageSize).map(m => (
+                    mocks.map(m => (
                       <tr key={m.id} className="border-b border-gray-50 hover:bg-purple-50/20 align-top">
                         <td className="px-4 py-3">
                           <div className="space-y-1.5">
@@ -1128,7 +1336,7 @@ export default function PlacementPage() {
                                 onClick={async () => {
                                   const ok = await ask({ title: 'Cancel Mock Interview?', message: 'Cancel this mock interview for all candidates?', confirmLabel: 'Cancel' })
                                   if (!ok) return
-                                  try { await adminApi.updateMockInterview(m.id, { status: 'CANCELLED' }); toast.success('Mock interview cancelled'); loadData() } catch (err) { toast.error(err?.response?.data?.message || 'Failed') }
+                                  try { await adminApi.updateMockInterview(m.id, { status: 'CANCELLED' }); toast.success('Mock interview cancelled'); loadMocksTab(); loadOverview() } catch (err) { toast.error(err?.response?.data?.message || 'Failed') }
                                 }}
                                 className="text-xs text-red-500 font-semibold hover:underline">
                                 Cancel
@@ -1143,7 +1351,8 @@ export default function PlacementPage() {
               </table>
             </div>
             <Pagination
-              data={filteredMocks}
+              total={mockTotal}
+              totalPages={mockTotalPages}
               page={mockPage}
               pageSize={mockPageSize}
               onPageChange={setMockPage}
@@ -1194,10 +1403,10 @@ export default function PlacementPage() {
             </button>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
-            {filteredIq.length === 0 ? (
+            {iqList.length === 0 ? (
               <div className="col-span-2 glass-card p-10 text-center text-gray-400">No questions found</div>
             ) : (
-              filteredIq.slice((iqPageEff - 1) * iqPageSize, iqPageEff * iqPageSize).map(q => (
+              iqList.map(q => (
                 <div key={q.id} className="glass-card p-5 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex gap-2 flex-wrap">
@@ -1234,7 +1443,8 @@ export default function PlacementPage() {
             )}
           </div>
           <Pagination
-            data={filteredIq}
+            total={iqTotal}
+            totalPages={iqTotalPages}
             page={iqPage}
             pageSize={iqPageSize}
             onPageChange={setIqPage}
@@ -1259,12 +1469,12 @@ export default function PlacementPage() {
               <Plus size={12} /> Add Aptitude Tips
             </button>
           </div>
-          {filteredApt.length === 0 ? (
+          {aptList.length === 0 ? (
             <div className="glass-card p-10 text-center text-gray-400">No aptitude tips yet. Add one to start helping students revise.</div>
           ) : (
             <>
               <div className="grid md:grid-cols-2 gap-4">
-                {filteredApt.slice((aptPageEff - 1) * aptPageSize, aptPageEff * aptPageSize).map(tip => (
+                {aptList.map(tip => (
                   <div key={tip.id} className="glass-card p-5 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -1291,7 +1501,8 @@ export default function PlacementPage() {
                 ))}
               </div>
               <Pagination
-                data={filteredApt}
+                total={aptTotal}
+                totalPages={aptTotalPages}
                 page={aptPage}
                 pageSize={aptPageSize}
                 onPageChange={setAptPage}
@@ -1331,12 +1542,12 @@ export default function PlacementPage() {
               <Plus size={12} /> Add Resource
             </button>
           </div>
-          {filteredRes.length === 0 ? (
+          {resList.length === 0 ? (
             <div className="glass-card p-10 text-center text-gray-400">No resources match your filters.</div>
           ) : (
             <>
               <div className="grid md:grid-cols-2 gap-4">
-                {filteredRes.slice((resPageEff - 1) * resPageSize, resPageEff * resPageSize).map(res => (
+                {resList.map(res => (
                   <div key={res.id} className="glass-card p-5 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1361,7 +1572,8 @@ export default function PlacementPage() {
                 ))}
               </div>
               <Pagination
-                data={filteredRes}
+                total={resTotal}
+                totalPages={resTotalPages}
                 page={resPage}
                 pageSize={resPageSize}
                 onPageChange={setResPage}
@@ -1375,6 +1587,97 @@ export default function PlacementPage() {
 
       {/* Preparation Tab */}
       {tab === 'Preparation' && (
+        prepPanel ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/20 shrink-0">
+                  <FileText size={24} />
+                </div>
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white font-display">
+                    {editPrep ? 'Edit Preparation Material' : 'Create Preparation Material'}
+                  </h1>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    Provide study guides, interview prep resources, and targeted instructions for students.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPrepPanel(false)}
+                className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-semibold transition-colors"
+              >
+                ← Back to Preparation
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePrep} className="space-y-6">
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Title *</label>
+                  <input
+                    value={prepForm.title}
+                    onChange={e => setPrepForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="TCS NQT — Aptitude & Coding Prep"
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Interview Type</label>
+                    <CustomSelect
+                      value={prepForm.interviewType}
+                      onChange={v => setPrepForm(f => ({ ...f, interviewType: v }))}
+                      options={['TECHNICAL', 'APTITUDE', 'HR', 'CODING', 'OTHER'].map(t => ({ value: t, label: t }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Course (blank = General)</label>
+                    <CustomSelect
+                      value={prepForm.courseId}
+                      onChange={v => setPrepForm(f => ({ ...f, courseId: v }))}
+                      options={[
+                        { value: '', label: 'All students (General)' },
+                        ...courses.map(c => ({ value: String(c.id), label: c.title })),
+                      ]}
+                      searchable
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Instructions</label>
+                  <textarea
+                    value={prepForm.instructions}
+                    onChange={e => setPrepForm(f => ({ ...f, instructions: e.target.value }))}
+                    rows={4}
+                    placeholder="How students should use this material, key topics to focus on..."
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none text-gray-800 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setPrepPanel(false)}
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !prepForm.title?.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                >
+                  {saving ? 'Saving...' : (editPrep ? 'Update Material' : 'Create Material')}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 flex-wrap">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
@@ -1403,18 +1706,18 @@ export default function PlacementPage() {
               <Plus size={14} /> Create Material
             </button>
           </div>
-          {prepMaterials.length === 0 ? (
+          {prepMaterials.length === 0 && !prepSearch && prepStatusFilter === 'ALL' ? (
             <div className="glass-card p-10 text-center text-gray-400">
               No preparation materials yet. Create one to start building interview prep content for students.
             </div>
-          ) : filteredPrep.length === 0 ? (
+          ) : prepMaterials.length === 0 ? (
             <div className="glass-card p-10 text-center text-gray-400">
               No materials match your filters.
             </div>
           ) : (
             <>
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredPrep.slice((prepPageEff - 1) * prepPageSize, prepPageEff * prepPageSize).map(p => (
+                {prepMaterials.map(p => (
                   <div key={p.id} className="glass-card p-5 space-y-3 flex flex-col">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -1452,7 +1755,8 @@ export default function PlacementPage() {
                 ))}
               </div>
               <Pagination
-                data={filteredPrep}
+                total={prepTotal}
+                totalPages={prepTotalPages}
                 page={prepPage}
                 pageSize={prepPageSize}
                 onPageChange={setPrepPage}
@@ -1462,10 +1766,219 @@ export default function PlacementPage() {
             </>
           )}
         </div>
+        )
       )}
 
       {/* Company Drives Tab */}
       {tab === 'Company Drives' && (
+        drivePanel ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/20 shrink-0">
+                  <Building2 size={24} />
+                </div>
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white font-display">
+                    {editingDrive ? 'Edit Company Drive' : 'Create Company Drive'}
+                  </h1>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    Configure campus recruitment drive details, deadlines, package, and eligibility criteria.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setDrivePanel(false); setEditingDrive(null); }}
+                className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-semibold transition-colors"
+              >
+                ← Back to Drives
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDrive} className="space-y-6">
+              {/* Card 1: Company & Job Information */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <Building2 size={14} /> Company & Job Information
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { label: 'Company Name *', key: 'companyName', placeholder: 'TCS Digital' },
+                    { label: 'Role *', key: 'role', placeholder: 'Junior Developer' },
+                    { label: 'Package Offered', key: 'packageOffered', placeholder: '3.5 - 5 LPA' },
+                    { label: 'Location', key: 'location', placeholder: 'Chennai' },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">{label}</label>
+                      <input
+                        value={driveForm[key]}
+                        onChange={e => setDriveForm(f => ({ ...f, [key]: e.target.value }))}
+                        placeholder={placeholder}
+                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white"
+                        required={label.includes('*')}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Description *</label>
+                  <textarea
+                    value={driveForm.description}
+                    onChange={e => setDriveForm(f => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    placeholder="Enter detailed role description..."
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none text-gray-800 dark:text-white"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Requirements (comma-separated)</label>
+                    <input
+                      value={driveForm.requirements}
+                      onChange={e => setDriveForm(f => ({ ...f, requirements: e.target.value }))}
+                      placeholder="B.Tech/MCA, 60% throughout, No backlogs"
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Skills Required (comma-separated)</label>
+                    <input
+                      value={driveForm.skills}
+                      onChange={e => setDriveForm(f => ({ ...f, skills: e.target.value }))}
+                      placeholder="Python, Django, SQL, Git"
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Drive Dates & Type */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <Calendar size={14} /> Drive Dates & Access
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Drive Date *</label>
+                    <input
+                      type="date"
+                      value={driveForm.driveDate}
+                      onChange={e => {
+                        const newDate = e.target.value
+                        setDriveForm(f => ({ ...f, driveDate: newDate, applyDeadline: (newDate && f.applyDeadline && f.applyDeadline > newDate) ? '' : f.applyDeadline }))
+                      }}
+                      required
+                      className={`w-full rounded-xl border bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white ${(driveFormErrors.driveDate || driveErrors.driveDate) ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200 dark:border-gray-700'}`}
+                    />
+                    {(driveFormErrors.driveDate || driveErrors.driveDate) && <p className="text-[11px] text-red-500 font-medium mt-1">{driveFormErrors.driveDate || driveErrors.driveDate}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Apply Deadline *</label>
+                    <input
+                      type="date"
+                      value={driveForm.applyDeadline}
+                      onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))}
+                      required
+                      max={driveForm.driveDate || undefined}
+                      className={`w-full rounded-xl border bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white ${(driveFormErrors.applyDeadline || driveErrors.applyDeadline) ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200 dark:border-gray-700'}`}
+                    />
+                    {(driveFormErrors.applyDeadline || driveErrors.applyDeadline) && <p className="text-[11px] text-red-500 font-medium mt-1">{driveFormErrors.applyDeadline || driveErrors.applyDeadline}</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Drive Type *</label>
+                    <CustomSelect
+                      value={driveForm.driveType}
+                      onChange={v => setDriveForm(f => ({ ...f, driveType: v }))}
+                      options={['CAMPUS', 'OFF_CAMPUS', 'POOL', 'VIRTUAL'].map(t => ({ value: t, label: t.replace('_', ' ') }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">External Apply Link (optional)</label>
+                    <input
+                      value={driveForm.applyLink}
+                      onChange={e => setDriveForm(f => ({ ...f, applyLink: e.target.value }))}
+                      placeholder="https://..."
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Eligibility & Target Cohorts */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Eligibility Criteria</p>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <span className={`text-xs font-semibold ${driveGeneral ? 'text-emerald-600' : 'text-gray-500'}`}>
+                      {driveGeneral ? 'Open to all students' : 'Restricted'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDriveGeneral(g => {
+                        const next = !g
+                        if (next) {
+                          setDriveForm(f => ({
+                            ...f, minCgpa: null, minPercentage: null, maxBacklogs: null,
+                            eligibleBatchIds: [], eligibleCourseIds: [],
+                          }))
+                          setDriveErrors(errs => {
+                            const { minCgpa, minPercentage, maxBacklogs, eligibleBatchIds, eligibleCourseIds, ...rest } = errs
+                            return rest
+                          })
+                        }
+                        return next
+                      })}
+                      role="switch"
+                      aria-checked={driveGeneral}
+                      className={`w-10 h-[22px] rounded-full transition-colors relative ${driveGeneral ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-all ${driveGeneral ? 'left-[20px]' : 'left-0.5'}`} />
+                    </button>
+                  </label>
+                </div>
+
+                {driveGeneral ? (
+                  <p className="text-xs text-gray-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
+                    No eligibility restrictions — this drive will be visible to all registered students.
+                  </p>
+                ) : (
+                  <>
+                    <EligibilityCriteriaFields value={driveForm} errors={{ ...driveErrors, ...driveFormErrors }} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
+                    {driveErrors.eligibleBatchIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleBatchIds}</p>}
+                    {driveErrors.eligibleCourseIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleCourseIds}</p>}
+                  </>
+                )}
+              </div>
+
+              {/* Action Bar */}
+              {(() => {
+                const isDriveFormValid = Object.keys(driveFormErrors).length === 0
+                return (
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <button
+                      type="button"
+                      onClick={() => { setDrivePanel(false); setEditingDrive(null); }}
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving || !isDriveFormValid}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
+                    >
+                      {saving ? (editingDrive ? 'Saving...' : 'Creating...') : (editingDrive ? 'Save Changes' : 'Create Drive')}
+                    </button>
+                  </div>
+                )
+              })()}
+            </form>
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 flex-wrap">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
@@ -1483,7 +1996,7 @@ export default function PlacementPage() {
                     { value: '', label: 'All Drives' },
                     { value: 'OPEN', label: 'Open' },
                     { value: 'CLOSED', label: 'Closed' },
-                    ...Array.from(new Set(drives.map(d => d.driveType).filter(Boolean))).map(t => ({ value: t, label: t.replace('_', ' ') })),
+                    ...['CAMPUS', 'OFF_CAMPUS', 'POOL', 'VIRTUAL'].map(t => ({ value: t, label: t.replace('_', ' ') })),
                   ]}
                   placeholder="All Drives"
                 />
@@ -1514,9 +2027,9 @@ export default function PlacementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDrives.length === 0 ? (
+                  {drives.length === 0 ? (
                     <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No drives match your filters</td></tr>
-                  ) : filteredDrives.slice((drivePageEff - 1) * drivePageSize, drivePageEff * drivePageSize).map(d => (
+                  ) : drives.map(d => (
                     <tr key={d.id} className="border-b border-gray-50 hover:bg-purple-50/20">
                       <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{d.companyName}</td>
                       <td className="px-4 py-3 text-xs text-gray-600">{d.role}</td>
@@ -1554,7 +2067,8 @@ export default function PlacementPage() {
               </table>
             </div>
             <Pagination
-              data={filteredDrives}
+              total={driveTotal}
+              totalPages={driveTotalPages}
               page={drivePage}
               pageSize={drivePageSize}
               onPageChange={setDrivePage}
@@ -1563,6 +2077,7 @@ export default function PlacementPage() {
             />
           </div>
         </div>
+        )
       )}
 
       {/* Offers Tab */}
@@ -1579,22 +2094,21 @@ export default function PlacementPage() {
               <div className="w-full sm:w-56">
                 <CustomSelect
                   value={offerDriveId}
-                  onChange={v => { setOfferDriveId(v); resetOfferPage(); loadOffers(v) }}
+                  onChange={v => { setOfferDriveId(v); resetOfferPage() }}
                   options={[
                     { value: '', label: 'All drives' },
-                    ...drives.map(d => ({ value: String(d.id), label: `${d.companyName} — ${d.role}` })),
+                    ...allDrives.map(d => ({ value: String(d.id), label: `${d.companyName} — ${d.role}` })),
                   ]}
                   placeholder="All drives"
                   searchable
                 />
               </div>
             </div>
-            {drives.length > 0 && (
+            {allDrives.length > 0 && (
               <button
                 onClick={() => {
-                  const first = offerDriveId || String(drives[0].id)
+                  const first = offerDriveId || String(allDrives[0].id)
                   setOfferDriveId(first)
-                  loadOffers(first)
                   handleOpenOfferPanel(first)
                 }}
                 className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
@@ -1613,9 +2127,9 @@ export default function PlacementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOffers.length === 0 ? (
+                  {offers.length === 0 ? (
                     <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No offers issued. Offer a candidate after they're selected for a drive.</td></tr>
-                  ) : filteredOffers.slice((offerPageEff - 1) * offerPageSize, offerPageEff * offerPageSize).map(o => (
+                  ) : offers.map(o => (
                     <tr key={o.id} className="border-b border-gray-50 hover:bg-purple-50/20">
                       <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{o.studentName || '—'}</td>
                       <td className="px-4 py-3 text-xs text-gray-600">{o.companyName}</td>
@@ -1644,7 +2158,8 @@ export default function PlacementPage() {
               </table>
             </div>
             <Pagination
-              data={filteredOffers}
+              total={offerTotal}
+              totalPages={offerTotalPages}
               page={offerPage}
               pageSize={offerPageSize}
               onPageChange={setOfferPage}
@@ -1663,10 +2178,10 @@ export default function PlacementPage() {
               <div className="w-full sm:w-60">
                 <CustomSelect
                   value={intDriveId}
-                  onChange={v => { setIntDriveId(v); setIntPage(1); loadInterviewsTab(v) }}
+                  onChange={v => { setIntDriveId(v); setIntPage(1) }}
                   options={[
                     { value: '', label: 'Select a drive' },
-                    ...drives.map(d => ({ value: String(d.id), label: `${d.companyName} — ${d.role}` })),
+                    ...allDrives.map(d => ({ value: String(d.id), label: `${d.companyName} — ${d.role}` })),
                   ]}
                   placeholder="Select a drive"
                   searchable
@@ -1686,7 +2201,7 @@ export default function PlacementPage() {
                       onChange={v => { setIntStatusFilter(v); resetIntPage() }}
                       options={[
                         { value: '', label: 'All Statuses' },
-                        ...[...new Set(interviews.map(i => i.status).filter(Boolean))].map(s => ({ value: s, label: s })),
+                        ...['SCHEDULED', 'RESCHEDULED', 'COMPLETED', 'CANCELLED', 'ABSENT'].map(s => ({ value: s, label: s })),
                       ]}
                       placeholder="All Statuses"
                     />
@@ -1750,9 +2265,9 @@ export default function PlacementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredInterviews.length === 0 ? (
+                      {interviews.length === 0 ? (
                         <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No interviews match your filters</td></tr>
-                      ) : filteredInterviews.slice((intPageEff - 1) * intPageSize, intPageEff * intPageSize).map(iv => (
+                      ) : interviews.map(iv => (
                         <tr key={iv.id} className="border-b border-gray-50 hover:bg-purple-50/20">
                           <td className="px-4 py-3 font-semibold text-gray-800 dark:text-white">{iv.studentName || '—'}</td>
                           <td className="px-4 py-3 text-xs text-gray-600">{iv.roundName}</td>
@@ -1790,7 +2305,8 @@ export default function PlacementPage() {
                 </div>
               </div>
               <Pagination
-                data={filteredInterviews}
+                total={intTotal}
+                totalPages={intTotalPages}
                 page={intPage}
                 pageSize={intPageSize}
                 onPageChange={setIntPage}
@@ -1801,55 +2317,6 @@ export default function PlacementPage() {
           )}
         </div>
       )}
-
-      {/* Prep Create/Edit Panel */}
-      <SlidePanel open={prepPanel} onClose={() => setPrepPanel(false)} title={editPrep ? 'Edit Material' : 'Create Preparation Material'}>
-        <form onSubmit={handleSavePrep} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
-            <input value={prepForm.title} onChange={e => setPrepForm(f => ({ ...f, title: e.target.value }))} placeholder="TCS NQT — Aptitude & Coding Prep"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Interview Type</label>
-              <CustomSelect
-                value={prepForm.interviewType}
-                onChange={v => setPrepForm(f => ({ ...f, interviewType: v }))}
-                options={['TECHNICAL', 'APTITUDE', 'HR', 'CODING', 'OTHER'].map(t => ({ value: t, label: t }))}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Course (blank = General)</label>
-              <CustomSelect
-                value={prepForm.courseId}
-                onChange={v => setPrepForm(f => ({ ...f, courseId: v }))}
-                options={[
-                  { value: '', label: 'All students (General)' },
-                  ...courses.map(c => ({ value: String(c.id), label: c.title })),
-                ]}
-                searchable
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Instructions</label>
-            <textarea value={prepForm.instructions} onChange={e => setPrepForm(f => ({ ...f, instructions: e.target.value }))} rows={3}
-              placeholder="How students should use this material, what to focus on..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setPrepPanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button
-              type="submit"
-              disabled={saving || !prepForm.title?.trim()}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
-            >
-              {saving ? 'Saving...' : (editPrep ? 'Update' : 'Create')}
-            </button>
-          </div>
-        </form>
-      </SlidePanel>
 
       {/* Prep Detail Panel */}
       <SlidePanel open={!!prepDetail} onClose={() => setPrepDetail(null)} title={prepDetail?.title || 'Manage Material'}>
@@ -2088,11 +2555,11 @@ export default function PlacementPage() {
             <MultiSelect
               value={mockForm.preparationMaterialIds}
               onChange={v => setMockForm(f => ({ ...f, preparationMaterialIds: v }))}
-              options={prepMaterials.filter(p => p.status === 'PUBLISHED').map(p => ({ value: p.id, label: p.title }))}
+              options={publishedPreps.map(p => ({ value: p.id, label: p.title }))}
               searchable
               placeholder="Select preparation materials..."
             />
-            {prepMaterials.filter(p => p.status === 'PUBLISHED').length === 0 && (
+            {publishedPreps.length === 0 && (
               <p className="text-[10px] text-gray-400 mt-1">No published preparation materials yet.</p>
             )}
           </div>
@@ -2189,134 +2656,6 @@ export default function PlacementPage() {
               {saving ? 'Saving...' : 'Save Feedback'}
             </button>
           </div>
-        </form>
-      </SlidePanel>
-
-      {/* Create Drive Panel */}
-      <SlidePanel open={drivePanel} onClose={() => { setDrivePanel(false); setEditingDrive(null) }} title={editingDrive ? 'Edit Company Drive' : 'Create Company Drive'}>
-        <form onSubmit={handleCreateDrive} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              { label: 'Company Name *', key: 'companyName', placeholder: 'TCS Digital' },
-              { label: 'Role *', key: 'role', placeholder: 'Junior Developer' },
-              { label: 'Package', key: 'packageOffered', placeholder: '3.5 - 5 LPA' },
-              { label: 'Location', key: 'location', placeholder: 'Chennai' },
-            ].map(({ label, key, placeholder }) => (
-              <div key={key}>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>
-                <input value={driveForm[key]} onChange={e => setDriveForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" required={label.includes('*')} />
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Date *</label>
-              <input type="date" value={driveForm.driveDate} onChange={e => {
-                const newDate = e.target.value
-                // Apply deadline may equal the (new) drive date - only clear it if it would
-                // now be strictly AFTER the drive date.
-                setDriveForm(f => ({ ...f, driveDate: newDate, applyDeadline: (newDate && f.applyDeadline && f.applyDeadline > newDate) ? '' : f.applyDeadline }))
-              }} required
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${(driveFormErrors.driveDate || driveErrors.driveDate) ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
-              {(driveFormErrors.driveDate || driveErrors.driveDate) && <p className="text-[11px] text-red-500 font-medium mt-1">{driveFormErrors.driveDate || driveErrors.driveDate}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Apply Deadline *</label>
-              <input type="date" value={driveForm.applyDeadline} onChange={e => setDriveForm(f => ({ ...f, applyDeadline: e.target.value }))} required
-                max={driveForm.driveDate || undefined}
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 ${(driveFormErrors.applyDeadline || driveErrors.applyDeadline) ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`} />
-              {(driveFormErrors.applyDeadline || driveErrors.applyDeadline) && <p className="text-[11px] text-red-500 font-medium mt-1">{driveFormErrors.applyDeadline || driveErrors.applyDeadline}</p>}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Description *</label>
-            <textarea value={driveForm.description} onChange={e => setDriveForm(f => ({ ...f, description: e.target.value }))} rows={3}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Requirements (comma-separated)</label>
-            <input value={driveForm.requirements} onChange={e => setDriveForm(f => ({ ...f, requirements: e.target.value }))} placeholder="B.Tech/MCA, 60% throughout, No backlogs"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Skills Required (comma-separated)</label>
-            <input value={driveForm.skills} onChange={e => setDriveForm(f => ({ ...f, skills: e.target.value }))} placeholder="Python, Django, SQL, Git"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Drive Type *</label>
-            <CustomSelect
-              value={driveForm.driveType}
-              onChange={v => setDriveForm(f => ({ ...f, driveType: v }))}
-              options={['CAMPUS', 'OFF_CAMPUS', 'POOL', 'VIRTUAL'].map(t => ({ value: t, label: t.replace('_', ' ') }))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">External Apply Link (optional)</label>
-            <input value={driveForm.applyLink} onChange={e => setDriveForm(f => ({ ...f, applyLink: e.target.value }))} placeholder="https://..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500" />
-            <p className="text-[10px] text-gray-400 mt-1">Company reference link only - students still express interest through the platform, never apply directly.</p>
-          </div>
-          <div className="pt-2 border-t border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-semibold text-gray-700">Eligibility Criteria</p>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <span className={`text-xs font-semibold ${driveGeneral ? 'text-emerald-600' : 'text-gray-500'}`}>
-                  {driveGeneral ? 'Open to all students' : 'Restricted'}
-                </span>
-                <button type="button" onClick={() => setDriveGeneral(g => {
-                  const next = !g
-                  if (next) {
-                    // Switching to Open to All: clear every eligibility-restriction value so
-                    // nothing stale is left in state (and therefore nothing stale gets
-                    // submitted or silently enforced against students).
-                    setDriveForm(f => ({
-                      ...f, minCgpa: null, minPercentage: null, maxBacklogs: null,
-                      eligibleBatchIds: [], eligibleCourseIds: [],
-                    }))
-                    setDriveErrors(errs => {
-                      const { minCgpa, minPercentage, maxBacklogs, eligibleBatchIds, eligibleCourseIds, ...rest } = errs
-                      return rest
-                    })
-                  }
-                  return next
-                })} role="switch" aria-checked={driveGeneral}
-                  className={`w-10 h-[22px] rounded-full transition-colors relative ${driveGeneral ? 'bg-green-500' : 'bg-gray-300'}`}>
-                  <span className={`absolute top-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-all ${driveGeneral ? 'left-[20px]' : 'left-0.5'}`} />
-                </button>
-              </label>
-            </div>
-            {driveGeneral ? (
-              <p className="text-xs text-gray-400 bg-gray-50 rounded-xl px-3 py-2.5">
-                No eligibility restrictions — the drive is visible to all students.
-              </p>
-            ) : (
-              <>
-                <EligibilityCriteriaFields value={driveForm} errors={{ ...driveErrors, ...driveFormErrors }} onChange={patch => setDriveForm(f => ({ ...f, ...patch }))} />
-                {driveErrors.eligibleBatchIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleBatchIds}</p>}
-                {driveErrors.eligibleCourseIds && <p className="text-[11px] text-red-500 font-medium mt-1">{driveErrors.eligibleCourseIds}</p>}
-              </>
-            )}
-          </div>
-          {(() => {
-            // driveFormErrors is recomputed live from the current form on every render
-            // (see the useMemo above), so fixing a field re-enables the button
-            // immediately - no stale error state, no need to resubmit or reopen the panel.
-            const isDriveFormValid = Object.keys(driveFormErrors).length === 0
-            return (
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setDrivePanel(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">Cancel</button>
-                <button
-                  type="submit"
-                  disabled={saving || !isDriveFormValid}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20"
-                >
-                  {saving ? (editingDrive ? 'Saving...' : 'Creating...') : (editingDrive ? 'Save Changes' : 'Create Drive')}
-                </button>
-              </div>
-            )
-          })()}
         </form>
       </SlidePanel>
 

@@ -7,6 +7,7 @@ import com.careerlabs.lms.api.announcement.dto.response.AnnouncementAnalyticsRes
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementSuggestionResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementVersionResponse;
+import com.careerlabs.lms.api.announcement.dto.response.StudentAnnouncementPageResponse;
 import com.careerlabs.lms.api.announcement.entity.Announcement;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementAcknowledgment;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementCategory;
@@ -46,7 +47,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -132,6 +132,61 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     @Override
     @Transactional(readOnly = true)
     public List<AnnouncementResponse> listForStudent(Long userId) {
+        return eligibleForStudent(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StudentAnnouncementPageResponse listForStudentPaged(Long userId, String search,
+            AnnouncementCategory category, Boolean unread, String sort, int page, int limit) {
+        List<AnnouncementResponse> result = new ArrayList<>(eligibleForStudent(userId));
+
+        if (category != null) {
+            result.removeIf(r -> r.category() != category);
+        }
+        // Unread mirrors the student page's definition: no row in announcement_views yet.
+        if (Boolean.TRUE.equals(unread)) {
+            result.removeIf(r -> Boolean.TRUE.equals(r.viewed()));
+        }
+        if (search != null && !search.isBlank()) {
+            String q = search.trim().toLowerCase(java.util.Locale.ROOT);
+            result.removeIf(r -> !containsIgnoreCase(r.title(), q) && !containsIgnoreCase(r.body(), q));
+        }
+
+        // Preserve the student page's sort: pinned first, then creation date
+        // (newest first by default, oldest first when requested).
+        boolean oldestFirst = "oldest".equalsIgnoreCase(sort);
+        java.util.Comparator<AnnouncementResponse> byCreatedAt = oldestFirst
+                ? java.util.Comparator.comparing(AnnouncementResponse::createdAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                : java.util.Comparator.comparing(AnnouncementResponse::createdAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()));
+        result.sort(java.util.Comparator.comparing(AnnouncementResponse::isPinned).reversed()
+                .thenComparing(byCreatedAt));
+
+        int pageNumber = Math.max(1, page);
+        int pageSize = limit <= 0 ? 20 : Math.min(limit, 1000);
+        long totalElements = result.size();
+        int totalPages = Math.max(1, (int) Math.ceil(totalElements / (double) pageSize));
+        int safePage = Math.min(pageNumber, totalPages);
+        int from = (safePage - 1) * pageSize;
+        int to = Math.min(from + pageSize, result.size());
+        List<AnnouncementResponse> items = from >= result.size()
+                ? List.of()
+                : List.copyOf(result.subList(from, to));
+        return new StudentAnnouncementPageResponse(items, totalElements, totalPages, safePage);
+    }
+
+    private static boolean containsIgnoreCase(String text, String query) {
+        return text != null && text.toLowerCase(java.util.Locale.ROOT).contains(query);
+    }
+
+    /**
+     * The audience-filtered, personalized, pinned-first list every student-facing
+     * announcement query starts from: published + unexpired + eligible recipient,
+     * with per-student viewed/acknowledged flags resolved from the view/ack tables.
+     */
+    private List<AnnouncementResponse> eligibleForStudent(Long userId) {
         Instant now = Instant.now();
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user " + userId));

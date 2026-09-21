@@ -18,6 +18,14 @@ public interface NotificationService {
     List<NotificationResponse> list(Long userId);
 
     /**
+     * Fetch notifications for the given user narrowed by optional filters.
+     * {@code category} is one of ASSIGNMENTS, QUIZZES, PLACEMENT, ANNOUNCEMENTS
+     * (ALL/blank = no category filter); {@code search} matches title/body
+     * case-insensitively; {@code unreadOnly=true} returns unread only.
+     */
+    List<NotificationResponse> list(Long userId, String category, String search, Boolean unreadOnly);
+
+    /**
      * Mark a single notification as read.
      * Throws ResourceNotFoundException if the notification doesn't belong to this user.
      */

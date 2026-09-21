@@ -1,15 +1,13 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/context/AuthContext'
-import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar, Clock, AlertCircle } from 'lucide-react'
+import { Search, Plus, Eye, Pencil, Trash2, Send, Lock, Unlock, Paperclip, X, RefreshCw, Calendar, Clock, AlertCircle, ArrowLeft, Loader2, FileText, BookOpen } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatAssignmentDueDate, format12HourTime } from '@/utils/assignmentDate'
 import toast from 'react-hot-toast'
 import assignmentService from '@/services/assignmentService'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
-import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -99,22 +97,9 @@ export default function AssignmentsPage() {
   const [errors, setErrors] = useState({})
   const searchTimer = useRef(null)
 
-  const { user } = useAuth()
-  const isTrainer = user?.role === 'TRAINER'
-
   const dateError = validateAssignmentDates(form.startDate, form.publishTime, form.dueDate, form.closeTime)
   const marksError = validateTotalMarks(form.totalMarks)
   const isFutureStart = isPublishDateInFuture(form.startDate, form.publishTime)
-
-  const trainerBatchIds = useMemo(() => new Set(batches.map(b => String(b.id))), [batches])
-
-  const displayedAssignments = useMemo(() => {
-    if (!isTrainer) return assignments
-    if (batches.length === 0) return []
-    return assignments.filter(a => a.batch && trainerBatchIds.has(String(a.batch.id)))
-  }, [assignments, isTrainer, batches, trainerBatchIds])
-
-  const displayedTotal = isTrainer ? displayedAssignments.length : total
 
   const loadAbortRef = useRef(null)
 
@@ -524,12 +509,472 @@ export default function AssignmentsPage() {
     ? batches.filter(b => getBatchCourseId(b) === String(courseFilter))
     : batches
 
+  if (panelOpen) {
+    return (
+      <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
+              <FileText className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                {editAssignment ? 'Edit Assignment' : 'Create New Assignment'}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {editAssignment ? 'Update assignment scope, schedule, deadline, and reference files.' : 'Assign coursework, define deadlines, and attach resources for a batch.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPanelOpen(false)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition shadow-xs self-start sm:self-auto"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Assignments
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Section 1: Assignment Content */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">1</div>
+              <span>Assignment Content</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Assignment Title *</label>
+              <input
+                value={form.title}
+                onChange={e => {
+                  setForm(f => ({ ...f, title: e.target.value }))
+                  if (errors.title) setErrors(prev => ({ ...prev, title: undefined }))
+                }}
+                placeholder="e.g. Build a Spring Boot REST API with JWT Authentication"
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                  errors.title ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+              />
+              {errors.title && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
+              <textarea
+                value={form.description}
+                onChange={e => {
+                  setForm(f => ({ ...f, description: e.target.value }))
+                  if (errors.description) setErrors(prev => ({ ...prev, description: undefined }))
+                }}
+                placeholder="Provide detailed submission instructions, coding requirements, deliverables, and rubric details..."
+                rows={4}
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 resize-none transition-all ${
+                  errors.description ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+              />
+              {errors.description && (
+                <p className="text-xs text-red-500 font-medium mt-1">{errors.description}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Section 2: Target Course & Cohort */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">2</div>
+              <span>Target Course &amp; Cohort</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Course *</label>
+                <SearchableSelect
+                  options={courseOptions}
+                  value={form.courseId}
+                  onChange={handleCourseChange}
+                  placeholder="Select course"
+                  searchPlaceholder="Search course..."
+                  disabled={!!(editAssignment && Number(editAssignment.submissionCount) > 0)}
+                  error={!!errors.courseId}
+                />
+                {errors.courseId && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
+                )}
+                {editAssignment && Number(editAssignment.submissionCount) > 0 && !errors.courseId && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1">
+                    Course and Batch cannot be changed once students have submitted ({editAssignment.submissionCount} submission{editAssignment.submissionCount > 1 ? 's' : ''}).
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Batch *</label>
+                <SearchableSelect
+                  options={batchOptions}
+                  value={form.batchId}
+                  onChange={(v) => {
+                    const hasSubmissions = editAssignment && Number(editAssignment.submissionCount) > 0
+                    const initialBatchId = editAssignment?.batch?.id != null ? String(editAssignment.batch.id) : ''
+                    if (hasSubmissions && v && String(v) !== initialBatchId) {
+                      setErrors(prev => ({ ...prev, batchId: 'Course and Batch cannot be changed once students have submitted.' }))
+                      toast.error('Course and Batch cannot be changed once students have submitted.')
+                      return
+                    }
+                    setForm(f => ({ ...f, batchId: v }))
+                    if (errors.batchId) setErrors(prev => ({ ...prev, batchId: undefined }))
+                  }}
+                  placeholder="Select batch"
+                  searchPlaceholder="Search batch..."
+                  disabled={!!(editAssignment && Number(editAssignment.submissionCount) > 0)}
+                  error={!!errors.batchId}
+                />
+                {errors.batchId && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.batchId}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Schedule & Deadline */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">3</div>
+              <span>Schedule &amp; Deadline</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Start Date</label>
+                <input
+                  type="date"
+                  min={new Date().toISOString().slice(0, 10)}
+                  value={form.startDate}
+                  max={form.dueDate || undefined}
+                  onChange={e => {
+                    const newStart = e.target.value
+                    setForm(f => ({
+                      ...f,
+                      startDate: newStart,
+                    }))
+                    if (errors.startDate) setErrors(prev => ({ ...prev, startDate: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                    errors.startDate ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
+                />
+                {errors.startDate && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.startDate}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Publish Time</label>
+                <input
+                  type="time"
+                  value={form.publishTime}
+                  onChange={e => {
+                    setForm(f => ({ ...f, publishTime: e.target.value }))
+                    if (errors.publishTime) setErrors(prev => ({ ...prev, publishTime: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                    errors.publishTime || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
+                />
+                {errors.publishTime && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.publishTime}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">End Date</label>
+                <input
+                  type="date"
+                  min={form.startDate || new Date().toISOString().slice(0, 10)}
+                  value={form.dueDate}
+                  onChange={e => {
+                    setForm(f => ({ ...f, dueDate: e.target.value }))
+                    if (errors.dueDate) setErrors(prev => ({ ...prev, dueDate: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                    errors.dueDate || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
+                />
+                {errors.dueDate && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.dueDate}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Close Time</label>
+                <input
+                  type="time"
+                  value={form.closeTime}
+                  onChange={e => {
+                    setForm(f => ({ ...f, closeTime: e.target.value }))
+                    if (errors.closeTime) setErrors(prev => ({ ...prev, closeTime: undefined }))
+                  }}
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                    errors.closeTime || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
+                />
+                {errors.closeTime && (
+                  <p className="text-xs text-red-500 font-medium mt-1">{errors.closeTime}</p>
+                )}
+              </div>
+            </div>
+
+            {dateError && (
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium animate-fadeIn">
+                <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
+                <span>{dateError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Section 4: Grading & Resources */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">4</div>
+              <span>Grading &amp; Resources</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Total Marks
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={3}
+                value={form.totalMarks}
+                placeholder="Enter marks (1 - 100)"
+                onKeyDown={e => {
+                  if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) return
+                  if (e.ctrlKey || e.metaKey) return
+                  if (!/[\d.]/.test(e.key)) e.preventDefault()
+                }}
+                onChange={e => {
+                  const raw = e.target.value
+                  if (raw === '') {
+                    setForm(f => ({ ...f, totalMarks: '' }))
+                    if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
+                    return
+                  }
+                  const clean = raw.replace(/[^0-9.]/g, '')
+                  if (clean === '') {
+                    setForm(f => ({ ...f, totalMarks: '' }))
+                    return
+                  }
+                  const num = parseFloat(clean)
+                  if (!isNaN(num)) {
+                    if (num > 100) {
+                      setForm(f => ({ ...f, totalMarks: '100' }))
+                    } else if (clean.includes('.')) {
+                      if (clean.endsWith('.') && clean.indexOf('.') === clean.lastIndexOf('.')) {
+                        setForm(f => ({ ...f, totalMarks: clean }))
+                      } else {
+                        const rounded = Math.min(100, Math.max(1, Math.round(num)))
+                        setForm(f => ({ ...f, totalMarks: String(rounded) }))
+                      }
+                    } else {
+                      const intStr = clean.slice(0, 3)
+                      if (Number(intStr) > 100) {
+                        setForm(f => ({ ...f, totalMarks: '100' }))
+                      } else {
+                        setForm(f => ({ ...f, totalMarks: intStr }))
+                      }
+                    }
+                  } else {
+                    setForm(f => ({ ...f, totalMarks: '' }))
+                  }
+                  if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
+                }}
+                onBlur={() => {
+                  if (form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined) {
+                    const num = parseFloat(String(form.totalMarks))
+                    if (!isNaN(num)) {
+                      const rounded = Math.min(100, Math.max(1, Math.round(num)))
+                      setForm(f => ({ ...f, totalMarks: String(rounded) }))
+                    }
+                  }
+                }}
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                  errors.totalMarks || (form.totalMarks !== '' && marksError)
+                    ? 'border-red-400 focus:ring-red-400'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+              />
+              {(errors.totalMarks || (form.totalMarks !== '' && marksError)) && (
+                <p className="text-xs text-red-500 font-medium mt-1">
+                  {errors.totalMarks || marksError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Attachments (PDF, DOC, DOCX only)
+                </label>
+                {(form.attachments?.length > 0 || form.attachmentName) && (
+                  <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">
+                    {(form.attachments?.length || (form.attachmentName ? 1 : 0))} file{(form.attachments?.length || (form.attachmentName ? 1 : 0)) > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              {/* List of Attached Files */}
+              {(form.attachments?.length > 0 ? form.attachments : (form.attachmentName ? [{ fileUrl: form.attachmentUrl, fileName: form.attachmentName }] : [])).length > 0 && (
+                <div className="space-y-1.5 mb-2.5 max-h-40 overflow-y-auto pr-1">
+                  {(form.attachments?.length > 0 ? form.attachments : [{ fileUrl: form.attachmentUrl, fileName: form.attachmentName }]).map((att, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/40 dark:bg-gray-800/80 px-3.5 py-2 text-xs"
+                    >
+                      <span className="flex items-center gap-2 text-gray-700 dark:text-gray-300 min-w-0 font-medium">
+                        <Paperclip size={13} className="text-purple-500 flex-shrink-0" />
+                        <span className="break-words truncate max-w-[280px]">{att.fileName}</span>
+                      </span>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(idx)}
+                          className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                          title="Remove file"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* File Upload Input */}
+              <div className="relative">
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.doc,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                  className="w-full text-xs text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:bg-purple-50 dark:file:bg-purple-950/50 file:text-purple-600 dark:file:text-purple-300 file:text-xs file:font-semibold hover:file:bg-purple-100 dark:hover:file:bg-purple-900/50 cursor-pointer"
+                />
+              </div>
+
+              {/* Inline Error Message */}
+              {errors.attachment && (
+                <div className="mt-1.5 p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium animate-fadeIn">
+                  <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
+                  <span>{errors.attachment}</span>
+                </div>
+              )}
+
+              {uploading && (
+                <p className="text-xs text-purple-500 mt-1.5 flex items-center gap-1.5 font-medium">
+                  <Clock size={12} className="animate-spin" /> Uploading file(s)...
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <div className="flex items-center gap-2">
+              {editAssignment && editAssignment.status !== 'DRAFT' && editAssignment.status !== 'SCHEDULED' ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => handleSubmit(editAssignment.status)}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs sm:text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all shadow-md shadow-purple-500/20 disabled:opacity-60 flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Assignment'
+                  )}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => handleSubmit('DRAFT')}
+                    className="px-4 py-2.5 rounded-xl border border-purple-200 dark:border-purple-800/60 text-purple-600 dark:text-purple-400 text-xs sm:text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors disabled:opacity-60 cursor-pointer"
+                  >
+                    Save as Draft
+                  </button>
+                  {isFutureStart ? (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={handleScheduleSubmit}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs sm:text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 cursor-pointer"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Scheduling...
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={15} />
+                          Schedule
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={handlePublishSubmit}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs sm:text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 cursor-pointer"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Publishing...
+                        </>
+                      ) : (
+                        <>
+                          <Send size={15} />
+                          Publish
+                        </>
+                      )}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Assignments</h1>
-          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{displayedTotal}</span>
+          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full">{total}</span>
         </div>
         <button onClick={openCreate}
           className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
@@ -662,10 +1107,10 @@ export default function AssignmentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayedAssignments.length === 0 ? (
+                {assignments.length === 0 ? (
                   <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">No assignments found</td></tr>
                 ) : (
-                  displayedAssignments.map(a => (
+                  assignments.map(a => (
                     <tr key={a.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-purple-50/20 dark:hover:bg-purple-900/10 transition-colors">
                       <td className="px-4 py-3">
                         <button onClick={() => router.push(`/admin/assignments/${a.id}`)}
@@ -731,7 +1176,7 @@ export default function AssignmentsPage() {
         )}
 
         <Pagination
-          total={displayedTotal}
+          total={total}
           totalPages={totalPages}
           page={page}
           pageSize={pageSize}
@@ -743,364 +1188,7 @@ export default function AssignmentsPage() {
         />
       </div>
 
-      {/* Create / Edit Panel */}
-      <SlidePanel
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        title={editAssignment ? 'Edit Assignment' : 'Create Assignment'}
-        subtitle={editAssignment ? 'Update assignment details' : 'Assign work to a batch'}
-        width="w-full sm:w-[540px] lg:w-[600px]"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assignment Title *</label>
-            <input
-              value={form.title}
-              onChange={e => {
-                setForm(f => ({ ...f, title: e.target.value }))
-                if (errors.title) setErrors(prev => ({ ...prev, title: undefined }))
-              }}
-              placeholder="Enter your Title"
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                errors.title ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-              }`}
-            />
-            {errors.title && (
-              <p className="text-xs text-red-500 font-medium mt-1">{errors.title}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={e => {
-                setForm(f => ({ ...f, description: e.target.value }))
-                if (errors.description) setErrors(prev => ({ ...prev, description: undefined }))
-              }}
-              placeholder="Enter your Description"
-              rows={4}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 resize-none ${
-                errors.description ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-              }`}
-            />
-            {errors.description && (
-              <p className="text-xs text-red-500 font-medium mt-1">{errors.description}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-            <SearchableSelect
-              options={courseOptions}
-              value={form.courseId}
-              onChange={handleCourseChange}
-              placeholder="Select course"
-              searchPlaceholder="Search course..."
-              disabled={!!(editAssignment && Number(editAssignment.submissionCount) > 0)}
-              error={!!errors.courseId}
-            />
-            {errors.courseId && (
-              <p className="text-xs text-red-500 font-medium mt-1">{errors.courseId}</p>
-            )}
-            {editAssignment && Number(editAssignment.submissionCount) > 0 && !errors.courseId && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1">
-                Course and Batch cannot be changed once students have submitted ({editAssignment.submissionCount} submission{editAssignment.submissionCount > 1 ? 's' : ''}).
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch *</label>
-            <SearchableSelect
-              options={batchOptions}
-              value={form.batchId}
-              onChange={(v) => {
-                const hasSubmissions = editAssignment && Number(editAssignment.submissionCount) > 0
-                const initialBatchId = editAssignment?.batch?.id != null ? String(editAssignment.batch.id) : ''
-                if (hasSubmissions && v && String(v) !== initialBatchId) {
-                  setErrors(prev => ({ ...prev, batchId: 'Course and Batch cannot be changed once students have submitted.' }))
-                  toast.error('Course and Batch cannot be changed once students have submitted.')
-                  return
-                }
-                setForm(f => ({ ...f, batchId: v }))
-                if (errors.batchId) setErrors(prev => ({ ...prev, batchId: undefined }))
-              }}
-              placeholder="Select batch"
-              searchPlaceholder="Search batch..."
-              disabled={!!(editAssignment && Number(editAssignment.submissionCount) > 0)}
-              error={!!errors.batchId}
-            />
-            {errors.batchId && (
-              <p className="text-xs text-red-500 font-medium mt-1">{errors.batchId}</p>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
-              <input
-                type="date"
-                min={new Date().toISOString().slice(0, 10)}
-                value={form.startDate}
-                max={form.dueDate || undefined}
-                onChange={e => {
-                  const newStart = e.target.value
-                  setForm(f => ({
-                    ...f,
-                    startDate: newStart,
-                  }))
-                  if (errors.startDate) setErrors(prev => ({ ...prev, startDate: undefined }))
-                }}
-                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                  errors.startDate ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                }`}
-              />
-              {errors.startDate && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.startDate}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Publish Time</label>
-              <input
-                type="time"
-                value={form.publishTime}
-                onChange={e => {
-                  setForm(f => ({ ...f, publishTime: e.target.value }))
-                  if (errors.publishTime) setErrors(prev => ({ ...prev, publishTime: undefined }))
-                }}
-                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                  errors.publishTime || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                }`}
-              />
-              {errors.publishTime && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.publishTime}</p>
-              )}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date</label>
-              <input
-                type="date"
-                min={form.startDate || new Date().toISOString().slice(0, 10)}
-                value={form.dueDate}
-                onChange={e => {
-                  setForm(f => ({ ...f, dueDate: e.target.value }))
-                  if (errors.dueDate) setErrors(prev => ({ ...prev, dueDate: undefined }))
-                }}
-                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                  errors.dueDate || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                }`}
-              />
-              {errors.dueDate && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.dueDate}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Close Time</label>
-              <input
-                type="time"
-                value={form.closeTime}
-                onChange={e => {
-                  setForm(f => ({ ...f, closeTime: e.target.value }))
-                  if (errors.closeTime) setErrors(prev => ({ ...prev, closeTime: undefined }))
-                }}
-                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                  errors.closeTime || dateError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                }`}
-              />
-              {errors.closeTime && (
-                <p className="text-xs text-red-500 font-medium mt-1">{errors.closeTime}</p>
-              )}
-            </div>
-          </div>
-
-          {dateError && (
-            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium animate-fadeIn">
-              <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
-              <span>{dateError}</span>
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              Total Marks
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={3}
-              value={form.totalMarks}
-              placeholder="Enter marks (1 - 100)"
-              onKeyDown={e => {
-                // Allow standard control and navigation keys
-                if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) {
-                  return
-                }
-                // Allow keyboard shortcuts (Ctrl+A, Ctrl+C, Ctrl+V, etc.)
-                if (e.ctrlKey || e.metaKey) {
-                  return
-                }
-                // Allow 0-9 and decimal point
-                if (!/[\d.]/.test(e.key)) {
-                  e.preventDefault()
-                }
-              }}
-              onChange={e => {
-                const raw = e.target.value
-                if (raw === '') {
-                  setForm(f => ({ ...f, totalMarks: '' }))
-                  if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
-                  return
-                }
-                // Clean input, allow only digits and dot
-                const clean = raw.replace(/[^0-9.]/g, '')
-                if (clean === '') {
-                  setForm(f => ({ ...f, totalMarks: '' }))
-                  return
-                }
-                const num = parseFloat(clean)
-                if (!isNaN(num)) {
-                  if (num > 100) {
-                    setForm(f => ({ ...f, totalMarks: '100' }))
-                  } else if (clean.includes('.')) {
-                    if (clean.endsWith('.') && clean.indexOf('.') === clean.lastIndexOf('.')) {
-                      setForm(f => ({ ...f, totalMarks: clean }))
-                    } else {
-                      const rounded = Math.min(100, Math.max(1, Math.round(num)))
-                      setForm(f => ({ ...f, totalMarks: String(rounded) }))
-                    }
-                  } else {
-                    const intStr = clean.slice(0, 3)
-                    if (Number(intStr) > 100) {
-                      setForm(f => ({ ...f, totalMarks: '100' }))
-                    } else {
-                      setForm(f => ({ ...f, totalMarks: intStr }))
-                    }
-                  }
-                } else {
-                  setForm(f => ({ ...f, totalMarks: '' }))
-                }
-                if (errors.totalMarks) setErrors(prev => ({ ...prev, totalMarks: undefined }))
-              }}
-              onBlur={() => {
-                if (form.totalMarks !== '' && form.totalMarks !== null && form.totalMarks !== undefined) {
-                  const num = parseFloat(String(form.totalMarks))
-                  if (!isNaN(num)) {
-                    const rounded = Math.min(100, Math.max(1, Math.round(num)))
-                    setForm(f => ({ ...f, totalMarks: String(rounded) }))
-                  }
-                }
-              }}
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 ${
-                errors.totalMarks || (form.totalMarks !== '' && marksError)
-                  ? 'border-red-400 focus:ring-red-400'
-                  : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-              }`}
-            />
-            {(errors.totalMarks || (form.totalMarks !== '' && marksError)) && (
-              <p className="text-xs text-red-500 font-medium mt-1">
-                {errors.totalMarks || marksError}
-              </p>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Attachments (PDF, DOC, DOCX only)
-              </label>
-              {(form.attachments?.length > 0 || form.attachmentName) && (
-                <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">
-                  {(form.attachments?.length || (form.attachmentName ? 1 : 0))} file{(form.attachments?.length || (form.attachmentName ? 1 : 0)) > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-
-            {/* List of Attached Files */}
-            {(form.attachments?.length > 0 ? form.attachments : (form.attachmentName ? [{ fileUrl: form.attachmentUrl, fileName: form.attachmentName }] : [])).length > 0 && (
-              <div className="space-y-1.5 mb-2.5 max-h-40 overflow-y-auto pr-1">
-                {(form.attachments?.length > 0 ? form.attachments : [{ fileUrl: form.attachmentUrl, fileName: form.attachmentName }]).map((att, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/40 dark:bg-gray-800/80 px-3.5 py-2 text-xs"
-                  >
-                    <span className="flex items-center gap-2 text-gray-700 dark:text-gray-300 min-w-0 font-medium">
-                      <Paperclip size={13} className="text-purple-500 flex-shrink-0" />
-                      <span className="break-words truncate max-w-[280px]">{att.fileName}</span>
-                    </span>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAttachment(idx)}
-                        className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                        title="Remove file"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* File Upload Input */}
-            <div className="relative">
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.docx,.doc,.ppt,.pptx,.txt,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.svg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                onChange={handleFileChange}
-                disabled={uploading}
-                className="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-purple-50 dark:file:bg-purple-950/50 file:text-purple-600 dark:file:text-purple-300 file:text-sm file:font-semibold hover:file:bg-purple-100 dark:hover:file:bg-purple-900/50 cursor-pointer"
-              />
-            </div>
-
-            {/* Inline Error Message */}
-            {errors.attachment && (
-              <div className="mt-1.5 p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2 text-xs text-red-600 dark:text-red-400 font-medium animate-fadeIn">
-                <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-red-500" />
-                <span>{errors.attachment}</span>
-              </div>
-            )}
-
-            {uploading && (
-              <p className="text-xs text-purple-500 mt-1.5 flex items-center gap-1.5 font-medium">
-                <Clock size={12} className="animate-spin" /> Uploading file(s)...
-              </p>
-            )}
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Cancel
-            </button>
-            {editAssignment && editAssignment.status !== 'DRAFT' && editAssignment.status !== 'SCHEDULED' ? (
-              <button type="button" disabled={saving} onClick={() => handleSubmit(editAssignment.status)}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60">
-                {saving ? 'Updating...' : 'Update Assignment'}
-              </button>
-            ) : (
-              <>
-                <button type="button" disabled={saving} onClick={() => handleSubmit('DRAFT')}
-                  className="flex-1 py-2.5 px-2 rounded-xl border border-purple-200 dark:border-purple-800/60 text-purple-600 dark:text-purple-400 text-sm font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors disabled:opacity-60 cursor-pointer">
-                  Save as Draft
-                </button>
-                {isFutureStart ? (
-                  <button type="button" disabled={saving} onClick={handleScheduleSubmit}
-                    className="flex-1 py-2.5 px-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm shadow-blue-500/20 cursor-pointer">
-                    <Clock size={15} />
-                    <span>{saving ? 'Scheduling...' : 'Schedule'}</span>
-                  </button>
-                ) : (
-                  <button type="button" disabled={saving} onClick={handlePublishSubmit}
-                    className="flex-1 py-2.5 px-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/20 cursor-pointer">
-                    <Send size={15} />
-                    <span>{saving ? 'Publishing...' : 'Publish'}</span>
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </SlidePanel>
 
       <DeleteConfirmModal
         isOpen={Boolean(deletingAssignment)}

@@ -7,18 +7,20 @@ import com.careerlabs.lms.api.quiz.dto.request.ReorderQuestionsRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateQuizRequest;
 import com.careerlabs.lms.api.quiz.dto.response.AdminQuizAnalyticsResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizAssignmentResponse;
+import com.careerlabs.lms.api.quiz.dto.response.QuizPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.QuizResponse;
 import com.careerlabs.lms.api.quiz.dto.response.StudentQuizResponse;
+import com.careerlabs.lms.api.quiz.entity.QuizType;
 
 import java.util.List;
 
 public interface QuizService {
 
-    List<QuizResponse> list();
-
-    /** Same as {@link #list()}, additionally narrowed to quizzes whose title contains {@code search}
-     * (case-insensitive). A blank/null search is a no-op. */
-    List<QuizResponse> list(String search);
+    /** Server-driven, paginated admin quiz list. {@code status} takes the effective-status values the UI
+     * shows (DRAFT/SCHEDULED/LIVE/COMPLETED/ARCHIVED) and {@code sourcePdf} narrows to quizzes authored
+     * from an uploaded PDF. {@code page} is 1-indexed. */
+    QuizPageResponse list(String search, QuizType type, Long courseId, Long batchId, String status,
+                          Boolean sourcePdf, int page, int limit);
 
     QuizResponse get(Long id);
 
@@ -35,6 +37,9 @@ public interface QuizService {
     QuizResponse reorderQuestions(Long quizId, ReorderQuestionsRequest request);
 
     List<StudentQuizResponse> listPublished(Long studentId);
+
+    /** Student quiz list with optional case-insensitive search over title/description. */
+    List<StudentQuizResponse> listPublished(Long studentId, String search);
 
     StudentQuizResponse getPublished(Long id, Long studentId);
 

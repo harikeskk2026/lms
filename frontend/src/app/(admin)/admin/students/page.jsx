@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Users } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, FileDown, FileUp, RefreshCw, Loader2, KeyRound, Users, ArrowLeft, User, BookOpen, Briefcase } from 'lucide-react'
 import toast from 'react-hot-toast'
 import studentService from '@/services/studentService'
 import batchService from '@/services/batchService'
@@ -21,7 +21,6 @@ import {
   sanitizePhone,
 } from '@/utilities/validators'
 import LoginAccessToggle from '@/components/admin/LoginAccessToggle'
-import SlidePanel from '@/components/admin/SlidePanel'
 import SearchableSelect from '@/components/admin/SearchableSelect'
 import BulkImportModal from '@/components/admin/BulkImportModal'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
@@ -230,6 +229,282 @@ function CourseBatchGroups({ groups, onChange, courseOptions, batches, conflicts
       >
         <Plus size={13} /> Add Another Course
       </button>
+    </div>
+  )
+}
+
+function StudentForm({
+  form,
+  setForm,
+  editStudent,
+  saving,
+  isFormValid,
+  onSubmit,
+  onCancel,
+  courseOptions,
+  batches,
+  scheduleConflicts,
+  touched,
+  setTouched,
+  submitted,
+  isNameValid,
+  isEmailValid,
+  isPhoneValid,
+  isPasswordValid,
+  emailError,
+  setEmailError,
+  hasAnyCourse,
+}) {
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-500/25 flex-shrink-0">
+            <Users size={22} />
+          </div>
+          <div>
+            <h2 className="font-display text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+              {editStudent ? 'Edit Student Profile' : 'Create New Student'}
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {editStudent ? 'Update student enrollment, batch assignments, and placement status.' : 'Register a new student, assign courses and cohorts, and configure access.'}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-all shadow-2xs hover:shadow-xs active:scale-95"
+        >
+          <ArrowLeft size={14} /> Back to Students
+        </button>
+      </div>
+
+      {/* Form Content */}
+      <form onSubmit={onSubmit} noValidate className="space-y-6">
+        {/* Section 1: Personal & Academic Details */}
+        <div className="p-5 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <User size={14} />
+            </div>
+            <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+              Personal & Academic Details
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
+              <input
+                type="text"
+                value={form.name}
+                onKeyDown={filterNameKey}
+                onBlur={() => setTouched(t => ({ ...t, name: true }))}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Enter full name"
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                  (touched.name || submitted) && !isNameValid
+                    ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+                required
+              />
+              {(touched.name || submitted) && !isNameValid && (
+                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {!form.name.trim() ? 'Full Name is required' : NAME_ERROR_MESSAGE}
+                </p>
+              )}
+            </div>
+
+            {!editStudent && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onBlur={() => setTouched(t => ({ ...t, email: true }))}
+                  onChange={e => {
+                    const val = e.target.value
+                    setForm(f => ({ ...f, email: val }))
+                    if (emailError && isValidEmail(val.trim())) setEmailError('')
+                  }}
+                  placeholder="Enter email address"
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                    (touched.email || submitted) && !isEmailValid
+                      ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                      : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                  }`}
+                  required
+                />
+                {(touched.email || submitted) && !isEmailValid && (
+                  <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                    {!form.email.trim() ? 'Email is required' : EMAIL_ERROR_MESSAGE}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.phone}
+                onKeyDown={filterPhoneKey}
+                onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                onChange={e => setForm(f => ({ ...f, phone: sanitizePhone(e.target.value) }))}
+                placeholder="Enter phone number"
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                  (touched.phone || submitted) && !isPhoneValid
+                    ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+              />
+              {(touched.phone || submitted) && !isPhoneValid && (
+                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {PHONE_ERROR_MESSAGE}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
+              <input
+                type="text"
+                value={form.collegeName}
+                onChange={e => setForm(f => ({ ...f, collegeName: e.target.value }))}
+                placeholder="Enter college name"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Course & Cohort Assignment */}
+        <div className="p-5 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <BookOpen size={14} />
+            </div>
+            <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+              Course & Cohort Assignment
+            </h3>
+          </div>
+
+          <div>
+            <CourseBatchGroups
+              groups={form.courseGroups}
+              onChange={(groups) => setForm(f => ({ ...f, courseGroups: groups }))}
+              courseOptions={courseOptions}
+              batches={batches}
+              conflicts={scheduleConflicts}
+            />
+            {submitted && !hasAnyCourse && (
+              <p className="text-xs text-red-500 mt-1.5 font-semibold">Please select at least one course</p>
+            )}
+          </div>
+        </div>
+
+        {/* Section 3: Account Security (Create only) */}
+        {!editStudent && (
+          <div className="p-5 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <KeyRound size={14} />
+              </div>
+              <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Account Security
+              </h3>
+            </div>
+
+            <div className="max-w-md space-y-3">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Password *</label>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, password: genPassword() }))}
+                  className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-semibold"
+                >
+                  Generate Random
+                </button>
+              </div>
+              <input
+                type="text"
+                value={form.password}
+                onBlur={() => setTouched(t => ({ ...t, password: true }))}
+                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="Enter password"
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-mono text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
+                  (touched.password || submitted) && !isPasswordValid
+                    ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
+                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
+                }`}
+                required
+              />
+              {(touched.password || submitted) && !isPasswordValid && (
+                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                  {!form.password ? 'Password is required' : PASSWORD_ERROR_MESSAGE}
+                </p>
+              )}
+              {form.password && <PasswordStrengthMeter password={form.password} />}
+            </div>
+          </div>
+        )}
+
+        {/* Section 4: Placement Status (Edit only) */}
+        {editStudent && (
+          <div className="p-5 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <Briefcase size={14} />
+              </div>
+              <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Placement Status
+              </h3>
+            </div>
+
+            <div className="max-w-md">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status</label>
+              <CustomSelect
+                value={form.placementStatus}
+                onChange={(val) => setForm(f => ({ ...f, placementStatus: val }))}
+                options={[
+                  { value: 'SEEKING', label: 'Seeking' },
+                  { value: 'INTERVIEWING', label: 'Interviewing' },
+                  { value: 'PLACED', label: 'Placed' },
+                  { value: 'NOT_SEEKING', label: 'Not Seeking' },
+                ]}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Bottom Actions */}
+        <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-gray-800">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-750 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !isFormValid}
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-sm font-bold shadow-md shadow-purple-500/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            {saving && <Loader2 size={16} className="animate-spin" />}
+            {saving ? 'Saving...' : editStudent ? 'Save Changes' : 'Create Student'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
@@ -504,8 +779,33 @@ export default function StudentsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-6 border border-purple-100 dark:border-purple-900/30">
+      {panelOpen ? (
+        <StudentForm
+          form={form}
+          setForm={setForm}
+          editStudent={editStudent}
+          saving={saving}
+          isFormValid={isFormValid}
+          onSubmit={handleSubmit}
+          onCancel={() => setPanelOpen(false)}
+          courseOptions={courseOptions}
+          batches={batches}
+          scheduleConflicts={scheduleConflicts}
+          touched={touched}
+          setTouched={setTouched}
+          submitted={submitted}
+          isNameValid={isNameValid}
+          isEmailValid={isEmailValid}
+          isPhoneValid={isPhoneValid}
+          isPasswordValid={isPasswordValid}
+          emailError={emailError}
+          setEmailError={setEmailError}
+          hasAnyCourse={hasAnyCourse}
+        />
+      ) : (
+        <>
+          {/* Header Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-6 border border-purple-100 dark:border-purple-900/30">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
@@ -767,183 +1067,8 @@ export default function StudentsPage() {
           label="students"
         />
       </div>
-
-      {/* Add / Edit Student Panel */}
-      <SlidePanel
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        title={editStudent ? 'Edit Student' : 'Add Student'}
-        subtitle={editStudent ? 'Update student profile' : 'Create a new student account'}
-        isDirty={isDirty}
-      >
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
-            <input
-              type="text"
-              value={form.name}
-              onKeyDown={filterNameKey}
-              onBlur={() => setTouched(t => ({ ...t, name: true }))}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Enter full name"
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
-                (touched.name || submitted) && !isNameValid
-                  ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
-                  : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-              }`}
-              required
-            />
-            {(touched.name || submitted) && !isNameValid && (
-              <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                {!form.name.trim() ? 'Full Name is required' : NAME_ERROR_MESSAGE}
-              </p>
-            )}
-          </div>
-
-          {!editStudent && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Email *</label>
-              <input
-                type="email"
-                value={form.email}
-                onBlur={() => setTouched(t => ({ ...t, email: true }))}
-                onChange={e => {
-                  const val = e.target.value
-                  setForm(f => ({ ...f, email: val }))
-                  if (emailError && isValidEmail(val.trim())) setEmailError('')
-                }}
-                placeholder="Enter email address"
-                className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
-                  (touched.email || submitted) && !isEmailValid
-                    ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
-                    : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                }`}
-                required
-              />
-              {(touched.email || submitted) && !isEmailValid && (
-                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                  {!form.email.trim() ? 'Email is required' : EMAIL_ERROR_MESSAGE}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Phone</label>
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={10}
-              value={form.phone}
-              onKeyDown={filterPhoneKey}
-              onBlur={() => setTouched(t => ({ ...t, phone: true }))}
-              onChange={e => setForm(f => ({ ...f, phone: sanitizePhone(e.target.value) }))}
-              placeholder="Enter phone number"
-              className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
-                (touched.phone || submitted) && !isPhoneValid
-                  ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
-                  : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-              }`}
-            />
-            {(touched.phone || submitted) && !isPhoneValid && (
-              <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                {PHONE_ERROR_MESSAGE}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">College Name</label>
-            <input
-              type="text"
-              value={form.collegeName}
-              onChange={e => setForm(f => ({ ...f, collegeName: e.target.value }))}
-              placeholder="Enter college name"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-
-          {!editStudent && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Password *</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={form.password}
-                  onBlur={() => setTouched(t => ({ ...t, password: true }))}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="Enter password"
-                  className={`flex-1 rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 transition-all ${
-                    (touched.password || submitted) && !isPasswordValid
-                      ? 'border-red-500 focus:ring-red-500 bg-red-50/20'
-                      : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'
-                  }`}
-                  required
-                />
-                <button type="button" onClick={() => setForm(f => ({ ...f, password: genPassword() }))}
-                  className="px-3 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors whitespace-nowrap">
-                  Generate
-                </button>
-              </div>
-              {(touched.password || submitted) && !isPasswordValid && (
-                <p className="text-xs text-red-500 mt-1.5 font-semibold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                  {!form.password ? 'Password is required' : PASSWORD_ERROR_MESSAGE}
-                </p>
-              )}
-              {form.password && <PasswordStrengthMeter password={form.password} />}
-            </div>
-          )}
-
-          {/*
-            Course + Batch: what CareerLabs is training this student on. A
-            student can enroll in multiple courses, but only one batch per
-            course - see CourseBatchGroups.
-          */}
-          <div className="pt-1">
-            <CourseBatchGroups
-              groups={form.courseGroups}
-              onChange={(groups) => setForm(f => ({ ...f, courseGroups: groups }))}
-              courseOptions={courseOptions}
-              batches={batches}
-              conflicts={scheduleConflicts}
-            />
-            {submitted && !hasAnyCourse && (
-              <p className="text-xs text-red-500 mt-1.5 font-semibold">Please select at least one course</p>
-            )}
-          </div>
-
-          {editStudent && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Placement Status</label>
-              <CustomSelect
-                value={form.placementStatus}
-                onChange={(val) => setForm(f => ({ ...f, placementStatus: val }))}
-                options={[
-                  { value: 'SEEKING', label: 'Seeking' },
-                  { value: 'INTERVIEWING', label: 'Interviewing' },
-                  { value: 'PLACED', label: 'Placed' },
-                  { value: 'NOT_SEEKING', label: 'Not Seeking' },
-                ]}
-              />
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setPanelOpen(false)}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving || !isFormValid}
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-              {saving ? 'Saving...' : editStudent ? 'Save Changes' : 'Create Student'}
-            </button>
-          </div>
-        </form>
-      </SlidePanel>
+    </>
+  )}
 
       {/* Bulk Import Students Modal */}
       {importModalOpen && (

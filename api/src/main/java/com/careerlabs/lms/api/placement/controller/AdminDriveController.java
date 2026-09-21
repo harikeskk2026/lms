@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.request.CreateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.response.AdminDriveResponse;
+import com.careerlabs.lms.api.placement.dto.response.DrivePageResponse;
 import com.careerlabs.lms.api.placement.service.DriveService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
 import jakarta.validation.Valid;
@@ -16,9 +17,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/drives")
@@ -31,8 +31,14 @@ public class AdminDriveController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<AdminDriveResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.of(driveService.listForAdmin()));
+    public ResponseEntity<ApiResponse<DrivePageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) Integer size) {
+        int effectiveLimit = (size != null && size > 0) ? size : limit;
+        return ResponseEntity.ok(ApiResponse.of(driveService.pageForAdmin(search, status, page, effectiveLimit)));
     }
 
     @GetMapping("/{id}")

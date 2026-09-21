@@ -1,6 +1,7 @@
 package com.careerlabs.lms.api.placement.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
+import com.careerlabs.lms.api.placement.dto.response.OfferPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.OfferResponse;
 import com.careerlabs.lms.api.placement.service.OfferService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -26,8 +28,12 @@ public class StudentOfferController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<OfferResponse>>> myOffers(@AuthenticationPrincipal JwtUserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.of(offerService.listForStudent(principal.id())));
+    public ResponseEntity<ApiResponse<OfferPageResponse>> myOffers(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(offerService.pageForStudent(principal.id(), search, page, limit)));
     }
 
     @PostMapping("/{offerId}/accept")

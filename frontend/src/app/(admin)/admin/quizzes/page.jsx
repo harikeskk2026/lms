@@ -112,9 +112,45 @@ export default function QuizzesPage() {
   const [originalQuestionIds, setOriginalQuestionIds] = useState([])
   const [originalStatus, setOriginalStatus] = useState('DRAFT')
   const [loadingEditQuiz, setLoadingEditQuiz] = useState(false)
+  const [quizTotal, setQuizTotal] = useState(0)
+  const [quizTotalPages, setQuizTotalPages] = useState(1)
+  const [pdfQuizzes, setPdfQuizzes] = useState([])
+  const [bankTotal, setBankTotal] = useState(0)
+  const [bankTotalPages, setBankTotalPages] = useState(1)
+  const bankQuestionCache = useRef(new Map())
+  const pickerSearch = useDebouncedValue(questionSearch, 400)
 
-  const loadBankQuestions = () => {
-    quizService.listQuestions({ active: true }).then(r => setBankQuestions(r.data || [])).catch(() => {})
+  const cacheQuestions = (qs) => {
+    qs.forEach(q => bankQuestionCache.current.set(q.id, q))
+  }
+
+  const fetchBankPage = () => {
+    if (!panelOpen || step !== 1 || questionsView !== 'list' || editingQuizId) return
+    quizService.listQuestions({
+      active: true,
+      search: pickerSearch.trim() || undefined,
+      topicId: pickerTopicFilter || undefined,
+      courseId: pickerCourseFilter || undefined,
+      difficulty: pickerDifficultyFilter || undefined,
+      questionType: pickerTypeFilter || undefined,
+      page: pickerPage,
+      limit: pickerPageSize,
+    })
+      .then(r => {
+        const data = r.data
+        const qs = data.questions || []
+        setBankQuestions(qs)
+        setBankTotal(data.total ?? 0)
+        setBankTotalPages(data.totalPages ?? 1)
+        cacheQuestions(qs)
+      })
+      .catch(() => {})
+  }
+
+  const loadPdfQuizzes = () => {
+    quizService.listQuizzes({ sourcePdf: true, page: 1, limit: 100 })
+      .then(r => setPdfQuizzes((r.data && r.data.quizzes) || []))
+      .catch(() => {})
   }
 
   const load = () => {
@@ -122,8 +158,21 @@ export default function QuizzesPage() {
     const controller = new AbortController()
     quizzesAbortRef.current = controller
     setLoading(true)
-    quizService.listQuizzes({ search: quizSearch.trim() || undefined }, { signal: controller.signal })
-      .then(r => setQuizzes(r.data || []))
+    quizService.listQuizzes({
+      search: quizSearch.trim() || undefined,
+      type: typeFilter || undefined,
+      courseId: courseFilter || undefined,
+      batchId: batchFilter || undefined,
+      status: statusFilter || undefined,
+      page: quizPage,
+      limit: quizPageSize,
+    }, { signal: controller.signal })
+      .then(r => {
+        const data = r.data
+        setQuizzes((data && data.quizzes) || [])
+        setQuizTotal((data && data.totalElements) ?? 0)
+        setQuizTotalPages((data && data.totalPages) ?? 1)
+      })
       .catch(err => {
         if (err.code === 'ERR_CANCELED') return
         toast.error('Failed to load quizzes')
@@ -135,10 +184,15 @@ export default function QuizzesPage() {
 
   useEffect(() => {
     load()
-  }, [quizSearch])
+  }, [quizSearch, typeFilter, courseFilter, batchFilter, statusFilter, quizPage, quizPageSize])
 
   useEffect(() => {
-    loadBankQuestions()
+    fetchBankPage()
+  }, [pickerSearch, pickerTopicFilter, pickerCourseFilter, pickerDifficultyFilter, pickerTypeFilter,
+      pickerPage, pickerPageSize, panelOpen, step, questionsView, editingQuizId])
+
+  useEffect(() => {
+    loadPdfQuizzes()
     quizService.listTopics().then(r => setTopics(r.data || [])).catch(() => {})
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
     batchService.list().then(r => setBatches(r.data || [])).catch(() => {})
@@ -146,12 +200,14 @@ export default function QuizzesPage() {
 
   const handleQuestionCreated = (newQuestion) => {
     setBankQuestions(prev => [newQuestion, ...prev])
+    cacheQuestions([newQuestion])
     setSelectedQuestionIds(prev => [...prev, newQuestion.id])
     setQuestionsView('list')
   }
 
   const handleBulkQuestionsCreated = (newQuestions) => {
     setBankQuestions(prev => [...newQuestions, ...prev])
+    cacheQuestions(newQuestions)
     setSelectedQuestionIds(prev => [...prev, ...newQuestions.map(q => q.id)])
     setQuestionsView('list')
   }
@@ -180,6 +236,7 @@ export default function QuizzesPage() {
       })
       toast.success(nextStatus === 'PUBLISHED' ? 'Quiz published' : 'Quiz moved to draft')
       load()
+      loadPdfQuizzes()
     } catch (err) { toast.error(err.message || 'Failed') }
   }
 
@@ -247,6 +304,7 @@ export default function QuizzesPage() {
       toast.success('Quiz deleted')
       setDeletingQuiz(null)
       load()
+      loadPdfQuizzes()
     } catch (err) {
       toast.error(err.message || 'Failed to delete quiz')
     } finally {
@@ -273,19 +331,11 @@ export default function QuizzesPage() {
     setQuestionMarks(prev => ({ ...prev, [id]: value === '' ? undefined : Number(value) }))
   }
 
-  // Preserves selection/reorder order (unlike a plain bank filter)
+  // Preserves selection/reorder order across server-paginated bank fetches (objects are cached by id).
   const selectedQuestions = selectedQuestionIds
-    .map(id => bankQuestions.find(q => q.id === id))
+    .map(id => bankQuestionCache.current.get(id))
     .filter(Boolean)
   const totalPoints = selectedQuestions.reduce((a, q) => a + (questionMarks[q.id] ?? q.points ?? 1), 0)
-  const filteredBankQuestions = bankQuestions.filter(q => {
-    if (questionSearch && !q.questionText.toLowerCase().includes(questionSearch.toLowerCase())) return false
-    if (pickerTopicFilter && String(q.topicId ?? '') !== String(pickerTopicFilter)) return false
-    if (pickerCourseFilter && String(q.courseId ?? '') !== String(pickerCourseFilter)) return false
-    if (pickerDifficultyFilter && q.difficulty !== pickerDifficultyFilter) return false
-    if (pickerTypeFilter && q.questionType !== pickerTypeFilter) return false
-    return true
-  })
 
   const getFieldError = (field, val) => {
     if (field === 'title') {
@@ -442,6 +492,13 @@ export default function QuizzesPage() {
       setStep(0)
       setQuestionsView('list')
       setPanelOpen(true)
+      quizService.listQuestions({ active: true })
+        .then(r => {
+          const qs = r.data || []
+          setBankQuestions(qs)
+          cacheQuestions(qs)
+        })
+        .catch(() => {})
     } catch (err) {
       toast.error(err.message || 'Failed to load quiz for editing')
     } finally {
@@ -578,24 +635,745 @@ export default function QuizzesPage() {
       await quizService.releaseResults(quiz.id)
       toast.success('Results released to students')
       load()
+      loadPdfQuizzes()
     } catch (err) { toast.error(err.message || 'Failed to release results') }
   }
 
-  // Title search is server-side (see `load`); type/status/course/batch stay client-side.
-  const filtered = quizzes.filter(q => {
-    if (typeFilter && q.type !== typeFilter) return false
-    if (statusFilter && q.effectiveStatus !== statusFilter) return false
-    if (courseFilter && String(q.courseId) !== String(courseFilter)) return false
-    if (batchFilter && String(q.batchId) !== String(batchFilter)) return false
-    return true
-  })
-
-  // PDF-created quizzes only — independent of the main tab's filters above, so
-  // switching tabs never carries filter state across (each list is self-contained).
-  const pdfQuizzes = quizzes.filter(q => q.hasSourcePdf)
+  // All filters/search/sort/pagination for the main table and the PDF list run through the
+  // backend (see `load` and `loadPdfQuizzes`); no client-side re-filtering happens here.
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
+      {panelOpen ? (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/20 shrink-0">
+                <ClipboardList size={24} />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white font-display">
+                  {editingQuizId ? 'Edit Quiz' : 'Create New Quiz'}
+                </h1>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  Configure assessment parameters, select questions from the bank, and schedule publishing.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setPanelOpen(false); setStep(0); setQuestionsView('list'); }}
+              className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-semibold transition-colors"
+            >
+              ← Back to Quizzes
+            </button>
+          </div>
+
+          {/* Steps Indicator */}
+          <div className="flex gap-2 max-w-xl">
+            {STEP_LABELS.map((l, i) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setStep(i)}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all text-center flex items-center justify-center gap-2 ${
+                  step === i
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step === i ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                  {i + 1}
+                </span>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {/* Step 0: Settings */}
+          {step === 0 && (
+            <div className="space-y-6">
+              {/* Card 1: Basic Information */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <FileText size={14} /> Basic Information
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Title *</label>
+                  <input
+                    value={form.title}
+                    onBlur={() => setTouched(t => ({ ...t, title: true }))}
+                    onChange={e => {
+                      setForm(f => ({ ...f, title: e.target.value }))
+                      if (formErrors.title) setFormErrors(prev => ({ ...prev, title: undefined }))
+                    }}
+                    placeholder="Enter quiz title"
+                    className={`w-full rounded-xl border bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                      (touched.title || formErrors.title) && getFieldError('title', form.title)
+                        ? 'border-red-500 focus:ring-red-400'
+                        : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500 text-gray-800 dark:text-white'
+                    }`}
+                  />
+                  {(touched.title || formErrors.title) && getFieldError('title', form.title) && (
+                    <p className="text-xs text-red-500 mt-1">{getFieldError('title', form.title)}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Description</label>
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    rows={2}
+                    placeholder="Enter quiz description"
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none text-gray-800 dark:text-white"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Quiz Type *</label>
+                    <CustomSelect
+                      value={form.type}
+                      onChange={(val) => {
+                        setForm(f => ({ ...f, type: val }))
+                        if (formErrors.type) setFormErrors(prev => ({ ...prev, type: undefined }))
+                      }}
+                      placeholder="Select quiz type"
+                      options={[
+                        { value: 'MCQ', label: 'MCQ' },
+                        { value: 'APTITUDE', label: 'Aptitude' },
+                        { value: 'CODING', label: 'Coding' },
+                        { value: 'INTERVIEW_PREP', label: 'Interview Prep' },
+                        { value: 'ADAPTIVE', label: 'Adaptive' },
+                      ]}
+                    />
+                    {formErrors.type && <p className="text-xs text-red-500 mt-1">{formErrors.type}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Difficulty *</label>
+                    <CustomSelect
+                      value={form.difficulty}
+                      onChange={(val) => {
+                        setForm(f => ({ ...f, difficulty: val }))
+                        if (formErrors.difficulty) setFormErrors(prev => ({ ...prev, difficulty: undefined }))
+                      }}
+                      placeholder="Select difficulty"
+                      options={[
+                        { value: 'EASY', label: 'Easy' },
+                        { value: 'MEDIUM', label: 'Medium' },
+                        { value: 'HARD', label: 'Hard' },
+                      ]}
+                    />
+                    {formErrors.difficulty && <p className="text-xs text-red-500 mt-1">{formErrors.difficulty}</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Course & Cohort Target */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <Users size={14} /> Course & Cohort Target
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Course</label>
+                    <CustomSelect
+                      value={form.courseId}
+                      onChange={(val) => {
+                        setForm(f => {
+                          const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(b.course?.id) === String(val))
+                          return { ...f, courseId: val, batchId: stillValid ? f.batchId : '' }
+                        })
+                      }}
+                      options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
+                      placeholder="All courses"
+                      searchable
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Batch</label>
+                    <CustomSelect
+                      value={form.batchId}
+                      onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
+                      options={batches
+                        .filter(b => !form.courseId || String(b.course?.id) === String(form.courseId))
+                        .map(b => ({ value: b.id, label: b.name }))}
+                      placeholder="All batches"
+                      searchable
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Duration & Score Criteria */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <BarChart3 size={14} /> Duration & Scoring Parameters
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Duration (min) *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Enter duration (min)"
+                      value={form.duration}
+                      onBlur={() => setTouched(t => ({ ...t, duration: true }))}
+                      onKeyDown={e => {
+                        if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
+                      }}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '')
+                        setForm(f => ({ ...f, duration: val }))
+                        if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined }))
+                      }}
+                      className={`w-full rounded-xl border bg-white dark:bg-gray-900 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                        (touched.duration || formErrors.duration) && getFieldError('duration', form.duration)
+                          ? 'border-red-500 focus:ring-red-400'
+                          : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500 text-gray-800 dark:text-white'
+                      }`}
+                    />
+                    {(touched.duration || formErrors.duration) && getFieldError('duration', form.duration) && (
+                      <p className="text-xs text-red-500 mt-1">{getFieldError('duration', form.duration)}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Passing Score (%) *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="e.g. 60"
+                      value={form.passingScore}
+                      onBlur={() => setTouched(t => ({ ...t, passingScore: true }))}
+                      onKeyDown={e => {
+                        if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
+                      }}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '')
+                        setForm(f => ({ ...f, passingScore: val }))
+                        if (formErrors.passingScore) setFormErrors(prev => ({ ...prev, passingScore: undefined }))
+                      }}
+                      className={`w-full rounded-xl border bg-white dark:bg-gray-900 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                        (touched.passingScore || formErrors.passingScore) && getFieldError('passingScore', form.passingScore)
+                          ? 'border-red-500 focus:ring-red-400'
+                          : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500 text-gray-800 dark:text-white'
+                      }`}
+                    />
+                    {(touched.passingScore || formErrors.passingScore) && getFieldError('passingScore', form.passingScore) && (
+                      <p className="text-xs text-red-500 mt-1">{getFieldError('passingScore', form.passingScore)}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Max Attempts *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="e.g. 1"
+                      value={form.maxAttempts}
+                      onBlur={() => setTouched(t => ({ ...t, maxAttempts: true }))}
+                      onKeyDown={e => {
+                        if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
+                      }}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '')
+                        setForm(f => ({ ...f, maxAttempts: val }))
+                        if (formErrors.maxAttempts) setFormErrors(prev => ({ ...prev, maxAttempts: undefined }))
+                      }}
+                      className={`w-full rounded-xl border bg-white dark:bg-gray-900 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
+                        (touched.maxAttempts || formErrors.maxAttempts) && getFieldError('maxAttempts', form.maxAttempts)
+                          ? 'border-red-500 focus:ring-red-400'
+                          : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500 text-gray-800 dark:text-white'
+                      }`}
+                    />
+                    {(touched.maxAttempts || formErrors.maxAttempts) && getFieldError('maxAttempts', form.maxAttempts) && (
+                      <p className="text-xs text-red-500 mt-1">{getFieldError('maxAttempts', form.maxAttempts)}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: Schedule & Policies */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <CheckCircle size={14} /> Schedule & Examination Policies
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Start Date/Time</label>
+                    <DateTimePicker
+                      value={form.scheduledStart}
+                      onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">End Date/Time</label>
+                    <DateTimePicker
+                      value={form.scheduledEnd}
+                      onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
+                    />
+                    {form.scheduledStart && form.scheduledEnd && new Date(form.scheduledStart) >= new Date(form.scheduledEnd) && (
+                      <p className="text-xs text-red-500 mt-1">End time must be after start time</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Result Visibility *</label>
+                  <CustomSelect
+                    value={form.resultVisibility}
+                    onChange={(val) => {
+                      setForm(f => ({ ...f, resultVisibility: val }))
+                      if (formErrors.resultVisibility) setFormErrors(prev => ({ ...prev, resultVisibility: undefined }))
+                    }}
+                    placeholder="Select result visibility"
+                    options={[
+                      { value: 'IMMEDIATE', label: 'Show result immediately' },
+                      { value: 'AFTER_CLOSE', label: 'Show result after quiz closes' },
+                      { value: 'MANUAL', label: 'Release result manually' },
+                    ]}
+                  />
+                  {formErrors.resultVisibility && <p className="text-xs text-red-500 mt-1">{formErrors.resultVisibility}</p>}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <label className="flex items-center gap-3 cursor-pointer select-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                    <input type="checkbox" checked={form.randomQuestions} onChange={e => setForm(f => ({ ...f, randomQuestions: e.target.checked }))}
+                      className="w-4 h-4 rounded accent-purple-600" />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Randomize question order</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer select-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                    <input type="checkbox" checked={form.randomOptions} onChange={e => setForm(f => ({ ...f, randomOptions: e.target.checked }))}
+                      className="w-4 h-4 rounded accent-purple-600" />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Randomize option order</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer select-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                    <input type="checkbox" checked={form.negativeMarking} onChange={e => setForm(f => ({ ...f, negativeMarking: e.target.checked }))}
+                      className="w-4 h-4 rounded accent-purple-600" />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Negative marking</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer select-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                    <input type="checkbox" checked={form.showExplanation} onChange={e => setForm(f => ({ ...f, showExplanation: e.target.checked }))}
+                      className="w-4 h-4 rounded accent-purple-600" />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Show explanations after submit</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Bar */}
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => { setPanelOpen(false); setStep(0); setQuestionsView('list'); }}
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 transition-all"
+                >
+                  Next: Add Questions →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 1: Questions (from the Question Bank) */}
+          {step === 1 && questionsView === 'list' && editingQuizId && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+                <span className="mt-0.5 shrink-0">ℹ️</span>
+                <span>Questions cannot be changed while editing an existing quiz. To change which questions are included, create a new quiz.</span>
+              </div>
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{selectedQuestionIds.length} question{selectedQuestionIds.length === 1 ? '' : 's'}</p>
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                {selectedQuestionIds.map((id, idx) => {
+                  const q = bankQuestions.find(bq => bq.id === id)
+                  const pts = questionMarks[id] ?? q?.points ?? 1
+                  return (
+                    <div key={id} className="p-3.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/50 dark:bg-gray-800/40 flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white break-words">{q?.questionText || `Question #${id}`}</p>
+                      </div>
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60 shrink-0">
+                        {pts} pt{pts > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setStep(0)}
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold transition-colors"
+                >
+                  ← Back to Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 transition-all"
+                >
+                  Preview & Review →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 1 && questionsView === 'list' && !editingQuizId && (() => {
+            const totalPickerPages = Math.max(1, bankTotalPages)
+            const validPickerPage = Math.min(pickerPage, totalPickerPages)
+            const pickerStartIndex = (validPickerPage - 1) * pickerPageSize
+            const pickerEndIndex = pickerStartIndex + bankQuestions.length
+            const paginatedPickerQuestions = bankQuestions
+
+            const pageIds = paginatedPickerQuestions.map(q => q.id)
+            const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedQuestionIds.includes(id))
+
+            const selectPageAll = () => {
+              setSelectedQuestionIds(prev => {
+                const newIds = pageIds.filter(id => !prev.includes(id))
+                return [...prev, ...newIds]
+              })
+            }
+            const deselectPageAll = () => {
+              setSelectedQuestionIds(prev => prev.filter(id => !pageIds.includes(id)))
+            }
+            const deselectAll = () => {
+              setSelectedQuestionIds([])
+            }
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{selectedQuestionIds.length} questions selected</p>
+                  <div className="flex items-center gap-2">
+                    {selectedQuestionIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={deselectAll}
+                        className="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 dark:border-red-900 rounded-lg px-2.5 py-1 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                      >
+                        Deselect All
+                      </button>
+                    )}
+                    {bankQuestions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={allPageSelected ? deselectPageAll : selectPageAll}
+                        className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors border ${
+                          allPageSelected
+                            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {allPageSelected ? 'Deselect This Page' : `Select Page (${bankQuestions.length})`}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setQuestionsView('create')}
+                      className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 border border-purple-200 dark:border-purple-800 rounded-lg px-2.5 py-1 hover:bg-purple-50 dark:hover:bg-purple-950 transition-colors"
+                    >
+                      + New Question
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuestionsView('bulkCreate')}
+                      className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 border border-purple-200 dark:border-purple-800 rounded-lg px-2.5 py-1 hover:bg-purple-50 dark:hover:bg-purple-950 transition-colors"
+                    >
+                      + Bulk Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Toolbar */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={questionSearch}
+                      onChange={e => { setQuestionSearch(e.target.value); setPickerPage(1); }}
+                      placeholder="Search questions..."
+                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <CustomSelect
+                    value={pickerTopicFilter}
+                    onChange={v => { setPickerTopicFilter(v); setPickerPage(1); }}
+                    options={[{ value: '', label: 'All Topics' }, ...topics.map(t => ({ value: t.id, label: t.name }))]}
+                    placeholder="All Topics"
+                  />
+                  <CustomSelect
+                    value={pickerCourseFilter}
+                    onChange={v => { setPickerCourseFilter(v); setPickerPage(1); }}
+                    options={[{ value: '', label: 'All Courses' }, ...courses.map(c => ({ value: c.id, label: c.title || c.name }))]}
+                    placeholder="All Courses"
+                  />
+                  <CustomSelect
+                    value={pickerDifficultyFilter}
+                    onChange={v => { setPickerDifficultyFilter(v); setPickerPage(1); }}
+                    options={[{ value: '', label: 'All Difficulties' }, { value: 'EASY', label: 'Easy' }, { value: 'MEDIUM', label: 'Medium' }, { value: 'HARD', label: 'Hard' }]}
+                    placeholder="All Difficulties"
+                  />
+                  <CustomSelect
+                    value={pickerTypeFilter}
+                    onChange={v => { setPickerTypeFilter(v); setPickerPage(1); }}
+                    options={[{ value: '', label: 'All Types' }, { value: 'MCQ', label: 'MCQ' }, { value: 'APTITUDE', label: 'Aptitude' }, { value: 'CODING', label: 'Coding' }, { value: 'INTERVIEW_PREP', label: 'Interview' }, { value: 'ADAPTIVE', label: 'Adaptive' }]}
+                    placeholder="All Types"
+                  />
+                </div>
+
+                {/* Questions List */}
+                <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1">
+                  {paginatedPickerQuestions.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
+                      No questions match the selected filters.
+                    </div>
+                  ) : (
+                    paginatedPickerQuestions.map(q => {
+                      const isSelected = selectedQuestionIds.includes(q.id)
+                      return (
+                        <div
+                          key={q.id}
+                          onClick={() => toggleQuestion(q.id)}
+                          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
+                            isSelected
+                              ? 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-300 dark:border-purple-800'
+                              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-purple-200'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-4 h-4 rounded accent-purple-600 shrink-0 mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white break-words">{q.questionText}</p>
+                            <div className="flex items-center gap-2 mt-2 flex-wrap text-[11px]">
+                              {q.topic && <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-md font-medium">{q.topic}</span>}
+                              {q.difficulty && <span className={`px-2 py-0.5 rounded-md font-medium ${DIFFICULTY_STYLES[q.difficulty] || ''}`}>{q.difficulty}</span>}
+                              {q.type && <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-md">{q.type}</span>}
+                              <span className="text-gray-400">{q.points ?? 1} pt(s)</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 pt-2">
+                  <span>Showing {pickerStartIndex + 1}–{pickerEndIndex} of {bankTotal}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPickerPage(p => Math.max(1, p - 1))}
+                      disabled={validPickerPage <= 1}
+                      className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="font-bold px-1.5 text-gray-700 dark:text-gray-200">{validPickerPage} / {totalPickerPages}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPickerPage(p => Math.min(totalPickerPages, p + 1))}
+                      disabled={validPickerPage >= totalPickerPages}
+                      className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Action Bar */}
+                <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setStep(0)}
+                    className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold transition-colors"
+                  >
+                    ← Back to Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 transition-all"
+                  >
+                    Preview & Publish →
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Step 1: Questions — inline single question creation view */}
+          {step === 1 && questionsView === 'create' && (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setQuestionsView('list')}
+                className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center gap-1"
+              >
+                ← Back to Questions
+              </button>
+              <QuestionForm
+                topics={topics}
+                onTopicsChange={setTopics}
+                onSaved={handleQuestionCreated}
+                onCancel={() => setQuestionsView('list')}
+              />
+            </div>
+          )}
+
+          {/* Step 1: Questions — inline batch questions creation view */}
+          {step === 1 && questionsView === 'bulkCreate' && (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setQuestionsView('list')}
+                className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center gap-1"
+              >
+                ← Back to Questions
+              </button>
+              <BulkQuestionForm
+                topics={topics}
+                onSaved={handleBulkQuestionsCreated}
+                onCancel={() => setQuestionsView('list')}
+              />
+            </div>
+          )}
+
+          {/* Step 2: Preview */}
+          {step === 2 && (
+            <div className="space-y-6">
+              <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${TYPE_STYLES[form.type] || TYPE_STYLES.MCQ}`}>
+                    {TYPE_LABELS[form.type] || form.type}
+                  </span>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${DIFFICULTY_STYLES[form.difficulty] || ''}`}>{form.difficulty}</span>
+                </div>
+                <h3 className="font-display font-bold text-lg text-gray-800 dark:text-white">{form.title || 'Untitled Quiz'}</h3>
+                {form.description && <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">{form.description}</p>}
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <span className="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2.5 py-1 rounded-full font-semibold">{selectedQuestionIds.length} questions</span>
+                  <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-full font-semibold">{form.duration} minutes</span>
+                  <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2.5 py-1 rounded-full font-semibold">Total: {totalPoints} pts</span>
+                  <span className="text-xs bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 px-2.5 py-1 rounded-full font-semibold">Pass: {form.passingScore}%</span>
+                  <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2.5 py-1 rounded-full font-semibold">Max attempts: {form.maxAttempts}</span>
+                </div>
+              </div>
+
+              {/* Questions Preview List */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                  <Eye size={14} className="text-purple-600" /> Questions Preview ({selectedQuestions.length})
+                </h4>
+
+                {selectedQuestions.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
+                    No questions selected. Go back to Step 2 to select questions.
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                    {selectedQuestions.map((q, idx) => (
+                      <div key={q.id || idx} className="p-4 border border-gray-200 dark:border-gray-800 rounded-2xl bg-white dark:bg-gray-900 space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                            <span className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                              {idx + 1}
+                            </span>
+                            <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white">{q.questionText}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <input
+                              type="number"
+                              min={1}
+                              value={questionMarks[q.id] ?? q.points ?? 1}
+                              onChange={e => setQuestionMark(q.id, e.target.value)}
+                              className="w-14 text-xs font-bold text-center rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 py-1"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => moveQuestion(q.id, -1)}
+                              disabled={idx === 0}
+                              className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 disabled:opacity-30 flex items-center justify-center text-xs"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveQuestion(q.id, 1)}
+                              disabled={idx === selectedQuestions.length - 1}
+                              className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 disabled:opacity-30 flex items-center justify-center text-xs"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleQuestion(q.id)}
+                              className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-500 flex items-center justify-center text-sm font-bold"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                        {q.options && q.options.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 pl-8">
+                            {q.options.map((o, oIdx) => (
+                              <div key={o.id || oIdx} className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${o.correct ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800 font-medium' : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-gray-100 dark:border-gray-800'}`}>
+                                <span>{o.correct ? '✓' : '•'}</span>
+                                <span className="break-words">{o.optionText}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Bar */}
+              <div className="flex items-center justify-between gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold transition-colors"
+                >
+                  ← Back to Questions
+                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSave(false)}
+                    disabled={saving || !isDraftValid}
+                    className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {saving ? 'Saving...' : (editingQuizId ? 'Save Changes' : 'Save Draft')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSave(true)}
+                    disabled={saving || !isPublishValid}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {saving ? 'Publishing...' : (editingQuizId ? 'Save & Publish' : 'Publish Quiz')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-2xl font-extrabold text-gray-900 dark:text-white">Quizzes</h1>
@@ -636,7 +1414,7 @@ export default function QuizzesPage() {
         ))}
       </div>
 
-      {activeTab === 'question-bank' && <QuestionBankPanel onChange={loadBankQuestions} />}
+      {activeTab === 'question-bank' && <QuestionBankPanel onChange={fetchBankPage} />}
 
       {activeTab === 'pdf-quiz' && (
         pdfQuizzes.length === 0 ? (
@@ -784,11 +1562,9 @@ export default function QuizzesPage() {
 
       {/* Quiz Table */}
       {(() => {
-        const totalQuizPages = Math.ceil(filtered.length / quizPageSize) || 1
-        const validQuizPage = Math.min(quizPage, totalQuizPages)
-        const quizStartIndex = (validQuizPage - 1) * quizPageSize
-        const quizEndIndex = Math.min(quizStartIndex + quizPageSize, filtered.length)
-        const paginatedQuizzes = filtered.slice(quizStartIndex, quizEndIndex)
+        // The current page's rows come straight from the backend response; server returns
+        // the matching page for the active filters. No client-side slicing here.
+        const paginatedQuizzes = quizzes
 
         return (
           <div className="glass-card overflow-hidden">
@@ -893,7 +1669,9 @@ export default function QuizzesPage() {
                 </div>
 
                 <Pagination
-                  data={filtered}
+                  data={quizzes}
+                  total={quizTotal}
+                  totalPages={quizTotalPages}
                   page={quizPage}
                   pageSize={quizPageSize}
                   onPageChange={setQuizPage}
@@ -908,630 +1686,6 @@ export default function QuizzesPage() {
       })()}
       </>
       )}
-
-      {/* Create Quiz Panel */}
-      <SlidePanel open={panelOpen} onClose={() => { setPanelOpen(false); setStep(0); setQuestionsView('list') }} title={editingQuizId ? 'Edit Quiz' : 'Create Quiz'} width="w-[680px]" variant="modal">
-        {/* Steps */}
-        <div className="flex mb-5 gap-1.5">
-          {STEP_LABELS.map((l, i) => (
-            <button key={l} onClick={() => setStep(i)}
-              className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold transition-all break-words text-center ${step === i ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-              {i + 1}. {l}
-            </button>
-          ))}
-        </div>
-
-        {/* Step 0: Settings */}
-        {step === 0 && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
-              <input
-                value={form.title}
-                onBlur={() => setTouched(t => ({ ...t, title: true }))}
-                onChange={e => {
-                  setForm(f => ({ ...f, title: e.target.value }))
-                  if (formErrors.title) setFormErrors(prev => ({ ...prev, title: undefined }))
-                }}
-                placeholder="Enter quiz title"
-                className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
-                  (touched.title || formErrors.title) && getFieldError('title', form.title)
-                    ? 'border-red-500 focus:ring-red-400'
-                    : 'border-gray-200 focus:ring-purple-500'
-                }`}
-              />
-              {(touched.title || formErrors.title) && getFieldError('title', form.title) && (
-                <p className="text-xs text-red-500 mt-1">{getFieldError('title', form.title)}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
-              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
-                placeholder="Enter quiz description"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Quiz Type *</label>
-                <CustomSelect
-                  value={form.type}
-                  onChange={(val) => {
-                    setForm(f => ({ ...f, type: val }))
-                    if (formErrors.type) setFormErrors(prev => ({ ...prev, type: undefined }))
-                  }}
-                  placeholder="Select quiz type"
-                  options={[
-                    { value: 'MCQ', label: 'MCQ' },
-                    { value: 'APTITUDE', label: 'Aptitude' },
-                    { value: 'CODING', label: 'Coding' },
-                    { value: 'INTERVIEW_PREP', label: 'Interview Prep' },
-                    { value: 'ADAPTIVE', label: 'Adaptive' },
-                  ]}
-                />
-                {formErrors.type && <p className="text-xs text-red-500 mt-1">{formErrors.type}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulty *</label>
-                <CustomSelect
-                  value={form.difficulty}
-                  onChange={(val) => {
-                    setForm(f => ({ ...f, difficulty: val }))
-                    if (formErrors.difficulty) setFormErrors(prev => ({ ...prev, difficulty: undefined }))
-                  }}
-                  placeholder="Select difficulty"
-                  options={[
-                    { value: 'EASY', label: 'Easy' },
-                    { value: 'MEDIUM', label: 'Medium' },
-                    { value: 'HARD', label: 'Hard' },
-                  ]}
-                />
-                {formErrors.difficulty && <p className="text-xs text-red-500 mt-1">{formErrors.difficulty}</p>}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Course</label>
-                <CustomSelect
-                  value={form.courseId}
-                  onChange={(val) => {
-                    setForm(f => {
-                      const stillValid = f.batchId && batches.some(b => String(b.id) === String(f.batchId) && String(b.course?.id) === String(val))
-                      return { ...f, courseId: val, batchId: stillValid ? f.batchId : '' }
-                    })
-                  }}
-                  options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
-                  placeholder="All courses"
-                  searchable
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Batch</label>
-                <CustomSelect
-                  value={form.batchId}
-                  onChange={(val) => setForm(f => ({ ...f, batchId: val }))}
-                  options={batches
-                    .filter(b => !form.courseId || String(b.course?.id) === String(form.courseId))
-                    .map(b => ({ value: b.id, label: b.name }))}
-                  placeholder="All batches"
-                  searchable
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Duration (min) *</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Enter duration (min)"
-                  value={form.duration}
-                  onBlur={() => setTouched(t => ({ ...t, duration: true }))}
-                  onKeyDown={e => {
-                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
-                  }}
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '')
-                    setForm(f => ({ ...f, duration: val }))
-                    if (formErrors.duration) setFormErrors(prev => ({ ...prev, duration: undefined }))
-                  }}
-                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
-                    (touched.duration || formErrors.duration) && getFieldError('duration', form.duration)
-                      ? 'border-red-500 focus:ring-red-400'
-                      : 'border-gray-200 focus:ring-purple-500'
-                  }`}
-                />
-                {(touched.duration || formErrors.duration) && getFieldError('duration', form.duration) && (
-                  <p className="text-xs text-red-500 mt-1">{getFieldError('duration', form.duration)}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Passing Score (%) *</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Enter passing %"
-                  value={form.passingScore}
-                  onBlur={() => setTouched(t => ({ ...t, passingScore: true }))}
-                  onKeyDown={e => {
-                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
-                  }}
-                  onChange={e => {
-                    let val = e.target.value.replace(/\D/g, '')
-                    if (val !== '' && Number(val) > 100) val = '100'
-                    setForm(f => ({ ...f, passingScore: val }))
-                    if (formErrors.passingScore) setFormErrors(prev => ({ ...prev, passingScore: undefined }))
-                  }}
-                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
-                    (touched.passingScore || formErrors.passingScore) && getFieldError('passingScore', form.passingScore)
-                      ? 'border-red-500 focus:ring-red-400'
-                      : 'border-gray-200 focus:ring-purple-500'
-                  }`}
-                />
-                {(touched.passingScore || formErrors.passingScore) && getFieldError('passingScore', form.passingScore) && (
-                  <p className="text-xs text-red-500 mt-1">{getFieldError('passingScore', form.passingScore)}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Max Attempts *</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Enter max attempts"
-                  value={form.maxAttempts}
-                  onBlur={() => setTouched(t => ({ ...t, maxAttempts: true }))}
-                  onKeyDown={e => {
-                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault()
-                  }}
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '')
-                    setForm(f => ({ ...f, maxAttempts: val }))
-                    if (formErrors.maxAttempts) setFormErrors(prev => ({ ...prev, maxAttempts: undefined }))
-                  }}
-                  className={`w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:ring-2 ${
-                    (touched.maxAttempts || formErrors.maxAttempts) && getFieldError('maxAttempts', form.maxAttempts)
-                      ? 'border-red-500 focus:ring-red-400'
-                      : 'border-gray-200 focus:ring-purple-500'
-                  }`}
-                />
-                {(touched.maxAttempts || formErrors.maxAttempts) && getFieldError('maxAttempts', form.maxAttempts) && (
-                  <p className="text-xs text-red-500 mt-1">{getFieldError('maxAttempts', form.maxAttempts)}</p>
-                )}
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date/Time</label>
-                <DateTimePicker
-                  value={form.scheduledStart}
-                  onChange={val => setForm(f => ({ ...f, scheduledStart: val }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">End Date/Time</label>
-                <DateTimePicker
-                  value={form.scheduledEnd}
-                  onChange={val => setForm(f => ({ ...f, scheduledEnd: val }))}
-                />
-                {form.scheduledStart && form.scheduledEnd && new Date(form.scheduledStart) >= new Date(form.scheduledEnd) && (
-                  <p className="text-xs text-red-500 mt-1">End time must be after start time</p>
-                )}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Result Visibility *</label>
-              <CustomSelect
-                value={form.resultVisibility}
-                onChange={(val) => {
-                  setForm(f => ({ ...f, resultVisibility: val }))
-                  if (formErrors.resultVisibility) setFormErrors(prev => ({ ...prev, resultVisibility: undefined }))
-                }}
-                placeholder="Select result visibility"
-                options={[
-                  { value: 'IMMEDIATE', label: 'Show result immediately' },
-                  { value: 'AFTER_CLOSE', label: 'Show result after quiz closes' },
-                  { value: 'MANUAL', label: 'Release result manually' },
-                ]}
-              />
-              {formErrors.resultVisibility && <p className="text-xs text-red-500 mt-1">{formErrors.resultVisibility}</p>}
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input type="checkbox" checked={form.randomQuestions} onChange={e => setForm(f => ({ ...f, randomQuestions: e.target.checked }))}
-                  className="w-4 h-4 rounded accent-purple-600" />
-                <span className="text-sm font-semibold text-gray-700">Randomize question order</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input type="checkbox" checked={form.randomOptions} onChange={e => setForm(f => ({ ...f, randomOptions: e.target.checked }))}
-                  className="w-4 h-4 rounded accent-purple-600" />
-                <span className="text-sm font-semibold text-gray-700">Randomize option order</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input type="checkbox" checked={form.negativeMarking} onChange={e => setForm(f => ({ ...f, negativeMarking: e.target.checked }))}
-                  className="w-4 h-4 rounded accent-purple-600" />
-                <span className="text-sm font-semibold text-gray-700">Negative marking (wrong answers deduct full marks)</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input type="checkbox" checked={form.showExplanation} onChange={e => setForm(f => ({ ...f, showExplanation: e.target.checked }))}
-                  className="w-4 h-4 rounded accent-purple-600" />
-                <span className="text-sm font-semibold text-gray-700">Show explanations after submission</span>
-              </label>
-            </div>
-            <button onClick={() => setStep(1)} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 transition-all">
-              Next: Add Questions →
-            </button>
-          </div>
-        )}
-
-        {/* Step 1: Questions (from the Question Bank) */}
-        {step === 1 && questionsView === 'list' && editingQuizId && (
-          <div className="space-y-3">
-            <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-              <span className="mt-0.5 shrink-0">ℹ️</span>
-              <span>Questions cannot be changed while editing a quiz. To change which questions are included, create a new quiz.</span>
-            </div>
-            <p className="text-sm font-semibold text-gray-700">{selectedQuestionIds.length} question{selectedQuestionIds.length === 1 ? '' : 's'}</p>
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-              {selectedQuestionIds.map((id, idx) => {
-                const q = bankQuestions.find(bq => bq.id === id)
-                const pts = questionMarks[id] ?? q?.points ?? 1
-                return (
-                  <div key={id} className="p-3 border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                        {idx + 1}
-                      </span>
-                      <p className="text-xs font-semibold text-gray-800 dark:text-white break-words">{q?.questionText || `Question #${id}`}</p>
-                    </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
-                      {pts} pt{pts > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {step === 1 && questionsView === 'list' && !editingQuizId && (() => {
-          const totalPickerPages = Math.ceil(filteredBankQuestions.length / pickerPageSize) || 1
-          const validPickerPage = Math.min(pickerPage, totalPickerPages)
-          const pickerStartIndex = (validPickerPage - 1) * pickerPageSize
-          const pickerEndIndex = Math.min(pickerStartIndex + pickerPageSize, filteredBankQuestions.length)
-          const paginatedPickerQuestions = filteredBankQuestions.slice(pickerStartIndex, pickerEndIndex)
-
-          const allFilteredIds = filteredBankQuestions.map(q => q.id)
-          const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedQuestionIds.includes(id))
-          const pageIds = paginatedPickerQuestions.map(q => q.id)
-          const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedQuestionIds.includes(id))
-          const somePageSelected = pageIds.some(id => selectedQuestionIds.includes(id)) && !allPageSelected
-
-          const selectAllFiltered = () => {
-            setSelectedQuestionIds(prev => {
-              const newIds = allFilteredIds.filter(id => !prev.includes(id))
-              return [...prev, ...newIds]
-            })
-          }
-          const deselectAll = () => {
-            setSelectedQuestionIds([])
-          }
-          const togglePageAll = () => {
-            if (allPageSelected) {
-              setSelectedQuestionIds(prev => prev.filter(id => !pageIds.includes(id)))
-            } else {
-              setSelectedQuestionIds(prev => {
-                const newIds = pageIds.filter(id => !prev.includes(id))
-                return [...prev, ...newIds]
-              })
-            }
-          }
-
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <p className="text-sm font-semibold text-gray-700">{selectedQuestionIds.length} selected</p>
-                <div className="flex items-center gap-2">
-                  {selectedQuestionIds.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={deselectAll}
-                      className="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50 transition-colors"
-                    >
-                      Deselect All
-                    </button>
-                  )}
-                  {filteredBankQuestions.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={allFilteredSelected ? deselectAll : selectAllFiltered}
-                      className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors border ${
-                        allFilteredSelected
-                          ? 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700'
-                          : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                      }`}
-                    >
-                      {allFilteredSelected ? '✓ All Selected' : `Select All (${filteredBankQuestions.length})`}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Info note */}
-              <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-                <span className="mt-0.5 shrink-0">ℹ️</span>
-                <span>Questions are sourced from the <strong>Question Bank</strong> tab. Use the Question Bank to create, import, or manage all your questions centrally — they can be reused across multiple quizzes.</span>
-              </div>
-
-              {/* Search + Filters Grid */}
-              <div className="space-y-2">
-                <div className="relative w-full">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    placeholder="Search question bank..."
-                    value={questionSearch}
-                    onChange={e => { setQuestionSearch(e.target.value); setPickerPage(1); }}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <CustomSelect
-                    value={pickerTopicFilter}
-                    onChange={(val) => { setPickerTopicFilter(val); setPickerPage(1); }}
-                    options={topics.map(t => ({ value: t.id, label: t.name }))}
-                    placeholder="All Topics"
-                    searchable
-                    compact
-                  />
-                  <CustomSelect
-                    value={pickerCourseFilter}
-                    onChange={(val) => { setPickerCourseFilter(val); setPickerPage(1); }}
-                    options={courses.map(c => ({ value: c.id, label: c.title || c.name }))}
-                    placeholder="All Courses"
-                    searchable
-                    compact
-                  />
-                  <CustomSelect
-                    value={pickerDifficultyFilter}
-                    onChange={(val) => { setPickerDifficultyFilter(val); setPickerPage(1); }}
-                    options={[
-                      { value: 'EASY', label: 'Easy' },
-                      { value: 'MEDIUM', label: 'Medium' },
-                      { value: 'HARD', label: 'Hard' },
-                    ]}
-                    placeholder="All Levels"
-                    compact
-                  />
-                  <CustomSelect
-                    value={pickerTypeFilter}
-                    onChange={(val) => { setPickerTypeFilter(val); setPickerPage(1); }}
-                    options={[
-                      { value: 'MCQ', label: 'MCQ' },
-                      { value: 'MULTIPLE_CORRECT', label: 'Multi-Select' },
-                      { value: 'TRUE_FALSE', label: 'True/False' },
-                      { value: 'SHORT_ANSWER', label: 'Short Answer' },
-                    ]}
-                    placeholder="All Types"
-                    compact
-                  />
-                </div>
-              </div>
-
-              {/* Page select-all row */}
-              {paginatedPickerQuestions.length > 0 && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl border border-gray-100">
-                  <input
-                    type="checkbox"
-                    id="picker-page-all"
-                    checked={allPageSelected}
-                    ref={el => { if (el) el.indeterminate = somePageSelected }}
-                    onChange={togglePageAll}
-                    className="w-4 h-4 accent-purple-600 cursor-pointer"
-                  />
-                  <label htmlFor="picker-page-all" className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
-                    Select all on this page ({paginatedPickerQuestions.length})
-                  </label>
-                </div>
-              )}
-
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {paginatedPickerQuestions.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-8">
-                    No active questions found. Add some in the Question Bank first.
-                  </p>
-                ) : (
-                  paginatedPickerQuestions.map(q => (
-                    <label key={q.id} className={`flex items-start gap-3 border rounded-xl p-3 cursor-pointer transition-colors ${
-                      selectedQuestionIds.includes(q.id)
-                        ? 'border-purple-300 bg-purple-50/60 dark:bg-purple-900/20'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}>
-                      <input type="checkbox" checked={selectedQuestionIds.includes(q.id)} onChange={() => toggleQuestion(q.id)}
-                        className="w-4 h-4 mt-0.5 accent-purple-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 dark:text-white break-words">{q.questionText}</p>
-                        <div className="flex gap-1.5 mt-1 flex-wrap">
-                          {q.topicName && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                              {q.topicName}
-                            </span>
-                          )}
-                          {q.courseName && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">
-                              {q.courseName}
-                            </span>
-                          )}
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${q.questionType === 'MULTIPLE_CORRECT' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {q.questionType === 'MULTIPLE_CORRECT' ? 'Multi-Select' : q.questionType}
-                          </span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${DIFFICULTY_STYLES[q.difficulty]}`}>{q.difficulty}</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{q.points} pts</span>
-                        </div>
-                      </div>
-                    </label>
-                  ))
-                )}
-              </div>
-
-              {/* Picker Pagination Bar */}
-              <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-xs text-gray-500">
-                <span>Showing {filteredBankQuestions.length > 0 ? pickerStartIndex + 1 : 0}–{pickerEndIndex} of {filteredBankQuestions.length}</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPickerPage(p => Math.max(1, p - 1))}
-                    disabled={validPickerPage === 1}
-                    className="p-1 rounded-lg border border-gray-200 disabled:opacity-40"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="font-bold px-1.5 text-gray-700">{validPickerPage} / {totalPickerPages}</span>
-                  <button
-                    type="button"
-                    onClick={() => setPickerPage(p => Math.min(totalPickerPages, p + 1))}
-                    disabled={validPickerPage >= totalPickerPages}
-                    className="p-1 rounded-lg border border-gray-200 disabled:opacity-40"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <button onClick={() => setStep(2)} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold">
-                Preview & Publish →
-              </button>
-            </div>
-          )
-        })()}
-
-        {/* Step 1: Questions — inline single question creation view */}
-        {step === 1 && questionsView === 'create' && (
-          <div className="space-y-4">
-            <button type="button" onClick={() => setQuestionsView('list')}
-              className="text-xs font-semibold text-gray-500 hover:text-gray-700 flex items-center gap-1">
-              ← Back to Questions
-            </button>
-            <QuestionForm
-              topics={topics}
-              onTopicsChange={setTopics}
-              onSaved={handleQuestionCreated}
-              onCancel={() => setQuestionsView('list')}
-            />
-          </div>
-        )}
-
-        {/* Step 1: Questions — inline batch questions creation view */}
-        {step === 1 && questionsView === 'bulkCreate' && (
-          <div className="space-y-4">
-            <button type="button" onClick={() => setQuestionsView('list')}
-              className="text-xs font-semibold text-gray-500 hover:text-gray-700 flex items-center gap-1">
-              ← Back to Questions
-            </button>
-            <BulkQuestionForm
-              topics={topics}
-              onSaved={handleBulkQuestionsCreated}
-              onCancel={() => setQuestionsView('list')}
-            />
-          </div>
-        )}
-
-        {/* Step 2: Preview */}
-        {step === 2 && (
-          <div className="space-y-4">
-            <div className="glass-card p-5">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TYPE_STYLES[form.type] || TYPE_STYLES.MCQ}`}>
-                    {TYPE_LABELS[form.type] || form.type}
-                  </span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_STYLES[form.difficulty]}`}>{form.difficulty}</span>
-                </div>
-              </div>
-              <h3 className="font-display font-bold text-gray-800 dark:text-white">{form.title || 'Untitled Quiz'}</h3>
-              {form.description && <p className="text-xs text-gray-500 mt-1">{form.description}</p>}
-              <div className="flex gap-2 mt-3 flex-wrap">
-                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">{selectedQuestionIds.length} questions</span>
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{form.duration} minutes</span>
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">Total: {totalPoints} pts</span>
-                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">Pass: {form.passingScore}%</span>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">Max attempts: {form.maxAttempts}</span>
-              </div>
-            </div>
-
-            {/* Questions Preview List with View Icon Header */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <Eye size={14} className="text-purple-600" /> Questions Preview ({selectedQuestions.length})
-                </h4>
-              </div>
-
-              {selectedQuestions.length === 0 ? (
-                <div className="p-6 text-center text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                  No questions selected. Go back to Step 2 to select questions.
-                </div>
-              ) : (
-                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                  {selectedQuestions.map((q, idx) => (
-                    <div key={q.id || idx} className="p-3 border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 space-y-1.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2 flex-1 min-w-0">
-                          <span className="w-5 h-5 rounded bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                            {idx + 1}
-                          </span>
-                          <p className="text-xs font-semibold text-gray-800 dark:text-white">{q.questionText}</p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <input type="number" min={1} value={questionMarks[q.id] ?? q.points ?? 1}
-                            onChange={e => setQuestionMark(q.id, e.target.value)}
-                            className="w-12 text-[10px] font-bold text-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 py-0.5" />
-                          <button type="button" onClick={() => moveQuestion(q.id, -1)} disabled={idx === 0}
-                            className="w-5 h-5 rounded bg-gray-100 text-gray-500 disabled:opacity-30 flex items-center justify-center">↑</button>
-                          <button type="button" onClick={() => moveQuestion(q.id, 1)} disabled={idx === selectedQuestions.length - 1}
-                            className="w-5 h-5 rounded bg-gray-100 text-gray-500 disabled:opacity-30 flex items-center justify-center">↓</button>
-                          <button type="button" onClick={() => toggleQuestion(q.id)}
-                            className="w-5 h-5 rounded bg-red-50 text-red-500 flex items-center justify-center">×</button>
-                        </div>
-                      </div>
-                      {q.options && q.options.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1 pt-1 pl-7">
-                          {q.options.map((o, oIdx) => (
-                            <div key={o.id || oIdx} className={`text-[11px] px-2 py-0.5 rounded-md border flex items-center gap-1 ${o.correct ? 'bg-green-50 text-green-700 border-green-200 font-medium' : 'bg-gray-50 text-gray-500 border-gray-100'}`}>
-                              <span>{o.correct ? '✓' : '•'}</span>
-                               <span className="break-words">{o.optionText}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => handleSave(false)}
-                disabled={saving || !isDraftValid}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {saving ? 'Saving...' : (editingQuizId ? 'Save Changes' : 'Save Draft')}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSave(true)}
-                disabled={saving || !isPublishValid}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {saving ? 'Publishing...' : (editingQuizId ? 'Save & Publish' : 'Publish Quiz')}
-              </button>
-            </div>
-          </div>
-        )}
-      </SlidePanel>
 
       {/* Quiz Details View SlidePanel */}
       <SlidePanel open={!!viewingQuiz} onClose={() => setViewingQuiz(null)} title="Quiz Details" width="w-[600px]" variant="modal">
@@ -1872,10 +2026,12 @@ export default function QuizzesPage() {
           courses={courses}
           batches={batches}
           onTopicsChange={setTopics}
-          onCreated={load}
+          onCreated={() => { load(); loadPdfQuizzes() }}
           onClose={() => setPdfPanelOpen(false)}
         />
       </SlidePanel>
+      </>
+      )}
     </div>
   )
 }

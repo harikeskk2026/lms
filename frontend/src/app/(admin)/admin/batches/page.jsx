@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Users, Calendar, Monitor, MapPin, Pencil, Trash2, Search } from 'lucide-react'
+import { Plus, Users, Calendar, Monitor, MapPin, Pencil, Trash2, Search, ArrowLeft, Loader2, Clock, BookOpen, Upload, FileDown, FileUp } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
@@ -9,8 +9,8 @@ import { adminApi } from '@/lib/api'
 import courseService from '@/services/courseService'
 import batchService from '@/services/batchService'
 import useDebouncedValue from '@/hooks/useDebouncedValue'
-import SlidePanel from '@/components/admin/SlidePanel'
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal'
+import CsvImportModal from '@/components/admin/CsvImportModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 import MultiSelect from '@/components/ui/MultiSelect'
 import { validateBatchDates, calculateMaxEndDate } from '@/utils/courseDuration'
@@ -70,6 +70,8 @@ export default function BatchesPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingBatch, setDeletingBatch] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [exportingBatches, setExportingBatches] = useState(false)
   const [form, setForm] = useState({ name: '', courseId: '', trainerIds: [], startDate: '', endDate: '', timing: '', mode: 'ONLINE', maxStudents: '' })
 
   // Clean Time Pickers
@@ -91,7 +93,10 @@ export default function BatchesPage() {
     const controller = new AbortController()
     batchesAbortRef.current = controller
     setLoading(true)
-    batchService.list({ search: searchQuery.trim() || undefined }, { signal: controller.signal })
+    batchService.list({
+      search: searchQuery.trim() || undefined,
+      mode: modeTab === 'ALL' ? undefined : modeTab,
+    }, { signal: controller.signal })
       .then(r => setBatches(r.data || []))
       .catch(err => {
         if (err.code === 'ERR_CANCELED') return
@@ -102,9 +107,68 @@ export default function BatchesPage() {
       })
   }
 
+  function downloadBatchesCSV() {
+    setExportingBatches(true)
+    const headers = ['Name', 'Course', 'Start Date', 'End Date', 'Timing', 'Mode', 'Max Students', 'Trainer Emails']
+    const esc = v => {
+      const s = v === null || v === undefined ? '' : String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const rows = (batches || []).map(b => {
+      const courseTitle = b.course?.title ?? b.course?.name ?? b.course ?? ''
+      const trainerEmails = Array.isArray(b.trainers) ? b.trainers.map(t => t.email ?? t).join('; ') : ''
+      return [
+        esc(b.name), esc(courseTitle),
+        esc(b.startDate ? new Date(b.startDate).toISOString().slice(0, 10) : ''),
+        esc(b.endDate ? new Date(b.endDate).toISOString().slice(0, 10) : ''),
+        esc(b.timing), esc(b.mode), esc(b.maxStudents), esc(trainerEmails)
+      ]
+    })
+    const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `batches-export-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setExportingBatches(false)
+  }
+
+  function downloadBatchImportTemplateCSV() {
+    const headers = ['Name', 'Course', 'Start Date', 'End Date', 'Timing', 'Mode', 'Max Students', 'Trainer Emails']
+    const sample = {
+      Name: 'Java Full Stack - Sep 2024',
+      Course: 'Master Full Stack Java Development',
+      'Start Date': '2024-09-01',
+      'End Date': '2025-02-28',
+      Timing: 'Mon-Fri 6:00 PM - 9:00 PM',
+      Mode: 'ONLINE',
+      'Max Students': '30',
+      'Trainer Emails': 'trainer1@careerlabs.com; trainer2@careerlabs.com'
+    }
+    const esc = v => {
+      const s = v === null || v === undefined ? '' : String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const rows = [headers.map(h => esc(sample[h]))]
+    const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'batches-import-template.csv'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   useEffect(() => {
     load()
-  }, [searchQuery])
+  }, [searchQuery, modeTab])
 
   useEffect(() => {
     courseService.list().then(r => setCourses(r.data || [])).catch(() => {})
@@ -212,18 +276,264 @@ export default function BatchesPage() {
   }
 
   const isTrainer = user?.role === 'TRAINER'
-  const userBatches = isTrainer && user?.id
-    ? batches.filter(b => (b.trainers || []).some(t => t.id === user.id))
-    : batches
 
   const modeCounts = {
-    ALL: userBatches.length,
-    ONLINE: userBatches.filter(b => b.mode === 'ONLINE').length,
-    OFFLINE: userBatches.filter(b => b.mode === 'OFFLINE').length,
+    ALL: batches.length,
+    ONLINE: batches.reduce((n, b) => (b.mode === 'ONLINE' ? n + 1 : n), 0),
+    OFFLINE: batches.reduce((n, b) => (b.mode === 'OFFLINE' ? n + 1 : n), 0),
   }
 
-  // Search is server-side (see `load`); only the mode tab is filtered client-side here.
-  const displayedBatches = userBatches.filter(b => modeTab === 'ALL' || b.mode === modeTab)
+  if (panelOpen) {
+    const isTimeValid = (!startTime && !endTime) || (Boolean(startTime) && Boolean(endTime) && startTime < endTime)
+    const isMaxStudentsValid = !form.maxStudents || (Number(form.maxStudents) >= 1 && Number(form.maxStudents) <= 500)
+    const isBatchFormValid = Boolean(
+      form.name?.trim() &&
+      form.courseId &&
+      form.startDate &&
+      form.endDate &&
+      !batchDateError &&
+      isTimeValid &&
+      isMaxStudentsValid
+    )
+
+    return (
+      <div className="bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 rounded-3xl p-5 sm:p-8 shadow-xl shadow-purple-500/5 w-full min-w-0 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                {editingBatch ? 'Edit Batch' : 'Create New Batch'}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {editingBatch ? 'Update batch schedule, assigned trainers, and cohort limits.' : 'Set up a new training batch, assign course, trainers, and timing schedule.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPanelOpen(false)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition shadow-xs self-start sm:self-auto"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Batches
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Section 1: Batch & Course Information */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">1</div>
+              <span>Batch &amp; Course Information</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Batch Name *</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. FS-JAVA-AUG24"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Course *</label>
+                <CustomSelect
+                  value={form.courseId}
+                  onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
+                  options={courses.filter(c => c.status === 'PUBLISHED').map(c => ({
+                    value: c.id,
+                    label: `${c.title}${c.duration ? ` — ${c.duration}` : ''}`
+                  }))}
+                  placeholder="Select course"
+                />
+                {selectedCourse && (
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Selected course duration: <span className="font-semibold text-purple-600 dark:text-purple-400">{selectedCourse.duration}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Trainers Assignment */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">2</div>
+              <span>Trainers Assignment</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Assign Trainers (Optional)</label>
+              <MultiSelect
+                value={form.trainerIds}
+                onChange={(vals) => setForm(f => ({ ...f, trainerIds: vals.map(String) }))}
+                options={trainers.filter(t => t.active === true).map(t => ({
+                  value: String(t.id),
+                  label: `${t.name}${t.designation ? ` (${t.designation})` : ''}`
+                }))}
+                placeholder="Select one or more trainers (optional)"
+                searchable={trainers.length >= 10}
+              />
+              {(editingBatch?.trainers || [])
+                .filter(t => t.active === false && !form.trainerIds.includes(String(t.id)))
+                .map(t => (
+                  <p key={t.id} className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
+                    Previous trainer ({t.name}) is inactive. Please select an active trainer or remove them.
+                  </p>
+                ))}
+            </div>
+          </div>
+
+          {/* Section 3: Schedule & Timing */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">3</div>
+              <span>Schedule &amp; Timing</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Start Time</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={e => setStartTime(e.target.value)}
+                  placeholder="Select start time"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">End Time</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={e => setEndTime(e.target.value)}
+                  placeholder="Select end time"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 transition-all"
+                />
+              </div>
+            </div>
+
+            {startTime && endTime && startTime >= endTime && (
+              <p className="text-xs text-red-500 font-medium">End time must be after start time</p>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Start Date *</label>
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={e => {
+                    const newStart = e.target.value
+                    setForm(f => ({
+                      ...f,
+                      startDate: newStart,
+                      endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
+                    }))
+                  }}
+                  required
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">End Date *</label>
+                <input
+                  type="date"
+                  min={form.startDate || undefined}
+                  max={maxEndDateStr}
+                  value={form.endDate}
+                  onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+                  required
+                  className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-4 py-2.5 text-xs outline-none focus:ring-2 ${batchDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'} text-gray-800 dark:text-gray-200 transition-all`}
+                />
+              </div>
+            </div>
+
+            {selectedCourse && form.startDate && maxEndDate && (
+              <p className="text-xs text-gray-500">
+                Max allowed end date for <span className="font-semibold">{selectedCourse.duration}</span> from {format(new Date(form.startDate), 'dd MMM yyyy')} is <span className="font-semibold text-purple-600 dark:text-purple-400">{format(maxEndDate, 'dd MMM yyyy')}</span>
+              </p>
+            )}
+            {batchDateError && (
+              <p className="text-xs text-red-500 font-medium">{batchDateError}</p>
+            )}
+          </div>
+
+          {/* Section 4: Capacity & Delivery Mode */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              <div className="w-5 h-5 rounded-md bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">4</div>
+              <span>Capacity &amp; Delivery Mode</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Mode</label>
+                <CustomSelect
+                  value={form.mode}
+                  onChange={(val) => setForm(f => ({ ...f, mode: val }))}
+                  options={[
+                    { value: 'ONLINE', label: 'ONLINE' },
+                    { value: 'OFFLINE', label: 'OFFLINE' },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Max Students</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={form.maxStudents}
+                  onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))}
+                  placeholder="Enter max students (1-500)"
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 transition-all"
+                />
+                {form.maxStudents && (Number(form.maxStudents) < 1 || Number(form.maxStudents) > 500) && (
+                  <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 500</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs sm:text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !isBatchFormValid}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs sm:text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-purple-500/20 flex items-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {editingBatch ? 'Saving Changes...' : 'Creating Batch...'}
+                </>
+              ) : (
+                editingBatch ? 'Save Changes' : 'Create Batch'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
@@ -254,6 +564,25 @@ export default function BatchesPage() {
               </button>
             )}
           </div>
+          {canManageBatch && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors whitespace-nowrap"
+              >
+                <Upload size={16} /> Import
+              </button>
+              <button
+                type="button"
+                onClick={downloadBatchesCSV}
+                disabled={exportingBatches}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                <FileDown size={16} /> Export
+              </button>
+            </>
+          )}
           {canManageBatch && (
             <button
               onClick={openCreate}
@@ -300,7 +629,7 @@ export default function BatchesPage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[...Array(6)].map((_, i) => <div key={i} className="h-52 glass-card animate-pulse" />)}
         </div>
-      ) : displayedBatches.length === 0 ? (
+      ) : batches.length === 0 ? (
         <div className="glass-card p-16 text-center">
           <p className="text-gray-400">
             {searchQuery.trim()
@@ -316,7 +645,7 @@ export default function BatchesPage() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {displayedBatches.map((b, i) => {
+          {batches.map((b, i) => {
             const grad = BATCH_GRADIENTS[i % BATCH_GRADIENTS.length]
             const enrolled = b.studentCount || 0
             const fillPct = Math.round((enrolled / b.maxStudents) * 100)
@@ -418,210 +747,39 @@ export default function BatchesPage() {
         </div>
       )}
 
-      {/* Create / Edit Batch Panel */}
-      {canManageBatch && (
-        <SlidePanel
-          open={panelOpen}
-          onClose={() => setPanelOpen(false)}
-          title={editingBatch ? 'Edit Batch' : 'Create Batch'}
-          subtitle={editingBatch ? 'Update batch details and schedule' : 'Set up a new training batch'}
-          isDirty={editingBatch
-          ? Boolean(
-              form.name !== (editingBatch.name || '') ||
-              form.courseId !== (editingBatch.course?.id ? String(editingBatch.course.id) : '') ||
-              form.startDate !== (editingBatch.startDate ? editingBatch.startDate.slice(0, 10) : '') ||
-              form.endDate !== (editingBatch.endDate ? editingBatch.endDate.slice(0, 10) : '') ||
-              startTime || endTime ||
-              form.maxStudents !== (editingBatch.maxStudents || '')
-            )
-          : Boolean(form.name || form.courseId || form.startDate || form.endDate || startTime || endTime || form.maxStudents)}
-        >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Batch Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Batch Name *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Enter batch name"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                required
-              />
-            </div>
 
-            {/* Course */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Course *</label>
-              <CustomSelect
-                value={form.courseId}
-                onChange={(val) => setForm(f => ({ ...f, courseId: val }))}
-                options={courses.filter(c => c.status === 'PUBLISHED').map(c => ({
-                  value: c.id,
-                  label: `${c.title}${c.duration ? ` — ${c.duration}` : ''}`
-                }))}
-                placeholder="Select course"
-              />
-              {selectedCourse && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Selected course duration: <span className="font-semibold text-purple-600">{selectedCourse.duration}</span>
-                </p>
-              )}
-            </div>
 
-            {/* Assign Trainers */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign Trainers (Optional)</label>
-              <MultiSelect
-                value={form.trainerIds}
-                onChange={(vals) => setForm(f => ({ ...f, trainerIds: vals.map(String) }))}
-                options={trainers.filter(t => t.active === true).map(t => ({
-                  value: String(t.id),
-                  label: `${t.name}${t.designation ? ` (${t.designation})` : ''}`
-                }))}
-                placeholder="Select one or more trainers (optional)"
-                searchable={trainers.length >= 10}
-              />
-              {(editingBatch?.trainers || [])
-                .filter(t => t.active === false && !form.trainerIds.includes(String(t.id)))
-                .map(t => (
-                  <p key={t.id} className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
-                    Previous trainer ({t.name}) is inactive. Please select an active trainer or remove them.
-                  </p>
-                ))}
-            </div>
-
-            {/* Clean Start & End Time Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={e => setStartTime(e.target.value)}
-                  placeholder="Select start time"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={e => setEndTime(e.target.value)}
-                  placeholder="Select end time"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                />
-              </div>
-            </div>
-
-            {startTime && endTime && startTime >= endTime && (
-              <p className="text-xs text-red-500 font-medium">End time must be after start time</p>
-            )}
-
-            {/* Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
-                <input
-                  type="date"
-                  value={form.startDate}
-                  onChange={e => {
-                    const newStart = e.target.value
-                    setForm(f => ({
-                      ...f,
-                      startDate: newStart,
-                      endDate: f.endDate && newStart && f.endDate < newStart ? '' : f.endDate,
-                    }))
-                  }}
-                  required
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">End Date *</label>
-                <input
-                  type="date"
-                  min={form.startDate || undefined}
-                  max={maxEndDateStr}
-                  value={form.endDate}
-                  onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                  required
-                  className={`w-full rounded-xl border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 ${batchDateError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700 focus:ring-purple-500'} text-gray-800 dark:text-gray-200`}
-                />
-              </div>
-            </div>
-            {selectedCourse && form.startDate && maxEndDate && (
-              <p className="text-xs text-gray-500">
-                Max allowed end date for <span className="font-semibold">{selectedCourse.duration}</span> from {format(new Date(form.startDate), 'dd MMM yyyy')} is <span className="font-semibold text-purple-600">{format(maxEndDate, 'dd MMM yyyy')}</span>
-              </p>
-            )}
-            {batchDateError && (
-              <p className="text-xs text-red-500 font-medium">{batchDateError}</p>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Mode</label>
-                <CustomSelect
-                  value={form.mode}
-                  onChange={(val) => setForm(f => ({ ...f, mode: val }))}
-                  options={[
-                    { value: 'ONLINE', label: 'ONLINE' },
-                    { value: 'OFFLINE', label: 'OFFLINE' },
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Students</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={form.maxStudents}
-                  onChange={e => setForm(f => ({ ...f, maxStudents: e.target.value }))}
-                  placeholder="Enter max students (1-500)"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200"
-                />
-                {form.maxStudents && (Number(form.maxStudents) < 1 || Number(form.maxStudents) > 500) && (
-                  <p className="text-xs text-red-500 font-medium mt-1">Max students must be between 1 and 500</p>
-                )}
-              </div>
-            </div>
-
-            {(() => {
-              const isTimeValid = (!startTime && !endTime) || (Boolean(startTime) && Boolean(endTime) && startTime < endTime)
-              const isMaxStudentsValid = !form.maxStudents || (Number(form.maxStudents) >= 1 && Number(form.maxStudents) <= 500)
-              const isBatchFormValid = Boolean(
-                form.name?.trim() &&
-                form.courseId &&
-                form.startDate &&
-                form.endDate &&
-                !batchDateError &&
-                isTimeValid &&
-                isMaxStudentsValid
-              )
-              return (
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setPanelOpen(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving || !isBatchFormValid}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-purple-500/20"
-                  >
-                    {saving ? (editingBatch ? 'Saving...' : 'Creating...') : (editingBatch ? 'Save Changes' : 'Create Batch')}
-                  </button>
-                </div>
-              )
-            })()}
-          </form>
-        </SlidePanel>
-      )}
+      {/* Import Batches Modal */}
+      <CsvImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Batches"
+        subtitle="Bulk create batches from a CSV file. Download the template for the exact column format."
+        entityLabel="batch"
+        templateFilename="batches-import-template.csv"
+        templateHeaders={['Name', 'Course', 'Start Date', 'End Date', 'Timing', 'Mode', 'Max Students', 'Trainer Emails']}
+        templateRows={[[
+          'Java Full Stack - Aug 2024',
+          'Master Full Stack Java Development',
+          '2024-08-01',
+          '2025-01-31',
+          '6:00 PM - 9:00 PM',
+          'ONLINE',
+          '30',
+          'trainer1@careerlabs.com; trainer2@careerlabs.com',
+        ]]}
+        requiredColumns={['name']}
+        submitFn={(file) => batchService.bulkImport(file)}
+        onSuccess={load}
+        helpLines={[
+          'Required column: Name.',
+          'Course must match an existing course title or course code.',
+          'Dates must be in YYYY-MM-DD format and End Date cannot be before Start Date.',
+          'Mode must be ONLINE or OFFLINE.',
+          'Max Students must be between 1 and 500.',
+          'Trainer Emails: semicolon-separated emails of trainers to assign.',
+        ]}
+      />
 
       {/* Delete Batch Confirmation Modal */}
       <DeleteConfirmModal

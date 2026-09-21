@@ -137,7 +137,8 @@ export default function UnifiedAdminDashboard() {
   const loadDrives = useCallback(() => {
     adminApi.getDrives({ status: 'ACTIVE', size: 5 })
       .then(r => {
-        const list = r.data?.data?.content || r.data?.content || r.data?.data || r.data || []
+        const payload = r.data?.data ?? r.data
+        const list = payload?.items || payload?.content || (Array.isArray(payload) ? payload : []) || []
         const arr = Array.isArray(list) ? list : []
         // Sort by driveDate ascending, take next 5 upcoming
         const now = new Date()

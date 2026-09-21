@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.quiz.service.impl;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
@@ -7,6 +8,7 @@ import com.careerlabs.lms.api.quiz.dto.request.CreateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewCategoryCount;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewPrepPageResponse;
+import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionResponse;
 import com.careerlabs.lms.api.quiz.entity.InterviewQuestion;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
@@ -15,6 +17,7 @@ import com.careerlabs.lms.api.quiz.service.InterviewQuestionService;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -54,7 +57,8 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
                 .map(row -> new InterviewCategoryCount((String) row[0], (Long) row[1]))
                 .toList();
 
-        return new InterviewPrepPageResponse(questions, result.getTotalElements(), categories);
+        return new InterviewPrepPageResponse(questions, result.getTotalElements(), categories,
+                result.getTotalPages(), result.getNumber() + 1);
     }
 
     @Override
@@ -66,6 +70,21 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
                 .stream()
                 .map(InterviewQuestionResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InterviewQuestionPageResponse pageAll(String category, String difficulty, String search,
+                                                 Boolean active, Long courseId, int page, int limit) {
+        Pageable pageable = PageRequest.of(Math.max(0, page - 1), limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Specification<InterviewQuestion> spec =
+                buildSpecification(active, category, parseDifficulty(difficulty), search, courseId, false);
+        Page<InterviewQuestion> result = interviewQuestionRepository.findAll(spec, pageable);
+        List<InterviewQuestionResponse> items = result.getContent().stream()
+                .map(InterviewQuestionResponse::from)
+                .toList();
+        return new InterviewQuestionPageResponse(items, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber() + 1);
     }
 
     @Override
@@ -124,6 +143,18 @@ private void applyRequest(InterviewQuestion question, String category, String qu
         }
         return courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
+    }
+
+    private QuizDifficulty parseDifficulty(String difficulty) {
+        if (difficulty == null || difficulty.isBlank()) {
+            return null;
+        }
+        try {
+            return QuizDifficulty.valueOf(difficulty.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(
+                    "Invalid difficulty: " + difficulty + ". Valid values: EASY, MEDIUM, HARD");
+        }
     }
 
     private Specification<InterviewQuestion> buildSpecification(Boolean active, String category,

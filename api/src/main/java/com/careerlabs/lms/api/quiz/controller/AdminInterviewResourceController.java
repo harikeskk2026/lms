@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.quiz.controller;
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.quiz.dto.request.CreateInterviewResourceRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateInterviewResourceRequest;
+import com.careerlabs.lms.api.quiz.dto.response.InterviewResourcePageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewResourceResponse;
 import com.careerlabs.lms.api.quiz.service.InterviewResourceService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -19,8 +20,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
  * Admin management of interview-prep resources shown on the student Interview Prep tab.
  */
@@ -35,9 +34,13 @@ public class AdminInterviewResourceController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<InterviewResourceResponse>>> list(
-            @RequestParam(required = false) Boolean active) {
-        return ResponseEntity.ok(ApiResponse.of(interviewResourceService.listAll(active)));
+    public ResponseEntity<ApiResponse<InterviewResourcePageResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(interviewResourceService.page(search, tag, active, page, limit)));
     }
 
     @GetMapping("/{id}")

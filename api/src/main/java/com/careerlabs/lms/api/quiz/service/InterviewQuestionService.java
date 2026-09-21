@@ -3,6 +3,7 @@ package com.careerlabs.lms.api.quiz.service;
 import com.careerlabs.lms.api.quiz.dto.request.CreateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.request.UpdateInterviewQuestionRequest;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewPrepPageResponse;
+import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionPageResponse;
 import com.careerlabs.lms.api.quiz.dto.response.InterviewQuestionResponse;
 import com.careerlabs.lms.api.quiz.entity.QuizDifficulty;
 
@@ -13,6 +14,8 @@ public interface InterviewQuestionService {
     InterviewPrepPageResponse browse(String category, QuizDifficulty difficulty, String search, Long courseId, int page, int limit);
 
     List<InterviewQuestionResponse> listAll(String category, QuizDifficulty difficulty, String search, Boolean active, Long courseId);
+
+    InterviewQuestionPageResponse pageAll(String category, String difficulty, String search, Boolean active, Long courseId, int page, int limit);
 
     InterviewQuestionResponse get(Long id);
 

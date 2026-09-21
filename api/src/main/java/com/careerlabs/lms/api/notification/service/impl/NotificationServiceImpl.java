@@ -1,5 +1,6 @@
 package com.careerlabs.lms.api.notification.service.impl;
 
+import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.notification.dto.response.NotificationResponse;
 import com.careerlabs.lms.api.notification.entity.Notification;
@@ -54,9 +55,61 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional(readOnly = true)
     public List<NotificationResponse> list(Long userId) {
+        return list(userId, null, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> list(Long userId, String category, String search, Boolean unreadOnly) {
+        List<String> keywords = parseCategory(category);
+        String searchLower = (search != null && !search.isBlank()) ? search.trim().toLowerCase() : null;
+        boolean onlyUnread = Boolean.TRUE.equals(unreadOnly);
         return notificationRepository.findAllByUser_IdOrderByCreatedAtDesc(userId).stream()
+                .filter(n -> !onlyUnread || !n.isRead())
+                .filter(n -> keywords == null || containsAny(lower(n.getTitle()), keywords))
+                .filter(n -> searchLower == null
+                        || contains(lower(n.getTitle()), searchLower)
+                        || contains(lower(n.getBody()), searchLower))
                 .map(NotificationResponse::from)
                 .toList();
+    }
+
+    /**
+     * NOTE: the Notification entity has no content-category field (its
+     * {@code type} is severity: INFO/SUCCESS/WARNING/URGENT...), so the page's
+     * keyword buckets are mirrored here on the title, case-insensitively —
+     * identical to the client's old {@code filterByCategory}.
+     */
+    private static List<String> parseCategory(String category) {
+        if (category == null || category.isBlank() || category.equalsIgnoreCase("ALL")) {
+            return null;
+        }
+        return switch (category.trim().toUpperCase()) {
+            case "ASSIGNMENTS" -> List.of("assignment");
+            case "QUIZZES" -> List.of("quiz");
+            case "PLACEMENT" -> List.of("placement", "interview", "mock");
+            case "ANNOUNCEMENTS" -> List.of("announcement", "batch", "class");
+            default -> throw new BadRequestException(
+                    "Invalid notification category: " + category
+                            + ". Allowed values: ASSIGNMENTS, QUIZZES, PLACEMENT, ANNOUNCEMENTS");
+        };
+    }
+
+    private static String lower(String value) {
+        return value != null ? value.toLowerCase() : "";
+    }
+
+    private static boolean contains(String haystack, String needle) {
+        return haystack.contains(needle);
+    }
+
+    private static boolean containsAny(String haystack, List<String> needles) {
+        for (String needle : needles) {
+            if (haystack.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

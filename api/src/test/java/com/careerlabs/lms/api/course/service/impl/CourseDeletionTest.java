@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
 import java.util.Collections;
@@ -42,6 +43,7 @@ class CourseDeletionTest {
     @Mock private SyllabusService syllabusService;
     @Mock private MaterialRepository materialRepository;
     @Mock private BatchRepository batchRepository;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private CourseServiceImpl courseService;
 
@@ -78,7 +80,8 @@ class CourseDeletionTest {
                 moduleRepository,
                 syllabusService,
                 materialRepository,
-                batchRepository
+                batchRepository,
+                transactionManager
         );
     }
 

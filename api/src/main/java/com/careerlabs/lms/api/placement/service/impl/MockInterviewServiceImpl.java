@@ -5,6 +5,7 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.placement.dto.request.CreateMockInterviewRequest;
 import com.careerlabs.lms.api.placement.dto.request.MockCandidateFeedbackRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateMockInterviewRequest;
+import com.careerlabs.lms.api.placement.dto.response.MockInterviewPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.MockInterviewResponse;
 import com.careerlabs.lms.api.placement.entity.*;
 import com.careerlabs.lms.api.placement.repository.MockInterviewCandidateRepository;
@@ -14,6 +15,13 @@ import com.careerlabs.lms.api.placement.service.MockInterviewService;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +62,51 @@ public class MockInterviewServiceImpl implements MockInterviewService {
         return mockInterviewRepository.findAllByOrderByScheduledAtDesc().stream()
                 .map(MockInterviewResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MockInterviewPageResponse page(String search, String status, int page, int limit) {
+        Pageable pageable = PageRequest.of(Math.max(0, page - 1), limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<MockInterview> result = mockInterviewRepository.findAll(buildSpecification(search, status), pageable);
+        List<MockInterviewResponse> items = result.getContent().stream()
+                .map(MockInterviewResponse::from)
+                .toList();
+        return new MockInterviewPageResponse(items, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber() + 1);
+    }
+
+    private Specification<MockInterview> buildSpecification(String search, String status) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null && !status.isBlank()) {
+                final MockInterviewStatus parsed;
+                try {
+                    parsed = MockInterviewStatus.valueOf(status.trim().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException(
+                            "Invalid status: " + status + ". Valid values: SCHEDULED, COMPLETED, CANCELLED");
+                }
+                predicates.add(cb.equal(root.get("status"), parsed));
+            }
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                Subquery<Long> candidateMatch = query.subquery(Long.class);
+                var candidate = candidateMatch.from(MockInterviewCandidate.class);
+                var candidateUser = candidate.join("student").join("user");
+                candidateMatch.select(candidate.get("id")).where(cb.and(
+                        cb.equal(candidate.get("mockInterview"), root),
+                        cb.or(
+                                cb.like(cb.lower(candidateUser.get("name")), like),
+                                cb.like(cb.lower(candidateUser.get("email")), like))));
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("interviewerName")), like),
+                        cb.like(cb.lower(root.get("syllabus")), like),
+                        cb.like(cb.lower(root.get("instructions")), like),
+                        cb.exists(candidateMatch)));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Override

@@ -116,6 +116,12 @@ public class MaterialServiceImpl implements MaterialService {
     @Override
     @Transactional(readOnly = true)
     public List<MaterialResponse> listAllForCourse(Long courseId, JwtUserPrincipal principal) {
+        return listAllForCourse(courseId, principal, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MaterialResponse> listAllForCourse(Long courseId, JwtUserPrincipal principal, MaterialType type) {
         findCourseOrThrow(courseId);
         accessGuard.requireContentAccess(principal, courseId);
 
@@ -194,7 +200,11 @@ public class MaterialServiceImpl implements MaterialService {
             }
         }
 
-        return result.stream().map(MaterialResponse::from).toList();
+        Stream<Material> filtered = result.stream();
+        if (type != null) {
+            filtered = filtered.filter(m -> m.getType() == type);
+        }
+        return filtered.map(MaterialResponse::from).toList();
     }
 
     private boolean isPublished(Material material) {

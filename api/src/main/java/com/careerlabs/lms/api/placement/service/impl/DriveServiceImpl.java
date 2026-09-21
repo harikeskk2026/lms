@@ -9,9 +9,12 @@ import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.placement.dto.request.CreateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdateDriveRequest;
 import com.careerlabs.lms.api.placement.dto.response.AdminDriveResponse;
+import com.careerlabs.lms.api.placement.dto.response.DrivePageResponse;
+import com.careerlabs.lms.api.placement.dto.response.StudentDrivePageResponse;
 import com.careerlabs.lms.api.placement.dto.response.StudentDriveResponse;
 import com.careerlabs.lms.api.placement.entity.Drive;
 import com.careerlabs.lms.api.placement.entity.DriveApplication;
+import com.careerlabs.lms.api.placement.entity.DriveType;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationRepository;
 import com.careerlabs.lms.api.placement.repository.DriveApplicationStatusHistoryRepository;
 import com.careerlabs.lms.api.placement.repository.DriveRepository;
@@ -20,10 +23,16 @@ import com.careerlabs.lms.api.placement.service.PlacementEligibilityGuard;
 import com.careerlabs.lms.api.placement.validation.DriveValidationMessages;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +73,55 @@ public class DriveServiceImpl implements DriveService {
         return drives.stream()
                 .map(drive -> AdminDriveResponse.from(drive, counts.getOrDefault(drive.getId(), 0L)))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DrivePageResponse pageForAdmin(String search, String status, int page, int limit) {
+        int safePage = Math.max(page, 1) - 1;
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        Page<Drive> result = driveRepository.findAll(buildSpecification(search, status),
+                PageRequest.of(safePage, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt")));
+        Map<Long, Long> counts = applicationCountsByDrive(
+                result.getContent().stream().map(Drive::getId).toList());
+        List<AdminDriveResponse> items = result.getContent().stream()
+                .map(drive -> AdminDriveResponse.from(drive, counts.getOrDefault(drive.getId(), 0L)))
+                .toList();
+        return new DrivePageResponse(items, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber() + 1);
+    }
+
+    private Specification<Drive> buildSpecification(String search, String status) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("companyName")), like),
+                        cb.like(cb.lower(root.get("role")), like)));
+            }
+            if (status != null && !status.isBlank()) {
+                String s = status.trim().toUpperCase();
+                LocalDate today = LocalDate.now();
+                if ("OPEN".equals(s) || "ACTIVE".equals(s)) {
+                    predicates.add(cb.and(
+                            cb.isNotNull(root.get("applyDeadline")),
+                            cb.greaterThanOrEqualTo(root.get("applyDeadline"), today)));
+                } else if ("CLOSED".equals(s)) {
+                    predicates.add(cb.or(
+                            cb.isNull(root.get("applyDeadline")),
+                            cb.lessThan(root.get("applyDeadline"), today)));
+                } else {
+                    try {
+                        predicates.add(cb.equal(root.get("driveType"), DriveType.valueOf(s)));
+                    } catch (IllegalArgumentException e) {
+                        throw new BadRequestException("Invalid drive status: " + status.trim()
+                                + ". Valid values: OPEN, ACTIVE, CLOSED, CAMPUS, OFF_CAMPUS, POOL, VIRTUAL");
+                    }
+                }
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Override
@@ -130,6 +188,65 @@ public class DriveServiceImpl implements DriveService {
                                 ? applicationsByDriveId.get(drive.getId()).getStatus()
                                 : null))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StudentDrivePageResponse pageForStudent(Long userId, String search, String status, int page, int limit) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for this account"));
+
+        Map<Long, DriveApplication> applicationsByDriveId = driveApplicationRepository
+                .findAllByStudent_IdOrderByCreatedAtDesc(student.getId()).stream()
+                .collect(Collectors.toMap(a -> a.getDrive().getId(), Function.identity(), (a, b) -> a));
+
+        String q = search == null ? "" : search.trim().toLowerCase();
+        String s = status == null || status.isBlank() ? "ALL" : status.trim().toUpperCase();
+        if (!s.equals("ALL") && !s.equals("OPEN") && !s.equals("CLOSED") && !s.equals("INTERESTED")) {
+            throw new BadRequestException("Invalid drive status: " + status.trim()
+                    + ". Valid values: All, Open, Closed, Interested");
+        }
+
+        LocalDate today = LocalDate.now();
+        List<Drive> filtered = driveRepository.findAllByOrderByDriveDateAsc().stream()
+                .filter(drive -> {
+                    if (!q.isEmpty()) {
+                        boolean matchCompany = drive.getCompanyName() != null
+                                && drive.getCompanyName().toLowerCase().contains(q);
+                        boolean matchRole = drive.getRole() != null
+                                && drive.getRole().toLowerCase().contains(q);
+                        if (!matchCompany && !matchRole) {
+                            return false;
+                        }
+                    }
+                    if ("INTERESTED".equals(s)) {
+                        return applicationsByDriveId.containsKey(drive.getId());
+                    } else if ("OPEN".equals(s)) {
+                        return drive.getApplyDeadline() != null && !drive.getApplyDeadline().isBefore(today);
+                    } else if ("CLOSED".equals(s)) {
+                        return drive.getApplyDeadline() == null || drive.getApplyDeadline().isBefore(today);
+                    }
+                    return true;
+                })
+                .toList();
+
+        int safePage = Math.max(page, 1);
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        long total = filtered.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / safeLimit);
+        int from = Math.min((safePage - 1) * safeLimit, filtered.size());
+        int to = Math.min(from + safeLimit, filtered.size());
+        List<StudentDriveResponse> items = filtered.subList(from, to).stream()
+                .map(drive -> StudentDriveResponse.from(
+                        drive,
+                        eligibilityGuard.isEligible(student, drive),
+                        eligibilityGuard.ineligibilityReasons(student, drive),
+                        eligibilityGuard.hasIncompleteAcademicData(student, drive),
+                        applicationsByDriveId.containsKey(drive.getId())
+                                ? applicationsByDriveId.get(drive.getId()).getStatus()
+                                : null))
+                .toList();
+        return new StudentDrivePageResponse(items, total, totalPages, safePage);
     }
 
     /**

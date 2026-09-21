@@ -7,10 +7,14 @@ import com.careerlabs.lms.api.announcement.repository.AnnouncementRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementTemplateRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementVersionRepository;
 import com.careerlabs.lms.api.announcement.repository.AnnouncementViewRepository;
+import com.careerlabs.lms.api.common.dto.response.BulkImportResponse;
+import com.careerlabs.lms.api.common.dto.response.ImportRowError;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ForbiddenException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.common.util.CsvParser;
+import com.careerlabs.lms.api.common.util.ImportValidators;
 import com.careerlabs.lms.api.auth.repository.RevokedTokenRepository;
 import com.careerlabs.lms.api.meeting.repository.MeetingLinkRepository;
 import com.careerlabs.lms.api.notification.repository.NotificationRepository;
@@ -43,10 +47,17 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class UserAdminServiceImpl implements UserAdminService {
@@ -54,6 +65,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenRevocationService tokenRevocationService;
+    private final TransactionTemplate transactionTemplate;
 
     // Content that would take student-owned data down with it if cascaded -
     // deletion is blocked outright if any of this exists (see deleteAdmin()).
@@ -89,6 +101,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     public UserAdminServiceImpl(UserRepository userRepository,
                                 PasswordEncoder passwordEncoder,
                                 TokenRevocationService tokenRevocationService,
+                                PlatformTransactionManager transactionManager,
                                 DriveRepository driveRepository,
                                 QuizRepository quizRepository,
                                 QuestionRepository questionRepository,
@@ -112,6 +125,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenRevocationService = tokenRevocationService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.driveRepository = driveRepository;
         this.quizRepository = quizRepository;
         this.questionRepository = questionRepository;
@@ -186,6 +200,133 @@ public class UserAdminServiceImpl implements UserAdminService {
         user.setDepartment(request.getDepartment());
         User saved = userRepository.save(user);
         return AdminResponse.from(saved);
+    }
+
+    @Override
+    public BulkImportResponse<AdminResponse> bulkImportAdmins(MultipartFile file, String defaultPassword) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Uploaded CSV file is empty");
+        }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BadRequestException("CSV file size exceeds the 5MB limit");
+        }
+
+        CsvParser.ParseResult parseResult;
+        try {
+            parseResult = CsvParser.parse(file.getInputStream());
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+        }
+
+        List<CsvParser.ParsedRow> rows = parseResult.getRows();
+        if (rows.isEmpty()) {
+            throw new BadRequestException("CSV file contains no admin data rows");
+        }
+        if (rows.size() > 1000) {
+            throw new BadRequestException("CSV file exceeds maximum limit of 1000 rows");
+        }
+
+        boolean hasNameHeader = parseResult.getHeaders().stream()
+                .map(CsvParser::normalizeHeaderKey)
+                .anyMatch(h -> h.contains("name"));
+        boolean hasEmailHeader = parseResult.getHeaders().stream()
+                .map(CsvParser::normalizeHeaderKey)
+                .anyMatch(h -> h.contains("email"));
+        if (!hasNameHeader || !hasEmailHeader) {
+            throw new BadRequestException("CSV file must contain 'Name' and 'Email' columns");
+        }
+
+        String resolvedDefaultPassword = (defaultPassword == null || defaultPassword.isBlank())
+                ? "Admin@123"
+                : defaultPassword.trim();
+        if (!ImportValidators.isValidPasswordStrength(resolvedDefaultPassword)) {
+            throw new BadRequestException("Default password must be 8-128 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (no spaces)");
+        }
+
+        Set<String> seenEmailsInCsv = new HashSet<>();
+        List<AdminResponse> importedAdmins = new ArrayList<>();
+        List<ImportRowError> errors = new ArrayList<>();
+
+        for (CsvParser.ParsedRow row : rows) {
+            int rowNum = row.getRowNumber();
+
+            String name = row.get("name", "adminname", "fullname", "admin_name");
+            if (name == null || name.trim().length() < 2 || name.trim().length() > 150) {
+                errors.add(new ImportRowError(rowNum, name != null ? name : "", "Name is required (2 to 150 characters)"));
+                continue;
+            }
+            name = name.trim();
+
+            String rawEmail = row.get("email", "adminemail", "emailaddress", "admin_email");
+            if (rawEmail == null || rawEmail.trim().isEmpty()) {
+                errors.add(new ImportRowError(rowNum, name, "Email is required"));
+                continue;
+            }
+            String email = rawEmail.trim().toLowerCase(Locale.ROOT);
+            if (!ImportValidators.isValidEmail(email)) {
+                errors.add(new ImportRowError(rowNum, name, "Invalid email address format"));
+                continue;
+            }
+            if (!seenEmailsInCsv.add(email)) {
+                errors.add(new ImportRowError(rowNum, name, "Duplicate email '" + email + "' found within this CSV sheet"));
+                continue;
+            }
+            if (userRepository.existsByEmailIgnoreCase(email)) {
+                errors.add(new ImportRowError(rowNum, name, "Email '" + email + "' is already registered in the system"));
+                continue;
+            }
+
+            String phone = row.get("phone", "phonenumber", "mobile", "contact", "mobile_number");
+            if (phone != null) {
+                phone = phone.replaceAll("\\D", "").trim();
+                if (phone.isEmpty()) {
+                    phone = null;
+                } else if (!ImportValidators.isValidPhone(phone)) {
+                    errors.add(new ImportRowError(rowNum, name, "Phone number must be a valid 10-digit number starting with 6-9"));
+                    continue;
+                }
+            }
+
+            String password = row.get("password");
+            if (password == null || password.trim().isEmpty()) {
+                password = resolvedDefaultPassword;
+            } else {
+                password = password.trim();
+                if (!ImportValidators.isValidPasswordStrength(password)) {
+                    errors.add(new ImportRowError(rowNum, name, "Password must be 8-128 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (no spaces)"));
+                    continue;
+                }
+            }
+
+            final String fName = name;
+            final String fEmail = email;
+            final String fPhone = phone;
+            final String fPassword = password;
+            final String designation = row.get("designation", "designationtitle", "role");
+            final String department = row.get("department", "dept", "departmentname");
+
+            try {
+                AdminResponse created = transactionTemplate.execute(status -> {
+                    User user = new User();
+                    user.setName(fName);
+                    user.setEmail(fEmail);
+                    user.setPasswordHash(passwordEncoder.encode(fPassword));
+                    user.setRole(Role.ADMIN);
+                    user.setActive(true);
+                    user.setPhone(fPhone);
+                    user.setDesignation(designation);
+                    user.setDepartment(department);
+                    return AdminResponse.from(userRepository.save(user));
+                });
+                if (created != null) {
+                    importedAdmins.add(created);
+                }
+            } catch (Exception ex) {
+                errors.add(new ImportRowError(rowNum, fName, "Failed to create admin: " + ex.getMessage()));
+            }
+        }
+
+        return new BulkImportResponse<>(rows.size(), importedAdmins.size(), errors.size(), importedAdmins, errors);
     }
 
     @Override

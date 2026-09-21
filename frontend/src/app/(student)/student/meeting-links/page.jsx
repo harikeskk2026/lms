@@ -77,7 +77,9 @@ const getDisplayStatus = (m) => {
 }
 
 export default function StudentMeetingLinksPage() {
-  const [meetings, setMeetings] = useState([])
+  const [activeLiveMeetings, setActiveLiveMeetings] = useState([])
+  const [upcomingMeetings, setUpcomingMeetings] = useState([])
+  const [pastMeetings, setPastMeetings] = useState([])
   const [loading, setLoading] = useState(true)
   const [now, setNow] = useState(new Date())
 
@@ -93,31 +95,29 @@ export default function StudentMeetingLinksPage() {
     return []
   }
 
-  const loadMeetings = async () => {
-    setLoading(true)
+  const extract = (r) => extractList(r?.data) || extractList(r) || []
+
+  const loadMeetings = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
-      const allRes = await studentApi.getMeetings()
-      const mList = extractList(allRes?.data) || extractList(allRes) || []
-      const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
-      setMeetings(unique)
+      const [ongoingRes, upcomingRes, pastRes] = await Promise.all([
+        studentApi.getMeetings({ status: 'ONGOING' }),
+        studentApi.getMeetings({ status: 'UPCOMING' }),
+        studentApi.getMeetings({ status: 'PAST' }),
+      ])
+      setActiveLiveMeetings(extract(ongoingRes))
+      setUpcomingMeetings(extract(upcomingRes))
+      setPastMeetings(extract(pastRes))
     } catch {
       toast.error('Failed to load meeting links')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
     loadMeetings()
-    const interval = setInterval(() => {
-      studentApi.getMeetings()
-        .then(allRes => {
-          const mList = extractList(allRes?.data) || extractList(allRes) || []
-          const unique = Array.from(new Map(mList.map(item => [item.id, item])).values())
-          setMeetings(unique)
-        })
-        .catch(() => {})
-    }, 15000)
+    const interval = setInterval(() => loadMeetings({ silent: true }), 15000)
     return () => clearInterval(interval)
   }, [])
 
@@ -130,10 +130,6 @@ export default function StudentMeetingLinksPage() {
   const recordJoin = (id) => {
     studentApi.joinMeeting(id).catch(() => {})
   }
-
-  const activeLiveMeetings = meetings.filter(m => getDisplayStatus(m) === 'ONGOING')
-  const upcomingMeetings   = meetings.filter(m => getDisplayStatus(m) === 'UPCOMING')
-  const pastMeetings       = meetings.filter(m => getDisplayStatus(m) === 'COMPLETED' || m.status === 'CANCELLED')
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

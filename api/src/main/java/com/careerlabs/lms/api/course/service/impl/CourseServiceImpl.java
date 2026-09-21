@@ -2,13 +2,18 @@ package com.careerlabs.lms.api.course.service.impl;
 
 import com.careerlabs.lms.api.batch.entity.Batch;
 import com.careerlabs.lms.api.batch.repository.BatchRepository;
+import com.careerlabs.lms.api.common.dto.response.BulkImportResponse;
+import com.careerlabs.lms.api.common.dto.response.ImportRowError;
 import com.careerlabs.lms.api.common.exception.BadRequestException;
 import com.careerlabs.lms.api.common.exception.ConflictException;
 import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
+import com.careerlabs.lms.api.common.util.CsvParser;
 import com.careerlabs.lms.api.course.dto.request.CourseRequest;
 import com.careerlabs.lms.api.course.dto.response.CourseResponse;
+import com.careerlabs.lms.api.course.dto.response.CourseStatusCountsResponse;
 import com.careerlabs.lms.api.course.entity.Course;
 import com.careerlabs.lms.api.course.entity.CourseStatus;
+import com.careerlabs.lms.api.course.entity.Level;
 import com.careerlabs.lms.api.course.repository.CourseRepository;
 import com.careerlabs.lms.api.course.service.CourseService;
 import com.careerlabs.lms.api.enrollment.repository.EnrollmentRepository;
@@ -21,9 +26,14 @@ import com.careerlabs.lms.api.syllabus.repository.SyllabusModuleRepository;
 import com.careerlabs.lms.api.syllabus.service.SyllabusService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -44,12 +54,13 @@ public class CourseServiceImpl implements CourseService {
     private final SyllabusService syllabusService;
     private final MaterialRepository materialRepository;
     private final BatchRepository batchRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public CourseServiceImpl(CourseRepository courseRepository, CourseCodeGenerator courseCodeGenerator,
                               CourseAccessGuard accessGuard, StudentRepository studentRepository,
                               EnrollmentRepository enrollmentRepository, SyllabusModuleRepository moduleRepository,
                               SyllabusService syllabusService, MaterialRepository materialRepository,
-                              BatchRepository batchRepository) {
+                              BatchRepository batchRepository, PlatformTransactionManager transactionManager) {
         this.courseRepository = courseRepository;
         this.courseCodeGenerator = courseCodeGenerator;
         this.accessGuard = accessGuard;
@@ -59,29 +70,44 @@ public class CourseServiceImpl implements CourseService {
         this.syllabusService = syllabusService;
         this.materialRepository = materialRepository;
         this.batchRepository = batchRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CourseResponse> list(JwtUserPrincipal principal) {
-        return list(principal, null);
+        return list(principal, null, null);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CourseResponse> list(JwtUserPrincipal principal, String search) {
+        return list(principal, search, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CourseResponse> list(JwtUserPrincipal principal, String search, CourseStatus status) {
         List<CourseResponse> responses;
         if (accessGuard.isAdmin(principal)) {
-            responses = courseRepository.findAllByOrderByCreatedAtDesc().stream()
-                    .map(CourseResponse::from)
-                    .toList();
+            if (status != null) {
+                responses = courseRepository.findByStatusOrderByCreatedAtDesc(status).stream()
+                        .map(CourseResponse::from)
+                        .toList();
+            } else {
+                responses = courseRepository.findAllByOrderByCreatedAtDesc().stream()
+                        .map(CourseResponse::from)
+                        .toList();
+            }
         } else if (accessGuard.isTrainer(principal)) {
             responses = courseRepository.findCoursesByTrainerId(principal.id()).stream()
+                    .filter(c -> status == null || c.getStatus() == status)
                     .map(c -> CourseResponse.from(c, true))
                     .toList();
         } else if (accessGuard.isStudent(principal)) {
             Set<Long> enrolledIds = enrolledCourseIds(principal);
             responses = courseRepository.findByStatusOrderByCreatedAtDesc(CourseStatus.PUBLISHED).stream()
+                    .filter(c -> status == null || c.getStatus() == status)
                     .map(c -> CourseResponse.from(c, enrolledIds.contains(c.getId())))
                     .toList();
         } else {
@@ -98,6 +124,15 @@ public class CourseServiceImpl implements CourseService {
                         || containsIgnoreCase(c.courseCode(), needle)
                         || (c.level() != null && containsIgnoreCase(c.level().name(), needle)))
                 .toList();
+    }
+
+    @Override
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public CourseStatusCountsResponse statusCounts() {
+        long published = courseRepository.countByStatus(CourseStatus.PUBLISHED);
+        long draft = courseRepository.countByStatus(CourseStatus.DRAFT);
+        long archived = courseRepository.countByStatus(CourseStatus.ARCHIVED);
+        return CourseStatusCountsResponse.of(published, draft, archived);
     }
 
     private boolean containsIgnoreCase(String value, String lowerCaseNeedle) {
@@ -138,6 +173,129 @@ public class CourseServiceImpl implements CourseService {
             }
         }
         return CourseResponse.from(courseRepository.save(course));
+    }
+
+    private static final Pattern DURATION_PATTERN =
+            Pattern.compile("^[1-9]\\d*\\s+(days?|weeks?|months?|years?)$", Pattern.CASE_INSENSITIVE);
+
+    @Override
+    public BulkImportResponse<CourseResponse> bulkImportCourses(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Uploaded CSV file is empty");
+        }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BadRequestException("CSV file size exceeds the 5MB limit");
+        }
+
+        CsvParser.ParseResult parseResult;
+        try {
+            parseResult = CsvParser.parse(file.getInputStream());
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+        }
+
+        List<CsvParser.ParsedRow> rows = parseResult.getRows();
+        if (rows.isEmpty()) {
+            throw new BadRequestException("CSV file contains no course data rows");
+        }
+        if (rows.size() > 1000) {
+            throw new BadRequestException("CSV file exceeds maximum limit of 1000 rows");
+        }
+
+        boolean hasTitleHeader = parseResult.getHeaders().stream()
+                .map(CsvParser::normalizeHeaderKey)
+                .anyMatch(h -> h.contains("title"));
+        if (!hasTitleHeader) {
+            throw new BadRequestException("CSV file must contain a 'Title' column");
+        }
+
+        List<CourseResponse> importedCourses = new ArrayList<>();
+        List<ImportRowError> errors = new ArrayList<>();
+
+        for (CsvParser.ParsedRow row : rows) {
+            int rowNum = row.getRowNumber();
+
+            String title = row.get("title", "coursetitle", "course_title", "name");
+            if (title == null || title.trim().length() < 3 || title.trim().length() > 150) {
+                errors.add(new ImportRowError(rowNum, title != null ? title : "", "Title is required (3 to 150 characters)"));
+                continue;
+            }
+            title = title.trim();
+
+            String courseCode = row.get("coursecode", "course_code", "code");
+            if (courseCode != null && courseCode.isBlank()) {
+                courseCode = null;
+            }
+
+            String description = row.get("description", "desc", "about", "coursedescription");
+            if (description == null || description.trim().isEmpty()) {
+                errors.add(new ImportRowError(rowNum, title, "Description is required"));
+                continue;
+            }
+            description = description.trim();
+            if (description.length() > 5000) {
+                errors.add(new ImportRowError(rowNum, title, "Description must not exceed 5000 characters"));
+                continue;
+            }
+
+            String duration = row.get("duration", "courseduration", "durationweeks", "durationmonths");
+            if (duration == null || duration.trim().isEmpty()) {
+                errors.add(new ImportRowError(rowNum, title, "Duration is required (e.g. \"6 months\", \"12 weeks\")"));
+                continue;
+            }
+            duration = duration.trim();
+            if (!DURATION_PATTERN.matcher(duration).matches()) {
+                errors.add(new ImportRowError(rowNum, title, "Invalid duration '" + duration + "'. Use a number followed by days/weeks/months/years, e.g. \"6 months\""));
+                continue;
+            }
+            duration = normalizeDuration(duration);
+
+            String rawLevel = row.get("level", "difficulty", "courselevel");
+            if (rawLevel == null || rawLevel.isBlank()) {
+                errors.add(new ImportRowError(rowNum, title, "Level is required. Allowed: BEGINNER, INTERMEDIATE, ADVANCED"));
+                continue;
+            }
+            Level level;
+            try {
+                level = Level.valueOf(rawLevel.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                errors.add(new ImportRowError(rowNum, title, "Invalid level '" + rawLevel + "'. Allowed: BEGINNER, INTERMEDIATE, ADVANCED"));
+                continue;
+            }
+
+            String rawStatus = row.get("status", "coursestatus");
+            if (rawStatus != null && !rawStatus.isBlank()
+                    && !"DRAFT".equalsIgnoreCase(rawStatus.trim())) {
+                errors.add(new ImportRowError(rowNum, title, "Invalid status '" + rawStatus + "'. Courses must be imported as DRAFT and published afterwards"));
+                continue;
+            }
+
+            final String fTitle = title;
+            final String fCode = courseCode;
+            final String fDescription = description;
+            final String fDuration = duration;
+            final Level fLevel = level;
+
+            try {
+                CourseResponse created = transactionTemplate.execute(status -> {
+                    CourseRequest request = new CourseRequest();
+                    request.setTitle(fTitle);
+                    request.setCourseCode(fCode);
+                    request.setDescription(fDescription);
+                    request.setDuration(fDuration);
+                    request.setLevel(fLevel);
+                    request.setStatus(CourseStatus.DRAFT);
+                    return create(request);
+                });
+                if (created != null) {
+                    importedCourses.add(created);
+                }
+            } catch (Exception ex) {
+                errors.add(new ImportRowError(rowNum, fTitle, "Failed to create course: " + ex.getMessage()));
+            }
+        }
+
+        return new BulkImportResponse<>(rows.size(), importedCourses.size(), errors.size(), importedCourses, errors);
     }
 
     @Override

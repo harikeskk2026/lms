@@ -10,6 +10,7 @@ import com.careerlabs.lms.api.placement.dto.request.CreatePreparationMaterialReq
 import com.careerlabs.lms.api.placement.dto.request.PreparationQuestionRequest;
 import com.careerlabs.lms.api.placement.dto.request.UpdatePreparationMaterialRequest;
 import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialDetailResponse;
+import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.PreparationMaterialResponse;
 import com.careerlabs.lms.api.placement.entity.PreparationDocument;
 import com.careerlabs.lms.api.placement.entity.PreparationMaterial;
@@ -24,6 +25,11 @@ import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
 import com.careerlabs.lms.api.user.entity.User;
 import com.careerlabs.lms.api.user.repository.UserRepository;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -68,6 +74,42 @@ public class PreparationMaterialServiceImpl implements PreparationMaterialServic
         return materialRepository.findAllByOrderByCreatedAtDesc().stream()
                 .map(PreparationMaterialResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PreparationMaterialPageResponse pageForAdmin(String search, String status, int page, int limit) {
+        int safePage = Math.max(page, 1) - 1;
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        Page<PreparationMaterial> result = materialRepository.findAll(buildSpecification(search, status),
+                PageRequest.of(safePage, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<PreparationMaterialResponse> items = result.getContent().stream()
+                .map(PreparationMaterialResponse::from)
+                .toList();
+        return new PreparationMaterialPageResponse(items, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber() + 1);
+    }
+
+    private Specification<PreparationMaterial> buildSpecification(String search, String status) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null && !status.isBlank()) {
+                try {
+                    predicates.add(cb.equal(root.get("status"), PreparationMaterialStatus.valueOf(status.trim().toUpperCase())));
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException("Invalid preparation material status: " + status.trim()
+                            + ". Valid values: DRAFT, PUBLISHED, ARCHIVED");
+                }
+            }
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), like),
+                        cb.like(cb.lower(root.get("interviewType")), like),
+                        cb.like(cb.lower(root.get("instructions")), like)));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Override
@@ -236,6 +278,41 @@ public class PreparationMaterialServiceImpl implements PreparationMaterialServic
                     .stream().map(PreparationMaterialResponse::from).toList());
         }
         return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PreparationMaterialPageResponse pageForStudent(Long studentId, String search, int page, int limit) {
+        Student student = getStudent(studentId);
+        List<PreparationMaterial> scoped = new ArrayList<>(materialRepository
+                .findByStatusAndCourseIsNullOrderByCreatedAtDesc(PreparationMaterialStatus.PUBLISHED));
+        if (student.getCourse() != null) {
+            scoped.addAll(materialRepository
+                    .findByStatusAndCourseIdOrderByCreatedAtDesc(PreparationMaterialStatus.PUBLISHED, student.getCourse().getId()));
+        }
+        String q = search == null ? "" : search.trim().toLowerCase();
+        List<PreparationMaterial> filtered = scoped.stream()
+                .filter(m -> {
+                    if (q.isEmpty()) {
+                        return true;
+                    }
+                    String title = m.getTitle() != null ? m.getTitle().toLowerCase() : "";
+                    String type = m.getInterviewType() != null ? m.getInterviewType().toLowerCase() : "";
+                    String courseTitle = m.getCourse() != null && m.getCourse().getTitle() != null
+                            ? m.getCourse().getTitle().toLowerCase() : "";
+                    return (title + " " + type + " " + courseTitle).contains(q);
+                })
+                .toList();
+        int safePage = Math.max(page, 1);
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        long total = filtered.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / safeLimit);
+        int from = Math.min((safePage - 1) * safeLimit, filtered.size());
+        int to = Math.min(from + safeLimit, filtered.size());
+        List<PreparationMaterialResponse> items = filtered.subList(from, to).stream()
+                .map(PreparationMaterialResponse::from)
+                .toList();
+        return new PreparationMaterialPageResponse(items, total, totalPages, safePage);
     }
 
     @Override

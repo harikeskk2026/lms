@@ -6,7 +6,9 @@ import com.careerlabs.lms.api.common.exception.ResourceNotFoundException;
 import com.careerlabs.lms.api.notification.entity.NotificationType;
 import com.careerlabs.lms.api.notification.service.NotificationService;
 import com.careerlabs.lms.api.placement.dto.request.CreateOfferRequest;
+import com.careerlabs.lms.api.placement.dto.response.OfferPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.OfferResponse;
+import com.careerlabs.lms.api.placement.entity.Drive;
 import com.careerlabs.lms.api.placement.entity.DriveApplication;
 import com.careerlabs.lms.api.placement.entity.DriveApplicationStatus;
 import com.careerlabs.lms.api.placement.entity.Offer;
@@ -17,11 +19,20 @@ import com.careerlabs.lms.api.placement.service.OfferService;
 import com.careerlabs.lms.api.placement.service.PlacementService;
 import com.careerlabs.lms.api.student.entity.Student;
 import com.careerlabs.lms.api.student.repository.StudentRepository;
+import com.careerlabs.lms.api.user.entity.User;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -165,6 +176,35 @@ public class OfferServiceImpl implements OfferService {
 
     @Override
     @Transactional(readOnly = true)
+    public OfferPageResponse pageForStudent(Long studentUserId, String search, int page, int limit) {
+        Student student = requireStudent(studentUserId);
+        String q = search == null ? "" : search.trim().toLowerCase();
+        List<Offer> filtered = offerRepository.findByStudent_IdOrderByCreatedAtDesc(student.getId()).stream()
+                .filter(offer -> {
+                    if (q.isEmpty()) {
+                        return true;
+                    }
+                    String company = offer.getDrive() != null && offer.getDrive().getCompanyName() != null
+                            ? offer.getDrive().getCompanyName().toLowerCase() : "";
+                    String role = offer.getRole() != null ? offer.getRole().toLowerCase() : "";
+                    return (company + " " + role).contains(q)
+                            || company.contains(q) || role.contains(q);
+                })
+                .toList();
+        int safePage = Math.max(page, 1);
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        long total = filtered.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / safeLimit);
+        int from = Math.min((safePage - 1) * safeLimit, filtered.size());
+        int to = Math.min(from + safeLimit, filtered.size());
+        List<OfferResponse> items = filtered.subList(from, to).stream()
+                .map(OfferResponse::from)
+                .toList();
+        return new OfferPageResponse(items, total, totalPages, safePage);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<OfferResponse> listForDrive(Long driveId) {
         return offerRepository.findByDrive_IdOrderByCreatedAtDesc(driveId).stream()
                 .map(OfferResponse::from)
@@ -177,6 +217,50 @@ public class OfferServiceImpl implements OfferService {
         return offerRepository.findAll().stream()
                 .map(OfferResponse::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OfferPageResponse pageForAdmin(Long driveId, String search, String status, int page, int limit) {
+        int safePage = Math.max(page, 1) - 1;
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        Page<Offer> result = offerRepository.findAll(buildSpecification(driveId, search, status),
+                PageRequest.of(safePage, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<OfferResponse> items = result.getContent().stream()
+                .map(OfferResponse::from)
+                .toList();
+        return new OfferPageResponse(items, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber() + 1);
+    }
+
+    private Specification<Offer> buildSpecification(Long driveId, String search, String status) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (driveId != null) {
+                predicates.add(cb.equal(root.get("drive").get("id"), driveId));
+            }
+            if (status != null && !status.isBlank()) {
+                try {
+                    predicates.add(cb.equal(root.get("status"), OfferStatus.valueOf(status.trim().toUpperCase())));
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException("Invalid offer status: " + status.trim()
+                            + ". Valid values: OFFERED, ACCEPTED, REJECTED, EXPIRED, WITHDRAWN");
+                }
+            }
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.trim().toLowerCase() + "%";
+                Join<Offer, Student> student = root.join("student", JoinType.LEFT);
+                Join<Student, User> user = student.join("user", JoinType.LEFT);
+                Join<Offer, Drive> drive = root.join("drive", JoinType.LEFT);
+                predicates.add(cb.or(
+                        cb.like(cb.lower(user.get("name")), like),
+                        cb.like(cb.lower(user.get("email")), like),
+                        cb.like(cb.lower(root.get("role")), like),
+                        cb.like(cb.lower(root.get("offerNumber")), like),
+                        cb.like(cb.lower(drive.get("companyName")), like)));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     private Offer requireOwnedOffer(Long offerId, Long studentUserId) {

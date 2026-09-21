@@ -4,6 +4,7 @@ import com.careerlabs.lms.api.recordedsession.dto.request.CreateRecordedSessionR
 import com.careerlabs.lms.api.recordedsession.dto.request.UpdateRecordedSessionRequest;
 import com.careerlabs.lms.api.recordedsession.dto.response.ProcessingStatusResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionAnalyticsResponse;
+import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionPageResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.RecordedSessionResponse;
 import com.careerlabs.lms.api.recordedsession.dto.response.StudentRecordedSessionResponse;
 import org.springframework.web.multipart.MultipartFile;
@@ -12,7 +13,7 @@ import java.util.List;
 
 public interface RecordedSessionService {
 
-    List<RecordedSessionResponse> list();
+    RecordedSessionPageResponse list(String search, String status, int page, int limit);
 
     RecordedSessionResponse get(Long id);
 

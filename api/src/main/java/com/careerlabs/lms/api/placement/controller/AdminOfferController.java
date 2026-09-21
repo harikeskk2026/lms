@@ -2,6 +2,7 @@ package com.careerlabs.lms.api.placement.controller;
 
 import com.careerlabs.lms.api.common.response.ApiResponse;
 import com.careerlabs.lms.api.placement.dto.request.CreateOfferRequest;
+import com.careerlabs.lms.api.placement.dto.response.OfferPageResponse;
 import com.careerlabs.lms.api.placement.dto.response.OfferResponse;
 import com.careerlabs.lms.api.placement.service.OfferService;
 import com.careerlabs.lms.api.security.JwtUserPrincipal;
@@ -17,8 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /** Admin management of placement offers. */
 @RestController
 @RequestMapping("/api/admin/offers")
@@ -31,9 +30,13 @@ public class AdminOfferController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<OfferResponse>>> list(@RequestParam(required = false) Long driveId) {
-        List<OfferResponse> offers = driveId != null ? offerService.listForDrive(driveId) : offerService.listAll();
-        return ResponseEntity.ok(ApiResponse.of(offers));
+    public ResponseEntity<ApiResponse<OfferPageResponse>> list(
+            @RequestParam(required = false) Long driveId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.of(offerService.pageForAdmin(driveId, search, status, page, limit)));
     }
 
     @PostMapping

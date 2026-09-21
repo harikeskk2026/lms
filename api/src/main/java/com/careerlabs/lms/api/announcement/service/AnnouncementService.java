@@ -7,6 +7,8 @@ import com.careerlabs.lms.api.announcement.dto.response.AnnouncementAnalyticsRes
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementSuggestionResponse;
 import com.careerlabs.lms.api.announcement.dto.response.AnnouncementVersionResponse;
+import com.careerlabs.lms.api.announcement.dto.response.StudentAnnouncementPageResponse;
+import com.careerlabs.lms.api.announcement.entity.AnnouncementCategory;
 import com.careerlabs.lms.api.announcement.entity.AnnouncementStatus;
 
 import java.util.List;
@@ -18,6 +20,18 @@ public interface AnnouncementService {
 
     /** Announcements visible to a given student: matches their targeting + not expired, personalized. */
     List<AnnouncementResponse> listForStudent(Long userId);
+
+    /**
+     * Server-driven, paginated student announcement list. {@code category} narrows to one
+     * {@link com.careerlabs.lms.api.announcement.entity.AnnouncementCategory}, {@code unread}
+     * (when true) keeps only announcements the student has not viewed yet, and {@code sort}
+     * is {@code newest} (default) or {@code oldest} — both keep pinned items first, then
+     * order by creation date. {@code page} is 1-indexed.
+     */
+    StudentAnnouncementPageResponse listForStudentPaged(
+            Long userId, String search,
+            AnnouncementCategory category,
+            Boolean unread, String sort, int page, int limit);
 
     /**
      * Throws {@link com.careerlabs.lms.api.common.exception.ForbiddenException} unless the given
